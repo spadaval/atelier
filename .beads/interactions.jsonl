@@ -1,1 +1,2 @@
 {"id":"int-d4bf7e8a","kind":"field_change","created_at":"2026-06-08T17:59:15.415445503Z","actor":"Sumeet Padavala","issue_id":"atelier-an6","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"GitHub repo and Beads/Dolt remote are configured and pushed; shared-server setup is healthy; bd doctor passes with 75 checks and 0 warnings."}}
+{"id":"int-b59518db","kind":"field_change","created_at":"2026-06-08T19:14:50.204977086Z","actor":"Sumeet Padavala","issue_id":"atelier-ikeq","extra":{"field":"priority","new_value":"4","old_value":"2"}}

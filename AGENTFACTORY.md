@@ -19,11 +19,16 @@ concrete files, commands, and product-specific skills.
 ## Tracker
 
 - Tracker: Beads
-- Tracker backup/export: `.beads/issues.jsonl`
+- Tracker database: shared-server Dolt database `atelier`
+- Manual tracker backup/export: `.beads/issues.manual.jsonl`
+- Do not keep `.beads/issues.jsonl` in this repo. In the current Beads version,
+  that path is treated as a startup import source and can cause repeated
+  JSONL-to-Dolt imports before mutations.
 - Sync commands:
   - `bd dolt pull`
   - `bd dolt push`
   - `bd dolt status`
+  - `bd export -o .beads/issues.manual.jsonl`
 
 ## Checks
 
