@@ -4,6 +4,8 @@
 - `AGENTS.md`: concise entry point for agents working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and ambiguity decisions.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
+- [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
+  canonical `.atelier-state` manifest, record, graph, and rebuild layout.
 - `docs/adr/`: durable architecture and process decisions.
 - [docs/architecture/index.md](architecture/index.md): architecture and
   ownership map.
