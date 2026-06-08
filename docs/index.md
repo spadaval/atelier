@@ -12,3 +12,5 @@
 - `docs/architecture/quality/standards.md`: code and documentation standards.
 - `docs/architecture/quality/validation.md`: validation router and result
   states.
+- `docs/references/`: notes on external projects and prior art that inform
+  Atelier design.
