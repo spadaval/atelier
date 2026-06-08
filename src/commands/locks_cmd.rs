@@ -6,9 +6,9 @@ use crate::identity::AgentConfig;
 use crate::sync::{GpgVerification, SyncManager};
 use crate::utils::{format_issue_id, truncate};
 
-/// `chainlink locks list` — show current lock state
-pub fn list(chainlink_dir: &Path, db: &Database, json_output: bool) -> Result<()> {
-    let sync = SyncManager::new(chainlink_dir)?;
+/// `atelier locks list` — show current lock state
+pub fn list(atelier_dir: &Path, db: &Database, json_output: bool) -> Result<()> {
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -57,9 +57,9 @@ pub fn list(chainlink_dir: &Path, db: &Database, json_output: bool) -> Result<()
     Ok(())
 }
 
-/// `chainlink locks check <id>` — check if an issue is locked
-pub fn check(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
-    let sync = SyncManager::new(chainlink_dir)?;
+/// `atelier locks check <id>` — check if an issue is locked
+pub fn check(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -91,13 +91,13 @@ pub fn check(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-/// `chainlink locks claim <id> [--branch <branch>]` — claim a lock
-pub fn claim(chainlink_dir: &Path, issue_id: i64, branch: Option<&str>) -> Result<()> {
-    let agent = AgentConfig::load(chainlink_dir)?.ok_or_else(|| {
-        anyhow::anyhow!("No agent configured. Run 'chainlink agent init <id>' first.")
+/// `atelier locks claim <id> [--branch <branch>]` — claim a lock
+pub fn claim(atelier_dir: &Path, issue_id: i64, branch: Option<&str>) -> Result<()> {
+    let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
+        anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
 
-    let sync = SyncManager::new(chainlink_dir)?;
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -118,13 +118,13 @@ pub fn claim(chainlink_dir: &Path, issue_id: i64, branch: Option<&str>) -> Resul
     Ok(())
 }
 
-/// `chainlink locks release <id>` — release a lock
-pub fn release(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
-    let agent = AgentConfig::load(chainlink_dir)?.ok_or_else(|| {
-        anyhow::anyhow!("No agent configured. Run 'chainlink agent init <id>' first.")
+/// `atelier locks release <id>` — release a lock
+pub fn release(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+    let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
+        anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
 
-    let sync = SyncManager::new(chainlink_dir)?;
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -135,13 +135,13 @@ pub fn release(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-/// `chainlink locks steal <id>` — force-steal a stale lock
-pub fn steal(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
-    let agent = AgentConfig::load(chainlink_dir)?.ok_or_else(|| {
-        anyhow::anyhow!("No agent configured. Run 'chainlink agent init <id>' first.")
+/// `atelier locks steal <id>` — force-steal a stale lock
+pub fn steal(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+    let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
+        anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
 
-    let sync = SyncManager::new(chainlink_dir)?;
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -154,9 +154,9 @@ pub fn steal(chainlink_dir: &Path, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-/// `chainlink sync` — fetch locks, verify signatures, report status
-pub fn sync_cmd(chainlink_dir: &Path) -> Result<()> {
-    let sync = SyncManager::new(chainlink_dir)?;
+/// `atelier sync` — fetch locks, verify signatures, report status
+pub fn sync_cmd(atelier_dir: &Path) -> Result<()> {
+    let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
 
@@ -218,7 +218,7 @@ pub fn sync_cmd(chainlink_dir: &Path) -> Result<()> {
     }
 
     // Show agent identity if configured
-    if let Ok(Some(agent)) = AgentConfig::load(sync.chainlink_dir()) {
+    if let Ok(Some(agent)) = AgentConfig::load(sync.atelier_dir()) {
         println!("  Agent: {}", agent.agent_id);
         let my_locks = locks.agent_locks(&agent.agent_id);
         if !my_locks.is_empty() {

@@ -1,11 +1,11 @@
 [package]
-name = "chainlink-tracker"
+name = "atelier-tracker"
 version = "0.2.0"
 edition = "2021"
 description = "A lean issue tracker CLI for AI-assisted development sessions"
 license = "MIT"
-repository = "https://github.com/dollspace-gay/chainlink"
-homepage = "https://github.com/dollspace-gay/chainlink"
+repository = "https://github.com/dollspace-gay/atelier"
+homepage = "https://github.com/dollspace-gay/atelier"
 readme = "../README.md"
 keywords = ["issue-tracker", "cli", "ai-development", "session-management", "developer-tools"]
 categories = ["command-line-utilities", "development-tools"]
@@ -18,11 +18,11 @@ include = [
 ]
 
 [lib]
-name = "chainlink"
+name = "atelier"
 path = "src/lib.rs"
 
 [[bin]]
-name = "chainlink"
+name = "atelier"
 path = "src/main.rs"
 
 [dependencies]

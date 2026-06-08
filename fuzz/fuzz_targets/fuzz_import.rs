@@ -4,14 +4,14 @@ use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 use std::io::Write;
 
-use chainlink::db::Database;
+use atelier::db::Database;
 
 fuzz_target!(|data: &[u8]| {
     let dir = match tempdir() {
         Ok(d) => d,
         Err(_) => return,
     };
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
     let import_path = dir.path().join("import.json");
 
     // Write fuzz data as import file

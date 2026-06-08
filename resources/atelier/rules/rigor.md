@@ -16,7 +16,7 @@ You are the only one writing code. When `cargo check`, `cargo clippy`, `npm run 
 
 ### Choose correctness over convenience
 
-When you know the correct approach and a simpler-but-wrong alternative, implement the correct one. "Good enough for now" is acceptable only when the correct approach is genuinely out of scope and you document why with a chainlink comment (`--kind decision`).
+When you know the correct approach and a simpler-but-wrong alternative, implement the correct one. "Good enough for now" is acceptable only when the correct approach is genuinely out of scope and you document why with an Atelier comment (`--kind decision`).
 
 ### Cryptographic correctness
 

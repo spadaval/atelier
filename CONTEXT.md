@@ -31,9 +31,10 @@
 
 ## Ambiguities
 
-- The product name is Atelier, but many implementation symbols and tests still
-  say Chainlink. Use Chainlink for inherited current behavior and Atelier for
-  target-state product design.
+- The product name is Atelier. Use Chainlink for provenance and inherited
+  behavior that is still intentionally documented as source history; use Atelier
+  for the current package, binary, runtime directory, resources, and target-state
+  product design.
 - Export/import in the inherited code is backup-oriented. The target
   architecture needs canonical projection and rebuild semantics instead.
 - Dependencies should represent actual sequencing. Use typed links for other

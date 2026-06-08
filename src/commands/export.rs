@@ -99,7 +99,7 @@ pub fn run_markdown(db: &Database, output_path: Option<&str>) -> Result<()> {
     let issues = db.list_issues(Some("all"), None, None)?;
     let mut md = String::new();
 
-    md.push_str("# Chainlink Issues Export\n\n");
+    md.push_str("# Atelier Issues Export\n\n");
     md.push_str(&format!(
         "Exported: {}\n\n",
         chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
@@ -286,7 +286,7 @@ mod tests {
         let result = run_markdown(&db, Some(output_path.to_str().unwrap()));
         assert!(result.is_ok());
         let content = fs::read_to_string(&output_path).unwrap();
-        assert!(content.contains("# Chainlink Issues Export"));
+        assert!(content.contains("# Atelier Issues Export"));
     }
 
     #[test]

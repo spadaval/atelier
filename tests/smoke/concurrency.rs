@@ -7,7 +7,7 @@ use super::harness::SmokeHarness;
 #[test]
 fn test_concurrent_creates_10() {
     let h = SmokeHarness::new();
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..10)
@@ -19,7 +19,7 @@ fn test_concurrent_creates_10() {
                     .current_dir(&dir)
                     .args(["create", &format!("Concurrent issue {}", i)])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })
@@ -53,7 +53,7 @@ fn test_concurrent_reads() {
         h.run_ok(&["create", &format!("Issue {}", i)]);
     }
 
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..10)
@@ -65,7 +65,7 @@ fn test_concurrent_reads() {
                     .current_dir(&dir)
                     .args(["list", "-s", "all"])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })
@@ -89,7 +89,7 @@ fn test_concurrent_mixed_operations() {
         h.run_ok(&["create", &format!("Seed issue {}", i)]);
     }
 
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let mut handles = Vec::new();
@@ -103,7 +103,7 @@ fn test_concurrent_mixed_operations() {
                 .current_dir(&dir)
                 .args(["create", &format!("Concurrent write {}", i)])
                 .output()
-                .expect("failed to execute chainlink");
+                .expect("failed to execute atelier");
             output.status.success()
         }));
     }
@@ -117,7 +117,7 @@ fn test_concurrent_mixed_operations() {
                 .current_dir(&dir)
                 .args(["list", "-s", "all"])
                 .output()
-                .expect("failed to execute chainlink");
+                .expect("failed to execute atelier");
             output.status.success()
         }));
     }

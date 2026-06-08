@@ -32,7 +32,8 @@ bd dolt status
 
 ## Current Product State
 
-Atelier is being built from the Chainlink Rust CLI codebase. Existing code,
-tests, resource paths, and binary names still use Chainlink in many places.
-Treat `SPEC.md` as the target product intent and current code as the inherited
-implementation baseline until rename or migration beads say otherwise.
+Atelier is being built from the Chainlink Rust CLI codebase. Milestone 1 has
+renamed the primary package, binary, runtime directory, resources, and
+user-facing command surface to Atelier while preserving useful inherited
+behavior. Treat `SPEC.md` as the target product intent and current code as the
+inherited implementation baseline until follow-up migration beads say otherwise.

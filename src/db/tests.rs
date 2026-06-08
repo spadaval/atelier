@@ -902,7 +902,7 @@ fn test_update_parent() {
 #[test]
 fn test_corrupted_db_file_empty() {
     let dir = tempfile::tempdir().unwrap();
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
 
     // Create an empty file (corrupted)
     std::fs::write(&db_path, b"").unwrap();
@@ -925,7 +925,7 @@ fn test_corrupted_db_file_empty() {
 #[test]
 fn test_corrupted_db_file_garbage() {
     let dir = tempfile::tempdir().unwrap();
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
 
     // Write garbage data
     std::fs::write(&db_path, b"not a sqlite database at all!").unwrap();
@@ -938,7 +938,7 @@ fn test_corrupted_db_file_garbage() {
 #[test]
 fn test_corrupted_db_file_truncated() {
     let dir = tempfile::tempdir().unwrap();
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
 
     // Create valid DB first
     {
@@ -983,7 +983,7 @@ fn test_db_readonly_location() {
         use std::os::unix::fs::PermissionsExt;
 
         let dir = tempfile::tempdir().unwrap();
-        let db_path = dir.path().join("issues.db");
+        let db_path = dir.path().join("state.db");
 
         // Create the file first
         std::fs::write(&db_path, b"").unwrap();
@@ -992,6 +992,14 @@ fn test_db_readonly_location() {
         let mut perms = std::fs::metadata(&db_path).unwrap().permissions();
         perms.set_mode(0o444);
         std::fs::set_permissions(&db_path, perms).unwrap();
+
+        if std::fs::OpenOptions::new()
+            .write(true)
+            .open(&db_path)
+            .is_ok()
+        {
+            return;
+        }
 
         // Should fail gracefully
         let result = Database::open(&db_path);

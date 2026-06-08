@@ -20,7 +20,7 @@ pub fn start(db: &Database, issue_id: i64) -> Result<()> {
             );
         } else {
             bail!(
-                "Timer already running for issue {}. Stop it first with 'chainlink stop'.",
+                "Timer already running for issue {}. Stop it first with 'atelier stop'.",
                 format_issue_id(active_id)
             );
         }
@@ -32,7 +32,7 @@ pub fn start(db: &Database, issue_id: i64) -> Result<()> {
         format_issue_id(issue_id),
         issue.title
     );
-    println!("Run 'chainlink stop' when done.");
+    println!("Run 'atelier stop' when done.");
 
     Ok(())
 }
@@ -40,7 +40,7 @@ pub fn start(db: &Database, issue_id: i64) -> Result<()> {
 pub fn stop(db: &Database) -> Result<()> {
     let (issue_id, started_at) = match db.get_active_timer()? {
         Some(a) => a,
-        None => bail!("No timer running. Start one with 'chainlink start <id>'."),
+        None => bail!("No timer running. Start one with 'atelier start <id>'."),
     };
     let duration = Utc::now().signed_duration_since(started_at);
 

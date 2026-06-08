@@ -23,15 +23,15 @@ pub enum LockStatus {
 /// Returns `LockStatus` without blocking — callers decide how to handle.
 /// Gracefully degrades: if agent config is missing, sync fails, or we're
 /// offline, returns `NotConfigured` so single-agent usage is unaffected.
-pub fn check_lock(chainlink_dir: &Path, issue_id: i64) -> Result<LockStatus> {
+pub fn check_lock(atelier_dir: &Path, issue_id: i64) -> Result<LockStatus> {
     // If no agent config, we're in single-agent mode — no lock checking
-    let agent = match AgentConfig::load(chainlink_dir)? {
+    let agent = match AgentConfig::load(atelier_dir)? {
         Some(a) => a,
         None => return Ok(LockStatus::NotConfigured),
     };
 
     // Try to create sync manager. If it fails, don't block.
-    let sync = match SyncManager::new(chainlink_dir) {
+    let sync = match SyncManager::new(atelier_dir) {
         Ok(s) => s,
         Err(_) => return Ok(LockStatus::NotConfigured),
     };
@@ -80,8 +80,8 @@ pub fn check_lock(chainlink_dir: &Path, issue_id: i64) -> Result<LockStatus> {
 /// Read the `auto_steal_stale_locks` setting from hook-config.json.
 ///
 /// Returns `None` if disabled or missing, `Some(multiplier)` if enabled.
-fn read_auto_steal_config(chainlink_dir: &Path) -> Option<u64> {
-    let config_path = chainlink_dir.join("hook-config.json");
+fn read_auto_steal_config(atelier_dir: &Path) -> Option<u64> {
+    let config_path = atelier_dir.join("hook-config.json");
     let content = std::fs::read_to_string(&config_path).ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&content).ok()?;
     match parsed.get("auto_steal_stale_locks")? {
@@ -97,17 +97,17 @@ fn read_auto_steal_config(chainlink_dir: &Path) -> Option<u64> {
 ///
 /// Returns `Ok(true)` if the lock was auto-stolen, `Ok(false)` if not eligible.
 fn auto_steal_if_configured(
-    chainlink_dir: &Path,
+    atelier_dir: &Path,
     issue_id: i64,
     stale_agent_id: &str,
     db: &Database,
 ) -> Result<bool> {
-    let multiplier = match read_auto_steal_config(chainlink_dir) {
+    let multiplier = match read_auto_steal_config(atelier_dir) {
         Some(m) => m,
         None => return Ok(false),
     };
 
-    let sync = match SyncManager::new(chainlink_dir) {
+    let sync = match SyncManager::new(atelier_dir) {
         Ok(s) => s,
         Err(_) => return Ok(false),
     };
@@ -133,7 +133,7 @@ fn auto_steal_if_configured(
     }
 
     // Perform the steal
-    let agent = match AgentConfig::load(chainlink_dir)? {
+    let agent = match AgentConfig::load(atelier_dir)? {
         Some(a) => a,
         None => return Ok(false),
     };
@@ -153,12 +153,12 @@ fn auto_steal_if_configured(
 ///
 /// When `auto_steal_stale_locks` is configured in hook-config.json and the lock
 /// has been stale long enough, automatically steals it and records an audit comment.
-pub fn enforce_lock(chainlink_dir: &Path, issue_id: i64, db: &Database) -> Result<()> {
-    match check_lock(chainlink_dir, issue_id)? {
+pub fn enforce_lock(atelier_dir: &Path, issue_id: i64, db: &Database) -> Result<()> {
+    match check_lock(atelier_dir, issue_id)? {
         LockStatus::NotConfigured | LockStatus::Available | LockStatus::LockedBySelf => Ok(()),
         LockStatus::LockedByOther { agent_id, stale } => {
             if stale {
-                match auto_steal_if_configured(chainlink_dir, issue_id, &agent_id, db) {
+                match auto_steal_if_configured(atelier_dir, issue_id, &agent_id, db) {
                     Ok(true) => {
                         tracing::info!(
                             "Auto-stole stale lock on issue #{} from '{}'.",
@@ -186,7 +186,7 @@ pub fn enforce_lock(chainlink_dir: &Path, issue_id: i64, db: &Database) -> Resul
             } else {
                 bail!(
                     "Issue {} is locked by agent '{}'. \
-                     Use 'chainlink locks check {}' for details. \
+                     Use 'atelier locks check {}' for details. \
                      Ask the human to release it or wait for the lock to expire.",
                     crate::utils::format_issue_id(issue_id),
                     agent_id,
@@ -206,13 +206,13 @@ mod tests {
         Database::open(Path::new(":memory:")).unwrap()
     }
 
-    fn write_agent_config(chainlink_dir: &Path, agent_id: &str) {
+    fn write_agent_config(atelier_dir: &Path, agent_id: &str) {
         let agent_json = serde_json::json!({
             "agent_id": agent_id,
             "machine_id": "test-machine"
         });
         std::fs::write(
-            chainlink_dir.join("agent.json"),
+            atelier_dir.join("agent.json"),
             serde_json::to_string(&agent_json).unwrap(),
         )
         .unwrap();
@@ -221,43 +221,43 @@ mod tests {
     #[test]
     fn test_no_agent_config_returns_not_configured() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
-        let status = check_lock(&chainlink_dir, 1).unwrap();
+        let status = check_lock(&atelier_dir, 1).unwrap();
         assert_eq!(status, LockStatus::NotConfigured);
     }
 
     #[test]
     fn test_enforce_not_configured_allows() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
         let db = temp_db();
-        assert!(enforce_lock(&chainlink_dir, 1, &db).is_ok());
+        assert!(enforce_lock(&atelier_dir, 1, &db).is_ok());
     }
 
     #[test]
     fn test_check_lock_agent_config_no_cache_returns_not_configured() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-        write_agent_config(&chainlink_dir, "worker-1");
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
+        write_agent_config(&atelier_dir, "worker-1");
 
-        let status = check_lock(&chainlink_dir, 42).unwrap();
+        let status = check_lock(&atelier_dir, 42).unwrap();
         assert_eq!(status, LockStatus::NotConfigured);
     }
 
     #[test]
     fn test_enforce_lock_agent_config_no_cache_allows() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-        write_agent_config(&chainlink_dir, "worker-1");
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
+        write_agent_config(&atelier_dir, "worker-1");
 
         let db = temp_db();
-        assert!(enforce_lock(&chainlink_dir, 42, &db).is_ok());
+        assert!(enforce_lock(&atelier_dir, 42, &db).is_ok());
     }
 
     #[test]

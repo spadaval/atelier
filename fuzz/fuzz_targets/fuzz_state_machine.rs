@@ -4,7 +4,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use chainlink::db::Database;
+use atelier::db::Database;
 
 #[derive(Arbitrary, Debug, Clone)]
 enum StateOp {
@@ -39,7 +39,7 @@ fuzz_target!(|input: StateMachineInput| {
         Ok(d) => d,
         Err(_) => return,
     };
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
 
     let db = match Database::open(&db_path) {
         Ok(d) => d,

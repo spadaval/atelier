@@ -1,5 +1,4 @@
 /target/
-/.chainlink/
 /.atelier/
 /.atelier-state/cache/
 .dolt/

@@ -3,7 +3,7 @@ use proptest::prelude::*;
 
 fn setup_test_db() -> (Database, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
     let db = Database::open(&db_path).unwrap();
     (db, dir)
 }

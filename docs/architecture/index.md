@@ -1,5 +1,10 @@
 # Architecture
 
+This map separates current inherited implementation from target Atelier
+architecture. Product intent lives in [SPEC.md](../../SPEC.md), domain language
+lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is documented in
+[Chainlink Provenance](provenance.md).
+
 ## Current Implementation
 
 Atelier currently starts from the Chainlink Rust CLI:
@@ -9,15 +14,19 @@ Atelier currently starts from the Chainlink Rust CLI:
   sync, export, import, and related operational flows.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
-- `resources/chainlink/`: bundled rules, hook configuration, and integration
-  assets inherited from Chainlink.
+- `resources/atelier/`: bundled rules, hook configuration, and integration
+  assets renamed for Atelier from the inherited Chainlink defaults.
 - `tests/`: CLI integration and smoke coverage.
 - `fuzz/`: libFuzzer targets for CLI output, create, dependencies, import,
   search, and state-machine behavior.
 
+See [Chainlink Provenance](provenance.md) for inherited module boundaries,
+preservation expectations, and deferred migration areas.
+
 ## Target Architecture
 
-`SPEC.md` defines the target architecture:
+[SPEC.md](../../SPEC.md) defines the target architecture, using the vocabulary in
+[CONTEXT.md](../../CONTEXT.md):
 
 - SQLite is the fast local runtime store for queries, locks, sessions,
   workflow checks, and Mission Control projections.
@@ -43,7 +52,8 @@ Atelier currently starts from the Chainlink Rust CLI:
 
 ## Architecture Risks
 
-- Chainlink naming remains widespread and can obscure Atelier target-state work.
+- Some inherited Chainlink concepts and module boundaries can still obscure
+  Atelier target-state work.
 - Backup-style export/import can be mistaken for canonical projection/rebuild.
 - SQLite state must not become the only durable source once `.atelier-state/`
   exists.

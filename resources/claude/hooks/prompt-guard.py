@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Chainlink behavioral hook for Claude Code.
+Atelier behavioral hook for Claude Code.
 Injects best practice reminders on every prompt submission.
-Loads rules from .chainlink/rules/ markdown files.
+Loads rules from .atelier/rules/ markdown files.
 """
 
 import json
@@ -13,8 +13,8 @@ import hashlib
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chainlink_config import (
-    setup_utf8_stdout, get_project_root, find_chainlink_dir,
+from atelier_config import (
+    setup_utf8_stdout, get_project_root, find_atelier_dir,
     load_tracking_mode, load_rule_file, load_json_config,
     load_guard_state, save_guard_state, run_command,
 )
@@ -56,15 +56,15 @@ def parse_frontmatter(content):
     return meta, body
 
 
-def _build_detection_maps(chainlink_dir):
+def _build_detection_maps(atelier_dir):
     """Build extension→language and config_file→language maps from rule file frontmatter."""
     ext_to_lang = {}
     config_to_lang = {}
 
-    if not chainlink_dir:
+    if not atelier_dir:
         return ext_to_lang, config_to_lang
 
-    rules_dir = os.path.join(chainlink_dir, 'rules')
+    rules_dir = os.path.join(atelier_dir, 'rules')
     if not os.path.isdir(rules_dir):
         return ext_to_lang, config_to_lang
 
@@ -96,21 +96,21 @@ def _build_detection_maps(chainlink_dir):
     return ext_to_lang, config_to_lang
 
 
-def load_all_rules(chainlink_dir):
-    """Load all rule files from .chainlink/rules/, with .chainlink/rules.local/ overrides.
+def load_all_rules(atelier_dir):
+    """Load all rule files from .atelier/rules/, with .atelier/rules.local/ overrides.
 
     Language rule files are identified by a YAML frontmatter block containing a 'name' field.
     Non-language files (global, project, quality, rigor, tracking) have no such frontmatter.
     """
-    if not chainlink_dir:
+    if not atelier_dir:
         return {}, "", "", "", ""
 
-    rules_dir = os.path.join(chainlink_dir, 'rules')
+    rules_dir = os.path.join(atelier_dir, 'rules')
     if not os.path.isdir(rules_dir):
         return {}, "", "", "", ""
 
     # Local overrides directory (gitignored, machine-local)
-    rules_local_dir = os.path.join(chainlink_dir, 'rules.local')
+    rules_local_dir = os.path.join(atelier_dir, 'rules.local')
     if not os.path.isdir(rules_local_dir):
         rules_local_dir = None
 
@@ -155,8 +155,8 @@ def detect_languages():
     Extension and config-file mappings are loaded dynamically from the language rule
     files' frontmatter, so adding a new language .md file is all that's needed.
     """
-    chainlink_dir = find_chainlink_dir()
-    ext_to_lang, config_to_lang = _build_detection_maps(chainlink_dir)
+    atelier_dir = find_atelier_dir()
+    ext_to_lang, config_to_lang = _build_detection_maps(atelier_dir)
 
     found = set()
     cwd = get_project_root()
@@ -220,7 +220,7 @@ def get_language_section(languages, language_rules):
 # Directories to skip when building project tree
 SKIP_DIRS = {
     '.git', 'node_modules', 'target', 'venv', '.venv', 'env', '.env',
-    '__pycache__', '.chainlink', '.claude', 'dist', 'build', '.next',
+    '__pycache__', '.atelier', '.claude', 'dist', 'build', '.next',
     '.nuxt', 'vendor', '.idea', '.vscode', 'coverage', '.pytest_cache',
     '.mypy_cache', '.tox', 'eggs', '*.egg-info', '.sass-cache'
 }
@@ -384,7 +384,7 @@ def get_dependencies(max_deps=30):
     return ""
 
 
-def build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode="strict", chainlink_dir=None, quality_rules="", rigor_rules=""):
+def build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode="strict", atelier_dir=None, quality_rules="", rigor_rules=""):
     """Build the full reminder context."""
     lang_section = get_language_section(languages, language_rules)
     lang_list = ", ".join(languages) if languages else "this project"
@@ -410,7 +410,7 @@ def build_reminder(languages, project_tree, dependencies, language_rules, global
 ```
 """
 
-    # Build global rules section (from .chainlink/rules/global.md)
+    # Build global rules section (from .atelier/rules/global.md)
     # Then append/replace the tracking section based on tracking_mode
     global_section = ""
     if global_rules:
@@ -438,7 +438,7 @@ Examples of when to search:
    - NEVER write stub placeholders as implementation (no task-marker comments, no empty bodies, no unimpl shims)
    - NEVER write empty function bodies or placeholder returns
    - NEVER say "implement later" or "add logic here"
-   - If logic is genuinely too complex for one turn, use `raise NotImplementedError("Descriptive reason: what needs to be done")` and create a chainlink issue
+   - If logic is genuinely too complex for one turn, use `raise NotImplementedError("Descriptive reason: what needs to be done")` and create an Atelier issue
    - The PostToolUse hook WILL detect and flag stub patterns - write real code the first time
 2. **NO DEAD CODE**: Discover if dead code is truly dead or if it's an incomplete feature. If incomplete, complete it. If truly dead, remove it.
 3. **FULL FEATURES**: Implement the complete feature as requested. Don't stop partway or suggest "you could add X later."
@@ -464,25 +464,25 @@ When writing code: write it. When making changes: make them. Skip the narration.
 
 ### Large File Management (500+ lines)
 If you need to write or modify code that will exceed 500 lines:
-1. Create a parent issue for the overall feature: `chainlink create "<feature name>" -p high`
-2. Break down into subissues: `chainlink subissue <parent_id> "<component 1>"`, etc.
+1. Create a parent issue for the overall feature: `atelier create "<feature name>" -p high`
+2. Break down into subissues: `atelier subissue <parent_id> "<component 1>"`, etc.
 3. Inform the user: "This implementation will require multiple files/components. I've created issue #X with Y subissues to track progress."
 4. Work on one subissue at a time, marking each complete before moving on.
 
 ### Context Window Management
 If the conversation is getting long OR the task requires many more steps:
-1. Create a chainlink issue to track remaining work: `chainlink create "Continue: <task summary>" -p high`
-2. Add detailed notes as a comment: `chainlink comment <id> "<what's done, what's next>"`
+1. Create an Atelier issue to track remaining work: `atelier create "Continue: <task summary>" -p high`
+2. Add detailed notes as a comment: `atelier comment <id> "<what's done, what's next>"`
 3. Inform the user: "This task will require additional turns. I've created issue #X to track progress."
 
-Use `chainlink session work <id>` to mark what you're working on.
+Use `atelier session work <id>` to mark what you're working on.
 """
 
     # Inject tracking rules from per-mode markdown file
-    tracking_rules = load_tracking_rules(chainlink_dir, tracking_mode) if chainlink_dir else ""
+    tracking_rules = load_tracking_rules(atelier_dir, tracking_mode) if atelier_dir else ""
     tracking_section = f"\n{tracking_rules}\n" if tracking_rules else ""
 
-    # Build project rules section (from .chainlink/rules/project.md)
+    # Build project rules section (from .atelier/rules/project.md)
     project_section = ""
     if project_rules:
         project_section = f"\n### Project-Specific Rules\n{project_rules}\n"
@@ -495,27 +495,27 @@ Use `chainlink session work <id>` to mark what you're working on.
     if rigor_rules:
         rigor_section = f"\n{rigor_rules}\n"
 
-    reminder = f"""<chainlink-behavioral-guard>
+    reminder = f"""<atelier-behavioral-guard>
 ## Code Quality Requirements
 
 You are working on a {lang_list} project. Follow these requirements strictly:
 {tree_section}{deps_section}{global_section}{quality_section}{rigor_section}{tracking_section}{lang_section}{project_section}
-</chainlink-behavioral-guard>"""
+</atelier-behavioral-guard>"""
 
     return reminder
 
 
-def get_guard_marker_path(chainlink_dir):
+def get_guard_marker_path(atelier_dir):
     """Get the path to the guard-full-sent marker file."""
-    if not chainlink_dir:
+    if not atelier_dir:
         return None
-    cache_dir = os.path.join(chainlink_dir, '.cache')
+    cache_dir = os.path.join(atelier_dir, '.cache')
     return os.path.join(cache_dir, 'guard-full-sent')
 
 
-def should_send_full_guard(chainlink_dir):
+def should_send_full_guard(atelier_dir):
     """Check if this is the first prompt (no marker) or marker is stale."""
-    marker = get_guard_marker_path(chainlink_dir)
+    marker = get_guard_marker_path(atelier_dir)
     if not marker:
         return True
     if not os.path.exists(marker):
@@ -530,9 +530,9 @@ def should_send_full_guard(chainlink_dir):
     return False
 
 
-def mark_full_guard_sent(chainlink_dir):
+def mark_full_guard_sent(atelier_dir):
     """Create marker file indicating full guard has been sent this session."""
-    marker = get_guard_marker_path(chainlink_dir)
+    marker = get_guard_marker_path(atelier_dir)
     if not marker:
         return
     try:
@@ -544,26 +544,26 @@ def mark_full_guard_sent(chainlink_dir):
         return
 
 
-def load_tracking_rules(chainlink_dir, tracking_mode):
+def load_tracking_rules(atelier_dir, tracking_mode):
     """Load the tracking rules markdown file for the given mode."""
-    if not chainlink_dir:
+    if not atelier_dir:
         return ""
-    rules_dir = os.path.join(chainlink_dir, "rules")
+    rules_dir = os.path.join(atelier_dir, "rules")
     return load_rule_file(rules_dir, f"tracking-{tracking_mode}.md")
 
 
 # Condensed reminders kept short — these don't need full markdown files
 CONDENSED_REMINDERS = {
     "strict": (
-        "- **MANDATORY — Chainlink Issue Tracking**: You MUST create a chainlink issue BEFORE writing ANY code. "
-        "NO EXCEPTIONS. Use `chainlink quick \"title\" -p <priority> -l <label>` BEFORE your first Write/Edit/Bash. "
+        "- **MANDATORY — Atelier Issue Tracking**: You MUST create an Atelier issue BEFORE writing ANY code. "
+        "NO EXCEPTIONS. Use `atelier quick \"title\" -p <priority> -l <label>` BEFORE your first Write/Edit/Bash. "
         "If you skip this, the PreToolUse hook WILL block you. Do NOT treat this as optional.\n"
-        "- **Session**: ALWAYS use `chainlink session work <id>` to mark focus. "
-        "End with `chainlink session end --notes \"...\"`. This is NOT optional."
+        "- **Session**: ALWAYS use `atelier session work <id>` to mark focus. "
+        "End with `atelier session end --notes \"...\"`. This is NOT optional."
     ),
     "normal": (
-        "- **Chainlink**: Create issues before work. Use `chainlink quick` for create+label+work. Close with `chainlink close`.\n"
-        "- **Session**: Use `chainlink session work <id>`. End with `chainlink session end --notes \"...\"`."
+        "- **Atelier**: Create issues before work. Use `atelier quick` for create+label+work. Close with `atelier close`.\n"
+        "- **Session**: Use `atelier session work <id>`. End with `atelier session end --notes \"...\"`."
     ),
     "relaxed": "",
 }
@@ -574,16 +574,16 @@ def build_condensed_reminder(languages, tracking_mode):
     lang_list = ", ".join(languages) if languages else "this project"
     tracking_lines = CONDENSED_REMINDERS.get(tracking_mode, "")
 
-    return f"""<chainlink-behavioral-guard>
+    return f"""<atelier-behavioral-guard>
 ## Quick Reminder ({lang_list})
 
 {tracking_lines}
-- **Security**: Use `mcp__chainlink-safe-fetch__safe_fetch` for web requests. Parameterized queries only.
+- **Security**: Use `mcp__atelier-safe-fetch__safe_fetch` for web requests. Parameterized queries only.
 - **Quality**: No stubs/TODOs. Read before write. Complete features fully. Proper error handling.
 - **Testing**: Run tests after changes. Fix warnings, don't suppress them.
 
-Full rules were injected on first prompt. Use `chainlink list -s open` to see current issues.
-</chainlink-behavioral-guard>"""
+Full rules were injected on first prompt. Use `atelier list -s open` to see current issues.
+</atelier-behavioral-guard>"""
 
 
 def estimate_prompt_chars(input_data):
@@ -603,13 +603,13 @@ def estimate_prompt_chars(input_data):
         return 2000 * TURN_MULTIPLIER
 
 
-def check_context_budget(chainlink_dir, state, prompt_chars):
+def check_context_budget(atelier_dir, state, prompt_chars):
     """Check if estimated context usage has exceeded the budget.
 
     Returns True if the budget is exceeded and full reinjection is needed.
     Default budget: 1,000,000 chars ~ 250k tokens.
     """
-    config = load_json_config(chainlink_dir) if chainlink_dir else {}
+    config = load_json_config(atelier_dir) if atelier_dir else {}
     budget = int(config.get("context_budget_chars", 1_000_000))
     if budget <= 0:
         return False
@@ -626,25 +626,25 @@ def build_context_budget_warning(languages, tracking_mode):
     lang_list = ", ".join(languages) if languages else "this project"
     tracking_lines = CONDENSED_REMINDERS.get(tracking_mode, "")
 
-    return f"""<chainlink-context-budget-exceeded>
+    return f"""<atelier-context-budget-exceeded>
 ## CONTEXT BUDGET EXCEEDED — COMPRESSION REQUIRED
 
 Your estimated context usage has exceeded 250k tokens. Instruction adherence
 degrades significantly past this point. You MUST take the following steps
 IMMEDIATELY, before doing anything else:
 
-1. **Record your current state**: Run `chainlink session action "Context budget reached. Working on: <current task summary>"`
-2. **Save any in-progress work context** as a chainlink comment: `chainlink comment <id> "Progress: <what's done, what's next>" --kind observation`
+1. **Record your current state**: Run `atelier session action "Context budget reached. Working on: <current task summary>"`
+2. **Save any in-progress work context** as an Atelier comment: `atelier comment <id> "Progress: <what's done, what's next>" --kind observation`
 3. **The system will compress context automatically.** After compression, re-read any files you need and continue working.
 
 ## Re-injected Rules ({lang_list})
 
 {tracking_lines}
-- **Security**: Use `mcp__chainlink-safe-fetch__safe_fetch` for web requests. Parameterized queries only.
+- **Security**: Use `mcp__atelier-safe-fetch__safe_fetch` for web requests. Parameterized queries only.
 - **Quality**: No stubs/TODOs. Read before write. Complete features fully. Proper error handling.
 - **Testing**: Run tests after changes. Fix warnings, don't suppress them.
-- **Documentation**: Add typed chainlink comments (--kind plan/decision/observation/result) at every step.
-</chainlink-context-budget-exceeded>"""
+- **Documentation**: Add typed atelier comments (--kind plan/decision/observation/result) at every step.
+</atelier-context-budget-exceeded>"""
 
 
 def main():
@@ -658,36 +658,36 @@ def main():
     except Exception:
         input_data = {}
 
-    # Find chainlink directory and load rules
-    chainlink_dir = find_chainlink_dir()
-    tracking_mode = load_tracking_mode(chainlink_dir)
+    # Find atelier directory and load rules
+    atelier_dir = find_atelier_dir()
+    tracking_mode = load_tracking_mode(atelier_dir)
 
     # Load guard state for context budget tracking
-    state = load_guard_state(chainlink_dir)
+    state = load_guard_state(atelier_dir)
     state["total_prompts"] = state.get("total_prompts", 0) + 1
 
     # Check context budget — if exceeded, reinject full guard + compression directive
     prompt_chars = estimate_prompt_chars(input_data)
-    if not should_send_full_guard(chainlink_dir) and check_context_budget(chainlink_dir, state, prompt_chars):
+    if not should_send_full_guard(atelier_dir) and check_context_budget(atelier_dir, state, prompt_chars):
         languages = detect_languages()
-        language_rules, global_rules, project_rules, quality_rules, rigor_rules = load_all_rules(chainlink_dir)
+        language_rules, global_rules, project_rules, quality_rules, rigor_rules = load_all_rules(atelier_dir)
         project_tree = get_project_tree()
         dependencies = get_dependencies()
-        print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode, chainlink_dir, quality_rules, rigor_rules))
+        print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode, atelier_dir, quality_rules, rigor_rules))
         print(build_context_budget_warning(languages, tracking_mode))
         state["estimated_context_chars"] = 0  # reset for new compression cycle
         state["context_budget_reinjections"] = state.get("context_budget_reinjections", 0) + 1
-        save_guard_state(chainlink_dir, state)
+        save_guard_state(atelier_dir, state)
         sys.exit(0)
 
     # Check if we should send full or condensed guard
-    if not should_send_full_guard(chainlink_dir):
+    if not should_send_full_guard(atelier_dir):
         languages = detect_languages()
         print(build_condensed_reminder(languages, tracking_mode))
-        save_guard_state(chainlink_dir, state)
+        save_guard_state(atelier_dir, state)
         sys.exit(0)
 
-    language_rules, global_rules, project_rules, quality_rules, rigor_rules = load_all_rules(chainlink_dir)
+    language_rules, global_rules, project_rules, quality_rules, rigor_rules = load_all_rules(atelier_dir)
 
     # Detect languages in the project
     languages = detect_languages()
@@ -699,12 +699,12 @@ def main():
     dependencies = get_dependencies()
 
     # Output the full reminder
-    print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode, chainlink_dir, quality_rules, rigor_rules))
+    print(build_reminder(languages, project_tree, dependencies, language_rules, global_rules, project_rules, tracking_mode, atelier_dir, quality_rules, rigor_rules))
 
     # Mark that we've sent the full guard this session
-    mark_full_guard_sent(chainlink_dir)
+    mark_full_guard_sent(atelier_dir)
     state["estimated_context_chars"] = 0  # reset on full guard send
-    save_guard_state(chainlink_dir, state)
+    save_guard_state(atelier_dir, state)
     sys.exit(0)
 
 

@@ -17,9 +17,9 @@ use std::path::PathBuf;
 use db::Database;
 
 #[derive(Parser)]
-#[command(name = "chainlink")]
+#[command(name = "atelier")]
 #[command(about = "A simple, lean issue tracker CLI")]
-#[command(version = option_env!("CHAINLINK_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
+#[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
     #[arg(short, long, global = true)]
@@ -30,7 +30,7 @@ struct Cli {
     json: bool,
 
     /// Log level for diagnostic output (error, warn, info, debug, trace)
-    #[arg(long, global = true, default_value = "warn", env = "CHAINLINK_LOG")]
+    #[arg(long, global = true, default_value = "warn", env = "ATELIER_LOG")]
     log_level: String,
 
     /// Log format (text, json)
@@ -38,7 +38,7 @@ struct Cli {
         long,
         global = true,
         default_value = "text",
-        env = "CHAINLINK_LOG_FORMAT"
+        env = "ATELIER_LOG_FORMAT"
     )]
     log_format: String,
 
@@ -48,7 +48,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize chainlink in the current directory
+    /// Initialize atelier in the current directory
     Init {
         /// Force update hooks even if already initialized
         #[arg(short, long)]
@@ -412,7 +412,7 @@ enum Commands {
 }
 
 // ============================================================================
-// Issue subcommands (canonical path: `chainlink issue <command>`)
+// Issue subcommands (canonical path: `atelier issue <command>`)
 // ============================================================================
 
 #[derive(Subcommand)]
@@ -657,7 +657,7 @@ enum IssueCommands {
 }
 
 // ============================================================================
-// Timer subcommands (canonical path: `chainlink timer <command>`)
+// Timer subcommands (canonical path: `atelier timer <command>`)
 // ============================================================================
 
 #[derive(Subcommand)]
@@ -910,24 +910,24 @@ enum DaemonCommands {
 // Helpers
 // ============================================================================
 
-fn find_chainlink_dir() -> Result<PathBuf> {
+fn find_atelier_dir() -> Result<PathBuf> {
     let mut current = env::current_dir()?;
 
     loop {
-        let candidate = current.join(".chainlink");
+        let candidate = current.join(".atelier");
         if candidate.is_dir() {
             return Ok(candidate);
         }
 
         if !current.pop() {
-            bail!("Not a chainlink repository (or any parent). Run 'chainlink init' first.");
+            bail!("Not an Atelier repository (or any parent). Run 'atelier init' first.");
         }
     }
 }
 
 fn get_db() -> Result<Database> {
-    let chainlink_dir = find_chainlink_dir()?;
-    let db_path = chainlink_dir.join("issues.db");
+    let atelier_dir = find_atelier_dir()?;
+    let db_path = atelier_dir.join("state.db");
     Database::open(&db_path).context("Failed to open database")
 }
 
@@ -962,12 +962,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             work,
         } => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir().ok();
+            let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
                 labels: &label,
                 work,
                 quiet,
-                chainlink_dir: chainlink_dir.as_deref(),
+                atelier_dir: atelier_dir.as_deref(),
             };
             commands::create::run(
                 &db,
@@ -987,12 +987,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             label,
         } => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir().ok();
+            let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
                 labels: &label,
                 work: true,
                 quiet,
-                chainlink_dir: chainlink_dir.as_deref(),
+                atelier_dir: atelier_dir.as_deref(),
             };
             commands::create::run(
                 &db,
@@ -1013,12 +1013,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             work,
         } => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir().ok();
+            let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
                 labels: &label,
                 work,
                 quiet,
-                chainlink_dir: chainlink_dir.as_deref(),
+                atelier_dir: atelier_dir.as_deref(),
             };
             commands::create::run_subissue(
                 &db,
@@ -1079,11 +1079,11 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Close { id, no_changelog } => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir()?;
+            let atelier_dir = find_atelier_dir()?;
             if quiet {
-                commands::status::close_quiet(&db, id, !no_changelog, &chainlink_dir)
+                commands::status::close_quiet(&db, id, !no_changelog, &atelier_dir)
             } else {
-                commands::status::close(&db, id, !no_changelog, &chainlink_dir)
+                commands::status::close(&db, id, !no_changelog, &atelier_dir)
             }
         }
 
@@ -1093,13 +1093,13 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             no_changelog,
         } => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir()?;
+            let atelier_dir = find_atelier_dir()?;
             commands::status::close_all(
                 &db,
                 label.as_deref(),
                 priority.as_deref(),
                 !no_changelog,
-                &chainlink_dir,
+                &atelier_dir,
             )
         }
 
@@ -1183,8 +1183,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Next => {
             let db = get_db()?;
-            let chainlink_dir = find_chainlink_dir()?;
-            commands::next::run(&db, &chainlink_dir)
+            let atelier_dir = find_atelier_dir()?;
+            commands::next::run(&db, &atelier_dir)
         }
 
         IssueCommands::Tree { status } => {
@@ -1193,8 +1193,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         }
 
         IssueCommands::Tested => {
-            let chainlink_dir = find_chainlink_dir()?;
-            commands::tested::run(&chainlink_dir)
+            let atelier_dir = find_atelier_dir()?;
+            commands::tested::run(&atelier_dir)
         }
     }
 }
@@ -1479,8 +1479,8 @@ fn run() -> Result<()> {
             let db = get_db()?;
             match action {
                 SessionCommands::Start => {
-                    let chainlink_dir = find_chainlink_dir()?;
-                    commands::session::start(&db, &chainlink_dir)
+                    let atelier_dir = find_atelier_dir()?;
+                    commands::session::start(&db, &atelier_dir)
                 }
                 SessionCommands::End { notes } => commands::session::end(&db, notes.as_deref()),
                 SessionCommands::Status => {
@@ -1491,8 +1491,8 @@ fn run() -> Result<()> {
                     }
                 }
                 SessionCommands::Work { id } => {
-                    let chainlink_dir = find_chainlink_dir()?;
-                    commands::session::work(&db, id, &chainlink_dir)
+                    let atelier_dir = find_atelier_dir()?;
+                    commands::session::work(&db, id, &atelier_dir)
                 }
                 SessionCommands::LastHandoff => commands::session::last_handoff(&db),
                 SessionCommands::Action { text } => commands::session::action(&db, &text),
@@ -1501,16 +1501,16 @@ fn run() -> Result<()> {
 
         Commands::Daemon { action } => match action {
             DaemonCommands::Start => {
-                let chainlink_dir = find_chainlink_dir()?;
-                daemon::start(&chainlink_dir)
+                let atelier_dir = find_atelier_dir()?;
+                daemon::start(&atelier_dir)
             }
             DaemonCommands::Stop => {
-                let chainlink_dir = find_chainlink_dir()?;
-                daemon::stop(&chainlink_dir)
+                let atelier_dir = find_atelier_dir()?;
+                daemon::stop(&atelier_dir)
             }
             DaemonCommands::Status => {
-                let chainlink_dir = find_chainlink_dir()?;
-                daemon::status(&chainlink_dir)
+                let atelier_dir = find_atelier_dir()?;
+                daemon::status(&atelier_dir)
             }
             DaemonCommands::Run { dir } => daemon::run_daemon(&dir),
         },
@@ -1569,38 +1569,36 @@ fn run() -> Result<()> {
         }
 
         Commands::Agent { action } => {
-            let chainlink_dir = find_chainlink_dir()?;
+            let atelier_dir = find_atelier_dir()?;
             match action {
                 AgentCommands::Init {
                     agent_id,
                     description,
                     force,
-                } => {
-                    commands::agent::init(&chainlink_dir, &agent_id, description.as_deref(), force)
-                }
-                AgentCommands::Status => commands::agent::status(&chainlink_dir),
+                } => commands::agent::init(&atelier_dir, &agent_id, description.as_deref(), force),
+                AgentCommands::Status => commands::agent::status(&atelier_dir),
             }
         }
 
         Commands::Locks { action } => {
-            let chainlink_dir = find_chainlink_dir()?;
+            let atelier_dir = find_atelier_dir()?;
             match action {
                 LocksCommands::List => {
                     let db = get_db()?;
-                    commands::locks_cmd::list(&chainlink_dir, &db, json)
+                    commands::locks_cmd::list(&atelier_dir, &db, json)
                 }
-                LocksCommands::Check { id } => commands::locks_cmd::check(&chainlink_dir, id),
+                LocksCommands::Check { id } => commands::locks_cmd::check(&atelier_dir, id),
                 LocksCommands::Claim { id, branch } => {
-                    commands::locks_cmd::claim(&chainlink_dir, id, branch.as_deref())
+                    commands::locks_cmd::claim(&atelier_dir, id, branch.as_deref())
                 }
-                LocksCommands::Release { id } => commands::locks_cmd::release(&chainlink_dir, id),
-                LocksCommands::Steal { id } => commands::locks_cmd::steal(&chainlink_dir, id),
+                LocksCommands::Release { id } => commands::locks_cmd::release(&atelier_dir, id),
+                LocksCommands::Steal { id } => commands::locks_cmd::steal(&atelier_dir, id),
             }
         }
 
         Commands::Sync => {
-            let chainlink_dir = find_chainlink_dir()?;
-            commands::locks_cmd::sync_cmd(&chainlink_dir)
+            let atelier_dir = find_atelier_dir()?;
+            commands::locks_cmd::sync_cmd(&atelier_dir)
         }
     }
 }

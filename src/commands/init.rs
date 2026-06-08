@@ -11,21 +11,21 @@ const POST_EDIT_CHECK_PY: &str = include_str!("../../resources/claude/hooks/post
 const SESSION_START_PY: &str = include_str!("../../resources/claude/hooks/session-start.py");
 const PRE_WEB_CHECK_PY: &str = include_str!("../../resources/claude/hooks/pre-web-check.py");
 const WORK_CHECK_PY: &str = include_str!("../../resources/claude/hooks/work-check.py");
-const CHAINLINK_CONFIG_PY: &str = include_str!("../../resources/claude/hooks/chainlink_config.py");
+const ATELIER_CONFIG_PY: &str = include_str!("../../resources/claude/hooks/atelier_config.py");
 
 // Embed MCP server for safe web fetching
 const SAFE_FETCH_SERVER_PY: &str = include_str!("../../resources/claude/mcp/safe-fetch-server.py");
 const MCP_JSON: &str = include_str!("../../resources/mcp.json");
 
 // Embed hook configuration
-const HOOK_CONFIG_JSON: &str = include_str!("../../resources/chainlink/hook-config.json");
+const HOOK_CONFIG_JSON: &str = include_str!("../../resources/atelier/hook-config.json");
 
 // Auto-generated rule file includes from build.rs
 // Includes all RULE_* constants and RULE_FILES array
-// Adding a new rule = just drop a .md/.txt file in resources/chainlink/rules/
+// Adding a new rule = just drop a .md/.txt file in resources/atelier/rules/
 include!(concat!(env!("OUT_DIR"), "/rules_gen.rs"));
 
-/// Merge chainlink's MCP server entries into an existing `.mcp.json`, or create it fresh.
+/// Merge atelier's MCP server entries into an existing `.mcp.json`, or create it fresh.
 /// Returns a list of warnings (e.g. overwritten keys) for the caller to display.
 fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
     let embedded: serde_json::Value = serde_json::from_str(MCP_JSON)
@@ -70,7 +70,7 @@ fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
     for (key, value) in src_servers {
         if dest_map.contains_key(key) {
             warnings.push(format!(
-                "Warning: overwriting existing mcpServers entry \"{}\" with chainlink default",
+                "Warning: overwriting existing mcpServers entry \"{}\" with atelier default",
                 key
             ));
         }
@@ -87,33 +87,33 @@ fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
 }
 
 pub fn run(path: &Path, force: bool) -> Result<()> {
-    let chainlink_dir = path.join(".chainlink");
+    let atelier_dir = path.join(".atelier");
     let claude_dir = path.join(".claude");
     let hooks_dir = claude_dir.join("hooks");
 
     // Check if already initialized
-    let chainlink_exists = chainlink_dir.exists();
+    let atelier_exists = atelier_dir.exists();
     let claude_exists = claude_dir.exists();
 
-    if chainlink_exists && claude_exists && !force {
+    if atelier_exists && claude_exists && !force {
         println!("Already initialized at {}", path.display());
         println!("Use --force to update hooks to latest version.");
         return Ok(());
     }
 
-    let rules_dir = chainlink_dir.join("rules");
+    let rules_dir = atelier_dir.join("rules");
 
-    // Create .chainlink directory and database
-    if !chainlink_exists {
-        fs::create_dir_all(&chainlink_dir).context("Failed to create .chainlink directory")?;
+    // Create .atelier directory and database
+    if !atelier_exists {
+        fs::create_dir_all(&atelier_dir).context("Failed to create .atelier directory")?;
 
-        let db_path = chainlink_dir.join("issues.db");
+        let db_path = atelier_dir.join("state.db");
         Database::open(&db_path)?;
-        println!("Created {}", chainlink_dir.display());
+        println!("Created {}", atelier_dir.display());
     }
 
     // Write hook config (create or update)
-    let config_path = chainlink_dir.join("hook-config.json");
+    let config_path = atelier_dir.join("hook-config.json");
     if !config_path.exists() || force {
         fs::write(&config_path, HOOK_CONFIG_JSON).context("Failed to write hook-config.json")?;
     }
@@ -121,7 +121,7 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
     // Create or update rules directory
     let rules_exist = rules_dir.exists();
     if !rules_exist || force {
-        fs::create_dir_all(&rules_dir).context("Failed to create .chainlink/rules directory")?;
+        fs::create_dir_all(&rules_dir).context("Failed to create .atelier/rules directory")?;
 
         for (filename, content) in RULE_FILES {
             fs::write(rules_dir.join(filename), content)
@@ -136,20 +136,20 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
     }
 
     // Create rules.local/ directory for machine-local rule overrides (gitignored)
-    let rules_local_dir = chainlink_dir.join("rules.local");
+    let rules_local_dir = atelier_dir.join("rules.local");
     if !rules_local_dir.exists() {
         fs::create_dir_all(&rules_local_dir)
-            .context("Failed to create .chainlink/rules.local directory")?;
+            .context("Failed to create .atelier/rules.local directory")?;
     }
 
-    // Write .chainlink/.gitignore for machine-local files
-    let inner_gitignore = chainlink_dir.join(".gitignore");
+    // Write .atelier/.gitignore for machine-local files
+    let inner_gitignore = atelier_dir.join(".gitignore");
     if !inner_gitignore.exists() || force {
         fs::write(
             &inner_gitignore,
             "# Machine-local overrides (not committed)\nrules.local/\nhook-config.local.json\n.cache/\nagent.json\n.locks-cache/\n",
         )
-        .context("Failed to write .chainlink/.gitignore")?;
+        .context("Failed to write .atelier/.gitignore")?;
     }
 
     // Create .claude directory and hooks (or update if force)
@@ -176,8 +176,8 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         fs::write(hooks_dir.join("work-check.py"), WORK_CHECK_PY)
             .context("Failed to write work-check.py")?;
 
-        fs::write(hooks_dir.join("chainlink_config.py"), CHAINLINK_CONFIG_PY)
-            .context("Failed to write chainlink_config.py")?;
+        fs::write(hooks_dir.join("atelier_config.py"), ATELIER_CONFIG_PY)
+            .context("Failed to write atelier_config.py")?;
 
         // Create MCP server directory and write safe-fetch server
         let mcp_dir = claude_dir.join("mcp");
@@ -185,7 +185,7 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         fs::write(mcp_dir.join("safe-fetch-server.py"), SAFE_FETCH_SERVER_PY)
             .context("Failed to write safe-fetch-server.py")?;
 
-        // Merge chainlink's MCP server entry into .mcp.json (preserving existing MCPs)
+        // Merge atelier's MCP server entry into .mcp.json (preserving existing MCPs)
         let warnings =
             write_mcp_json_merged(&path.join(".mcp.json")).context("Failed to write .mcp.json")?;
         for warning in warnings {
@@ -199,10 +199,10 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         }
     }
 
-    println!("Chainlink initialized successfully!");
+    println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  chainlink session start     # Start a session");
-    println!("  chainlink create \"Task\"     # Create an issue");
+    println!("  atelier session start     # Start a session");
+    println!("  atelier create \"Task\"     # Create an issue");
 
     Ok(())
 }
@@ -219,13 +219,13 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify directories created
-        assert!(dir.path().join(".chainlink").exists());
-        assert!(dir.path().join(".chainlink/rules").exists());
-        assert!(dir.path().join(".chainlink/issues.db").exists());
+        assert!(dir.path().join(".atelier").exists());
+        assert!(dir.path().join(".atelier/rules").exists());
+        assert!(dir.path().join(".atelier/state.db").exists());
         assert!(dir.path().join(".claude").exists());
         assert!(dir.path().join(".claude/hooks").exists());
         assert!(dir.path().join(".claude/mcp").exists());
-        assert!(dir.path().join(".chainlink/hook-config.json").exists());
+        assert!(dir.path().join(".atelier/hook-config.json").exists());
     }
 
     #[test]
@@ -240,10 +240,7 @@ mod tests {
         assert!(dir.path().join(".claude/hooks/session-start.py").exists());
         assert!(dir.path().join(".claude/hooks/pre-web-check.py").exists());
         assert!(dir.path().join(".claude/hooks/work-check.py").exists());
-        assert!(dir
-            .path()
-            .join(".claude/hooks/chainlink_config.py")
-            .exists());
+        assert!(dir.path().join(".claude/hooks/atelier_config.py").exists());
         assert!(dir.path().join(".claude/mcp/safe-fetch-server.py").exists());
         assert!(dir.path().join(".mcp.json").exists());
     }
@@ -253,7 +250,7 @@ mod tests {
         let dir = tempdir().unwrap();
         run(dir.path(), false).unwrap();
 
-        let rules_dir = dir.path().join(".chainlink/rules");
+        let rules_dir = dir.path().join(".atelier/rules");
         assert!(rules_dir.join("global.md").exists());
         assert!(rules_dir.join("project.md").exists());
         assert!(rules_dir.join("rust.md").exists());
@@ -510,15 +507,15 @@ mod tests {
         let content = fs::read_to_string(&mcp_path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed["someOtherKey"], true);
-        assert!(parsed["mcpServers"]["chainlink-safe-fetch"].is_object());
+        assert!(parsed["mcpServers"]["atelier-safe-fetch"].is_object());
     }
 
     #[test]
-    fn test_run_partial_init_chainlink_only() {
+    fn test_run_partial_init_atelier_only() {
         let dir = tempdir().unwrap();
 
-        // Create only .chainlink directory
-        fs::create_dir_all(dir.path().join(".chainlink")).unwrap();
+        // Create only .atelier directory
+        fs::create_dir_all(dir.path().join(".atelier")).unwrap();
 
         let result = run(dir.path(), false);
         assert!(result.is_ok());
@@ -537,8 +534,8 @@ mod tests {
         let result = run(dir.path(), false);
         assert!(result.is_ok());
 
-        // .chainlink should now exist
-        assert!(dir.path().join(".chainlink").exists());
+        // .atelier should now exist
+        assert!(dir.path().join(".atelier").exists());
     }
 
     #[test]
@@ -547,7 +544,7 @@ mod tests {
         run(dir.path(), false).unwrap();
 
         // Open the created database and verify it works
-        let db_path = dir.path().join(".chainlink/issues.db");
+        let db_path = dir.path().join(".atelier/state.db");
         let db = Database::open(&db_path).unwrap();
 
         // Should be able to create an issue
@@ -560,7 +557,7 @@ mod tests {
         let dir = tempdir().unwrap();
         run(dir.path(), false).unwrap();
 
-        let rules_dir = dir.path().join(".chainlink/rules");
+        let rules_dir = dir.path().join(".atelier/rules");
 
         // Verify rule files have content
         let global = fs::read_to_string(rules_dir.join("global.md")).unwrap();
@@ -576,7 +573,7 @@ mod tests {
         run(dir.path(), false).unwrap();
 
         // Modify a rule file
-        let rule_path = dir.path().join(".chainlink/rules/global.md");
+        let rule_path = dir.path().join(".atelier/rules/global.md");
         fs::write(&rule_path, "# modified rule").unwrap();
 
         // Force update
@@ -598,7 +595,7 @@ mod tests {
         }
 
         // All files should still exist
-        assert!(dir.path().join(".chainlink/issues.db").exists());
+        assert!(dir.path().join(".atelier/state.db").exists());
         assert!(dir.path().join(".claude/settings.json").exists());
     }
 

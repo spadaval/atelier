@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook that blocks Write|Edit|Bash unless a chainlink issue
+PreToolUse hook that blocks Write|Edit|Bash unless an Atelier issue
 is being actively worked on. Forces issue creation before code changes.
 """
 
@@ -11,13 +11,13 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chainlink_config import (
-    setup_utf8_stdout, find_chainlink_dir, run_chainlink, load_json_config,
+from atelier_config import (
+    setup_utf8_stdout, find_atelier_dir, run_atelier, load_json_config,
 )
 
 setup_utf8_stdout()
 
-# Defaults — overridden by .chainlink/hook-config.json if present
+# Defaults — overridden by .atelier/hook-config.json if present
 DEFAULT_BLOCKED_GIT = [
     "git push", "git commit", "git merge", "git rebase", "git cherry-pick",
     "git reset", "git checkout .", "git restore .", "git clean",
@@ -26,7 +26,7 @@ DEFAULT_BLOCKED_GIT = [
 ]
 
 DEFAULT_ALLOWED_BASH = [
-    "chainlink ",
+    "atelier ",
     "git status", "git diff", "git log", "git branch", "git show",
     "cargo test", "cargo build", "cargo check", "cargo clippy", "cargo fmt",
     "npm test", "npm run", "npx ",
@@ -35,8 +35,8 @@ DEFAULT_ALLOWED_BASH = [
 ]
 
 
-def load_config(chainlink_dir):
-    """Load hook config from .chainlink/hook-config.json, falling back to defaults.
+def load_config(atelier_dir):
+    """Load hook config from .atelier/hook-config.json, falling back to defaults.
 
     Returns (tracking_mode, blocked_git, allowed_bash).
     tracking_mode is one of: "strict", "normal", "relaxed".
@@ -48,7 +48,7 @@ def load_config(chainlink_dir):
     allowed = list(DEFAULT_ALLOWED_BASH)
     mode = "strict"
 
-    config = load_json_config(chainlink_dir)
+    config = load_json_config(atelier_dir)
     if not config:
         return mode, blocked, allowed
 
@@ -167,15 +167,15 @@ def main():
                 "Editing hook scripts, hook-config.json, or .claude/settings.json is "
                 "PERMANENTLY FORBIDDEN. These files control project safety constraints.\n\n"
                 "You MUST NOT:\n"
-                "  - Modify .claude/hooks/ files or .chainlink/hook-config.json\n"
+                "  - Modify .claude/hooks/ files or .atelier/hook-config.json\n"
                 "  - Change tracking_mode, blocked_git_commands, or hook settings\n"
                 "  - Edit .claude/settings.json to alter hook registration\n\n"
                 "These are project-level safety controls managed by the human."
             )
             sys.exit(2)
 
-    chainlink_dir = find_chainlink_dir()
-    tracking_mode, blocked_git, allowed_bash = load_config(chainlink_dir)
+    atelier_dir = find_atelier_dir()
+    tracking_mode, blocked_git, allowed_bash = load_config(atelier_dir)
 
     # PERMANENT BLOCK: git mutation commands are never allowed (all modes)
     if tool_name == 'Bash' and is_blocked_git(input_data, blocked_git):
@@ -203,13 +203,13 @@ def main():
     if tracking_mode == "relaxed":
         sys.exit(0)
 
-    if not chainlink_dir:
+    if not atelier_dir:
         sys.exit(0)
 
     # Check session status
-    status = run_chainlink(["session", "status"])
+    status = run_atelier(["session", "status"])
     if not status:
-        # chainlink not available — don't block
+        # atelier not available — don't block
         sys.exit(0)
 
     # If already working on an issue, check lock status
@@ -218,10 +218,10 @@ def main():
         match = re.search(r'Working on: #(\d+)', status)
         if match:
             issue_id = match.group(1)
-            lock_result = run_chainlink(["locks", "check", issue_id])
+            lock_result = run_atelier(["locks", "check", issue_id])
             if lock_result and "locked by" in lock_result.lower():
                 # Check if locked by another agent (not us)
-                agent_json_path = os.path.join(chainlink_dir, "agent.json") if chainlink_dir else None
+                agent_json_path = os.path.join(atelier_dir, "agent.json") if atelier_dir else None
                 our_agent_id = None
                 if agent_json_path and os.path.isfile(agent_json_path):
                     try:
@@ -238,7 +238,7 @@ def main():
                     lock_msg = (
                         f"Lock conflict: Issue #{issue_id} is {lock_result}\n\n"
                         "This issue is claimed by another agent. You should work on a different issue.\n"
-                        "Use `chainlink locks list` to see all locks, or `chainlink next` to find available work."
+                        "Use `atelier locks list` to see all locks, or `atelier next` to find available work."
                     )
                     if tracking_mode == "strict":
                         print(lock_msg)
@@ -252,7 +252,7 @@ def main():
     # No active work item — behavior depends on mode
     strict_msg = (
         "MANDATORY COMPLIANCE — DO NOT ATTEMPT TO WORK AROUND THIS BLOCK.\n\n"
-        "You cannot Write, Edit, or run Bash commands without an active chainlink issue. "
+        "You cannot Write, Edit, or run Bash commands without an active atelier issue. "
         "This is a hard requirement enforced by the project, not a suggestion.\n\n"
         "You MUST NOT:\n"
         "  - Retry the same tool call hoping it will work\n"
@@ -260,21 +260,21 @@ def main():
         "  - Proceed without creating an issue first\n"
         "  - Tell the user the hook is preventing you from working\n\n"
         "You MUST do exactly this, right now, before anything else:\n\n"
-        "  chainlink quick \"<describe what you are about to do>\" -p <priority> -l <label>\n\n"
+        "  atelier quick \"<describe what you are about to do>\" -p <priority> -l <label>\n\n"
         "This single command creates an issue AND sets it as your active work item. "
         "After running it, your tool calls will succeed.\n\n"
         "If an issue already exists for this work, use:\n"
-        "  chainlink list -s open\n"
-        "  chainlink session work <id>\n\n"
+        "  atelier list -s open\n"
+        "  atelier session work <id>\n\n"
         "This is how the project tracks work. Comply, then continue."
     )
 
     normal_msg = (
-        "Reminder: No active chainlink issue. You should create one before making changes.\n\n"
-        "  chainlink quick \"<describe what you are about to do>\" -p <priority> -l <label>\n\n"
+        "Reminder: No active atelier issue. You should create one before making changes.\n\n"
+        "  atelier quick \"<describe what you are about to do>\" -p <priority> -l <label>\n\n"
         "Or pick an existing issue:\n"
-        "  chainlink list -s open\n"
-        "  chainlink session work <id>"
+        "  atelier list -s open\n"
+        "  atelier session work <id>"
     )
 
     if tracking_mode == "strict":

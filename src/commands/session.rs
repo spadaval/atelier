@@ -8,7 +8,7 @@ use crate::db::Database;
 use crate::lock_check;
 use crate::utils::format_issue_id;
 
-pub fn start(db: &Database, chainlink_dir: &Path) -> Result<()> {
+pub fn start(db: &Database, atelier_dir: &Path) -> Result<()> {
     // Check if there's already an active session
     if let Some(current) = db.get_current_session()? {
         println!(
@@ -36,7 +36,7 @@ pub fn start(db: &Database, chainlink_dir: &Path) -> Result<()> {
     }
 
     // Load agent identity if configured
-    let agent_id = crate::identity::AgentConfig::load(chainlink_dir)
+    let agent_id = crate::identity::AgentConfig::load(atelier_dir)
         .ok()
         .flatten()
         .map(|a| a.agent_id);
@@ -67,7 +67,7 @@ pub fn status(db: &Database) -> Result<()> {
     let session = match db.get_current_session()? {
         Some(s) => s,
         None => {
-            println!("No active session. Use 'chainlink session start' to begin.");
+            println!("No active session. Use 'atelier session start' to begin.");
             return Ok(());
         }
     };
@@ -149,10 +149,10 @@ pub fn status_json(db: &Database) -> Result<()> {
     Ok(())
 }
 
-pub fn work(db: &Database, issue_id: i64, chainlink_dir: &Path) -> Result<()> {
+pub fn work(db: &Database, issue_id: i64, atelier_dir: &Path) -> Result<()> {
     let session = match db.get_current_session()? {
         Some(s) => s,
-        None => bail!("No active session. Use 'chainlink session start' first."),
+        None => bail!("No active session. Use 'atelier session start' first."),
     };
 
     let issue = match db.get_issue(issue_id)? {
@@ -161,7 +161,7 @@ pub fn work(db: &Database, issue_id: i64, chainlink_dir: &Path) -> Result<()> {
     };
 
     // Check lock before allowing work on this issue
-    lock_check::enforce_lock(chainlink_dir, issue_id, db)?;
+    lock_check::enforce_lock(atelier_dir, issue_id, db)?;
 
     db.set_session_issue(session.id, issue_id)?;
     println!(
@@ -175,7 +175,7 @@ pub fn work(db: &Database, issue_id: i64, chainlink_dir: &Path) -> Result<()> {
 pub fn action(db: &Database, text: &str) -> Result<()> {
     let session = match db.get_current_session()? {
         Some(s) => s,
-        None => bail!("No active session. Use 'chainlink session start' first."),
+        None => bail!("No active session. Use 'atelier session start' first."),
     };
 
     db.set_session_action(session.id, text)?;
@@ -217,9 +217,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         let db = Database::open(&db_path).unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-        (db, chainlink_dir, dir)
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
+        (db, atelier_dir, dir)
     }
 
     // ==================== Start Tests ====================

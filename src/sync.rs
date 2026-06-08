@@ -7,11 +7,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::identity::AgentConfig;
 use crate::locks::{Heartbeat, Keyring, LocksFile};
 
-/// Directory name under .chainlink for the hub cache worktree.
+/// Directory name under .atelier for the hub cache worktree.
 const HUB_CACHE_DIR: &str = ".locks-cache";
 
 /// The coordination branch name.
-const HUB_BRANCH: &str = "chainlink/locks";
+const HUB_BRANCH: &str = "atelier/locks";
 
 /// Maximum number of local commits ahead of remote before bailing.
 const MAX_DIVERGENCE: usize = 10;
@@ -32,11 +32,11 @@ pub enum GpgVerification {
     NoCommits,
 }
 
-/// Read the configured tracker remote name from `.chainlink/hook-config.json`.
+/// Read the configured tracker remote name from `.atelier/hook-config.json`.
 ///
 /// Returns the value of `tracker_remote` if set, otherwise `"origin"`.
-pub fn read_tracker_remote(chainlink_dir: &Path) -> String {
-    let config_path = chainlink_dir.join("hook-config.json");
+pub fn read_tracker_remote(atelier_dir: &Path) -> String {
+    let config_path = atelier_dir.join("hook-config.json");
     let configured = std::fs::read_to_string(&config_path)
         .ok()
         .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
@@ -61,43 +61,43 @@ pub fn read_tracker_remote(chainlink_dir: &Path) -> String {
     "origin".to_string()
 }
 
-/// Manages synchronization with the `chainlink/locks` coordination branch.
+/// Manages synchronization with the `atelier/locks` coordination branch.
 ///
-/// Uses a git worktree at `.chainlink/.locks-cache/` to avoid disturbing
+/// Uses a git worktree at `.atelier/.locks-cache/` to avoid disturbing
 /// the user's working tree.
 pub struct SyncManager {
-    /// Path to the .chainlink directory.
-    chainlink_dir: PathBuf,
-    /// Path to .chainlink/.locks-cache (worktree of chainlink/locks branch).
+    /// Path to the .atelier directory.
+    atelier_dir: PathBuf,
+    /// Path to .atelier/.locks-cache (worktree of atelier/locks branch).
     cache_dir: PathBuf,
-    /// The repo root (parent of .chainlink).
+    /// The repo root (parent of .atelier).
     repo_root: PathBuf,
     /// Git remote name (from config, defaults to "origin").
     remote: String,
 }
 
 impl SyncManager {
-    /// Create a new SyncManager for the given .chainlink directory.
-    pub fn new(chainlink_dir: &Path) -> Result<Self> {
-        let repo_root = chainlink_dir
+    /// Create a new SyncManager for the given .atelier directory.
+    pub fn new(atelier_dir: &Path) -> Result<Self> {
+        let repo_root = atelier_dir
             .parent()
-            .ok_or_else(|| anyhow::anyhow!("Cannot determine repo root from .chainlink dir"))?
+            .ok_or_else(|| anyhow::anyhow!("Cannot determine repo root from .atelier dir"))?
             .to_path_buf();
 
-        let cache_dir = chainlink_dir.join(HUB_CACHE_DIR);
-        let remote = read_tracker_remote(chainlink_dir);
+        let cache_dir = atelier_dir.join(HUB_CACHE_DIR);
+        let remote = read_tracker_remote(atelier_dir);
 
         Ok(SyncManager {
-            chainlink_dir: chainlink_dir.to_path_buf(),
+            atelier_dir: atelier_dir.to_path_buf(),
             cache_dir,
             repo_root,
             remote,
         })
     }
 
-    /// Get the path to the .chainlink directory.
-    pub fn chainlink_dir(&self) -> &Path {
-        &self.chainlink_dir
+    /// Get the path to the .atelier directory.
+    pub fn atelier_dir(&self) -> &Path {
+        &self.atelier_dir
     }
 
     /// Check if the cache directory is initialized.
@@ -158,11 +158,11 @@ impl SyncManager {
         if !has_email {
             let _ = Command::new("git")
                 .current_dir(&self.cache_dir)
-                .args(["config", "--local", "user.email", "chainlink@localhost"])
+                .args(["config", "--local", "user.email", "atelier@localhost"])
                 .output();
             let _ = Command::new("git")
                 .current_dir(&self.cache_dir)
-                .args(["config", "--local", "user.name", "chainlink"])
+                .args(["config", "--local", "user.name", "atelier"])
                 .output();
         }
         Ok(())
@@ -202,7 +202,7 @@ impl SyncManager {
 
     /// Initialize the hub cache directory.
     ///
-    /// If the `chainlink/locks` branch exists on the remote, fetches it and
+    /// If the `atelier/locks` branch exists on the remote, fetches it and
     /// creates a worktree. If not, creates an orphan branch with an empty
     /// locks.json.
     pub fn init_cache(&self) -> Result<()> {
@@ -258,7 +258,7 @@ impl SyncManager {
             // Commit the initial state
             self.git_in_cache(&["add", "locks.json"])?;
             self.ensure_cache_git_identity()?;
-            self.git_in_cache(&["commit", "-m", "Initialize chainlink/locks branch"])?;
+            self.git_in_cache(&["commit", "-m", "Initialize atelier/locks branch"])?;
         }
 
         self.ensure_cache_git_identity()?;
@@ -537,7 +537,7 @@ impl SyncManager {
                 if !force {
                     bail!(
                         "Issue {} is locked by '{}' (claimed {}). \
-                         Use 'chainlink locks steal {}' if the lock is stale.",
+                         Use 'atelier locks steal {}' if the lock is stale.",
                         crate::utils::format_issue_id(issue_id),
                         existing.agent_id,
                         existing.claimed_at.format("%Y-%m-%d %H:%M"),
@@ -843,10 +843,10 @@ mod tests {
     #[test]
     fn test_sync_manager_new() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         assert!(!sync.is_initialized());
         assert_eq!(sync.remote(), "origin");
     }
@@ -854,10 +854,10 @@ mod tests {
     #[test]
     fn test_sync_manager_cache_path() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         assert!(sync.cache_path().ends_with(".locks-cache"));
     }
 
@@ -882,10 +882,10 @@ mod tests {
     #[test]
     fn test_read_locks_no_cache() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         // Cache doesn't exist, so this should return empty
         let locks = sync.read_locks().unwrap();
         assert!(locks.locks.is_empty());
@@ -894,15 +894,15 @@ mod tests {
     #[test]
     fn test_read_locks_with_file() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         std::fs::create_dir_all(&cache_dir).unwrap();
 
         // Write a locks.json into the cache dir
         let locks = LocksFile::empty();
         locks.save(&cache_dir.join("locks.json")).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let loaded = sync.read_locks().unwrap();
         assert_eq!(loaded.version, 1);
         assert!(loaded.locks.is_empty());
@@ -911,11 +911,11 @@ mod tests {
     #[test]
     fn test_read_heartbeats_empty() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         std::fs::create_dir_all(&cache_dir).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let heartbeats = sync.read_heartbeats().unwrap();
         assert!(heartbeats.is_empty());
     }
@@ -923,8 +923,8 @@ mod tests {
     #[test]
     fn test_read_heartbeats_with_files() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         let hb_dir = cache_dir.join("heartbeats");
         std::fs::create_dir_all(&hb_dir).unwrap();
 
@@ -937,7 +937,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&hb).unwrap();
         std::fs::write(hb_dir.join("worker-1.json"), json).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let heartbeats = sync.read_heartbeats().unwrap();
         assert_eq!(heartbeats.len(), 1);
         assert_eq!(heartbeats[0].agent_id, "worker-1");
@@ -947,11 +947,11 @@ mod tests {
     #[test]
     fn test_read_keyring_missing() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         std::fs::create_dir_all(&cache_dir).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let keyring = sync.read_keyring().unwrap();
         assert!(keyring.trusted_fingerprints.is_empty());
     }
@@ -959,8 +959,8 @@ mod tests {
     #[test]
     fn test_find_stale_locks_no_heartbeats() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         std::fs::create_dir_all(&cache_dir).unwrap();
 
         // Write locks with one entry
@@ -976,7 +976,7 @@ mod tests {
         );
         locks.save(&cache_dir.join("locks.json")).unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let stale = sync.find_stale_locks().unwrap();
         assert_eq!(stale.len(), 1);
         assert_eq!(stale[0], (5, "worker-1".to_string()));
@@ -985,8 +985,8 @@ mod tests {
     #[test]
     fn test_find_stale_locks_fresh_heartbeat() {
         let dir = tempdir().unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        let cache_dir = chainlink_dir.join(".locks-cache");
+        let atelier_dir = dir.path().join(".atelier");
+        let cache_dir = atelier_dir.join(".locks-cache");
         let hb_dir = cache_dir.join("heartbeats");
         std::fs::create_dir_all(&hb_dir).unwrap();
 
@@ -1016,7 +1016,7 @@ mod tests {
         )
         .unwrap();
 
-        let sync = SyncManager::new(&chainlink_dir).unwrap();
+        let sync = SyncManager::new(&atelier_dir).unwrap();
         let stale = sync.find_stale_locks().unwrap();
         assert!(stale.is_empty());
     }

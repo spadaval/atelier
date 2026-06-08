@@ -12,9 +12,9 @@ use crate::db::Database;
 
 const FLUSH_INTERVAL_SECS: u64 = 30;
 
-pub fn start(chainlink_dir: &Path) -> Result<()> {
-    let pid_file = chainlink_dir.join("daemon.pid");
-    let log_file = chainlink_dir.join("daemon.log");
+pub fn start(atelier_dir: &Path) -> Result<()> {
+    let pid_file = atelier_dir.join("daemon.pid");
+    let log_file = atelier_dir.join("daemon.log");
 
     // Check if daemon is already running
     if let Some(pid) = read_pid(&pid_file) {
@@ -38,7 +38,7 @@ pub fn start(chainlink_dir: &Path) -> Result<()> {
         .arg("daemon")
         .arg("run")
         .arg("--dir")
-        .arg(chainlink_dir)
+        .arg(atelier_dir)
         .stdin(Stdio::null())
         .stdout(log_handle)
         .stderr(log_handle_err)
@@ -55,8 +55,8 @@ pub fn start(chainlink_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn stop(chainlink_dir: &Path) -> Result<()> {
-    let pid_file = chainlink_dir.join("daemon.pid");
+pub fn stop(atelier_dir: &Path) -> Result<()> {
+    let pid_file = atelier_dir.join("daemon.pid");
 
     let pid = match read_pid(&pid_file) {
         Some(p) => p,
@@ -82,8 +82,8 @@ pub fn stop(chainlink_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn status(chainlink_dir: &Path) -> Result<()> {
-    let pid_file = chainlink_dir.join("daemon.pid");
+pub fn status(atelier_dir: &Path) -> Result<()> {
+    let pid_file = atelier_dir.join("daemon.pid");
 
     match read_pid(&pid_file) {
         Some(pid) => {
@@ -100,20 +100,20 @@ pub fn status(chainlink_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn run_daemon(chainlink_dir: &Path) -> Result<()> {
-    // Validate that this is a legitimate chainlink directory
-    let db_path = chainlink_dir.join("issues.db");
+pub fn run_daemon(atelier_dir: &Path) -> Result<()> {
+    // Validate that this is a legitimate atelier directory
+    let db_path = atelier_dir.join("state.db");
     if !db_path.exists() {
         anyhow::bail!(
-            "Invalid chainlink directory: {} does not contain issues.db",
-            chainlink_dir.display()
+            "Invalid atelier directory: {} does not contain state.db",
+            atelier_dir.display()
         );
     }
 
-    let session_file = chainlink_dir.join("session.json");
+    let session_file = atelier_dir.join("session.json");
 
     println!("Daemon starting...");
-    println!("Watching: {}", chainlink_dir.display());
+    println!("Watching: {}", atelier_dir.display());
     println!("Flush interval: {} seconds", FLUSH_INTERVAL_SECS);
 
     // Graceful shutdown flag
@@ -213,8 +213,8 @@ pub fn run_daemon(chainlink_dir: &Path) -> Result<()> {
         // Heartbeat: push agent heartbeat every N cycles (best-effort)
         heartbeat_counter += 1;
         if heartbeat_counter.is_multiple_of(HEARTBEAT_EVERY_N) {
-            if let Ok(Some(agent)) = crate::identity::AgentConfig::load(chainlink_dir) {
-                if let Ok(sync) = crate::sync::SyncManager::new(chainlink_dir) {
+            if let Ok(Some(agent)) = crate::identity::AgentConfig::load(atelier_dir) {
+                if let Ok(sync) = crate::sync::SyncManager::new(atelier_dir) {
                     let _ = sync.init_cache();
                     if let Err(e) = sync.push_heartbeat(&agent, active_issue_id) {
                         tracing::warn!("Heartbeat push failed: {}", e);
@@ -227,7 +227,7 @@ pub fn run_daemon(chainlink_dir: &Path) -> Result<()> {
     }
 
     // Cleanup PID file on graceful exit
-    let pid_file = chainlink_dir.join("daemon.pid");
+    let pid_file = atelier_dir.join("daemon.pid");
     if pid_file.exists() {
         fs::remove_file(&pid_file).ok();
     }

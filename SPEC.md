@@ -404,7 +404,8 @@ Every command that agents call should support stable JSON output.
 - Add `export --check`.
 - Add `rebuild`.
 - Make SQLite rebuildable from exported state.
-- Decide whether `.atelier/state.db` is gitignored by default.
+- Keep `.atelier/state.db` ignored as local runtime state; committed durable
+  state lives under `.atelier-state/`.
 
 ### Milestone 3: Braid-Style Worktrees
 
@@ -434,12 +435,12 @@ Every command that agents call should support stable JSON output.
 
 ## Open Questions
 
-- Should the binary be `atelier` or a shorter alias such as `atl`?
-- Should `.atelier/state.db` be ignored or committed for convenience while still
-  treated as rebuildable?
+- Resolved for Milestone 1: the canonical binary is `atelier`; short aliases
+  such as `atl` are deferred until the install story is stable.
+- Resolved for Milestone 1: `.atelier/state.db` is ignored local runtime state,
+  while `.atelier-state/` is the committed rebuild source.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata?
 - What artifact storage backends should be supported first?
 - How much Chainlink lock sync should survive the redesign?
 - What should the default workflow be for tiny tasks?
-

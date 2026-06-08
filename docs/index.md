@@ -2,10 +2,14 @@
 
 - `AGENTFACTORY.md`: agent-factory bindings for this repository.
 - `AGENTS.md`: concise entry point for agents working in this repository.
-- `CONTEXT.md`: domain language and ambiguity decisions.
-- `SPEC.md`: product intent and target behavior for Atelier.
+- [CONTEXT.md](../CONTEXT.md): domain language and ambiguity decisions.
+- [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - `docs/adr/`: durable architecture and process decisions.
-- `docs/architecture/index.md`: architecture and ownership map.
+- [docs/architecture/index.md](architecture/index.md): architecture and
+  ownership map.
+- [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
+  provenance, inherited module boundaries, preservation expectations, and
+  deferred migration areas.
 - `docs/architecture/quality/index.md`: quality documentation index.
 - `docs/architecture/quality/architecture-quality.md`: vocabulary for
   architecture review.

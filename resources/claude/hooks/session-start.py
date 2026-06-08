@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Session start hook that loads chainlink context and auto-starts sessions.
+Session start hook that loads atelier context and auto-starts sessions.
 """
 
 import json
@@ -9,21 +9,21 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chainlink_config import find_chainlink_dir, run_chainlink
+from atelier_config import find_atelier_dir, run_atelier
 
 
 # Sessions older than this (in hours) are considered stale and auto-ended
 STALE_SESSION_HOURS = 4
 
 
-def check_chainlink_initialized():
-    """Check if .chainlink directory exists."""
-    return find_chainlink_dir() is not None
+def check_atelier_initialized():
+    """Check if .atelier directory exists."""
+    return find_atelier_dir() is not None
 
 
 def get_session_age_minutes():
     """Parse session status to get duration in minutes. Returns None if no active session."""
-    result = run_chainlink(["session", "status"])
+    result = run_atelier(["session", "status"])
     if not result or "Session #" not in result:
         return None
     match = re.search(r'Duration:\s*(\d+)\s*minutes', result)
@@ -33,8 +33,8 @@ def get_session_age_minutes():
 
 
 def has_active_session():
-    """Check if there's an active chainlink session."""
-    result = run_chainlink(["session", "status"])
+    """Check if there's an active atelier session."""
+    result = run_atelier(["session", "status"])
     if result and "Session #" in result and "(started" in result:
         return True
     return False
@@ -44,7 +44,7 @@ def auto_end_stale_session():
     """End session if it's been open longer than STALE_SESSION_HOURS."""
     age_minutes = get_session_age_minutes()
     if age_minutes is not None and age_minutes > STALE_SESSION_HOURS * 60:
-        run_chainlink([
+        run_atelier([
             "session", "end", "--notes",
             f"Session auto-ended (stale after {age_minutes} minutes). No handoff notes provided."
         ])
@@ -86,15 +86,15 @@ def auto_comment_on_resume(session_status):
     else:
         comment = "[auto] Session resumed after context compression."
 
-    run_chainlink(["comment", issue_id, comment])
+    run_atelier(["comment", issue_id, comment])
 
 
 def main():
-    if not check_chainlink_initialized():
-        # No chainlink repo, skip
+    if not check_atelier_initialized():
+        # No atelier repo, skip
         sys.exit(0)
 
-    context_parts = ["<chainlink-session-context>"]
+    context_parts = ["<atelier-session-context>"]
 
     is_resume = detect_resume_event()
 
@@ -110,15 +110,15 @@ def main():
             )
 
     # Get handoff notes from previous session before starting new one
-    last_handoff = run_chainlink(["session", "last-handoff"])
+    last_handoff = run_atelier(["session", "last-handoff"])
 
     # Auto-start session if none active
     if not has_active_session():
-        run_chainlink(["session", "start"])
+        run_atelier(["session", "start"])
 
     # If resuming, add breadcrumb comment and context
     if is_resume:
-        session_status = run_chainlink(["session", "status"])
+        session_status = run_atelier(["session", "status"])
         auto_comment_on_resume(session_status)
 
         last_action = get_last_action_from_status(session_status)
@@ -132,7 +132,7 @@ def main():
             context_parts.append(
                 "## Context Compression Breadcrumb\n"
                 "This session resumed after context compression.\n"
-                "No last action was recorded. Use `chainlink session action \"...\"` to track progress."
+                "No last action was recorded. Use `atelier session action \"...\"` to track progress."
             )
 
     # Include previous session handoff notes if available
@@ -140,45 +140,45 @@ def main():
         context_parts.append(f"## Previous Session Handoff\n{last_handoff}")
 
     # Try to get session status
-    session_status = run_chainlink(["session", "status"])
+    session_status = run_atelier(["session", "status"])
     if session_status:
         context_parts.append(f"## Current Session\n{session_status}")
 
     # Sync lock state from remote (best-effort, non-blocking)
-    sync_result = run_chainlink(["sync"], timeout=10)
+    sync_result = run_atelier(["sync"], timeout=10)
     if sync_result:
         context_parts.append(f"## Lock Sync\n{sync_result}")
 
     # Show current lock status
-    locks_result = run_chainlink(["locks", "list"])
+    locks_result = run_atelier(["locks", "list"])
     if locks_result and "No locks" not in locks_result:
         context_parts.append(f"## Active Locks\n{locks_result}")
 
     # Show agent identity if configured
-    agent_result = run_chainlink(["agent", "status"])
+    agent_result = run_atelier(["agent", "status"])
     if agent_result and "No agent" not in agent_result:
         context_parts.append(f"## Agent Identity\n{agent_result}")
 
     # Get ready issues (unblocked work)
-    ready_issues = run_chainlink(["ready"])
+    ready_issues = run_atelier(["ready"])
     if ready_issues:
         context_parts.append(f"## Ready Issues (unblocked)\n{ready_issues}")
 
     # Get open issues summary
-    open_issues = run_chainlink(["list", "-s", "open"])
+    open_issues = run_atelier(["list", "-s", "open"])
     if open_issues:
         context_parts.append(f"## Open Issues\n{open_issues}")
 
     context_parts.append("""
-## Chainlink Workflow Reminder
-- Use `chainlink session start` at the beginning of work
-- Use `chainlink session work <id>` to mark current focus
-- Use `chainlink session action "..."` to record breadcrumbs before context compression
-- Add comments as you discover things: `chainlink comment <id> "..."`
-- End with handoff notes: `chainlink session end --notes "..."`
-- Use `chainlink locks list` to see which issues are claimed by agents
-- Use `chainlink sync` to fetch latest lock state from remote
-</chainlink-session-context>""")
+## Atelier Workflow Reminder
+- Use `atelier session start` at the beginning of work
+- Use `atelier session work <id>` to mark current focus
+- Use `atelier session action "..."` to record breadcrumbs before context compression
+- Add comments as you discover things: `atelier comment <id> "..."`
+- End with handoff notes: `atelier session end --notes "..."`
+- Use `atelier locks list` to see which issues are claimed by agents
+- Use `atelier sync` to fetch latest lock state from remote
+</atelier-session-context>""")
 
     print("\n\n".join(context_parts))
     sys.exit(0)

@@ -35,13 +35,13 @@ fn calculate_progress(db: &Database, issue: &Issue) -> Result<Progress> {
     Ok(Some((closed, total)))
 }
 
-pub fn run(db: &Database, chainlink_dir: &Path) -> Result<()> {
+pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
     let ready = db.list_ready_issues()?;
 
     if ready.is_empty() {
         println!("No issues ready to work on.");
         println!(
-            "Use 'chainlink list' to see all issues or 'chainlink blocked' to see blocked issues."
+            "Use 'atelier list' to see all issues or 'atelier blocked' to see blocked issues."
         );
         return Ok(());
     }
@@ -57,7 +57,7 @@ pub fn run(db: &Database, chainlink_dir: &Path) -> Result<()> {
 
         // Best-effort: skip issues locked by other agents
         if let Ok(LockStatus::LockedByOther { stale: false, .. }) =
-            lock_check::check_lock(chainlink_dir, issue.id)
+            lock_check::check_lock(atelier_dir, issue.id)
         {
             continue;
         }
@@ -119,7 +119,7 @@ pub fn run(db: &Database, chainlink_dir: &Path) -> Result<()> {
     }
 
     println!();
-    println!("Run: chainlink session work {}", top.id);
+    println!("Run: atelier session work {}", top.id);
 
     // Show runners-up if any
     if scored.len() > 1 {
@@ -153,9 +153,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         let db = Database::open(&db_path).unwrap();
-        let chainlink_dir = dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-        (db, chainlink_dir, dir)
+        let atelier_dir = dir.path().join(".atelier");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
+        (db, atelier_dir, dir)
     }
 
     #[test]

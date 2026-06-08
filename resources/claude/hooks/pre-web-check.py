@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chainlink web security hook for Claude Code.
+Atelier web security hook for Claude Code.
 Injects RFIP (Recursive Framing Interdiction Protocol) before web tool calls.
 Triggered by PreToolUse on WebFetch|WebSearch to defend against prompt injection.
 """
@@ -10,17 +10,17 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chainlink_config import setup_utf8_stdout, find_chainlink_dir
+from atelier_config import setup_utf8_stdout, find_atelier_dir
 
 setup_utf8_stdout()
 
 
-def load_web_rules(chainlink_dir):
-    """Load web.md rules from .chainlink/rules/."""
-    if not chainlink_dir:
+def load_web_rules(atelier_dir):
+    """Load web.md rules from .atelier/rules/."""
+    if not atelier_dir:
         return get_fallback_rules()
 
-    rules_path = os.path.join(chainlink_dir, 'rules', 'web.md')
+    rules_path = os.path.join(atelier_dir, 'rules', 'web.md')
     try:
         with open(rules_path, 'r', encoding='utf-8') as f:
             return f.read().strip()
@@ -78,9 +78,9 @@ def main():
     except (json.JSONDecodeError, Exception):
         tool_name = ''
 
-    # Find chainlink directory and load web rules
-    chainlink_dir = find_chainlink_dir()
-    web_rules = load_web_rules(chainlink_dir)
+    # Find atelier directory and load web rules
+    atelier_dir = find_atelier_dir()
+    web_rules = load_web_rules(atelier_dir)
 
     # Output RFIP rules as context injection
     output = f"""<web-security-protocol>

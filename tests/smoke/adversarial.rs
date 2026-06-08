@@ -38,7 +38,7 @@ fn test_boundary_title_over_513() {
 #[test]
 fn test_boundary_title_null_bytes() {
     let h = SmokeHarness::new();
-    let output = Command::new(&h.chainlink_bin)
+    let output = Command::new(&h.atelier_bin)
         .current_dir(h.temp_dir.path())
         .args(["create", "test\x00null"])
         .output();
@@ -325,6 +325,16 @@ fn test_corrupt_db_permissions() {
     let perms = std::fs::Permissions::from_mode(0o444);
     std::fs::set_permissions(h.db_path(), perms).unwrap();
 
+    if std::fs::OpenOptions::new()
+        .write(true)
+        .open(h.db_path())
+        .is_ok()
+    {
+        let perms = std::fs::Permissions::from_mode(0o644);
+        std::fs::set_permissions(h.db_path(), perms).unwrap();
+        return;
+    }
+
     let result = h.run(&["create", "Should fail"]);
     assert!(
         !result.success,
@@ -357,7 +367,7 @@ fn test_corrupt_missing_db() {
 #[test]
 fn test_concurrent_creates_5() {
     let h = SmokeHarness::new();
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..5)
@@ -369,7 +379,7 @@ fn test_concurrent_creates_5() {
                     .current_dir(&dir)
                     .args(["create", &format!("Concurrent issue {}", i)])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })

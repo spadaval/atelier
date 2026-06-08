@@ -80,7 +80,7 @@ pub struct CreateOpts<'a> {
     pub labels: &'a [String],
     pub work: bool,
     pub quiet: bool,
-    pub chainlink_dir: Option<&'a Path>,
+    pub atelier_dir: Option<&'a Path>,
 }
 
 pub fn run(
@@ -156,8 +156,8 @@ pub fn run(
     // Set as active session work item
     if opts.work {
         if let Ok(Some(session)) = db.get_current_session() {
-            // Enforce lock check if chainlink_dir is available
-            if let Some(dir) = opts.chainlink_dir {
+            // Enforce lock check if atelier_dir is available
+            if let Some(dir) = opts.atelier_dir {
                 lock_check::enforce_lock(dir, id, db)?;
             }
             db.set_session_issue(session.id, id)?;
@@ -214,7 +214,7 @@ pub fn run_subissue(
     // Set as active session work item
     if opts.work {
         if let Ok(Some(session)) = db.get_current_session() {
-            if let Some(dir) = opts.chainlink_dir {
+            if let Some(dir) = opts.atelier_dir {
                 lock_check::enforce_lock(dir, id, db)?;
             }
             db.set_session_issue(session.id, id)?;
