@@ -1,0 +1,445 @@
+# Atelier Specification
+
+Atelier is a local-first, agent-native work tracker for complex software missions.
+It starts from the Chainlink codebase, but the intended product is not a thin
+rename. The goal is to combine Chainlink's SQLite-backed operational machinery
+with Braid's repo-native simplicity and then add the workflow, evidence, and
+mission-control features needed by agent-factory style orchestration.
+
+## Core Thesis
+
+Atelier should use:
+
+- SQLite for state in motion.
+- Markdown and structured exports for state at rest.
+- Git for merge, review, and long-term audit.
+- Agent-facing commands as the primary interface.
+- Optional UI surfaces built on top of mechanical projections.
+
+The SQLite database is the fast local runtime store. It supports queries,
+locks, sessions, workflow checks, and Mission Control projections. The exported
+state is the durable, mergeable repo surface. A worktree should be able to
+rebuild its local SQLite database from committed exported state after checkout,
+pull, merge, or clone.
+
+## Starting Point
+
+This repository begins as a copy of `dollspace-gay/chainlink`.
+
+Chainlink provides useful foundations:
+
+- Rust CLI structure.
+- SQLite database and migrations.
+- Issue CRUD.
+- Parent/subissue relationships.
+- Labels, comments, relations, and dependencies.
+- Milestones.
+- Sessions and handoff notes.
+- Agent identity.
+- Lock and sync concepts.
+- Token usage tracking.
+- Hooks, rules, and context-provider direction.
+- JSON output.
+
+Braid provides important product-shape ideas:
+
+- Repo-legible issue state.
+- Simple command-oriented workflow.
+- Git/worktree ergonomics.
+- Agent worktree creation.
+- Ready/start/done flow.
+- Human-readable markdown records.
+- Lightweight mental model.
+
+Atelier should preserve Braid's elegance without making markdown parsing the hot
+path for every command.
+
+## Non-Goals
+
+Atelier should not become:
+
+- A SaaS-backed issue tracker.
+- A Jira clone.
+- A Dolt-backed database system.
+- A mandatory red-tape engine.
+- A TUI-first product.
+- A system where every issue maps rigidly to one agent session.
+
+Interactive UI can come later. The foundation should be a crisp CLI with stable
+JSON output and durable file projections.
+
+## Storage Model
+
+Atelier should implement this storage contract:
+
+```text
+.atelier/
+  state.db              # live local SQLite state
+  agent.json            # machine-local agent identity
+  cache/                # derived local-only data
+
+.atelier-state/
+  manifest.json
+  issues/
+    ISS-0001.md
+  missions/
+    MIS-0001.md
+  milestones/
+    MS-0001.md
+  plans/
+    PLAN-0001.md
+  evidence/
+    EV-0001.md
+  graph.json
+  mission-control.json
+```
+
+The exact layout can change, but the principles should not:
+
+- Exported state must be deterministic.
+- Exported state must be sufficient to rebuild SQLite.
+- `export --check` must detect stale projections.
+- Mutating commands should update exports automatically by default.
+- Git merges should happen through exported files, not by merging SQLite files.
+- SQLite should be rebuildable after checkout, merge, pull, or clone.
+
+The existing Chainlink export/import system is backup-oriented. Atelier needs a
+canonical projection/rebuild system instead.
+
+## Domain Model
+
+Atelier should distinguish durable work concepts rather than forcing everything
+to be an issue.
+
+### Mission
+
+A mission is a high-level objective that may span hours or days. It is useful
+for orchestrators and Mission Control. It should contain intent, constraints,
+active milestones, linked plans, status, validation expectations, and current
+health.
+
+### Milestone
+
+A milestone is a validated intermediate target state. It is not merely a vague
+point on a roadmap. A milestone should define:
+
+- Desired state.
+- Scope boundaries.
+- Validation criteria.
+- Linked work.
+- Required or accepted evidence.
+- Completion state.
+
+### Issue
+
+An issue is a durable accountability unit. It may be small enough for one agent
+run, but the system must not require one issue to equal one run. Issues can be
+tasks, bugs, research items, implementation slices, review items, validation
+items, or custom configured types.
+
+### Plan
+
+A plan records intended execution when that intent matters beyond ephemeral
+context. Plans should be stored when they create scope, coordinate multiple
+agents, define sequencing, explain decisions, or survive across sessions. Scratch
+plans can remain ephemeral.
+
+Plans must be adaptable. The tool should make plan drift visible and allow plans
+to be revised with reasons as new facts emerge.
+
+### Evidence
+
+Evidence records prove that validation happened. Evidence may point to test
+results, logs, screenshots, videos, API responses, benchmark output, review
+notes, or generated reports.
+
+Evidence metadata should include:
+
+- ID.
+- Linked issue, milestone, mission, or gate.
+- Kind.
+- Result.
+- Summary.
+- Path or URI.
+- Size.
+- Hash when applicable.
+- Created time.
+- Producer or validator.
+
+Small artifacts may live in the repo. Large artifacts should use configurable
+external storage while preserving metadata in repo state.
+
+### Run
+
+A run/session/slice is execution metadata, not the primary unit of work. A run
+may touch one issue, part of one issue, or several issues. Runs should record
+what happened mechanically enough for Mission Control without forcing agents
+into rigid accounting.
+
+## Links
+
+Links should be explicit and typed. Do not overload dependencies to represent
+all hierarchy.
+
+Likely link types:
+
+- `blocks`
+- `blocked_by`
+- `depends_on`
+- `related`
+- `duplicates`
+- `supersedes`
+- `derived_from`
+- `part_of`
+- `implements`
+- `validates`
+- `evidenced_by`
+- `planned_by`
+
+The link model should support custom relation types with validation and linting.
+
+## Workflows
+
+Atelier should support configurable workflows. A workflow defines allowed phases,
+transitions, required fields, gates, evidence requirements, and closure rules.
+
+Example workflow:
+
+```yaml
+types:
+  epic:
+    workflow: epic_delivery
+
+workflows:
+  epic_delivery:
+    phases:
+      - research
+      - impact_report
+      - planning
+      - implementation
+      - code_review
+      - validation
+      - done
+    transitions:
+      research: [impact_report]
+      impact_report: [planning, research]
+      planning: [implementation, research]
+      implementation: [code_review, validation]
+      code_review: [implementation, validation]
+      validation: [done, implementation]
+    done_requires:
+      evidence:
+        min_count: 1
+      gates:
+        - tests_passed
+        - export_fresh
+```
+
+Workflows should scale with risk. Small tasks should not require heavyweight
+ceremony unless policy says so.
+
+## Rules, Lint, And Guidance
+
+Atelier should support three layers of process:
+
+- Mechanical rules: enforceable by the CLI.
+- Lint rules: warnings or errors over tracker state.
+- Advisory guidance: surfaced at relevant actions and optionally reviewed by an
+  LLM.
+
+Examples:
+
+- Required evidence before `done`.
+- Required plan before implementation for large missions.
+- Warning when a summary is too long or too vague.
+- Warning when a milestone lacks validation criteria.
+- Error when exported state is stale.
+- Error when a workflow transition is invalid.
+- Warning when implementation starts on `main`.
+
+Fuzzy guidance should live close to the action it affects. Agents should receive
+the relevant rule at the point of use, not a wall of generic process text.
+
+## Avoiding Red Tape
+
+Atelier must make the right thing easy without drowning agents in process.
+
+Process should be:
+
+- Configurable.
+- Risk-scaled.
+- Overrideable with a recorded reason.
+- Split between start requirements and close requirements.
+- Strict only where strictness protects correctness or coordination.
+
+Rules should have severities:
+
+- `info`
+- `warn`
+- `error`
+- `policy`
+
+Waivers should be explicit and visible in Mission Control.
+
+## Branches And Worktrees
+
+Atelier should preserve Braid's agent worktree ergonomics.
+
+Desired commands:
+
+```text
+atelier agent init <name>
+atelier work start ISS-123
+atelier worktree for ISS-123
+atelier work finish ISS-123
+atelier worktree merge
+```
+
+The default branch model should be opinionated but configurable:
+
+```text
+main
+  integration branch
+
+work/ISS-123-short-slug
+  normal issue implementation branch
+
+mission/MIS-001-short-slug
+  optional coordinated mission branch
+
+agent/<agent-id>
+  optional long-lived agent branch/worktree
+```
+
+Useful enforcement:
+
+- Warn or fail when implementation starts on `main`.
+- Refuse claim when the worktree is dirty unless overridden.
+- Record branch/worktree association.
+- Refuse `done` when exported state is stale.
+- Allow multi-issue slices with explicit intent.
+
+The worktree feature is a convenience layer over Git, not a replacement sync
+system.
+
+## Validation And Gates
+
+Evidence should be a first-class condition for closing work. Gates evaluate
+whether a record can advance or close.
+
+Example gates:
+
+- `export_fresh`
+- `tests_passed`
+- `review_complete`
+- `evidence_attached`
+- `milestone_validated`
+- `no_blocking_lints`
+
+Gates should produce machine-readable results for Mission Control.
+
+## Mission Control
+
+Atelier should maintain enough mechanical state to drive a dashboard or local UI.
+
+Mission Control should be able to show:
+
+- Active missions.
+- Milestone progress.
+- Open blockers.
+- Active agents and runs.
+- Branch/worktree associations.
+- Claims and locks.
+- Stale exports.
+- Required evidence.
+- Gate failures.
+- Plan drift.
+- Recent decisions.
+- Items ready for review or validation.
+
+The CLI should expose this through JSON projections before any UI is built.
+
+## Command Philosophy
+
+The CLI should be small, composable, and agent-friendly.
+
+Representative commands:
+
+```text
+atelier init
+atelier next
+atelier ready
+atelier show ISS-123
+atelier issue create
+atelier mission create
+atelier milestone create
+atelier plan create
+atelier link add
+atelier work start
+atelier work finish
+atelier evidence add
+atelier gate check
+atelier lint
+atelier export
+atelier export --check
+atelier rebuild
+atelier doctor
+```
+
+Every command that agents call should support stable JSON output.
+
+## Initial Milestones
+
+### Milestone 1: Establish The Fork
+
+- Copy Chainlink into the new project.
+- Rename package, binary, directories, and user-facing text.
+- Preserve tests where practical.
+- Document provenance and architectural intent.
+
+### Milestone 2: Canonical Export/Rebuild
+
+- Define `.atelier-state`.
+- Export deterministic per-record files.
+- Add `export --check`.
+- Add `rebuild`.
+- Make SQLite rebuildable from exported state.
+- Decide whether `.atelier/state.db` is gitignored by default.
+
+### Milestone 3: Braid-Style Worktrees
+
+- Add agent worktree creation.
+- Add work branch helpers.
+- Associate claims with branches/worktrees.
+- Rebuild SQLite in new worktrees.
+
+### Milestone 4: Domain Model Upgrade
+
+- Add first-class missions, milestones, plans, evidence, gates, and runs.
+- Add typed links.
+- Keep compatibility migration paths where reasonable.
+
+### Milestone 5: Workflows And Rules
+
+- Add configurable types and workflows.
+- Add gate-backed transitions.
+- Add linter severities and waivers.
+- Surface action-aware guidance.
+
+### Milestone 6: Mission Control Projection
+
+- Add JSON projections for active missions, agents, blockers, gates, evidence,
+  branches, and plan drift.
+- Defer rich UI until projections are useful.
+
+## Open Questions
+
+- Should the binary be `atelier` or a shorter alias such as `atl`?
+- Should `.atelier/state.db` be ignored or committed for convenience while still
+  treated as rebuildable?
+- Should sessions be exported, partially exported, or treated as local runtime
+  metadata?
+- What artifact storage backends should be supported first?
+- How much Chainlink lock sync should survive the redesign?
+- What should the default workflow be for tiny tasks?
+
