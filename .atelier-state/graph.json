@@ -154,16 +154,6 @@
       "metadata": {
         "source": "front-matter"
       },
-      "source_id": "ISS-0009",
-      "source_kind": "issue",
-      "target_id": "ISS-0035",
-      "target_kind": "issue",
-      "type": "blocks"
-    },
-    {
-      "metadata": {
-        "source": "front-matter"
-      },
       "source_id": "ISS-0011",
       "source_kind": "issue",
       "target_id": "ISS-0009",
@@ -769,16 +759,6 @@
       "target_id": "ISS-0035",
       "target_kind": "issue",
       "type": "parent"
-    },
-    {
-      "metadata": {
-        "source": "front-matter"
-      },
-      "source_id": "ISS-0041",
-      "source_kind": "issue",
-      "target_id": "ISS-0042",
-      "target_kind": "issue",
-      "type": "blocks"
     },
     {
       "metadata": {
