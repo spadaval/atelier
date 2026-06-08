@@ -151,6 +151,34 @@ commands:
    local SQLite state from `.atelier-state/`, after which show/list/ready/lint
    commands behave the same as before rebuild.
 
+## Temporary Command Mappings
+
+Until Agent Factory is migrated in `atelier-z1p.5`, Atelier supports the
+following agent-facing command surface for the Beads subset used by workers and
+orchestrators:
+
+| Beads command | Atelier command |
+| --- | --- |
+| `bd show <id>` | `atelier issue show <id>` |
+| `bd update <id> --claim` | `atelier issue update <id> --claim` |
+| `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` |
+| `bd update <id> --title ... --description ... --priority ...` | `atelier issue update <id> --title ... --description ... --priority ...` |
+| `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |
+| `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` |
+| `bd ready` | `atelier issue ready` or flat alias `atelier ready` |
+| `bd list --status=open` | `atelier issue list --status open` or flat alias `atelier list --status open` |
+| `bd search "<topic>"` | `atelier issue search "<topic>"` or flat alias `atelier search "<topic>"` |
+| `bd create ...` | `atelier issue create ...` |
+| `bd dep add <blocked> <blocker>` | `atelier dep add <blocked> <blocker>` |
+| `bd dep remove <blocked> <blocker>` | `atelier dep remove <blocked> <blocker>` |
+| `bd lint [id]` | `atelier lint [id]` |
+| `bd doctor` / `bd ping` | `atelier doctor` |
+
+Imported Beads IDs such as `atelier-z1p.3` are accepted anywhere this mapping
+uses `<id>`. If no imported source ID exists, Atelier numeric IDs such as `#1`
+or `1` remain valid. Required commands accept `--json` and use the MVP response
+envelope.
+
 ## Cutover Blockers
 
 These blockers must be closed or explicitly waived before `AGENTFACTORY.md`

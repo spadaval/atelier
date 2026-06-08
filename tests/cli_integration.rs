@@ -1,6 +1,12 @@
 use std::process::Command;
 use tempfile::tempdir;
 
+fn json_value(stdout: &str) -> serde_json::Value {
+    serde_json::from_str(stdout).unwrap_or_else(|error| {
+        panic!("expected valid JSON, got error {error}; stdout:\n{stdout}");
+    })
+}
+
 /// Helper to run atelier commands in a temp directory
 fn run_atelier(dir: &std::path::Path, args: &[&str]) -> (bool, String, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
@@ -2502,6 +2508,138 @@ fn test_integrity_export_import_roundtrip() {
     let (success, stdout, _) = run_atelier(dir2.path(), &["list"]);
     assert!(success);
     assert!(stdout.contains("Child") || stdout.contains("#2"));
+}
+
+#[test]
+fn test_agent_factory_json_command_subset() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "issue",
+            "create",
+            "Agent Factory task",
+            "--issue-type",
+            "feature",
+            "--label",
+            "agent-factory",
+        ],
+    );
+    assert!(success, "create failed: {stderr}");
+    let created = json_value(&stdout);
+    assert_eq!(created["ok"], true);
+    assert_eq!(created["command"], "issue.create");
+    assert_eq!(created["data"]["id"], "#1");
+    assert_eq!(created["data"]["issue_type"], "feature");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "issue",
+            "update",
+            "1",
+            "--claim",
+            "--append-notes",
+            "handoff note",
+            "--priority",
+            "high",
+        ],
+    );
+    assert!(success, "update failed: {stderr}");
+    let updated = json_value(&stdout);
+    assert_eq!(updated["ok"], true);
+    assert_eq!(updated["command"], "issue.update");
+    assert!(updated["data"]["changed_fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|field| field == "notes"));
+    assert_eq!(updated["data"]["issue"]["priority"], "high");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "#1"]);
+    assert!(success, "show failed: {stderr}");
+    let shown = json_value(&stdout);
+    assert_eq!(shown["data"]["id"], "#1");
+    assert_eq!(shown["data"]["notes"][1]["body"], "handoff note");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "ready"]);
+    assert!(success, "ready failed: {stderr}");
+    assert_eq!(json_value(&stdout)["data"]["count"], 1);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Blocker"]);
+    assert!(success, "blocker create failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "add", "1", "2"]);
+    assert!(success, "dep add failed: {stderr}");
+    let dep = json_value(&stdout);
+    assert_eq!(dep["command"], "dep.add");
+    assert_eq!(dep["data"]["blocked"], "#1");
+    assert_eq!(dep["data"]["blocker"], "#2");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "1"]);
+    assert!(success, "dep list failed: {stderr}");
+    assert_eq!(json_value(&stdout)["data"]["count"], 1);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "remove", "1", "2"]);
+    assert!(success, "dep remove failed: {stderr}");
+    assert_eq!(json_value(&stdout)["data"]["changed"], true);
+
+    for args in [
+        vec!["--json", "issue", "list", "--status", "all"],
+        vec!["--json", "issue", "search", "Factory"],
+        vec!["--json", "lint"],
+        vec!["--json", "export"],
+        vec!["--json", "export", "--check"],
+        vec!["--json", "doctor"],
+        vec!["--json", "rebuild"],
+    ] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "{args:?} failed: {stderr}");
+        assert_eq!(json_value(&stdout)["ok"], true, "{args:?}");
+    }
+
+    let (success, stdout, _) = run_atelier(dir.path(), &["--json", "issue", "show", "missing"]);
+    assert!(!success);
+    let error = json_value(&stdout);
+    assert_eq!(error["ok"], false);
+    assert_eq!(error["error"]["code"], "not_found");
+    assert!(error["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("missing"));
+}
+
+#[test]
+fn test_agent_factory_beads_source_id_aliases() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/beads/issues.manual.jsonl");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "import-beads", fixture.to_str().unwrap()],
+    );
+    assert!(success, "import-beads failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "show", "atelier-z1p.4"]);
+    assert!(success, "source-id show failed: {stderr}");
+    let shown = json_value(&stdout);
+    assert_eq!(shown["data"]["id"], "atelier-z1p.4");
+    assert_eq!(shown["data"]["parent"], "atelier-z1p");
+    assert_eq!(shown["data"]["owner"], "supadava@cisco.com");
+    assert_eq!(shown["data"]["dependencies"][0]["id"], "atelier-z1p.2");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "dep", "list", "atelier-z1p.4"]);
+    assert!(success, "source-id dep list failed: {stderr}");
+    let deps = json_value(&stdout);
+    assert_eq!(deps["data"]["items"][0]["blocked"], "atelier-z1p.4");
+    assert_eq!(deps["data"]["items"][0]["blocker"], "atelier-z1p.2");
 }
 
 // ============================================================

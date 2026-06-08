@@ -125,6 +125,11 @@ pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()>
     Ok(())
 }
 
+pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
+    let files = build_canonical_projection(db)?;
+    stale_projection_entries(state_dir, &files)
+}
+
 fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
     let mut issues = db.list_issues(Some("all"), None, None)?;
     issues.sort_by_key(|issue| issue.id);

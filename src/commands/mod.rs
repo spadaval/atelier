@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod agent_factory;
 pub mod archive;
 pub mod comment;
 pub mod cpitd;

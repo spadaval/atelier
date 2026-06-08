@@ -102,6 +102,21 @@ enum Commands {
         output: Option<String>,
     },
 
+    /// Dependency aliases for Agent Factory (`dep add/remove/list`)
+    Dep {
+        #[command(subcommand)]
+        action: DepCommands,
+    },
+
+    /// Validate tracker records
+    Lint {
+        /// Optional issue ID or imported source ID
+        id: Option<String>,
+    },
+
+    /// Check tracker runtime and exported-state health
+    Doctor,
+
     /// Archive management
     Archive {
         #[command(subcommand)]
@@ -173,6 +188,12 @@ enum Commands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
+        /// Issue type for Agent Factory parity
+        #[arg(long)]
+        issue_type: Option<String>,
+        /// Parent issue ID or imported source ID
+        #[arg(long)]
+        parent: Option<String>,
         /// Set as current session work item
         #[arg(short, long)]
         work: bool,
@@ -243,14 +264,14 @@ enum Commands {
     #[command(hide = true)]
     Show {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Update an issue (shortcut for `issue update`)
     #[command(hide = true)]
     Update {
         /// Issue ID
-        id: i64,
+        id: String,
         /// New title
         #[arg(short, long)]
         title: Option<String>,
@@ -260,13 +281,34 @@ enum Commands {
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
+        /// New status (open, in_progress, closed)
+        #[arg(short, long)]
+        status: Option<String>,
+        /// Add labels to the issue
+        #[arg(short, long)]
+        label: Vec<String>,
+        /// Set parent issue ID or imported source ID
+        #[arg(long)]
+        parent: Option<String>,
+        /// Clear parent issue
+        #[arg(long)]
+        no_parent: bool,
+        /// Claim this issue for the current agent/user
+        #[arg(long)]
+        claim: bool,
+        /// Append durable notes without opening an editor
+        #[arg(long)]
+        append_notes: Option<String>,
     },
 
     /// Close an issue (shortcut for `issue close`)
     #[command(hide = true)]
     Close {
         /// Issue ID
-        id: i64,
+        id: String,
+        /// Closure reason
+        #[arg(short, long)]
+        reason: Option<String>,
         /// Skip changelog entry
         #[arg(long)]
         no_changelog: bool,
@@ -290,7 +332,7 @@ enum Commands {
     #[command(hide = true)]
     Reopen {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Delete an issue (shortcut for `issue delete`)
@@ -307,7 +349,7 @@ enum Commands {
     #[command(hide = true)]
     Comment {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Comment text
         text: String,
         /// Comment kind (note, plan, decision, observation, blocker, resolution, result, handoff, human)
@@ -319,7 +361,7 @@ enum Commands {
     #[command(hide = true)]
     Label {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Label name
         label: String,
     },
@@ -328,7 +370,7 @@ enum Commands {
     #[command(hide = true)]
     Unlabel {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Label name
         label: String,
     },
@@ -337,18 +379,18 @@ enum Commands {
     #[command(hide = true)]
     Block {
         /// Issue ID that is blocked
-        id: i64,
+        id: String,
         /// Issue ID that is blocking
-        blocker: i64,
+        blocker: String,
     },
 
     /// Unblock an issue (shortcut for `issue unblock`)
     #[command(hide = true)]
     Unblock {
         /// Issue ID that was blocked
-        id: i64,
+        id: String,
         /// Issue ID that was blocking
-        blocker: i64,
+        blocker: String,
     },
 
     /// List blocked issues (shortcut for `issue blocked`)
@@ -452,6 +494,12 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
+        /// Issue type for Agent Factory parity
+        #[arg(long)]
+        issue_type: Option<String>,
+        /// Parent issue ID or imported source ID
+        #[arg(long)]
+        parent: Option<String>,
         /// Set as current session work item
         #[arg(short, long)]
         work: bool,
@@ -517,13 +565,13 @@ enum IssueCommands {
     /// Show issue details
     Show {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Update an issue
     Update {
         /// Issue ID
-        id: i64,
+        id: String,
         /// New title
         #[arg(short, long)]
         title: Option<String>,
@@ -533,12 +581,33 @@ enum IssueCommands {
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
+        /// New status (open, in_progress, closed)
+        #[arg(short, long)]
+        status: Option<String>,
+        /// Add labels to the issue
+        #[arg(short, long)]
+        label: Vec<String>,
+        /// Set parent issue ID or imported source ID
+        #[arg(long)]
+        parent: Option<String>,
+        /// Clear parent issue
+        #[arg(long)]
+        no_parent: bool,
+        /// Claim this issue for the current agent/user
+        #[arg(long)]
+        claim: bool,
+        /// Append durable notes without opening an editor
+        #[arg(long)]
+        append_notes: Option<String>,
     },
 
     /// Close an issue
     Close {
         /// Issue ID
-        id: i64,
+        id: String,
+        /// Closure reason
+        #[arg(short, long)]
+        reason: Option<String>,
         /// Skip changelog entry
         #[arg(long)]
         no_changelog: bool,
@@ -560,7 +629,7 @@ enum IssueCommands {
     /// Reopen a closed issue
     Reopen {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Delete an issue
@@ -575,7 +644,7 @@ enum IssueCommands {
     /// Add a comment to an issue
     Comment {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Comment text
         text: String,
         /// Comment kind (note, plan, decision, observation, blocker, resolution, result, handoff, human)
@@ -586,7 +655,7 @@ enum IssueCommands {
     /// Add a label to an issue
     Label {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Label name
         label: String,
     },
@@ -594,7 +663,7 @@ enum IssueCommands {
     /// Remove a label from an issue
     Unlabel {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Label name
         label: String,
     },
@@ -602,17 +671,17 @@ enum IssueCommands {
     /// Mark an issue as blocked by another
     Block {
         /// Issue ID that is blocked
-        id: i64,
+        id: String,
         /// Issue ID that is blocking
-        blocker: i64,
+        blocker: String,
     },
 
     /// Remove a blocking relationship
     Unblock {
         /// Issue ID that was blocked
-        id: i64,
+        id: String,
         /// Issue ID that was blocking
-        blocker: i64,
+        blocker: String,
     },
 
     /// List blocked issues
@@ -881,6 +950,16 @@ enum AgentCommands {
 }
 
 #[derive(Subcommand)]
+enum DepCommands {
+    /// Add a blocking dependency: <blocked> is blocked by <blocker>
+    Add { blocked: String, blocker: String },
+    /// Remove a blocking dependency
+    Remove { blocked: String, blocker: String },
+    /// List blocking dependencies
+    List { issue: Option<String> },
+}
+
+#[derive(Subcommand)]
 enum LocksCommands {
     /// List all active locks
     List,
@@ -994,9 +1073,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             priority,
             template,
             label,
+            issue_type,
+            parent,
             work,
         } => {
             let db = get_db()?;
+            if json || issue_type.is_some() || parent.is_some() {
+                return commands::agent_factory::create(
+                    &db,
+                    commands::agent_factory::CreateInput {
+                        title: &title,
+                        description: description.as_deref(),
+                        priority: &priority,
+                        issue_type: issue_type.as_deref().or(template.as_deref()),
+                        labels: &label,
+                        parent: parent.as_deref(),
+                    },
+                    json,
+                );
+            }
             let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
                 labels: &label,
@@ -1072,28 +1167,36 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         } => {
             let db = get_db()?;
             if json {
-                commands::list::run_json(&db, Some(&status), label.as_deref(), priority.as_deref())
+                commands::agent_factory::list(
+                    &db,
+                    Some(&status),
+                    label.as_deref(),
+                    priority.as_deref(),
+                    true,
+                )
             } else {
-                commands::list::run(&db, Some(&status), label.as_deref(), priority.as_deref())
+                commands::agent_factory::list(
+                    &db,
+                    Some(&status),
+                    label.as_deref(),
+                    priority.as_deref(),
+                    false,
+                )
             }
         }
 
         IssueCommands::Search { query } => {
             let db = get_db()?;
             if json {
-                commands::search::run_json(&db, &query)
+                commands::agent_factory::search(&db, &query, true)
             } else {
-                commands::search::run(&db, &query)
+                commands::agent_factory::search(&db, &query, false)
             }
         }
 
         IssueCommands::Show { id } => {
             let db = get_db()?;
-            if json {
-                commands::show::run_json(&db, id)
-            } else {
-                commands::show::run(&db, id)
-            }
+            commands::agent_factory::show(&db, &id, json)
         }
 
         IssueCommands::Update {
@@ -1101,25 +1204,44 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             title,
             description,
             priority,
+            status,
+            label,
+            parent,
+            no_parent,
+            claim,
+            append_notes,
         } => {
             let db = get_db()?;
-            commands::update::run(
+            commands::agent_factory::update(
                 &db,
-                id,
-                title.as_deref(),
-                description.as_deref(),
-                priority.as_deref(),
+                commands::agent_factory::UpdateInput {
+                    issue_ref: &id,
+                    title: title.as_deref(),
+                    description: description.as_deref(),
+                    priority: priority.as_deref(),
+                    status: status.as_deref(),
+                    labels: &label,
+                    parent: if no_parent {
+                        Some(None)
+                    } else {
+                        parent.as_deref().map(Some)
+                    },
+                    claim,
+                    append_notes: append_notes.as_deref(),
+                },
+                json,
             )
         }
 
-        IssueCommands::Close { id, no_changelog } => {
+        IssueCommands::Close {
+            id,
+            reason,
+            no_changelog,
+        } => {
             let db = get_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            if quiet {
-                commands::status::close_quiet(&db, id, !no_changelog, &atelier_dir)
-            } else {
-                commands::status::close(&db, id, !no_changelog, &atelier_dir)
-            }
+            let _ = no_changelog;
+            let _ = quiet;
+            commands::agent_factory::close(&db, &id, reason.as_deref(), json)
         }
 
         IssueCommands::CloseAll {
@@ -1140,7 +1262,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Reopen { id } => {
             let db = get_db()?;
-            commands::status::reopen(&db, id)
+            commands::agent_factory::reopen(&db, &id, json)
         }
 
         IssueCommands::Delete { id, force } => {
@@ -1150,37 +1272,52 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Comment { id, text, kind } => {
             let db = get_db()?;
-            commands::comment::run(&db, id, &text, &kind)
+            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
+            commands::comment::run(&db, resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
             let db = get_db()?;
-            commands::label::add(&db, id, &label)
+            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
+            commands::label::add(&db, resolved, &label)
         }
 
         IssueCommands::Unlabel { id, label } => {
             let db = get_db()?;
-            commands::label::remove(&db, id, &label)
+            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
+            commands::label::remove(&db, resolved, &label)
         }
 
         IssueCommands::Block { id, blocker } => {
             let db = get_db()?;
-            commands::deps::block(&db, id, blocker)
+            commands::agent_factory::dep_add(&db, &id, &blocker, json)
         }
 
         IssueCommands::Unblock { id, blocker } => {
             let db = get_db()?;
-            commands::deps::unblock(&db, id, blocker)
+            commands::agent_factory::dep_remove(&db, &id, &blocker, json)
         }
 
         IssueCommands::Blocked => {
             let db = get_db()?;
-            commands::deps::list_blocked(&db)
+            if json {
+                let items = db
+                    .list_blocked_issues()?
+                    .into_iter()
+                    .map(|issue| commands::agent_factory::issue_object(&db, issue))
+                    .collect::<Result<Vec<_>>>()?;
+                commands::agent_factory::print_success(
+                    "issue.blocked",
+                    serde_json::json!({ "items": items, "count": items.len() }),
+                )
+            } else {
+                commands::deps::list_blocked(&db)
+            }
         }
 
         IssueCommands::Ready => {
             let db = get_db()?;
-            commands::deps::list_ready(&db)
+            commands::agent_factory::ready(&db, json)
         }
 
         IssueCommands::Relate {
@@ -1270,7 +1407,7 @@ fn run() -> Result<()> {
     let quiet = cli.quiet;
     let json = cli.json;
 
-    match cli.command {
+    let result = match cli.command {
         Commands::Init { force } => {
             let cwd = env::current_dir()?;
             commands::init::run(&cwd, force)
@@ -1287,6 +1424,8 @@ fn run() -> Result<()> {
             priority,
             template,
             label,
+            issue_type,
+            parent,
             work,
         } => dispatch_issue(
             IssueCommands::Create {
@@ -1295,6 +1434,8 @@ fn run() -> Result<()> {
                 priority,
                 template,
                 label,
+                issue_type,
+                parent,
                 work,
             },
             quiet,
@@ -1362,20 +1503,42 @@ fn run() -> Result<()> {
             title,
             description,
             priority,
+            status,
+            label,
+            parent,
+            no_parent,
+            claim,
+            append_notes,
         } => dispatch_issue(
             IssueCommands::Update {
                 id,
                 title,
                 description,
                 priority,
+                status,
+                label,
+                parent,
+                no_parent,
+                claim,
+                append_notes,
             },
             quiet,
             json,
         ),
 
-        Commands::Close { id, no_changelog } => {
-            dispatch_issue(IssueCommands::Close { id, no_changelog }, quiet, json)
-        }
+        Commands::Close {
+            id,
+            reason,
+            no_changelog,
+        } => dispatch_issue(
+            IssueCommands::Close {
+                id,
+                reason,
+                no_changelog,
+            },
+            quiet,
+            json,
+        ),
 
         Commands::CloseAll {
             label,
@@ -1500,7 +1663,7 @@ fn run() -> Result<()> {
                         .as_deref()
                         .map(std::path::PathBuf::from)
                         .unwrap_or_else(|| repo_root.join(".atelier-state"));
-                    commands::export::run_canonical(&db, &state_dir, check)
+                    commands::agent_factory::export_canonical(&db, &state_dir, check, json)
                 }
             }
         }
@@ -1512,7 +1675,7 @@ fn run() -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
             let db_path = repo_root.join(".atelier").join("state.db");
-            commands::rebuild::run(&state_dir, &db_path)
+            commands::agent_factory::rebuild(&state_dir, &db_path, json)
         }
 
         Commands::Import { input } => {
@@ -1532,6 +1695,36 @@ fn run() -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
             commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir, json)
+        }
+
+        Commands::Dep { action } => {
+            let db = get_db()?;
+            match action {
+                DepCommands::Add { blocked, blocker } => {
+                    commands::agent_factory::dep_add(&db, &blocked, &blocker, json)
+                }
+                DepCommands::Remove { blocked, blocker } => {
+                    commands::agent_factory::dep_remove(&db, &blocked, &blocker, json)
+                }
+                DepCommands::List { issue } => {
+                    commands::agent_factory::dep_list(&db, issue.as_deref(), json)
+                }
+            }
+        }
+
+        Commands::Lint { id } => {
+            let db = get_db()?;
+            commands::agent_factory::lint(&db, id.as_deref(), json)
+        }
+
+        Commands::Doctor => {
+            let db = get_db()?;
+            let atelier_dir = find_atelier_dir()?;
+            let repo_root = atelier_dir
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
+            let state_dir = repo_root.join(".atelier-state");
+            commands::agent_factory::doctor(&db, repo_root, &state_dir, json)
         }
 
         Commands::Archive { action } => {
@@ -1686,5 +1879,21 @@ fn run() -> Result<()> {
             let atelier_dir = find_atelier_dir()?;
             commands::locks_cmd::sync_cmd(&atelier_dir)
         }
+    };
+
+    if json {
+        if let Err(error) = result {
+            let code = commands::agent_factory::classify_error(&error);
+            commands::agent_factory::print_error(
+                "atelier",
+                code,
+                &error.to_string(),
+                serde_json::json!({}),
+            )?;
+            std::process::exit(1);
+        }
+        Ok(())
+    } else {
+        result
     }
 }

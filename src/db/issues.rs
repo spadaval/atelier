@@ -123,6 +123,26 @@ impl Database {
         Ok(issue)
     }
 
+    pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<i64>> {
+        let normalized = issue_ref.trim().trim_start_matches('#');
+        if normalized.is_empty() {
+            return Ok(None);
+        }
+
+        if let Ok(id) = normalized.parse::<i64>() {
+            if self.get_issue(id)?.is_some() {
+                return Ok(Some(id));
+            }
+        }
+
+        let source_label = format!("beads:id:{normalized}");
+        let mut stmt = self
+            .conn
+            .prepare("SELECT issue_id FROM labels WHERE label = ?1 ORDER BY issue_id LIMIT 1")?;
+        let id = stmt.query_row([source_label], |row| row.get(0)).ok();
+        Ok(id)
+    }
+
     /// Get an issue by ID, returning an error if not found.
     pub fn require_issue(&self, id: i64) -> Result<Issue> {
         self.get_issue(id)?
