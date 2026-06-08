@@ -80,6 +80,13 @@ enum Commands {
         check: bool,
     },
 
+    /// Rebuild local SQLite runtime state from canonical .atelier-state files
+    Rebuild {
+        /// Canonical state directory to rebuild from
+        #[arg(short, long)]
+        input: Option<String>,
+    },
+
     /// Import issues from JSON file
     Import {
         /// Input file path
@@ -928,6 +935,22 @@ fn find_atelier_dir() -> Result<PathBuf> {
     }
 }
 
+fn find_repo_root_for_rebuild() -> Result<PathBuf> {
+    let mut current = env::current_dir()?;
+
+    loop {
+        if current.join(".atelier-state").is_dir() || current.join(".atelier").is_dir() {
+            return Ok(current);
+        }
+
+        if !current.pop() {
+            bail!(
+                "Not an Atelier repository (or any parent). Run from a checkout with .atelier-state/."
+            );
+        }
+    }
+}
+
 fn get_db() -> Result<Database> {
     let atelier_dir = find_atelier_dir()?;
     let db_path = atelier_dir.join("state.db");
@@ -1471,6 +1494,16 @@ fn run() -> Result<()> {
                     commands::export::run_canonical(&db, &state_dir, check)
                 }
             }
+        }
+
+        Commands::Rebuild { input } => {
+            let repo_root = find_repo_root_for_rebuild()?;
+            let state_dir = input
+                .as_deref()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| repo_root.join(".atelier-state"));
+            let db_path = repo_root.join(".atelier").join("state.db");
+            commands::rebuild::run(&state_dir, &db_path)
         }
 
         Commands::Import { input } => {

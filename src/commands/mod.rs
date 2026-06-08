@@ -13,6 +13,7 @@ pub mod list;
 pub mod locks_cmd;
 pub mod milestone;
 pub mod next;
+pub mod rebuild;
 pub mod relate;
 pub mod search;
 pub mod session;

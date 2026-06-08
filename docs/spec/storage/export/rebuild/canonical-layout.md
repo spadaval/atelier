@@ -249,7 +249,9 @@ manifest, `export --check` must report a stale or untracked projection error.
 ## Mutating Command Rollout
 
 Milestone 2 introduces `atelier export` as the deterministic writer for
-`.atelier-state/` and `atelier export --check` as the freshness gate. Explicit
+`.atelier-state/` and `atelier export --check` as the freshness gate.
+`atelier rebuild` recreates `.atelier/state.db` from `.atelier-state/` and may
+create the local `.atelier/` runtime directory in a fresh checkout. Explicit
 backup exports remain available with `atelier export --format json` and
 `atelier export --format markdown`.
 

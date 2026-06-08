@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rusqlite::params;
 
 use super::{issue_from_row, validate_priority, validate_status, Database};
@@ -7,6 +7,42 @@ use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
 use crate::models::Issue;
 
 impl Database {
+    pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
+        validate_priority(&issue.priority)?;
+        validate_status(&issue.status)?;
+        if issue.title.len() > MAX_TITLE_LEN {
+            anyhow::bail!(
+                "Title exceeds maximum length of {} characters",
+                MAX_TITLE_LEN
+            );
+        }
+        if let Some(description) = &issue.description {
+            if description.len() > MAX_DESCRIPTION_LEN {
+                anyhow::bail!(
+                    "Description exceeds maximum length of {} bytes",
+                    MAX_DESCRIPTION_LEN
+                );
+            }
+        }
+
+        self.conn.execute(
+            "INSERT INTO issues (id, title, description, status, priority, parent_id, created_at, updated_at, closed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                issue.id,
+                issue.title,
+                issue.description,
+                issue.status,
+                issue.priority,
+                issue.parent_id,
+                issue.created_at.to_rfc3339(),
+                issue.updated_at.to_rfc3339(),
+                issue.closed_at.as_ref().map(DateTime::<Utc>::to_rfc3339),
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn create_issue(
         &self,
         title: &str,
