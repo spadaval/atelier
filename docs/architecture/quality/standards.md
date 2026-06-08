@@ -31,8 +31,10 @@
 
 ## Agent Workflow
 
-- Track work in Beads.
-- Use explicit noninteractive `bd` commands.
-- Record follow-up work as beads once tracker setup is available.
+- Track work in Atelier.
+- Use explicit noninteractive `atelier issue` commands.
+- Record follow-up work as Atelier issues.
+- Commit `.atelier-state/` changes with related tracker updates; treat
+  `.atelier/state.db` as rebuildable local runtime state.
 - Include validation evidence in handoff notes when checks are skipped, fail, or
   only partially cover the change.

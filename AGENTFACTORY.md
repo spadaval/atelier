@@ -20,24 +20,42 @@ concrete files, commands, and product-specific skills.
 
 ## Tracker
 
-- Tracker: Beads
-- Tracker database: shared-server Dolt database `atelier`
-- Manual tracker backup/export: `.beads/issues.manual.jsonl`
-- Do not keep `.beads/issues.jsonl` in this repo. In the current Beads version,
-  that path is treated as a startup import source and can cause repeated
-  JSONL-to-Dolt imports before mutations.
-- Sync commands:
-  - `bd dolt pull`
-  - `bd dolt push`
-  - `bd dolt status`
-  - `bd export -o .beads/issues.manual.jsonl`
+- Tracker: Atelier
+- Durable tracker state: committed `.atelier-state/`
+- Runtime tracker database: local `.atelier/state.db`, rebuilt from
+  `.atelier-state/`
+- Archived Beads fallback: `.beads/issues.manual.jsonl` and `.beads/`
+  metadata are retained read-only for recovery and audit only.
+- Normal tracker commands:
+  - `atelier issue ready`
+  - `atelier issue list --status open`
+  - `atelier issue show <id>`
+  - `atelier issue update <id> --claim`
+  - `atelier issue update <id> --append-notes "..."`
+  - `atelier issue close <id> --reason "..."`
+- Sync and state commands:
+  - `git pull`
+  - `atelier rebuild`
+  - `atelier export --check`
+  - `atelier export`
+  - `git status --short --branch`
+  - `git push`
+- Tracker health commands:
+  - `atelier lint`
+  - `atelier lint <id>`
+  - `atelier doctor`
+- Beads commands are not part of the normal Agent Factory path in this
+  repository. Use `bd` only for explicit archival bookkeeping while retiring the
+  old tracker, and never use interactive commands such as `bd edit`.
 
 ## Checks
 
 - Markdown formatting: `git diff --check -- '*.md'`
 - Rust formatting: `cargo fmt -- --check`
 - Diff whitespace: `git diff --check`
-- Bead lint: `bd lint`
+- Tracker export freshness: `atelier export --check`
+- Tracker lint: `atelier lint`
+- Tracker health: `atelier doctor`
 - Full repository check: `cargo test`
 
 ## Product-Specific Skills

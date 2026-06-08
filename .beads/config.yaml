@@ -1,4 +1,7 @@
-# Beads Configuration File
+# Archived Beads Configuration File
+# Beads is no longer the live tracker for this repository. This file is retained
+# read-only for recovery and migration audit.
+#
 # This file configures default behavior for all bd commands in this repository
 # All settings can also be set via environment variables (BD_* prefix)
 # or overridden with command-line flags

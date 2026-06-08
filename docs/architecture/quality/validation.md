@@ -10,8 +10,9 @@
 | `cargo test` | full Rust unit, integration, and smoke test suite |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |
-| `bd lint` | Beads structure |
-| `bd dolt status` | tracker sync/worktree state |
+| `atelier export --check` | tracker export freshness |
+| `atelier lint` | tracker structure |
+| `atelier doctor` | tracker runtime and rebuild health |
 
 ## Scenario Proof
 

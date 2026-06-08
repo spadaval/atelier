@@ -399,7 +399,18 @@ fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result
         let db = Database::open(&tmp_path)?;
         db.transaction(|| {
             for issue in &rebuild.issues {
-                db.insert_issue_rebuild(&issue.issue)?;
+                let mut row = issue.issue.clone();
+                row.parent_id = None;
+                db.insert_issue_rebuild(&row)?;
+            }
+            for issue in &rebuild.issues {
+                if issue.issue.parent_id.is_some() {
+                    db.update_parent_import(
+                        issue.issue.id,
+                        issue.issue.parent_id,
+                        &issue.issue.updated_at,
+                    )?;
+                }
             }
             for issue in &rebuild.issues {
                 for label in &issue.labels {
@@ -758,6 +769,26 @@ mod tests {
             fs::read_to_string(state_dir.join("graph.json")).unwrap(),
             fs::read_to_string(rebuilt_state_dir.join("graph.json")).unwrap()
         );
+    }
+
+    #[test]
+    fn rebuild_allows_parent_records_after_children() {
+        let (db, dir) = setup_test_db();
+        let child = db.create_issue("Child", Some("Child body"), "low").unwrap();
+        let parent = db
+            .create_issue("Parent", Some("Parent body"), "high")
+            .unwrap();
+        db.update_parent(child, Some(parent)).unwrap();
+
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let rebuilt_path = dir.path().join(".atelier/state.db");
+        run(&state_dir, &rebuilt_path).unwrap();
+        let rebuilt = Database::open(&rebuilt_path).unwrap();
+
+        let rebuilt_child = rebuilt.get_issue(child).unwrap().unwrap();
+        assert_eq!(rebuilt_child.parent_id, Some(parent));
     }
 
     #[test]

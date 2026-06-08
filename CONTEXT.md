@@ -5,9 +5,10 @@
 - Agent: an AI or human operator performing work in the repository.
 - Agent-factory: the coordinated operating model used to plan, assign,
   validate, review, and hand off agent work.
-- Atelier: the target product: a local-first, agent-native work tracker for
+- Atelier: the product and live repository tracker: a local-first, agent-native work tracker for
   complex software missions.
-- Beads: the repository's durable work tracker for agent-factory operation.
+- Beads: the archived predecessor tracker. Its `.beads/` data is retained
+  read-only for recovery and migration audit, not normal agent-factory work.
 - Canonical projection: deterministic repo-state files that can rebuild the
   local SQLite runtime database.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
