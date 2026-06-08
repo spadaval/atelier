@@ -15,6 +15,8 @@ concrete files, commands, and product-specific skills.
 - Architecture quality vocabulary: `docs/architecture/quality/architecture-quality.md`
 - Code standards: `docs/architecture/quality/standards.md`
 - Validation router: `docs/architecture/quality/validation.md`
+- Tracker replacement MVP:
+  `docs/spec/agent-factory/tracker-replacement-mvp.md`
 
 ## Tracker
 
