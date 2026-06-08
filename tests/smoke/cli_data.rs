@@ -94,6 +94,23 @@ fn test_export_markdown_format() {
 }
 
 #[test]
+fn test_canonical_export_check_cli() {
+    let h = SmokeHarness::new();
+
+    h.run_ok(&["create", "Canonical issue"]);
+    h.run_ok(&["export"]);
+    h.run_ok(&["export", "--check"]);
+
+    h.run_ok(&["update", "1", "--title", "Changed canonical issue"]);
+    let result = h.run_err(&["export", "--check"]);
+    assert!(
+        result.stderr.contains("Canonical export is stale"),
+        "expected stale canonical export error, got stderr: {}",
+        result.stderr
+    );
+}
+
+#[test]
 fn test_import_malformed_json() {
     let h = SmokeHarness::new();
 

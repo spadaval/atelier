@@ -246,6 +246,20 @@ Rebuild proceeds in this order:
 If any canonical file exists under `.atelier-state/` but is absent from the
 manifest, `export --check` must report a stale or untracked projection error.
 
+## Mutating Command Rollout
+
+Milestone 2 introduces `atelier export` as the deterministic writer for
+`.atelier-state/` and `atelier export --check` as the freshness gate. Explicit
+backup exports remain available with `atelier export --format json` and
+`atelier export --format markdown`.
+
+Until mutating commands are wired to export automatically, commands that create,
+update, close, reopen, delete, label, relate, block, comment on, or otherwise
+change records must be followed by `atelier export` before committing state.
+Automation work that adds post-mutation export must reuse this canonical writer
+and preserve `export --check` semantics instead of duplicating serialization in
+individual command handlers.
+
 ## Deferred Or Future Paths
 
 All paths listed in `SPEC.md` are covered above. `mission-control.json` is

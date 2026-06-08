@@ -67,14 +67,17 @@ enum Commands {
         action: Option<TimerCommands>,
     },
 
-    /// Export issues to JSON or markdown
+    /// Export canonical state, or backup issues to JSON/markdown with --format
     Export {
-        /// Output file path (defaults to stdout)
+        /// Output file path for backup exports, or state directory for canonical export
         #[arg(short, long)]
         output: Option<String>,
-        /// Format (json, markdown)
-        #[arg(short, long, default_value = "json")]
-        format: String,
+        /// Backup format (json, markdown). Omit for canonical .atelier-state export.
+        #[arg(short, long)]
+        format: Option<String>,
+        /// Check whether the canonical .atelier-state projection is current
+        #[arg(long)]
+        check: bool,
     },
 
     /// Import issues from JSON file
@@ -1431,13 +1434,41 @@ fn run() -> Result<()> {
         Commands::TimerStop => dispatch_timer(Some(TimerCommands::Stop)),
 
         // ====== Non-issue, non-timer commands ======
-        Commands::Export { output, format } => {
+        Commands::Export {
+            output,
+            format,
+            check,
+        } => {
             let db = get_db()?;
-            match format.as_str() {
-                "json" => commands::export::run_json(&db, output.as_deref()),
-                "markdown" | "md" => commands::export::run_markdown(&db, output.as_deref()),
-                _ => {
-                    bail!("Unknown format '{}'. Use 'json' or 'markdown'", format);
+            match format.as_deref() {
+                Some("json") => {
+                    if check {
+                        bail!("--check is only supported for canonical export");
+                    }
+                    commands::export::run_json(&db, output.as_deref())
+                }
+                Some("markdown") | Some("md") => {
+                    if check {
+                        bail!("--check is only supported for canonical export");
+                    }
+                    commands::export::run_markdown(&db, output.as_deref())
+                }
+                Some(format) => {
+                    bail!(
+                        "Unknown format '{}'. Use 'json', 'markdown', or omit --format for canonical export",
+                        format
+                    );
+                }
+                None => {
+                    let atelier_dir = find_atelier_dir()?;
+                    let repo_root = atelier_dir
+                        .parent()
+                        .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
+                    let state_dir = output
+                        .as_deref()
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|| repo_root.join(".atelier-state"));
+                    commands::export::run_canonical(&db, &state_dir, check)
                 }
             }
         }
