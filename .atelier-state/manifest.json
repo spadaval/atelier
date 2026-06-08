@@ -373,7 +373,7 @@
       "role": "canonical",
       "schema": "atelier.issue",
       "schema_version": 1,
-      "sha256": "602a4a40f562f8ae4186070d88b301dbb36d904e6951f1176a8823dfb7ee1180"
+      "sha256": "154c9f18e9331f96fbe761713723abac8ffe5e6395484bec719d8773eb0a8d37"
     },
     {
       "id": "ISS-0042",
@@ -385,13 +385,40 @@
       "sha256": "735d4bda59296631e9d64d984fad630bb39c1466fbcdd6eca886b4f7897d69ec"
     },
     {
+      "id": "ISS-0043",
+      "kind": "issue",
+      "path": ".atelier-state/issues/ISS-0043.md",
+      "role": "canonical",
+      "schema": "atelier.issue",
+      "schema_version": 1,
+      "sha256": "b17ccae48df0d7fa9e27ba0cae90930de5366be73aa4d5e50d3a1677e3147c76"
+    },
+    {
+      "id": "ISS-0044",
+      "kind": "issue",
+      "path": ".atelier-state/issues/ISS-0044.md",
+      "role": "canonical",
+      "schema": "atelier.issue",
+      "schema_version": 1,
+      "sha256": "5aee9962c83dd6873241e457a0d7007bddf8962f796c829e03e4128eff40e513"
+    },
+    {
+      "id": "ISS-0045",
+      "kind": "issue",
+      "path": ".atelier-state/issues/ISS-0045.md",
+      "role": "canonical",
+      "schema": "atelier.issue",
+      "schema_version": 1,
+      "sha256": "454a64517bf5b9a6776d804b175a824c61584cb55b2fc124b308154bca157138"
+    },
+    {
       "id": null,
       "kind": "graph",
       "path": ".atelier-state/graph.json",
       "role": "canonical",
       "schema": "atelier.graph",
       "schema_version": 1,
-      "sha256": "13744a46cad835e1bc4ab5ab1655267d98a5d7245adb7fe0626024cb4e41b63e"
+      "sha256": "8e81930cfd48aee38a5b4f1a70e9a8d4d9d513ff5f4371afb69ad866aba86dc0"
     }
   ],
   "schema": "atelier.manifest",
