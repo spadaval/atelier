@@ -93,6 +93,15 @@ enum Commands {
         input: String,
     },
 
+    /// Import Beads JSONL backup into Atelier runtime and canonical state
+    ImportBeads {
+        /// Beads JSONL backup path, usually .beads/issues.manual.jsonl
+        input: String,
+        /// Canonical state directory to write after import
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
     /// Archive management
     Archive {
         #[command(subcommand)]
@@ -1510,6 +1519,19 @@ fn run() -> Result<()> {
             let db = get_db()?;
             let path = std::path::Path::new(&input);
             commands::import::run_json(&db, path)
+        }
+
+        Commands::ImportBeads { input, output } => {
+            let db = get_db()?;
+            let atelier_dir = find_atelier_dir()?;
+            let repo_root = atelier_dir
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
+            let state_dir = output
+                .as_deref()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| repo_root.join(".atelier-state"));
+            commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir, json)
         }
 
         Commands::Archive { action } => {

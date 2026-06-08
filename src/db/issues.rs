@@ -43,6 +43,15 @@ impl Database {
         Ok(())
     }
 
+    pub fn insert_issue_import(&self, issue: &Issue) -> Result<()> {
+        self.insert_issue_rebuild(issue)?;
+        self.conn.execute(
+            "UPDATE sqlite_sequence SET seq = MAX(seq, ?1) WHERE name = 'issues'",
+            params![issue.id],
+        )?;
+        Ok(())
+    }
+
     pub fn create_issue(
         &self,
         title: &str,
@@ -261,6 +270,19 @@ impl Database {
         let rows = self.conn.execute(
             "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
             params![parent_id, now, id],
+        )?;
+        Ok(rows > 0)
+    }
+
+    pub fn update_parent_import(
+        &self,
+        id: i64,
+        parent_id: Option<i64>,
+        updated_at: &DateTime<Utc>,
+    ) -> Result<bool> {
+        let rows = self.conn.execute(
+            "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![parent_id, updated_at.to_rfc3339(), id],
         )?;
         Ok(rows > 0)
     }

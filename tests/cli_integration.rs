@@ -270,6 +270,58 @@ fn test_reopen_issue() {
     assert!(show_out.contains("open"));
 }
 
+#[test]
+fn test_import_beads_jsonl_fixture_round_trip() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let fixture_path = dir.path().join("issues.manual.jsonl");
+    std::fs::write(
+        &fixture_path,
+        include_str!("fixtures/beads/issues.manual.jsonl"),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "import-beads", fixture_path.to_str().unwrap()],
+    );
+    assert!(success, "import-beads failed: {stderr}");
+    assert!(stdout.contains("\"source_records\": 3"));
+    assert!(stdout.contains("\"imported_issues\": 3"));
+    assert!(stdout.contains("\"parent_child_links\": 2"));
+    assert!(stdout.contains("\"blocking_links\": 1"));
+    assert!(dir
+        .path()
+        .join(".atelier-state")
+        .join("manifest.json")
+        .exists());
+
+    let (_, list_out, _) = run_atelier(dir.path(), &["list", "--status", "all"]);
+    assert!(list_out.contains("Mission: Replace Beads"));
+    assert!(list_out.contains("Dogfood Atelier"));
+
+    let (_, show_out, _) = run_atelier(dir.path(), &["show", "3"]);
+    assert!(show_out.contains("Parent: #1"));
+    assert!(show_out.contains("Blocked by: #2"));
+    assert!(show_out.contains("Acceptance Criteria"));
+
+    let (updated, _, update_err) = run_atelier(
+        dir.path(),
+        &["update", "2", "--title", "Imported Beads issue updated"],
+    );
+    assert!(updated, "update failed: {update_err}");
+    let (closed, _, close_err) = run_atelier(dir.path(), &["close", "2"]);
+    assert!(closed, "close failed: {close_err}");
+
+    let (_, closed_show, _) = run_atelier(dir.path(), &["show", "2"]);
+    assert!(closed_show.contains("Imported Beads issue updated"));
+    assert!(closed_show.contains("Status: closed"));
+
+    let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(!fresh, "mutating imported issue should stale export");
+    assert!(fresh_err.contains("stale") || fresh_err.contains("changed"));
+}
+
 // ==================== Issue Delete Tests ====================
 
 #[test]

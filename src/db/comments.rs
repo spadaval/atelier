@@ -21,6 +21,26 @@ impl Database {
         Ok(self.conn.last_insert_rowid())
     }
 
+    pub fn add_comment_at(
+        &self,
+        issue_id: i64,
+        content: &str,
+        kind: &str,
+        created_at: &str,
+    ) -> Result<i64> {
+        if content.len() > MAX_COMMENT_LEN {
+            anyhow::bail!(
+                "Comment exceeds maximum length of {} bytes",
+                MAX_COMMENT_LEN
+            );
+        }
+        self.conn.execute(
+            "INSERT INTO comments (issue_id, content, created_at, kind) VALUES (?1, ?2, ?3, ?4)",
+            params![issue_id, content, created_at, kind],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
     pub fn get_comments(&self, issue_id: i64) -> Result<Vec<Comment>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, issue_id, content, created_at, kind FROM comments WHERE issue_id = ?1 ORDER BY created_at",
