@@ -1,0 +1,38 @@
+# Standards
+
+## Rust
+
+- Run `cargo fmt` before handing off code changes.
+- Prefer `anyhow::Context` on fallible IO, database, and external-command
+  boundaries.
+- Keep command output stable when tests or agents depend on it.
+- Add or update CLI integration tests for user-visible command behavior.
+- Add focused database tests for schema, migration, transaction, and invariant
+  changes.
+- Preserve JSON compatibility unless a migration bead or ADR explicitly changes
+  the contract.
+
+## Data And State
+
+- Treat SQLite as runtime state and deterministic exported files as the target
+  durable repo state.
+- Do not merge SQLite databases through Git.
+- Any canonical projection or rebuild change must define how stale exports are
+  detected.
+- Use typed links for semantic relationships; reserve dependencies for real
+  sequencing.
+
+## Documentation
+
+- Update `SPEC.md` when product intent changes.
+- Update `CONTEXT.md` when terminology or ambiguity decisions change.
+- Add ADRs for costly, surprising, or repeatedly relevant architecture choices.
+- Keep current target-state docs separate from historical rationale.
+
+## Agent Workflow
+
+- Track work in Beads.
+- Use explicit noninteractive `bd` commands.
+- Record follow-up work as beads once tracker setup is available.
+- Include validation evidence in handoff notes when checks are skipped, fail, or
+  only partially cover the change.

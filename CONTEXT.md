@@ -1,0 +1,42 @@
+# Context
+
+## Domain Terms
+
+- Agent: an AI or human operator performing work in the repository.
+- Agent-factory: the coordinated operating model used to plan, assign,
+  validate, review, and hand off agent work.
+- Atelier: the target product: a local-first, agent-native work tracker for
+  complex software missions.
+- Beads: the repository's durable work tracker for agent-factory operation.
+- Canonical projection: deterministic repo-state files that can rebuild the
+  local SQLite runtime database.
+- Chainlink: the inherited Rust CLI codebase this repository starts from.
+- Evidence: a durable proof record for validation, such as test output, logs,
+  screenshots, reports, or benchmark results.
+- Gate: a machine-readable condition that controls whether work can advance or
+  close.
+- Issue: a durable accountability unit. It does not have to map one-to-one to an
+  agent run.
+- Milestone: a validated intermediate target state with scope boundaries and
+  validation criteria.
+- Mission: a high-level objective that may span multiple issues, milestones,
+  plans, agents, and runs.
+- Mission Control: the target projection or UI surface that summarizes active
+  missions, blockers, agents, stale exports, gates, and evidence.
+- Plan: durable execution intent that matters beyond ephemeral context.
+- Run: execution metadata for a session or slice of work, not the primary unit
+  of product planning.
+- SQLite state: fast local runtime state, currently inherited from Chainlink and
+  targeted to live under `.atelier/`.
+
+## Ambiguities
+
+- The product name is Atelier, but many implementation symbols and tests still
+  say Chainlink. Use Chainlink for inherited current behavior and Atelier for
+  target-state product design.
+- Export/import in the inherited code is backup-oriented. The target
+  architecture needs canonical projection and rebuild semantics instead.
+- Dependencies should represent actual sequencing. Use typed links for other
+  relationships such as related, validates, implements, or evidenced_by.
+- Missions, milestones, plans, evidence, and runs are target first-class
+  concepts, not just labels on issues.

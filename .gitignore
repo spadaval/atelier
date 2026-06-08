@@ -1,5 +1,9 @@
-
-# Beads / Dolt files (added by bd init)
+/target/
+/.chainlink/
+/.atelier/
+/.atelier-state/cache/
 .dolt/
-*.db
 .beads-credential-key
+*.db
+*.db-shm
+*.db-wal
