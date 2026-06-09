@@ -17,6 +17,9 @@
   deferred migration areas.
 - [docs/architecture/work-model.md](architecture/work-model.md): mission,
   milestone, epic, issue, workflow validator, and evidence relationships.
+- [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
+  repository-owned workflow policy path, schema, validators, hooks, reload
+  behavior, and risk-scaled examples.
 - [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
   tiers, hidden compatibility commands, and inherited utility disposition.
 - `docs/architecture/quality/index.md`: quality documentation index.

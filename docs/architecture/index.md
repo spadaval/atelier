@@ -26,6 +26,9 @@ See [Work Model](work-model.md) for mission, milestone, epic, issue, workflow
 validator, and evidence relationships.
 See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
 integration command policy.
+See [Workflow Configuration Contract](workflow-configuration.md) for the
+repository-owned workflow policy path, schema, validators, hooks, reload
+behavior, and examples.
 
 ## Target Architecture
 
@@ -40,6 +43,8 @@ integration command policy.
 - `rebuild` recreates SQLite state from committed exported state.
 - First-class concepts include missions, milestone checkpoint records, issues,
   plans, evidence, runs, typed links, workflows, and workflow validators.
+- Repository-owned workflow policy lives in `atelier.workflow.yaml`, while
+  `.atelier-state/` remains the deterministic exported tracker projection.
 
 ## Boundaries
 
