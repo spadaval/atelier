@@ -580,7 +580,7 @@
       "role": "canonical",
       "schema": "atelier.issue",
       "schema_version": 1,
-      "sha256": "b4feb2db58d96a42d00bde79aff8723ff460c62776780d505df09e5fc1f39840"
+      "sha256": "20ea3658743ca4af731dead4f7da05a151cd140522254a05c324aa6b7a5f4429"
     },
     {
       "id": "ISS-0065",

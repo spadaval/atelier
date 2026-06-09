@@ -1,0 +1,51 @@
+{
+  "apply": {
+    "atomic": true,
+    "dry_run": true,
+    "export": "skip",
+    "on_conflict": "fail",
+    "validate_only": false
+  },
+  "links": [
+    {
+      "metadata": {},
+      "source": {
+        "client_ref": "issue.bad"
+      },
+      "target": {
+        "client_ref": "missing.milestone"
+      },
+      "type": "contributes_to"
+    }
+  ],
+  "records": {
+    "issues": [
+      {
+        "client_ref": "issue.bad",
+        "depends_on": [
+          {
+            "client_ref": "missing.blocker"
+          }
+        ],
+        "issue_type": "task",
+        "labels": [
+          "bulk"
+        ],
+        "parent": {
+          "client_ref": "issue.bad"
+        },
+        "priority": "impossible",
+        "title": "Invalid bulk plan issue"
+      },
+      {
+        "client_ref": "issue.bad",
+        "issue_type": "task",
+        "priority": "low",
+        "title": "Duplicate client ref"
+      }
+    ]
+  },
+  "schema": "atelier.bulk-plan",
+  "schema_version": 1,
+  "title": "Invalid bulk plan fixture"
+}

@@ -6,6 +6,9 @@
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
   canonical `.atelier-state` manifest, record, graph, and rebuild layout.
+- [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
+  versioned JSON contract, validation diagnostics, dry-run preview shape, and
+  fixtures for authored bulk graph plans.
 - [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
   minimum command, JSON, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
