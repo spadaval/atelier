@@ -869,6 +869,48 @@ fn test_unrelate_issues() {
     assert!(!related_out.contains("Issue 2") || related_out.contains("No related"));
 }
 
+#[test]
+fn test_issue_help_shows_impact_and_hides_legacy_assumption_commands() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "--help"]);
+
+    assert!(success, "issue help failed: {}", stderr);
+    assert!(stdout.contains("impact"));
+    assert!(!stdout.contains("cascade"));
+    assert!(!stdout.contains("falsify"));
+}
+
+#[test]
+fn test_issue_impact_reports_downstream_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Derived issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Caused issue"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "relate", "1", "3", "--type", "derived"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "relate", "1", "4", "--type", "caused-by"],
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "impact", "1"]);
+
+    assert!(success, "issue impact failed: {}", stderr);
+    assert!(stdout.contains("#2"));
+    assert!(stdout.contains("Child issue"));
+    assert!(stdout.contains("#3"));
+    assert!(stdout.contains("Derived issue"));
+    assert!(stdout.contains("#4"));
+    assert!(stdout.contains("Caused issue"));
+    assert!(stdout.contains("downstream impact"));
+}
+
 // ==================== Tree Tests ====================
 
 #[test]

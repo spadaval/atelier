@@ -100,21 +100,21 @@ pub fn list(db: &Database, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn cascade(db: &Database, issue_id: i64) -> Result<()> {
+pub fn impact(db: &Database, issue_id: i64) -> Result<()> {
     db.require_issue(issue_id)?;
 
-    let affected = db.falsification_cascade(issue_id)?;
+    let affected = db.downstream_impact(issue_id)?;
 
     if affected.is_empty() {
         println!(
-            "No downstream issues affected by falsifying {}",
+            "No downstream issues found for {}",
             format_issue_id(issue_id)
         );
         return Ok(());
     }
 
     println!(
-        "Falsifying {} affects {} issue(s):\n",
+        "{} has downstream impact on {} issue(s):\n",
         format_issue_id(issue_id),
         affected.len()
     );
@@ -137,12 +137,16 @@ pub fn cascade(db: &Database, issue_id: i64) -> Result<()> {
     }
 
     println!(
-        "\nThese issues were built on assumptions that trace back to {}.",
+        "\nThese issues are linked through hierarchy or impact-bearing relations from {}.",
         format_issue_id(issue_id)
     );
-    println!("Consider reassessing each one.");
+    println!("Review each issue before changing, closing, or invalidating the source.");
 
     Ok(())
+}
+
+pub fn cascade(db: &Database, issue_id: i64) -> Result<()> {
+    impact(db, issue_id)
 }
 
 /// Mark an issue as falsified: label it, close it, and show the cascade.
@@ -168,7 +172,7 @@ pub fn falsify(db: &Database, issue_id: i64) -> Result<()> {
     )?;
 
     // Show cascade
-    let affected = db.falsification_cascade(issue_id)?;
+    let affected = db.downstream_impact(issue_id)?;
 
     if affected.is_empty() {
         println!("No downstream issues affected.");
@@ -400,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn test_falsification_cascade_parent_child() {
+    fn test_downstream_impact_parent_child() {
         let (db, _dir) = setup_test_db();
         let root = db.create_issue("Root assumption", None, "high").unwrap();
         let child1 = db.create_subissue(root, "Why 1", None, "medium").unwrap();
@@ -409,7 +413,7 @@ mod tests {
             .create_subissue(child1, "Why 1.1", None, "medium")
             .unwrap();
 
-        let affected = db.falsification_cascade(root).unwrap();
+        let affected = db.downstream_impact(root).unwrap();
         let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
 
         assert!(affected_ids.contains(&child1));
@@ -419,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn test_falsification_cascade_derived_relations() {
+    fn test_downstream_impact_derived_relations() {
         let (db, _dir) = setup_test_db();
         let assumption = db.create_issue("Core assumption", None, "high").unwrap();
         let conclusion = db
@@ -429,13 +433,31 @@ mod tests {
         db.add_typed_relation(assumption, conclusion, "derived")
             .unwrap();
 
-        let affected = db.falsification_cascade(assumption).unwrap();
+        let affected = db.downstream_impact(assumption).unwrap();
         assert_eq!(affected.len(), 1);
         assert_eq!(affected[0].id, conclusion);
     }
 
     #[test]
-    fn test_falsification_cascade_assumption_one_hop() {
+    fn test_downstream_impact_named_impact_relations() {
+        let (db, _dir) = setup_test_db();
+        let source = db.create_issue("Source", None, "high").unwrap();
+        let caused = db.create_issue("Caused work", None, "medium").unwrap();
+        let falsified = db.create_issue("Falsified work", None, "medium").unwrap();
+
+        db.add_typed_relation(source, caused, "caused-by").unwrap();
+        db.add_typed_relation(source, falsified, "falsifies")
+            .unwrap();
+
+        let affected = db.downstream_impact(source).unwrap();
+        let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
+
+        assert!(affected_ids.contains(&caused));
+        assert!(affected_ids.contains(&falsified));
+    }
+
+    #[test]
+    fn test_downstream_impact_assumption_one_hop() {
         let (db, _dir) = setup_test_db();
         let a1 = db.create_issue("Assumption A", None, "high").unwrap();
         let a2 = db
@@ -448,8 +470,8 @@ mod tests {
         db.add_typed_relation(a1, a2, "assumption").unwrap();
         db.add_typed_relation(a2, a3, "assumption").unwrap();
 
-        // Falsifying a1 should flag a2 (one hop) but NOT a3 (two hops via assumption)
-        let affected = db.falsification_cascade(a1).unwrap();
+        // Impact from a1 should flag a2 one hop, but not a3 two hops away.
+        let affected = db.downstream_impact(a1).unwrap();
         let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
 
         assert!(affected_ids.contains(&a2));

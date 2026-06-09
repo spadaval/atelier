@@ -15,16 +15,18 @@
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
-- Gate: a machine-readable condition that controls whether work can advance or
-  close.
+- Workflow validator: a machine-readable transition check that controls whether
+  a workflow transition can proceed and returns an actionable failure reason.
 - Issue: a durable accountability unit. It does not have to map one-to-one to an
   agent run.
-- Milestone: a validated intermediate target state with scope boundaries and
-  validation criteria.
+- Milestone: a validated intermediate checkpoint state with scope boundaries,
+  validation criteria, accepted evidence, and completion state. It is not a
+  work container or super-epic.
 - Mission: a high-level objective that may span multiple issues, milestones,
   plans, agents, and runs.
 - Mission Control: the target projection or UI surface that summarizes active
-  missions, blockers, agents, stale exports, gates, and evidence.
+  missions, checkpoint progress, blockers, agents, workflow validator failures,
+  and evidence.
 - Plan: durable execution intent that matters beyond ephemeral context.
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
@@ -41,5 +43,7 @@
   architecture needs canonical projection and rebuild semantics instead.
 - Dependencies should represent actual sequencing. Use typed links for other
   relationships such as related, validates, implements, or evidenced_by.
-- Missions, milestones, plans, evidence, and runs are target first-class
-  concepts, not just labels on issues.
+- Missions, milestone checkpoint records, plans, evidence, and runs are target
+  first-class concepts, not just labels on issues.
+- Workflow validators belong to workflow policy, not to milestone records.
+  Milestones own validation criteria; validators enforce transitions.

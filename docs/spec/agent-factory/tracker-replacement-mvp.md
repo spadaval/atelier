@@ -109,7 +109,7 @@ replacement unless they become necessary to satisfy a required row.
 | Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Return updated issue plus `previous_assignee`, `assignee`, and `changed`. | Yes | `atelier-z1p.3` |
 | Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Return updated issue or appended note object with author and timestamp. | Yes | `atelier-z1p.3` |
 | Update title/body/priority/status/labels/parent | `bd update <id> --title ... --description ... --priority ... --status ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags | Print changed fields and the ID. Invalid values are rejected with actionable text. | Return updated issue plus a sorted `changed_fields` array. Invalid values use `invalid_input`. | Yes | `atelier-z1p.3` |
-| Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or gates remain, unless an explicit force flag is supported and logged. | Return updated issue with `status: "closed"`, `closed_at`, and `close_reason`; blocked closure uses `blocked`. | Yes | `atelier-z1p.3` |
+| Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Return updated issue with `status: "closed"`, `closed_at`, and `close_reason`; blocked closure uses `blocked`. | Yes | `atelier-z1p.3` |
 | Reopen accidentally closed work | `bd reopen <id>` | `atelier issue reopen <id>` | Print reopened ID and previous close reason. | Return updated issue with reopened status and `closed_at: null`. | Yes | `atelier-z1p.3` |
 | Find ready executable work | `bd ready` | `atelier issue ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Return array or envelope `data.items`; each item includes ID, title, type, priority, labels, parent, and blocker summaries. | Yes | `atelier-z1p.3` |
 | List/filter work | `bd list --status=open` | `atelier issue list --status open` | Print compact rows with ID, status, priority, type, title, and assignee. | Return stable item array with pagination metadata if pagination exists. | Yes | `atelier-z1p.3` |
@@ -129,7 +129,7 @@ replacement unless they become necessary to satisfy a required row.
 | Record comments separately from notes | `bd comment` / `bd comments` | `atelier issue comment` / future notes model | Text must show chronological comments if used by Agent Factory. | JSON must preserve author, time, body, kind, and issue ID. | No for first cutover if Beads notes are preserved | Later feature bead |
 | Worktree creation and assignment | `bd worktree` | Future `atelier worktree` | Not required for first cutover; agents can use normal Git worktrees. | Not required. | No | Deferred |
 | Mission Control dashboards | None in Beads MVP | Future `atelier mission-control` or UI | Not required for first cutover. | Not required. | No | Deferred |
-| Workflow gates and evidence enforcement | `bd gate` and local conventions | Future Atelier workflows/gates/evidence records | Not required beyond lint/close diagnostics for first cutover. | Not required beyond MVP errors. | No | Deferred |
+| Workflow validators and evidence enforcement | `bd gate` and local conventions | Future Atelier workflows, validators, and evidence records | Not required beyond lint/close diagnostics for first cutover. | Not required beyond MVP errors. | No | Deferred |
 | Agent run/session accounting | Beads audit/session-adjacent features | Future Atelier run records | Not required for first cutover. | Not required. | No | Deferred |
 
 ## Agent Factory Operation Contract
@@ -206,10 +206,10 @@ not block the first replacement cutover:
 - Rich Mission Control UI or dashboard projections beyond health/check output.
 - Live agent process supervision.
 - Long-term run/session accounting.
-- First-class workflow policy engines and closure gates beyond MVP diagnostics.
+- First-class workflow policy engines and closure validators beyond MVP diagnostics.
 - Worktree creation, branch naming, or PR automation.
 - Advanced duplicate detection, semantic search, federation, external tracker
-  integrations, or async coordination gates.
+  integrations, or async coordination validators.
 - Full Beads command compatibility for commands not used by Agent Factory.
 
 ## Documentation Cutover Checklist

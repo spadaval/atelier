@@ -3,9 +3,9 @@
 ## Abstraction
 
 Prefer abstractions that protect real domain invariants: canonical projections,
-gate evaluation, typed links, workflow transitions, evidence attachment, and
-SQLite rebuild. Avoid wrappers whose only purpose is hiding current Chainlink
-names before the target behavior is implemented.
+workflow validator evaluation, typed links, workflow transitions, evidence
+attachment, and SQLite rebuild. Avoid wrappers whose only purpose is hiding
+current Chainlink names before the target behavior is implemented.
 
 ## Coupling
 
@@ -30,7 +30,7 @@ explicit rules when they affect diffs or rebuild.
 
 Agent-facing commands should support stable JSON output when they are used for
 coordination, automation, validation, or Mission Control. Errors should identify
-the failed record, gate, transition, or file projection.
+the failed record, validator, transition, or file projection.
 
 ## Preservation
 

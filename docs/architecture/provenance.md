@@ -44,9 +44,9 @@ model:
   detects stale projections.
 - `rebuild` recreates local SQLite state from committed exported state after
   checkout, pull, merge, or clone.
-- Missions, milestones, issues, plans, evidence, gates, runs, typed links, and
-  workflows become first-class Atelier concepts instead of only inherited
-  issue-tracker fields.
+- Missions, milestone checkpoint records, issues, plans, evidence, workflow
+  validators, runs, typed links, and workflows become first-class Atelier
+  concepts instead of only inherited issue-tracker fields.
 - Agent-facing commands keep stable JSON output where they support
   coordination, validation, automation, or Mission Control.
 
@@ -83,7 +83,7 @@ them:
   `.atelier/`.
 - Replacing backup-style export/import with canonical `.atelier-state/`
   projection and rebuild.
-- Adding first-class missions, plans, evidence, gates, runs, typed links, and
-  workflow configuration.
+- Adding first-class missions, plans, evidence, workflow validators, runs, typed
+  links, and workflow configuration.
 - Reworking lock sync behavior beyond what the relevant migration or design bead
   decides.

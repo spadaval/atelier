@@ -62,6 +62,7 @@ enum Commands {
     },
 
     /// Time tracking (start, stop, show)
+    #[command(hide = true)]
     Timer {
         #[command(subcommand)]
         action: Option<TimerCommands>,
@@ -88,6 +89,7 @@ enum Commands {
     },
 
     /// Import issues from JSON file
+    #[command(hide = true)]
     Import {
         /// Input file path
         input: String,
@@ -118,54 +120,63 @@ enum Commands {
     Doctor,
 
     /// Archive management
+    #[command(hide = true)]
     Archive {
         #[command(subcommand)]
         action: ArchiveCommands,
     },
 
     /// Milestone management
+    #[command(hide = true)]
     Milestone {
         #[command(subcommand)]
         action: MilestoneCommands,
     },
 
     /// Session management
+    #[command(hide = true)]
     Session {
         #[command(subcommand)]
         action: SessionCommands,
     },
 
     /// Daemon management
+    #[command(hide = true)]
     Daemon {
         #[command(subcommand)]
         action: DaemonCommands,
     },
 
     /// Code clone detection via cpitd
+    #[command(hide = true)]
     Cpitd {
         #[command(subcommand)]
         action: CpitdCommands,
     },
 
     /// Token usage tracking and cost monitoring
+    #[command(hide = true)]
     Usage {
         #[command(subcommand)]
         action: UsageCommands,
     },
 
     /// Agent identity management
+    #[command(hide = true)]
     Agent {
         #[command(subcommand)]
         action: AgentCommands,
     },
 
     /// Lock management for multi-agent coordination
+    #[command(hide = true)]
     Locks {
         #[command(subcommand)]
         action: LocksCommands,
     },
 
     /// Fetch locks and report coordination status
+    #[command(hide = true)]
     Sync,
 
     // ========================================================================
@@ -309,9 +320,6 @@ enum Commands {
         /// Closure reason
         #[arg(short, long)]
         reason: Option<String>,
-        /// Skip changelog entry
-        #[arg(long)]
-        no_changelog: bool,
     },
 
     /// Close all issues matching filters (shortcut for `issue close-all`)
@@ -323,9 +331,6 @@ enum Commands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// Skip changelog entries
-        #[arg(long)]
-        no_changelog: bool,
     },
 
     /// Reopen an issue (shortcut for `issue reopen`)
@@ -432,13 +437,15 @@ enum Commands {
         id: i64,
     },
 
-    /// Show falsification cascade — what breaks if this assumption is wrong
+    /// Show downstream issue impact from hierarchy and impact-bearing links
+    #[command(hide = true)]
     Cascade {
-        /// Issue ID to check cascade from
+        /// Issue ID to check impact from
         id: i64,
     },
 
     /// Mark an assumption as falsified and propagate to downstream issues
+    #[command(hide = true)]
     Falsify {
         /// Issue ID of the falsified assumption
         id: i64,
@@ -608,9 +615,6 @@ enum IssueCommands {
         /// Closure reason
         #[arg(short, long)]
         reason: Option<String>,
-        /// Skip changelog entry
-        #[arg(long)]
-        no_changelog: bool,
     },
 
     /// Close all issues matching filters
@@ -621,9 +625,6 @@ enum IssueCommands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// Skip changelog entries
-        #[arg(long)]
-        no_changelog: bool,
     },
 
     /// Reopen a closed issue
@@ -718,13 +719,21 @@ enum IssueCommands {
         id: i64,
     },
 
-    /// Show falsification cascade — what breaks if this assumption is wrong
+    /// Show downstream issue impact from hierarchy and impact-bearing links
+    Impact {
+        /// Issue ID to check impact from
+        id: i64,
+    },
+
+    /// Show falsification cascade - compatibility alias for `issue impact`
+    #[command(hide = true)]
     Cascade {
         /// Issue ID to check cascade from
         id: i64,
     },
 
     /// Mark an assumption as falsified and propagate to downstream issues
+    #[command(hide = true)]
     Falsify {
         /// Issue ID of the falsified assumption
         id: i64,
@@ -1233,31 +1242,15 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             )
         }
 
-        IssueCommands::Close {
-            id,
-            reason,
-            no_changelog,
-        } => {
+        IssueCommands::Close { id, reason } => {
             let db = get_db()?;
-            let _ = no_changelog;
             let _ = quiet;
             commands::agent_factory::close(&db, &id, reason.as_deref(), json)
         }
 
-        IssueCommands::CloseAll {
-            label,
-            priority,
-            no_changelog,
-        } => {
+        IssueCommands::CloseAll { label, priority } => {
             let db = get_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            commands::status::close_all(
-                &db,
-                label.as_deref(),
-                priority.as_deref(),
-                !no_changelog,
-                &atelier_dir,
-            )
+            commands::status::close_all(&db, label.as_deref(), priority.as_deref())
         }
 
         IssueCommands::Reopen { id } => {
@@ -1343,9 +1336,9 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             commands::relate::list(&db, id)
         }
 
-        IssueCommands::Cascade { id } => {
+        IssueCommands::Impact { id } | IssueCommands::Cascade { id } => {
             let db = get_db()?;
-            commands::relate::cascade(&db, id)
+            commands::relate::impact(&db, id)
         }
 
         IssueCommands::Falsify { id } => {
@@ -1526,33 +1519,13 @@ fn run() -> Result<()> {
             json,
         ),
 
-        Commands::Close {
-            id,
-            reason,
-            no_changelog,
-        } => dispatch_issue(
-            IssueCommands::Close {
-                id,
-                reason,
-                no_changelog,
-            },
-            quiet,
-            json,
-        ),
+        Commands::Close { id, reason } => {
+            dispatch_issue(IssueCommands::Close { id, reason }, quiet, json)
+        }
 
-        Commands::CloseAll {
-            label,
-            priority,
-            no_changelog,
-        } => dispatch_issue(
-            IssueCommands::CloseAll {
-                label,
-                priority,
-                no_changelog,
-            },
-            quiet,
-            json,
-        ),
+        Commands::CloseAll { label, priority } => {
+            dispatch_issue(IssueCommands::CloseAll { label, priority }, quiet, json)
+        }
 
         Commands::Reopen { id } => dispatch_issue(IssueCommands::Reopen { id }, quiet, json),
 
@@ -1614,7 +1587,7 @@ fn run() -> Result<()> {
 
         Commands::Related { id } => dispatch_issue(IssueCommands::Related { id }, quiet, json),
 
-        Commands::Cascade { id } => dispatch_issue(IssueCommands::Cascade { id }, quiet, json),
+        Commands::Cascade { id } => dispatch_issue(IssueCommands::Impact { id }, quiet, json),
 
         Commands::Falsify { id } => dispatch_issue(IssueCommands::Falsify { id }, quiet, json),
 

@@ -15,6 +15,10 @@
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
   provenance, inherited module boundaries, preservation expectations, and
   deferred migration areas.
+- [docs/architecture/work-model.md](architecture/work-model.md): mission,
+  milestone, epic, issue, workflow validator, and evidence relationships.
+- [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
+  tiers, hidden compatibility commands, and inherited utility disposition.
 - `docs/architecture/quality/index.md`: quality documentation index.
 - `docs/architecture/quality/architecture-quality.md`: vocabulary for
   architecture review.

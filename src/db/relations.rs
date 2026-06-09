@@ -5,6 +5,8 @@ use rusqlite::params;
 use super::{issue_from_row, Database};
 use crate::models::{Issue, Relation};
 
+const TRANSITIVE_IMPACT_RELATIONS: &[&str] = &["derived", "caused-by", "falsifies"];
+
 impl Database {
     /// Add a typed relation between two issues.
     /// Defaults to "related" if no type is specified.
@@ -127,19 +129,23 @@ impl Database {
         Ok(issues)
     }
 
-    /// Falsification cascade: given an issue marked as falsified, find ALL issues
-    /// that transitively depend on it via parent-child, "derived", or "assumption" links.
-    /// Returns the set of issue IDs that should be reassessed.
-    pub fn falsification_cascade(&self, falsified_id: i64) -> Result<Vec<Issue>> {
+    /// Downstream impact: find issues that depend on a source through hierarchy
+    /// or impact-bearing relations.
+    ///
+    /// Child, "derived", "caused-by", and "falsifies" relations are followed
+    /// transitively. "assumption" links are included one hop from the source
+    /// because shared assumptions should be reviewed without treating the whole
+    /// cluster as invalidated.
+    pub fn downstream_impact(&self, source_id: i64) -> Result<Vec<Issue>> {
         let mut visited = std::collections::HashSet::new();
         let mut queue = std::collections::VecDeque::new();
         let mut affected = Vec::new();
 
-        queue.push_back(falsified_id);
-        visited.insert(falsified_id);
+        queue.push_back(source_id);
+        visited.insert(source_id);
 
         while let Some(current_id) = queue.pop_front() {
-            // 1. Children (parent_id = current) — downstream in the why-chain
+            // 1. Children (parent_id = current) are downstream work.
             let children = self.get_subissues(current_id)?;
             for child in children {
                 if visited.insert(child.id) {
@@ -148,28 +154,33 @@ impl Database {
                 }
             }
 
-            // 2. Issues linked via "derived" relation — conclusions built on this assumption
-            let derived = self.get_issues_by_relation_type(current_id, "derived")?;
-            for issue in derived {
-                if visited.insert(issue.id) {
-                    affected.push(issue.clone());
-                    queue.push_back(issue.id);
+            // 2. Impact-bearing typed relations describe downstream dependency.
+            for relation_type in TRANSITIVE_IMPACT_RELATIONS {
+                let linked = self.get_issues_by_relation_type(current_id, relation_type)?;
+                for issue in linked {
+                    if visited.insert(issue.id) {
+                        affected.push(issue.clone());
+                        queue.push_back(issue.id);
+                    }
                 }
             }
 
-            // 3. Issues linked via "assumption" relation — shared assumptions
-            // (only one hop — don't cascade through the entire assumption cluster)
-            if current_id == falsified_id {
+            // 3. "assumption" links are one hop only from the source.
+            if current_id == source_id {
                 let shared = self.get_issues_by_relation_type(current_id, "assumption")?;
                 for issue in shared {
                     if visited.insert(issue.id) {
                         affected.push(issue.clone());
-                        // Don't push to queue — one hop only for assumption links
                     }
                 }
             }
         }
 
         Ok(affected)
+    }
+
+    /// Compatibility alias for the hidden falsification-oriented command path.
+    pub fn falsification_cascade(&self, falsified_id: i64) -> Result<Vec<Issue>> {
+        self.downstream_impact(falsified_id)
     }
 }

@@ -20,7 +20,7 @@
 - Persistence changes should include database round-trip or migration proof.
 - Export/rebuild changes should prove deterministic output and stale-export
   detection.
-- Workflow, gate, evidence, mission, milestone, or plan changes should include
+- Workflow, validator, evidence, mission, milestone, or plan changes should include
   machine-readable result examples when JSON output is involved.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.

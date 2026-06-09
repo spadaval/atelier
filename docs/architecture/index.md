@@ -22,6 +22,10 @@ Atelier currently starts from the Chainlink Rust CLI:
 
 See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.
+See [Work Model](work-model.md) for mission, milestone, epic, issue, workflow
+validator, and evidence relationships.
+See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
+integration command policy.
 
 ## Target Architecture
 
@@ -34,8 +38,8 @@ preservation expectations, and deferred migration areas.
 - Mutating commands update canonical exports by default.
 - `export --check` detects stale projections.
 - `rebuild` recreates SQLite state from committed exported state.
-- First-class concepts include missions, milestones, issues, plans, evidence,
-  gates, runs, typed links, and workflows.
+- First-class concepts include missions, milestone checkpoint records, issues,
+  plans, evidence, runs, typed links, workflows, and workflow validators.
 
 ## Boundaries
 
@@ -45,7 +49,7 @@ preservation expectations, and deferred migration areas.
   invariants.
 - Export/rebuild code must own deterministic serialization and stale-projection
   detection.
-- Workflow and gate evaluation should produce machine-readable results suitable
+- Workflow validator evaluation should produce machine-readable results suitable
   for Mission Control.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.

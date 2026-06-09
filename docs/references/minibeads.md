@@ -60,7 +60,8 @@ read on 2026-06-08.
 - `atelier-8tf0`: decide how Minibeads' dependency type vocabulary maps to
   Atelier typed links.
 - `atelier-v72a`: decide which issue fields become shared record fields across
-  missions, milestones, plans, evidence, gates, and runs.
+  missions, milestone checkpoint records, plans, evidence, workflow validators,
+  and runs.
 - `atelier-ttp5`: compare Minibeads' coarse-grained file lock approach with
   inherited Chainlink lock/sync behavior before choosing Atelier coordination
   semantics.

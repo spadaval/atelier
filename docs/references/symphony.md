@@ -25,7 +25,8 @@ These notes are based on the public repository and local clone above as read on
   to environment resolution, but environment variables should not invisibly
   override repository policy.
 - Hooks belong in the workflow contract with defined timeout and failure
-  semantics. This maps cleanly to Atelier gates and worktree setup hooks.
+  semantics. This maps cleanly to Atelier workflow validators and worktree setup
+  hooks.
 - Strict prompt/template rendering is a good precedent for action-aware
   guidance. Unknown variables or filters should fail close to the command that
   needs the guidance.
@@ -50,9 +51,9 @@ These notes are based on the public repository and local clone above as read on
 
 - `atelier-saii.1`: decide the config path, schema, strict parsing rules,
   environment indirection, hook semantics, and dynamic reload behavior.
-- `atelier-kitl`: implement configurable workflows and gates from that
+- `atelier-kitl`: implement configurable workflows and validators from that
   repository-owned contract.
 - `atelier-9naj`: use the same strict rendering and error-surface expectations
   for action-aware guidance.
-- `atelier-9h7g`: project workflow/config health and gate results without
+- `atelier-9h7g`: project workflow/config health and validator results without
   requiring direct agent-run rows.

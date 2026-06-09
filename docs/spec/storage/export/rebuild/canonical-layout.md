@@ -169,9 +169,11 @@ text arrays preserve author order.
 
 Path: `.atelier-state/milestones/<MS-ID>.md`
 
-Milestone front matter adds `desired_state`, `scope`, `required_evidence`,
-`completion_state`, and `missions`. ID arrays are sorted lexically; text arrays
-preserve author order.
+Milestone front matter adds `desired_state`, `scope`,
+`validation_criteria`, `accepted_evidence`, `completion_state`, `missions`, and
+`contributing_work`. ID arrays are sorted lexically; text arrays preserve author
+order. Milestones are checkpoint records, not work containers; epics and issues
+link to them as contributing work.
 
 ## Plans
 
@@ -249,7 +251,8 @@ manifest, `export --check` must report a stale or untracked projection error.
 ## Mutating Command Rollout
 
 Milestone 2 introduces `atelier export` as the deterministic writer for
-`.atelier-state/` and `atelier export --check` as the freshness gate.
+`.atelier-state/` and `atelier export --check` as the durable-state freshness
+check.
 `atelier rebuild` recreates `.atelier/state.db` from `.atelier-state/` and may
 create the local `.atelier/` runtime directory in a fresh checkout. Explicit
 backup exports remain available with `atelier export --format json` and

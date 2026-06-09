@@ -120,8 +120,9 @@ health.
 
 ### Milestone
 
-A milestone is a validated intermediate target state. It is not merely a vague
-point on a roadmap. A milestone should define:
+A milestone is a validated intermediate checkpoint state. It is not a work
+container or super-epic, and it is not merely a vague point on a roadmap. A
+milestone should define:
 
 - Desired state.
 - Scope boundaries.
@@ -129,6 +130,9 @@ point on a roadmap. A milestone should define:
 - Linked work.
 - Required or accepted evidence.
 - Completion state.
+
+Epics and tasks may contribute to a milestone, and evidence may validate a
+milestone's criteria. The milestone itself should remain a target-state record.
 
 ### Issue
 
@@ -156,7 +160,8 @@ notes, or generated reports.
 Evidence metadata should include:
 
 - ID.
-- Linked issue, milestone, mission, or gate.
+- Linked issue, milestone, mission, workflow validator result, or other
+  evidence target.
 - Kind.
 - Result.
 - Summary.
@@ -201,7 +206,8 @@ The link model should support custom relation types with validation and linting.
 ## Workflows
 
 Atelier should support configurable workflows. A workflow defines allowed phases,
-transitions, required fields, gates, evidence requirements, and closure rules.
+transitions, required fields, workflow validators, evidence requirements, and
+closure rules.
 
 Example workflow:
 
@@ -230,9 +236,9 @@ workflows:
     done_requires:
       evidence:
         min_count: 1
-      gates:
+      validators:
         - tests_passed
-        - export_fresh
+        - durable_state_current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
@@ -322,21 +328,21 @@ Useful enforcement:
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
-## Validation And Gates
+## Validation And Workflow Validators
 
-Evidence should be a first-class condition for closing work. Gates evaluate
-whether a record can advance or close.
+Evidence should be a first-class condition for closing work. Workflow validators
+evaluate whether a record can advance or close.
 
-Example gates:
+Example validators:
 
-- `export_fresh`
+- `durable_state_current`
 - `tests_passed`
 - `review_complete`
 - `evidence_attached`
-- `milestone_validated`
+- `validation_criteria_satisfied`
 - `no_blocking_lints`
 
-Gates should produce machine-readable results for Mission Control.
+Validators should produce machine-readable results for Mission Control.
 
 ## Mission Control
 
@@ -352,7 +358,7 @@ Mission Control should be able to show:
 - Claims and locks.
 - Stale exports.
 - Required evidence.
-- Gate failures.
+- Workflow validator failures.
 - Plan drift.
 - Recent decisions.
 - Items ready for review or validation.
@@ -378,7 +384,7 @@ atelier link add
 atelier work start
 atelier work finish
 atelier evidence add
-atelier gate check
+atelier workflow validate
 atelier lint
 atelier export
 atelier export --check
@@ -416,21 +422,22 @@ Every command that agents call should support stable JSON output.
 
 ### Milestone 4: Domain Model Upgrade
 
-- Add first-class missions, milestones, plans, evidence, gates, and runs.
+- Add first-class missions, milestone checkpoint records, plans, evidence,
+  workflow validators, and runs.
 - Add typed links.
 - Keep compatibility migration paths where reasonable.
 
 ### Milestone 5: Workflows And Rules
 
 - Add configurable types and workflows.
-- Add gate-backed transitions.
+- Add validator-backed transitions.
 - Add linter severities and waivers.
 - Surface action-aware guidance.
 
 ### Milestone 6: Mission Control Projection
 
-- Add JSON projections for active missions, agents, blockers, gates, evidence,
-  branches, and plan drift.
+- Add JSON projections for active missions, agents, blockers, workflow
+  validator failures, evidence, branches, and plan drift.
 - Defer rich UI until projections are useful.
 
 ## Open Questions
