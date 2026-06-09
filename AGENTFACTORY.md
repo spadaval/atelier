@@ -24,8 +24,6 @@ concrete files, commands, and product-specific skills.
 - Durable tracker state: committed `.atelier-state/`
 - Runtime tracker database: local `.atelier/state.db`, rebuilt from
   `.atelier-state/`
-- Archived Beads fallback: `.beads/issues.manual.jsonl` and `.beads/`
-  metadata are retained read-only for recovery and audit only.
 - Normal tracker commands:
   - `atelier issue ready`
   - `atelier issue list --status open`
@@ -44,9 +42,8 @@ concrete files, commands, and product-specific skills.
   - `atelier lint`
   - `atelier lint <id>`
   - `atelier doctor`
-- Beads commands are not part of the normal Agent Factory path in this
-  repository. Use `bd` only for explicit archival bookkeeping while retiring the
-  old tracker, and never use interactive commands such as `bd edit`.
+- Beads commands are not part of the Agent Factory path in this repository.
+  `atelier import-beads` remains only a one-way external import command.
 
 ## Checks
 

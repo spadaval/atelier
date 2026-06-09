@@ -181,9 +181,8 @@ fn import_beads_jsonl(db: &Database, input_path: &Path) -> Result<BeadsImportRep
 
             let issue = imported_issue(record, id, &mut lossy_fields)?;
             db.insert_issue_import(&issue)?;
-            db.add_label(id, &format!("beads:id:{}", record.id))?;
             if let Some(issue_type) = &record.issue_type {
-                db.add_label(id, &format!("beads:type:{issue_type}"))?;
+                db.add_label(id, issue_type)?;
             }
             for label in record.labels.as_deref().unwrap_or_default() {
                 db.add_label(id, label)?;
@@ -266,7 +265,7 @@ fn imported_issue(
             lossy_fields.push(lossy(
                 &record.id,
                 "status",
-                "mapped in_progress to open; assignee/start metadata preserved as comments",
+                "mapped in_progress to open; assignee/start metadata reported as lossy fields",
             ));
             "open"
         }
@@ -312,7 +311,6 @@ fn imported_description(record: &BeadsIssue) -> String {
             sections.push(format!("## Acceptance Criteria\n\n{}", acceptance.trim()));
         }
     }
-    sections.push(format!("## Beads Source\n\nSource ID: {}", record.id));
     sections.join("\n\n")
 }
 
@@ -345,17 +343,6 @@ fn add_preservation_comments(
         .as_deref()
         .or(record.created_at.as_deref())
         .unwrap_or("1970-01-01T00:00:00Z");
-    let mut metadata = Vec::new();
-    push_metadata(&mut metadata, "source_id", Some(&record.id));
-    push_metadata(&mut metadata, "issue_type", record.issue_type.as_deref());
-    push_metadata(&mut metadata, "owner", record.owner.as_deref());
-    push_metadata(&mut metadata, "assignee", record.assignee.as_deref());
-    push_metadata(&mut metadata, "created_by", record.created_by.as_deref());
-    push_metadata(&mut metadata, "started_at", record.started_at.as_deref());
-    if !metadata.is_empty() {
-        db.add_comment_at(id, &metadata.join("\n"), "import-metadata", created_at)?;
-    }
-
     if let Some(notes) = record.notes.as_deref() {
         if !notes.trim().is_empty() {
             db.add_comment_at(id, notes.trim(), "note", created_at)?;
@@ -373,13 +360,12 @@ fn add_preservation_comments(
         ("created_by", record.created_by.as_deref()),
         ("started_at", record.started_at.as_deref()),
         ("close_reason", record.close_reason.as_deref()),
-        ("issue_type", record.issue_type.as_deref()),
     ] {
         if value.is_some() {
             lossy_fields.push(lossy(
                 &record.id,
                 field,
-                "preserved in import comments/labels; not first-class Atelier issue field",
+                "reported in import summary; not written to Atelier issue state",
             ));
         }
     }
@@ -398,14 +384,6 @@ fn add_preservation_comments(
         }
     }
     Ok(())
-}
-
-fn push_metadata(lines: &mut Vec<String>, key: &str, value: Option<&str>) {
-    if let Some(value) = value {
-        if !value.trim().is_empty() {
-            lines.push(format!("{key}: {value}"));
-        }
-    }
 }
 
 fn validate_dependency_record(
@@ -653,6 +631,17 @@ mod tests {
         assert_eq!(db.get_issue(3).unwrap().unwrap().parent_id, Some(1));
         assert_eq!(db.get_blockers(3).unwrap(), vec![2]);
         assert_eq!(db.get_blocking(2).unwrap(), vec![3]);
+
+        let labels = db.get_labels(3).unwrap();
+        assert!(labels.contains(&"task".to_string()));
+        assert!(!labels.iter().any(|label| label.starts_with("beads:")));
+        assert!(!db
+            .get_issue(3)
+            .unwrap()
+            .unwrap()
+            .description
+            .unwrap()
+            .contains("Beads Source"));
     }
 
     #[test]

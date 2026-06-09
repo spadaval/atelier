@@ -12,8 +12,8 @@
   commands instead.
 - Treat `.atelier-state/` as the committed durable tracker state and
   `.atelier/state.db` as local runtime state that can be rebuilt.
-- `.beads/` is archived read-only recovery data. Do not use `bd` for normal
-  planning, execution, or handoff in this repository.
+- Beads is no longer repository tracking state. Do not use the predecessor CLI
+  for planning, execution, handoff, or recovery in this repository.
 
 ## Repository Shape
 

@@ -135,12 +135,7 @@ impl Database {
             }
         }
 
-        let source_label = format!("beads:id:{normalized}");
-        let mut stmt = self
-            .conn
-            .prepare("SELECT issue_id FROM labels WHERE label = ?1 ORDER BY issue_id LIMIT 1")?;
-        let id = stmt.query_row([source_label], |row| row.get(0)).ok();
-        Ok(id)
+        Ok(None)
     }
 
     /// Get an issue by ID, returning an error if not found.

@@ -118,27 +118,21 @@ pub fn print_error(command: &str, code: ErrorCode, message: &str, details: Value
 
 pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<i64> {
     db.resolve_issue_ref(issue_ref)?
-        .ok_or_else(|| anyhow!("Issue {issue_ref} was not found; use a numeric ID like #1 or an imported Beads source ID label such as atelier-z1p.3"))
+        .ok_or_else(|| anyhow!("Issue {issue_ref} was not found; use a numeric ID like #1"))
 }
 
 fn issue_id_for_agent(db: &Database, issue: &Issue) -> Result<String> {
-    let source = db
-        .get_labels(issue.id)?
-        .into_iter()
-        .find_map(|label| label.strip_prefix("beads:id:").map(str::to_string));
-    Ok(source.unwrap_or_else(|| format_issue_id(issue.id)))
+    let _ = db;
+    Ok(format_issue_id(issue.id))
 }
 
 fn issue_type(labels: &[String]) -> String {
     labels
         .iter()
-        .find_map(|label| label.strip_prefix("beads:type:").map(str::to_string))
-        .or_else(|| {
-            labels.iter().find_map(|label| match label.as_str() {
-                "epic" | "task" | "feature" | "bug" | "validation" | "closeout" | "spike"
-                | "decision" => Some(label.clone()),
-                _ => None,
-            })
+        .find_map(|label| match label.as_str() {
+            "epic" | "task" | "feature" | "bug" | "validation" | "closeout" | "spike"
+            | "decision" => Some(label.clone()),
+            _ => None,
         })
         .unwrap_or_else(|| "task".to_string())
 }
@@ -502,7 +496,7 @@ pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Resul
         None => db.create_issue(input.title, input.description, input.priority)?,
     };
     if let Some(issue_type) = input.issue_type {
-        db.add_label(id, &format!("beads:type:{issue_type}"))?;
+        db.add_label(id, issue_type)?;
     }
     for label in input.labels {
         db.add_label(id, label)?;
@@ -688,7 +682,15 @@ pub fn dep_add(
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
     let changed = db.add_dependency(blocked_id, blocker_id)?;
-    dep_result(db, "dep.add", blocked_id, blocker_id, changed, json_output)
+    dep_result(
+        db,
+        "dep.add",
+        "add",
+        blocked_id,
+        blocker_id,
+        changed,
+        json_output,
+    )
 }
 
 pub fn dep_remove(
@@ -703,6 +705,7 @@ pub fn dep_remove(
     dep_result(
         db,
         "dep.remove",
+        "remove",
         blocked_id,
         blocker_id,
         changed,
@@ -713,6 +716,7 @@ pub fn dep_remove(
 fn dep_result(
     db: &Database,
     command: &str,
+    action: &str,
     blocked_id: i64,
     blocker_id: i64,
     changed: bool,
@@ -726,18 +730,31 @@ fn dep_result(
         "blocked": issue_id_for_agent(db, &blocked)?,
         "blocker": issue_id_for_agent(db, &blocker)?,
         "type": "blocks",
+        "action": action,
+        "state": dependency_state(action, changed),
         "changed": changed
     });
     if json_output {
         print_success(command, data)
     } else {
-        println!(
-            "{} is blocked by {} ({})",
-            data["blocked"].as_str().unwrap_or_default(),
-            data["blocker"].as_str().unwrap_or_default(),
-            if changed { "changed" } else { "unchanged" }
-        );
+        let blocked = data["blocked"].as_str().unwrap_or_default();
+        let blocker = data["blocker"].as_str().unwrap_or_default();
+        let state = data["state"].as_str().unwrap_or_default();
+        match action {
+            "remove" => println!("{blocked} is no longer blocked by {blocker} ({state})"),
+            _ => println!("{blocked} is blocked by {blocker} ({state})"),
+        }
         Ok(())
+    }
+}
+
+fn dependency_state(action: &str, changed: bool) -> &'static str {
+    match (action, changed) {
+        ("add", true) => "added",
+        ("add", false) => "already-present",
+        ("remove", true) => "removed",
+        ("remove", false) => "already-absent",
+        _ => "unchanged",
     }
 }
 

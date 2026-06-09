@@ -95,7 +95,7 @@ enum Commands {
 
     /// Import Beads JSONL backup into Atelier runtime and canonical state
     ImportBeads {
-        /// Beads JSONL backup path, usually .beads/issues.manual.jsonl
+        /// Beads JSONL backup path from an external source
         input: String,
         /// Canonical state directory to write after import
         #[arg(short, long)]

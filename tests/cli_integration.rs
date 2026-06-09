@@ -2576,6 +2576,8 @@ fn test_agent_factory_json_command_subset() {
     assert!(success, "dep add failed: {stderr}");
     let dep = json_value(&stdout);
     assert_eq!(dep["command"], "dep.add");
+    assert_eq!(dep["data"]["action"], "add");
+    assert_eq!(dep["data"]["state"], "added");
     assert_eq!(dep["data"]["blocked"], "#1");
     assert_eq!(dep["data"]["blocker"], "#2");
 
@@ -2585,7 +2587,11 @@ fn test_agent_factory_json_command_subset() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "remove", "1", "2"]);
     assert!(success, "dep remove failed: {stderr}");
-    assert_eq!(json_value(&stdout)["data"]["changed"], true);
+    let removed = json_value(&stdout);
+    assert_eq!(removed["command"], "dep.remove");
+    assert_eq!(removed["data"]["action"], "remove");
+    assert_eq!(removed["data"]["state"], "removed");
+    assert_eq!(removed["data"]["changed"], true);
 
     for args in [
         vec!["--json", "issue", "list", "--status", "all"],
@@ -2613,33 +2619,38 @@ fn test_agent_factory_json_command_subset() {
 }
 
 #[test]
-fn test_agent_factory_beads_source_id_aliases() {
+fn test_import_beads_reports_mapping_without_tracker_provenance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/beads/issues.manual.jsonl");
 
-    let (success, _, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["--json", "import-beads", fixture.to_str().unwrap()],
     );
     assert!(success, "import-beads failed: {stderr}");
+    assert!(stdout.contains("\"atelier-z1p.4\": 3"));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "show", "atelier-z1p.4"]);
-    assert!(success, "source-id show failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "3"]);
+    assert!(success, "mapped show failed: {stderr}");
     let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["id"], "atelier-z1p.4");
-    assert_eq!(shown["data"]["parent"], "atelier-z1p");
-    assert_eq!(shown["data"]["owner"], "supadava@cisco.com");
-    assert_eq!(shown["data"]["dependencies"][0]["id"], "atelier-z1p.2");
+    assert_eq!(shown["data"]["id"], "#3");
+    assert_eq!(shown["data"]["parent"], "#1");
+    assert_eq!(shown["data"]["issue_type"], "task");
+    assert!(shown["data"]["owner"].is_null());
+    assert_eq!(shown["data"]["dependencies"][0]["id"], "#2");
+    assert!(!shown["data"]["labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|label| label.as_str().unwrap().starts_with("beads:")));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "dep", "list", "atelier-z1p.4"]);
-    assert!(success, "source-id dep list failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "3"]);
+    assert!(success, "mapped dep list failed: {stderr}");
     let deps = json_value(&stdout);
-    assert_eq!(deps["data"]["items"][0]["blocked"], "atelier-z1p.4");
-    assert_eq!(deps["data"]["items"][0]["blocker"], "atelier-z1p.2");
+    assert_eq!(deps["data"]["items"][0]["blocked"], "#3");
+    assert_eq!(deps["data"]["items"][0]["blocker"], "#2");
 }
 
 // ============================================================

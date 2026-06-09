@@ -7,8 +7,9 @@
   validate, review, and hand off agent work.
 - Atelier: the product and live repository tracker: a local-first, agent-native work tracker for
   complex software missions.
-- Beads: the archived predecessor tracker. Its `.beads/` data is retained
-  read-only for recovery and migration audit, not normal agent-factory work.
+- Beads: the predecessor tracker replaced by Atelier. Beads data was imported
+  and the repository archive was purged; only the external `import-beads`
+  input format remains supported.
 - Canonical projection: deterministic repo-state files that can rebuild the
   local SQLite runtime database.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.

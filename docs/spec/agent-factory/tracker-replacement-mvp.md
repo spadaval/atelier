@@ -187,7 +187,7 @@ These cutover criteria define the repository switch to Atelier:
 | --- | --- | --- |
 | Beads data import from `.beads/issues.manual.jsonl` preserves current records, relationships, statuses, labels, notes, and close metadata or reports precise loss. | `atelier-z1p.2` | Import report, count comparison, round-trip show/list/update/close validation, and fixture-based tests. |
 | Agent Factory command parity covers every required MVP matrix row with stable text and JSON behavior. | `atelier-z1p.3` | Focused CLI tests and manual command transcript for ready/show/create/update/close/dependency/lint/doctor/export/rebuild. |
-| Repository dogfood cutover proves Atelier is live for `/root/atelier`. | `atelier-z1p.4` | `AGENTFACTORY.md` uses Atelier commands, Beads data is archived read-only, a real update and closeout happen through Atelier, and normal repository work no longer needs `bd`. |
+| Repository dogfood cutover proves Atelier is live for `/root/atelier`. | `atelier-z1p.4` | `AGENTFACTORY.md` uses Atelier commands, a real update and closeout happen through Atelier, normal repository work no longer needs `bd`, and the old archive is purged after validation. |
 | Agent Factory skill docs support tracker bindings instead of hard-coding Beads. | `atelier-z1p.5` | Follow-up outside this repository cutover; skill procedures route through repository-bound tracker commands and include Atelier examples. |
 
 Already closed prerequisites that remain part of the replacement foundation:
@@ -222,7 +222,7 @@ The repository cutover updated:
   tracker instructions.
 - Repository quality docs: replace Beads validation commands with Atelier
   export/lint/doctor commands.
-- `.beads/`: mark old data as archived read-only.
+- Old tracker archive: purge after import, validation, and rebuild proof.
 
 Agent Factory skill procedure changes are owned by `atelier-z1p.5`; this
 repository cutover does not edit global skill docs.
