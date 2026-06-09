@@ -24,6 +24,9 @@ See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.
 See [Work Model](work-model.md) for mission, milestone, epic, issue, workflow
 validator, and evidence relationships.
+See [Milestone Records](milestone-records.md) for the first-class checkpoint
+record contract, validation model, and inherited `atelier milestone`
+compatibility boundary.
 See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
 integration command policy.
 See [Workflow Configuration Contract](workflow-configuration.md) for the

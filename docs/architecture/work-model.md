@@ -92,6 +92,10 @@ transitions:
 The validator does not define the milestone's meaning. It only enforces whether
 the transition is allowed.
 
+See [Milestone Records](milestone-records.md) for the detailed field contract,
+evidence relationship, completion-state semantics, and compatibility boundary
+for the inherited `atelier milestone` command.
+
 ## Current Compatibility
 
 Today, most missions, milestones, and epics are represented as issues with

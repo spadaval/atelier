@@ -17,6 +17,9 @@
   deferred migration areas.
 - [docs/architecture/work-model.md](architecture/work-model.md): mission,
   milestone, epic, issue, workflow validator, and evidence relationships.
+- [docs/architecture/milestone-records.md](architecture/milestone-records.md):
+  first-class checkpoint record fields, validation model, evidence links, and
+  inherited milestone compatibility boundary.
 - [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
   repository-owned workflow policy path, schema, validators, hooks, reload
   behavior, and risk-scaled examples.

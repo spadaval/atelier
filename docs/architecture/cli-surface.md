@@ -36,8 +36,8 @@ should hide them:
 - `timer` and flat `start`/`stop`, pending a future run/session model.
 - `archive`, because archive state is inherited issue lifecycle behavior rather
   than a target workflow primitive.
-- `milestone`, until the first-class milestone record contract is updated to
-  match the target domain model.
+- `milestone`, until it is migrated to create, mutate, export, rebuild, and
+  validate first-class milestone checkpoint records.
 - `session`, because durable run/session accounting is deferred.
 - `agent`, `locks`, and `sync`, until the claim/worktree/lock policy is decided.
 - Backup `import` and `export --format json|markdown`, which are not canonical
