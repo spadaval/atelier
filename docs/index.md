@@ -26,6 +26,9 @@
 - [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
   repository-owned workflow policy path, schema, validators, hooks, reload
   behavior, and risk-scaled examples.
+- [docs/architecture/mission-control-tui.md](architecture/mission-control-tui.md):
+  Mission Control TUI projection dependencies, degradation rules, navigation
+  model, mutation boundary, and fixture expectations.
 - [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
   tiers, hidden compatibility commands, and inherited utility disposition.
 - `docs/architecture/quality/index.md`: quality documentation index.

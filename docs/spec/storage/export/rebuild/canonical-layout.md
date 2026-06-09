@@ -233,6 +233,10 @@ Mission Control projection work lands in Milestone 6.
 Until Milestone 6, the file may be absent. If present, it must carry
 `schema: "atelier.mission-control"` and `schema_version: 1`.
 
+The TUI consumer contract for this derived projection is defined in
+[Mission Control TUI](../../../../architecture/mission-control-tui.md). That
+contract does not make `mission-control.json` a rebuild source.
+
 ## Rebuild Order
 
 Rebuild proceeds in this order:

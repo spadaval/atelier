@@ -32,6 +32,9 @@ integration command policy.
 See [Workflow Configuration Contract](workflow-configuration.md) for the
 repository-owned workflow policy path, schema, validators, hooks, reload
 behavior, and examples.
+See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
+consumer contract, projection degradation rules, navigation model, and fixture
+expectations.
 
 ## Target Architecture
 
@@ -59,6 +62,8 @@ behavior, and examples.
   detection.
 - Workflow validator evaluation should produce machine-readable results suitable
   for Mission Control.
+- Mission Control TUI code should consume only the documented projection fields
+  and keep CLI commands plus JSON output as the primary agent interface.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.
 
