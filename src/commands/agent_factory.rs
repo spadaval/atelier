@@ -20,6 +20,16 @@ pub struct IssueSummary {
     pub parent: Option<String>,
 }
 
+struct QueueRow {
+    id: String,
+    title: String,
+    status: String,
+    issue_type: String,
+    priority: String,
+    parent: Option<String>,
+    open_blockers: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DependencySummary {
     pub id: String,
@@ -278,11 +288,12 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
 }
 
 fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObject) -> Result<()> {
-    println!("{} [{}] {}", object.id, object.issue_type, object.title);
-    println!(
-        "{}",
-        "=".repeat(object.id.len() + object.issue_type.len() + object.title.len() + 4)
+    let identity = format!(
+        "{} [{}] {} - {}",
+        object.id, object.issue_type, object.status, object.title
     );
+    println!("{identity}");
+    println!("{}", "=".repeat(identity.len()));
     println!("Status:   {}", object.status);
     println!("Type:     {}", object.issue_type);
     println!("Priority: {}", object.priority);
@@ -554,6 +565,7 @@ pub fn list(
     label: Option<&str>,
     priority: Option<&str>,
     json_output: bool,
+    quiet: bool,
 ) -> Result<()> {
     let items = db
         .list_issues(status, label, priority)?
@@ -576,18 +588,15 @@ pub fn list(
     } else if items.is_empty() {
         println!("No issues found.");
         Ok(())
-    } else {
-        for item in items {
-            println!(
-                "{:<16} {:<12} {:<8} {:<10} {}",
-                item.id, item.status, item.priority, item.issue_type, item.title
-            );
-        }
+    } else if quiet {
+        render_issue_ids_quiet(items);
         Ok(())
+    } else {
+        render_issue_queue_human(db, "Issue Queue", items, true)
     }
 }
 
-pub fn ready(db: &Database, json_output: bool) -> Result<()> {
+pub fn ready(db: &Database, json_output: bool, quiet: bool) -> Result<()> {
     let items = db
         .list_ready_issues()?
         .into_iter()
@@ -602,19 +611,15 @@ pub fn ready(db: &Database, json_output: bool) -> Result<()> {
         let blocked_count = db.list_blocked_issues()?.len();
         println!("No issues ready to work on ({} blocked).", blocked_count);
         Ok(())
-    } else {
-        println!("Ready issues (no open blockers):");
-        for item in items {
-            println!(
-                "  {:<16} {:<8} {:<10} {}",
-                item.id, item.priority, item.issue_type, item.title
-            );
-        }
+    } else if quiet {
+        render_issue_ids_quiet(items);
         Ok(())
+    } else {
+        render_issue_queue_human(db, "Ready Issues", items, false)
     }
 }
 
-pub fn search(db: &Database, query: &str, json_output: bool) -> Result<()> {
+pub fn search(db: &Database, query: &str, json_output: bool, quiet: bool) -> Result<()> {
     let lowercase = query.to_lowercase();
     let mut items = Vec::new();
     for issue in db.list_issues(Some("all"), None, None)? {
@@ -636,14 +641,134 @@ pub fn search(db: &Database, query: &str, json_output: bool) -> Result<()> {
     } else if items.is_empty() {
         println!("No issues found matching '{query}'.");
         Ok(())
-    } else {
-        for item in items {
-            println!(
-                "{} [{}] {} - {}",
-                item.id, item.status, item.priority, item.title
-            );
-        }
+    } else if quiet {
+        render_issue_ids_quiet(items);
         Ok(())
+    } else {
+        render_issue_queue_human(db, &format!("Search Results: {query}"), items, true)
+    }
+}
+
+fn render_issue_ids_quiet(items: Vec<IssueSummary>) {
+    for item in items {
+        println!("{}", item.id);
+    }
+}
+
+fn render_issue_queue_human(
+    db: &Database,
+    title: &str,
+    items: Vec<IssueSummary>,
+    show_status: bool,
+) -> Result<()> {
+    let mut rows = items
+        .into_iter()
+        .map(|item| queue_row(db, item))
+        .collect::<Result<Vec<_>>>()?;
+    rows.sort_by(|a, b| {
+        status_rank(&a.status)
+            .cmp(&status_rank(&b.status))
+            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
+            .then(a.issue_type.cmp(&b.issue_type))
+            .then(a.parent.cmp(&b.parent))
+            .then(a.id.cmp(&b.id))
+    });
+
+    println!("{title}");
+    println!("{}", "=".repeat(title.len()));
+    println!("{}", queue_summary(&rows));
+
+    let mut grouped = BTreeMap::<(String, String), Vec<QueueRow>>::new();
+    for row in rows {
+        let status_group = if show_status {
+            row.status.clone()
+        } else {
+            "ready".to_string()
+        };
+        grouped
+            .entry((status_group, row.priority.clone()))
+            .or_default()
+            .push(row);
+    }
+
+    let group_order = ["open", "ready", "in_progress", "blocked", "closed"];
+    let priority_order = ["critical", "high", "medium", "low"];
+    for status in group_order {
+        for priority in priority_order {
+            if let Some(rows) = grouped.remove(&(status.to_string(), priority.to_string())) {
+                print_queue_group(status, priority, rows, show_status);
+            }
+        }
+    }
+    for ((status, priority), rows) in grouped {
+        print_queue_group(&status, &priority, rows, show_status);
+    }
+
+    Ok(())
+}
+
+fn queue_row(db: &Database, item: IssueSummary) -> Result<QueueRow> {
+    let open_blockers = db
+        .get_blockers(&item.id)?
+        .into_iter()
+        .filter_map(|id| db.require_issue(&id).ok())
+        .filter(|issue| issue.status == "open")
+        .count();
+    Ok(QueueRow {
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        issue_type: item.issue_type,
+        priority: item.priority,
+        parent: item.parent,
+        open_blockers,
+    })
+}
+
+fn queue_summary(rows: &[QueueRow]) -> String {
+    let mut statuses = BTreeMap::<String, usize>::new();
+    let mut priorities = BTreeMap::<String, usize>::new();
+    let mut blocked = 0;
+    for row in rows {
+        *statuses.entry(row.status.clone()).or_default() += 1;
+        *priorities.entry(row.priority.clone()).or_default() += 1;
+        if row.open_blockers > 0 {
+            blocked += 1;
+        }
+    }
+    format!(
+        "{} total | status: {} | priority: {} | blocked={}",
+        rows.len(),
+        joined_counts(statuses),
+        joined_counts(priorities),
+        blocked
+    )
+}
+
+fn print_queue_group(status: &str, priority: &str, rows: Vec<QueueRow>, show_status: bool) {
+    let heading = format!("{status} {priority}");
+    println!("\n{heading}");
+    println!("{}", "-".repeat(heading.len()));
+    for row in rows {
+        let status_text = if show_status {
+            format!("[{}] ", row.status)
+        } else {
+            String::new()
+        };
+        let parent = row
+            .parent
+            .as_deref()
+            .map(|parent| format!(" parent={parent}"))
+            .unwrap_or_default();
+        let blockers = if row.open_blockers > 0 {
+            format!(" blocked_by={}", row.open_blockers)
+        } else {
+            String::new()
+        };
+        println!(
+            "  {}{}{} {} - {}{}",
+            status_text, row.id, parent, row.issue_type, row.title, blockers
+        );
     }
 }
 

@@ -9,6 +9,7 @@ evidence_required: []
 id: "atelier-omnw"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cli"
 - "human-output"
 links: []
@@ -16,9 +17,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Replace flat issue queues with grouped scannable views"
-updated_at: "2026-06-10T20:59:05.023604139+00:00"
+updated_at: "2026-06-10T22:15:52.549031285+00:00"
 ---
 
 Improve routine work-selection output so users can scan open, ready, and search results without reading a raw table dump.

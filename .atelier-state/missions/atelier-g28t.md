@@ -23,9 +23,9 @@ links:
   type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Improve CLI output"
-updated_at: "2026-06-10T20:58:39.654760506+00:00"
+updated_at: "2026-06-10T22:18:35.594922100+00:00"
 ---
 
 Atelier's default human-readable CLI output should become scannable, hierarchical, and useful for operators and agents. JSON output is mostly acceptable and remains the automation contract; this mission targets non-JSON views that currently under-communicate, dump tables, or overwhelm users.

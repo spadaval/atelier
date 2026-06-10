@@ -401,6 +401,9 @@ enum IssueCommands {
         /// Filter by status (open, closed, all)
         #[arg(short, long, default_value = "all")]
         status: String,
+        /// Show a bounded, scan-friendly hierarchy instead of the full tree
+        #[arg(long)]
+        compact: bool,
     },
 
     /// Mark tests as run (resets test reminder)
@@ -784,6 +787,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                     label.as_deref(),
                     priority.as_deref(),
                     true,
+                    quiet,
                 )
             } else {
                 commands::agent_factory::list(
@@ -792,6 +796,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                     label.as_deref(),
                     priority.as_deref(),
                     false,
+                    quiet,
                 )
             }
         }
@@ -799,9 +804,9 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         IssueCommands::Search { query } => {
             let db = get_fresh_projection_db()?;
             if json {
-                commands::agent_factory::search(&db, &query, true)
+                commands::agent_factory::search(&db, &query, true, quiet)
             } else {
-                commands::agent_factory::search(&db, &query, false)
+                commands::agent_factory::search(&db, &query, false, quiet)
             }
         }
 
@@ -912,7 +917,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Ready => {
             let db = get_fresh_projection_db()?;
-            commands::agent_factory::ready(&db, json)
+            commands::agent_factory::ready(&db, json, quiet)
         }
 
         IssueCommands::Relate {
@@ -949,9 +954,13 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             commands::next::run(&db, &atelier_dir)
         }
 
-        IssueCommands::Tree { status } => {
+        IssueCommands::Tree { status, compact } => {
             let db = get_fresh_projection_db()?;
-            commands::tree::run(&db, Some(&status))
+            if compact {
+                commands::tree::run_compact(&db, Some(&status))
+            } else {
+                commands::tree::run(&db, Some(&status))
+            }
         }
 
         IssueCommands::Tested => {

@@ -10,6 +10,7 @@ evidence_required: []
 id: "atelier-u8xc"
 issue_type: "validation"
 labels:
+- "assignee:root"
 - "cli"
 - "human-output"
 links: []
@@ -17,9 +18,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate and document human CLI output conventions"
-updated_at: "2026-06-10T20:59:23.907724705+00:00"
+updated_at: "2026-06-10T22:18:35.525315733+00:00"
 ---
 
 Validate the improved human-output surfaces as a coherent operator experience and document the conventions so future CLI work follows them.

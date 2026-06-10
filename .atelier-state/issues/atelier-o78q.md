@@ -9,6 +9,7 @@ evidence_required: []
 id: "atelier-o78q"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cli"
 - "human-output"
 links: []
@@ -16,9 +17,9 @@ parent: null
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add compact issue hierarchy output"
-updated_at: "2026-06-10T20:59:15.257035626+00:00"
+updated_at: "2026-06-10T22:12:37.929534819+00:00"
 ---
 
 Provide a smaller hierarchy-oriented view for routine scanning so users are not forced to choose between flat lists and the full `atelier issue tree` dump.

@@ -430,13 +430,28 @@ fn test_list_issues() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
-    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Issue 2", "-p", "high"],
+    );
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
 
     assert!(success);
+    assert!(stdout.contains("Issue Queue"));
+    assert!(stdout.contains("2 total | status: open=2"));
+    assert!(stdout.contains("open high"));
+    assert!(stdout.contains("open medium"));
+    assert!(stdout.contains("parent=atelier-"));
     assert!(stdout.contains("Issue 1"));
     assert!(stdout.contains("Issue 2"));
+
+    let (success, quiet_out, stderr) = run_atelier(dir.path(), &["--quiet", "issue", "list"]);
+    assert!(success, "quiet issue list failed: {stderr}");
+    assert!(!quiet_out.contains("Issue Queue"));
+    assert!(!quiet_out.contains("Issue 1"));
+    assert_eq!(quiet_out.lines().count(), 2);
+    assert!(quiet_out.lines().all(|line| line.starts_with("atelier-")));
 }
 
 #[test]
@@ -1140,6 +1155,9 @@ fn test_ready_issues() {
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
 
     assert!(success);
+    assert!(stdout.contains("Ready Issues"));
+    assert!(stdout.contains("ready medium"));
+    assert!(stdout.contains("2 total"));
     assert!(stdout.contains("Ready issue"));
     assert!(stdout.contains("Blocker issue")); // Blocker is also ready
     assert!(!stdout.contains("Blocked issue"));
@@ -1214,6 +1232,9 @@ fn test_search_issues() {
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "auth"]);
 
     assert!(success);
+    assert!(stdout.contains("Search Results: auth"));
+    assert!(stdout.contains("open medium"));
+    assert!(stdout.contains("2 total"));
     assert!(stdout.contains("Authentication") || stdout.contains("Auth"));
     assert!(!stdout.contains("Dark mode"));
 }
@@ -1698,6 +1719,93 @@ fn test_tree_with_status_filter() {
     assert!(stdout.contains("Open parent"));
     // Closed issues should not appear
     assert!(!stdout.contains("Closed parent"));
+}
+
+#[test]
+fn test_tree_compact_collapses_deep_hierarchy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Level 0"]);
+    for level in 1..=6 {
+        let parent = issue_ref(dir.path(), level);
+        let title = format!("Level {level}");
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "subissue", &parent, &title]);
+        assert!(success, "subissue failed: {stderr}");
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
+
+    assert!(success, "compact tree failed: {stderr}");
+    assert!(stdout.contains("Compact Issue Hierarchy"));
+    assert!(stdout.contains("Level 3"));
+    assert!(stdout.contains("descendants collapsed"));
+    assert!(!stdout.contains("Level 4"));
+}
+
+#[test]
+fn test_tree_compact_omits_wide_sibling_sets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Wide parent"]);
+    let parent = issue_ref(dir.path(), 1);
+    for index in 1..=8 {
+        let title = format!("Child {index}");
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "subissue", &parent, &title]);
+        assert!(success, "subissue failed: {stderr}");
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
+
+    assert!(success, "compact tree failed: {stderr}");
+    assert!(stdout.contains("Wide parent children=8 open=8 closed=0"));
+    assert!(stdout.contains("... 2 more children omitted"));
+}
+
+#[test]
+fn test_tree_compact_omits_wide_root_sets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for index in 1..=8 {
+        let title = format!("Root {index}");
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", &title]);
+        assert!(success, "root create failed: {stderr}");
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
+
+    assert!(success, "compact tree failed: {stderr}");
+    assert_eq!(
+        stdout.lines().filter(|line| line.contains("Root ")).count(),
+        6
+    );
+    assert!(stdout.contains("... 2 more root issues omitted"));
+}
+
+#[test]
+fn test_tree_compact_summarizes_mixed_open_closed_subtrees() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Mixed parent"]);
+    let parent = issue_ref(dir.path(), 1);
+    run_atelier(dir.path(), &["issue", "subissue", &parent, "Open child"]);
+    run_atelier(dir.path(), &["issue", "subissue", &parent, "Closed child"]);
+    let closed = issue_id_by_title(dir.path(), "Closed child");
+    run_atelier(dir.path(), &["issue", "close", &closed]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
+    assert!(success, "compact tree failed: {stderr}");
+    assert!(stdout.contains("Mixed parent children=2 open=1 closed=1"));
+    assert!(stdout.contains("[closed"));
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "tree", "--compact", "-s", "open"]);
+    assert!(success, "compact open tree failed: {stderr}");
+    assert!(stdout.contains("Mixed parent children=1 open=1 closed=0"));
+    assert!(!stdout.contains("Closed child"));
 }
 
 // ==================== Next Tests ====================
@@ -3688,6 +3796,29 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert_eq!(show["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(show["work"]["ready"].as_array().unwrap().len(), 1);
     assert_eq!(show["mission_blockers"].as_array().unwrap().len(), 1);
+
+    let (success, human_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
+    assert!(success, "human mission show failed: {stderr}");
+    assert!(human_out.contains(&format!("Mission {mission_id} [open] - Ship records")));
+    assert!(human_out.contains("Constraints"));
+    assert!(human_out.contains("Keep issues accountable"));
+    assert!(human_out.contains("Progress"));
+    assert!(human_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(human_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
+    assert!(human_out.contains("Plans"));
+    assert!(human_out.contains("Execution plan"));
+    assert!(human_out.contains("Evidence"));
+    assert!(human_out.contains("cargo test passed"));
+    assert!(human_out.contains("Mission Blockers"));
+    assert!(human_out.contains("Resolve mission blocker"));
+    assert!(human_out.contains("OPEN BLOCKER"));
+    assert!(human_out.contains("Linked Work"));
+    assert!(human_out.contains("Ready (1)"));
+    assert!(human_out.contains("Wire mission work"));
+    assert!(human_out.contains("Evidence Gaps"));
+    assert!(human_out.contains("(none)"));
+    assert!(human_out.contains("Next Commands"));
+    assert!(human_out.contains("atelier workflow validate mission"));
 }
 
 #[test]

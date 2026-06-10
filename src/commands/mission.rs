@@ -111,31 +111,14 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!("Mission {}: {}", mission.id, mission.title);
-    println!("Status: {}", mission.status);
-    if let Some(body) = &mission.body {
-        if !body.is_empty() {
-            println!("\n{}", body);
-        }
-    }
-    println!();
-    println!(
-        "Plans: {}  Milestones: {}  Evidence: {}",
-        plans.len(),
-        milestones.len(),
-        evidence.len()
-    );
-    println!(
-        "Work: {} ready, {} blocked, {} done, {} backlog",
-        work["ready"].len(),
-        work["blocked"].len(),
-        work["done"].len(),
-        work["backlog"].len()
-    );
-    println!("Mission blockers: {}", mission_blockers.len());
-    if evidence.is_empty() {
-        println!("Evidence gap: no evidence records are linked to this mission.");
-    }
+    render_mission_show_human(
+        &mission,
+        &plans,
+        &milestones,
+        &evidence,
+        &work,
+        &mission_blockers,
+    )?;
     Ok(())
 }
 
@@ -211,6 +194,207 @@ fn print_record(db: &Database, record: &DomainRecord, json_output: bool) -> Resu
         }
     }
     Ok(())
+}
+
+fn render_mission_show_human(
+    mission: &DomainRecord,
+    plans: &[Value],
+    milestones: &[Value],
+    evidence: &[Value],
+    work: &BTreeMap<String, Vec<Value>>,
+    mission_blockers: &[Value],
+) -> Result<()> {
+    let data: Value = serde_json::from_str(&mission.data_json)?;
+    let identity = format!(
+        "Mission {} [{}] - {}",
+        mission.id, mission.status, mission.title
+    );
+    println!("{identity}");
+    println!("{}", "=".repeat(identity.len()));
+    println!("Status:   {}", mission.status);
+    println!("Created:  {}", mission.created_at.to_rfc3339());
+    println!("Updated:  {}", mission.updated_at.to_rfc3339());
+
+    print_mission_text_section("Body", mission.body.as_deref());
+    print_mission_list_section("Constraints", string_array(&data, "constraints"));
+    print_mission_list_section("Risks", string_array(&data, "risks"));
+    print_mission_list_section("Validation", string_array(&data, "validation"));
+
+    print_mission_heading("Progress");
+    println!(
+        "Records: plans={} milestones={} evidence={}",
+        plans.len(),
+        milestones.len(),
+        evidence.len()
+    );
+    println!(
+        "Work: ready={} blocked={} done={} backlog={}",
+        work_bucket_len(work, "ready"),
+        work_bucket_len(work, "blocked"),
+        work_bucket_len(work, "done"),
+        work_bucket_len(work, "backlog")
+    );
+    println!("Mission blockers={}", mission_blockers.len());
+
+    print_record_group("Plans", plans);
+    print_record_group("Milestones", milestones);
+    print_record_group("Evidence", evidence);
+    print_mission_blockers(mission_blockers);
+    print_work_groups(work);
+    print_evidence_gaps(evidence);
+    print_mission_next_commands(mission);
+    Ok(())
+}
+
+fn print_mission_text_section(title: &str, body: Option<&str>) {
+    if let Some(body) = body.map(str::trim).filter(|body| !body.is_empty()) {
+        print_mission_heading(title);
+        println!("{body}");
+    }
+}
+
+fn print_mission_list_section(title: &str, values: Vec<String>) {
+    print_mission_heading(title);
+    if values.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for value in values {
+        println!("  {value}");
+    }
+}
+
+fn print_mission_heading(title: &str) {
+    println!("\n{title}");
+    println!("{}", "-".repeat(title.len()));
+}
+
+fn print_record_group(title: &str, records: &[Value]) {
+    print_mission_heading(title);
+    if records.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for record in records {
+        println!("  {}", record_row(record));
+    }
+}
+
+fn print_mission_blockers(blockers: &[Value]) {
+    print_mission_heading("Mission Blockers");
+    if blockers.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for blocker in blockers {
+        let marker = if blocker["status"].as_str() == Some("open") {
+            " OPEN BLOCKER"
+        } else {
+            ""
+        };
+        println!("  {}{}", issue_row(blocker), marker);
+    }
+}
+
+fn print_work_groups(work: &BTreeMap<String, Vec<Value>>) {
+    print_mission_heading("Linked Work");
+    let groups = [
+        ("Ready", "ready"),
+        ("Blocked", "blocked"),
+        ("Done", "done"),
+        ("Backlog", "backlog"),
+    ];
+    if groups
+        .iter()
+        .all(|(_, bucket)| work_bucket_len(work, bucket) == 0)
+    {
+        println!("(none)");
+        return;
+    }
+    for (label, bucket) in groups {
+        let Some(items) = work.get(bucket) else {
+            continue;
+        };
+        if items.is_empty() {
+            continue;
+        }
+        println!("{label} ({})", items.len());
+        for item in items {
+            println!("  {}", issue_row(item));
+        }
+    }
+}
+
+fn print_evidence_gaps(evidence: &[Value]) {
+    print_mission_heading("Evidence Gaps");
+    if evidence.is_empty() {
+        println!("  No evidence records are linked to this mission.");
+    } else {
+        println!("(none)");
+    }
+}
+
+fn print_mission_next_commands(mission: &DomainRecord) {
+    print_mission_heading("Next Commands");
+    println!("  atelier mission show {}", mission.id);
+    if mission.status == "closed" {
+        println!("  atelier mission update {} --status open", mission.id);
+    } else {
+        println!(
+            "  atelier link add mission {} issue <issue-id> --type advances",
+            mission.id
+        );
+        println!("  atelier workflow validate mission {}", mission.id);
+    }
+}
+
+fn string_array(data: &Value, key: &str) -> Vec<String> {
+    data.get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn work_bucket_len(work: &BTreeMap<String, Vec<Value>>, bucket: &str) -> usize {
+    work.get(bucket).map_or(0, Vec::len)
+}
+
+fn record_row(record: &Value) -> String {
+    format!(
+        "{} [{}] - {}",
+        value_str(record, "id"),
+        value_str(record, "status"),
+        value_str(record, "title")
+    )
+}
+
+fn issue_row(issue: &Value) -> String {
+    let open_blockers = issue["open_blockers"]
+        .as_array()
+        .map_or(0, |blockers| blockers.len());
+    let relation_type = value_str(issue, "relation_type");
+    let blocker_suffix = if open_blockers > 0 {
+        format!(" open_blockers={open_blockers}")
+    } else {
+        String::new()
+    };
+    format!(
+        "{} [{}] {} {} - {} relation={}{}",
+        value_str(issue, "id"),
+        value_str(issue, "status"),
+        value_str(issue, "priority"),
+        value_str(issue, "issue_type"),
+        value_str(issue, "title"),
+        relation_type,
+        blocker_suffix
+    )
+}
+
+fn value_str<'a>(value: &'a Value, key: &str) -> &'a str {
+    value[key].as_str().unwrap_or("(unknown)")
 }
 
 fn record_json(record: &DomainRecord) -> Result<Value> {

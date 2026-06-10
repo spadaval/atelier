@@ -9,6 +9,7 @@ evidence_required: []
 id: "atelier-ugeo"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cli"
 - "human-output"
 links: []
@@ -16,9 +17,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Upgrade mission and issue detail human views"
-updated_at: "2026-06-10T20:58:56.691138582+00:00"
+updated_at: "2026-06-10T22:15:52.530565986+00:00"
 ---
 
 Make the primary detail views dense, scannable, and useful by default.

@@ -3,6 +3,9 @@ use anyhow::Result;
 use crate::db::Database;
 use crate::models::Issue;
 
+const COMPACT_MAX_DEPTH: usize = 3;
+const COMPACT_MAX_SIBLINGS: usize = 6;
+
 fn status_icon(status: &str) -> &'static str {
     match status {
         "open" => " ",
@@ -41,6 +44,159 @@ fn print_tree_recursive(
     Ok(())
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+struct ProgressSummary {
+    open: usize,
+    closed: usize,
+    other: usize,
+}
+
+impl ProgressSummary {
+    fn add_issue(&mut self, issue: &Issue) {
+        match issue.status.as_str() {
+            "open" => self.open += 1,
+            "closed" => self.closed += 1,
+            _ => self.other += 1,
+        }
+    }
+
+    fn add_summary(&mut self, summary: ProgressSummary) {
+        self.open += summary.open;
+        self.closed += summary.closed;
+        self.other += summary.other;
+    }
+
+    fn total(self) -> usize {
+        self.open + self.closed + self.other
+    }
+
+    fn format(self) -> String {
+        let mut parts = vec![
+            format!("open={}", self.open),
+            format!("closed={}", self.closed),
+        ];
+        if self.other > 0 {
+            parts.push(format!("other={}", self.other));
+        }
+        parts.join(" ")
+    }
+}
+
+fn status_matches(issue: &Issue, status_filter: Option<&str>) -> bool {
+    match status_filter {
+        Some("all") | None => true,
+        Some(filter) => issue.status == filter,
+    }
+}
+
+fn filtered_subissues(
+    db: &Database,
+    parent_id: &str,
+    status_filter: Option<&str>,
+) -> Result<Vec<Issue>> {
+    Ok(db
+        .get_subissues(parent_id)?
+        .into_iter()
+        .filter(|issue| status_matches(issue, status_filter))
+        .collect())
+}
+
+fn descendant_summary(
+    db: &Database,
+    parent_id: &str,
+    status_filter: Option<&str>,
+) -> Result<ProgressSummary> {
+    let mut summary = ProgressSummary::default();
+
+    for child in filtered_subissues(db, parent_id, status_filter)? {
+        summary.add_issue(&child);
+        summary.add_summary(descendant_summary(db, &child.id, status_filter)?);
+    }
+
+    Ok(summary)
+}
+
+fn direct_child_summary(children: &[Issue]) -> ProgressSummary {
+    let mut summary = ProgressSummary::default();
+    for child in children {
+        summary.add_issue(child);
+    }
+    summary
+}
+
+fn issue_set_summary(
+    db: &Database,
+    issues: &[Issue],
+    status_filter: Option<&str>,
+) -> Result<ProgressSummary> {
+    let mut summary = ProgressSummary::default();
+    for issue in issues {
+        summary.add_issue(issue);
+        summary.add_summary(descendant_summary(db, &issue.id, status_filter)?);
+    }
+    Ok(summary)
+}
+
+fn compact_issue_line(issue: &Issue, indent: usize, children: &[Issue]) {
+    let prefix = "  ".repeat(indent);
+    let child_summary = direct_child_summary(children);
+    let child_suffix = if children.is_empty() {
+        String::new()
+    } else {
+        format!(" children={} {}", children.len(), child_summary.format())
+    };
+
+    println!(
+        "{}[{} {}] {} [{}] - {}{}",
+        prefix, issue.status, issue.priority, issue.id, issue.issue_type, issue.title, child_suffix
+    );
+}
+
+fn compact_tree_recursive(
+    db: &Database,
+    issue: &Issue,
+    indent: usize,
+    status_filter: Option<&str>,
+) -> Result<()> {
+    let children = filtered_subissues(db, &issue.id, status_filter)?;
+    compact_issue_line(issue, indent, &children);
+
+    if children.is_empty() {
+        return Ok(());
+    }
+
+    if indent >= COMPACT_MAX_DEPTH {
+        let summary = descendant_summary(db, &issue.id, status_filter)?;
+        println!(
+            "{}... {} descendants collapsed ({})",
+            "  ".repeat(indent + 1),
+            summary.total(),
+            summary.format()
+        );
+        return Ok(());
+    }
+
+    for child in children.iter().take(COMPACT_MAX_SIBLINGS) {
+        compact_tree_recursive(db, child, indent + 1, status_filter)?;
+    }
+
+    if children.len() > COMPACT_MAX_SIBLINGS {
+        let mut omitted_summary = ProgressSummary::default();
+        for child in children.iter().skip(COMPACT_MAX_SIBLINGS) {
+            omitted_summary.add_issue(child);
+            omitted_summary.add_summary(descendant_summary(db, &child.id, status_filter)?);
+        }
+        println!(
+            "{}... {} more children omitted ({})",
+            "  ".repeat(indent + 1),
+            children.len() - COMPACT_MAX_SIBLINGS,
+            omitted_summary.format()
+        );
+    }
+
+    Ok(())
+}
+
 pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
     // Get all top-level issues (no parent)
     let all_issues = db.list_issues(status_filter, None, None)?;
@@ -62,6 +218,43 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
     // Legend
     println!();
     println!("Legend: [ ] open, [x] closed");
+
+    Ok(())
+}
+
+pub fn run_compact(db: &Database, status_filter: Option<&str>) -> Result<()> {
+    let all_issues = db.list_issues(status_filter, None, None)?;
+    let top_level: Vec<_> = all_issues
+        .into_iter()
+        .filter(|i| i.parent_id.is_none())
+        .collect();
+
+    if top_level.is_empty() {
+        println!("No issues found.");
+        return Ok(());
+    }
+
+    println!("Compact Issue Hierarchy");
+    println!("=======================");
+    println!(
+        "Limits: depth={} siblings={}",
+        COMPACT_MAX_DEPTH, COMPACT_MAX_SIBLINGS
+    );
+    println!();
+
+    for issue in top_level.iter().take(COMPACT_MAX_SIBLINGS) {
+        compact_tree_recursive(db, &issue, 0, status_filter)?;
+    }
+
+    if top_level.len() > COMPACT_MAX_SIBLINGS {
+        let omitted = &top_level[COMPACT_MAX_SIBLINGS..];
+        let omitted_summary = issue_set_summary(db, omitted, status_filter)?;
+        println!(
+            "... {} more root issues omitted ({})",
+            omitted.len(),
+            omitted_summary.format()
+        );
+    }
 
     Ok(())
 }
@@ -186,5 +379,35 @@ mod tests {
             .unwrap();
 
         assert!(run(&db, None).is_ok());
+    }
+
+    #[test]
+    fn test_progress_summary_counts_mixed_statuses() {
+        let (db, _dir) = setup_test_db();
+        let root = db.create_issue("Root", None, "high").unwrap();
+        let open = db.create_subissue(&root, "Open", None, "medium").unwrap();
+        let closed = db.create_subissue(&root, "Closed", None, "medium").unwrap();
+        db.close_issue(&closed).unwrap();
+        db.create_subissue(&open, "Nested open", None, "low")
+            .unwrap();
+
+        let summary = descendant_summary(&db, &root, Some("all")).unwrap();
+
+        assert_eq!(summary.open, 2);
+        assert_eq!(summary.closed, 1);
+    }
+
+    #[test]
+    fn test_filtered_subissues_excludes_closed_children() {
+        let (db, _dir) = setup_test_db();
+        let root = db.create_issue("Root", None, "high").unwrap();
+        db.create_subissue(&root, "Open", None, "medium").unwrap();
+        let closed = db.create_subissue(&root, "Closed", None, "medium").unwrap();
+        db.close_issue(&closed).unwrap();
+
+        let children = filtered_subissues(&db, &root, Some("open")).unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].status, "open");
     }
 }
