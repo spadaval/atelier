@@ -6,6 +6,9 @@
 - Prefer `anyhow::Context` on fallible IO, database, and external-command
   boundaries.
 - Keep command output stable when tests or agents depend on it.
+- Follow the human-output grammar in
+  [Human CLI Output](../human-cli-output.md) for non-JSON detail, queue, and
+  hierarchy views.
 - Add or update CLI integration tests for user-visible command behavior.
 - Add focused database tests for schema, migration, transaction, and invariant
   changes.

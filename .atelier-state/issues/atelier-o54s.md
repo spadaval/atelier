@@ -10,6 +10,7 @@ evidence_required: []
 id: "atelier-o54s"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cli"
 - "human-output"
 links: []
@@ -17,9 +18,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define Atelier human-output design system"
-updated_at: "2026-06-10T20:58:48.813640540+00:00"
+updated_at: "2026-06-10T22:08:01.634171323+00:00"
 ---
 
 Create the shared design and implementation direction for non-JSON CLI rendering. This epic should audit current default outputs, choose the reusable formatter primitives, and define the rules future commands follow.

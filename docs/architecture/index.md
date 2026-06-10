@@ -29,6 +29,8 @@ See [Milestone Records](milestone-records.md) for the first-class checkpoint
 record contract and validation model.
 See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
 integration command policy.
+See [Human CLI Output](human-cli-output.md) for the detail, queue, hierarchy,
+color, width, formatter, and test conventions for non-JSON command output.
 See [Workflow Configuration Contract](workflow-configuration.md) for the
 repository-owned workflow policy path, schema, validators, hooks, reload
 behavior, and examples.
@@ -77,6 +79,8 @@ Accepted ADRs record cross-cutting product decisions:
   for Mission Control.
 - Mission Control TUI code should consume only the documented projection fields
   and keep CLI commands plus JSON output as the primary agent interface.
+- Human CLI rendering should use shared detail, queue, and hierarchy formatter
+  conventions while keeping JSON construction separate from display text.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.
 

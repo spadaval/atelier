@@ -43,6 +43,9 @@
 - [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
   core command surface, removed compatibility commands, and inherited utility
   disposition.
+- [docs/architecture/human-cli-output.md](architecture/human-cli-output.md):
+  human-readable CLI output grammar, formatter boundaries, color/width policy,
+  and test expectations.
 - `docs/architecture/quality/index.md`: quality documentation index.
 - `docs/architecture/quality/architecture-quality.md`: vocabulary for
   architecture review.
