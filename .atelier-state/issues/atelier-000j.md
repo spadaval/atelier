@@ -20,9 +20,9 @@ parent: null
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Milestone 4: First-class records and typed links"
-updated_at: "2026-06-09T19:41:24.611564297+00:00"
+updated_at: "2026-06-10T15:05:55.241389561+00:00"
 ---
 
 Introduce first-class missions, milestone checkpoint records, plans, evidence, workflow validators, and typed links so generic issues stop carrying every durable concept. Preserve existing issue behavior where useful, but make mission intent, checkpoint state, execution plans, validation proof, workflow transition checks, and semantic links explicit records or commands.

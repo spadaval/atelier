@@ -18,9 +18,9 @@ parent: "atelier-000j"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add mission progress view over linked work graph"
-updated_at: "2026-06-10T00:23:07.411454046+00:00"
+updated_at: "2026-06-10T15:05:38.612806202+00:00"
 ---
 
 Add a mission-centered read view that summarizes completed work, remaining ready/backlog work, blockers, checkpoint progress, plans, and evidence for one mission.

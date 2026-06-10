@@ -22,9 +22,9 @@ parent: "atelier-001n"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Extend bulk apply to typed links and first-class records"
-updated_at: "2026-06-09T20:45:21.716823162+00:00"
+updated_at: "2026-06-10T15:05:38.585686715+00:00"
 ---
 
 Extend bulk apply beyond issue hierarchy so authored JSON can create or link missions, milestone checkpoints, plans, evidence, and typed semantic links when those record types are available.

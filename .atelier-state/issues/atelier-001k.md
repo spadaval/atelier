@@ -20,9 +20,9 @@ parent: "atelier-000u"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add workflow validator evaluation command"
-updated_at: "2026-06-09T19:41:24.664791997+00:00"
+updated_at: "2026-06-10T14:51:43.085892951+00:00"
 ---
 
 Add a first-class workflow validator evaluation command that can evaluate configured tracker and workflow transition conditions without mutating work state.

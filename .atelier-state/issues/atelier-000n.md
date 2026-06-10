@@ -22,9 +22,9 @@ parent: "atelier-000m"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add worktree status and setup ergonomics"
-updated_at: "2026-06-09T17:30:36.285165093+00:00"
+updated_at: "2026-06-10T14:56:32.539896293+00:00"
 ---
 
 Add Worktrunk-inspired ergonomics around Atelier worktrees without supervising direct agent runs. Scope includes configured branch/path templates, scan-friendly worktree status, hook-driven setup, optional ignored-cache copying, per-worktree local settings such as dev-server ports, and transparent merge/remove helpers.

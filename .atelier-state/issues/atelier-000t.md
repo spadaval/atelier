@@ -17,9 +17,9 @@ parent: null
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide how much inherited Chainlink lock sync survives"
-updated_at: "2026-06-08T17:33:27+00:00"
+updated_at: "2026-06-10T14:51:19.805241515+00:00"
 ---
 
 

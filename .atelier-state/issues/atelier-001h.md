@@ -8,6 +8,7 @@ evidence_required: []
 id: "atelier-001h"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "beads:type:feature"
 - "cli"
 - "domain-model"
@@ -17,9 +18,9 @@ parent: "atelier-000u"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add first-class mission commands"
-updated_at: "2026-06-10T00:22:58.879686258+00:00"
+updated_at: "2026-06-10T04:30:15.245386891+00:00"
 ---
 
 Add first-class mission commands and persistence as part of the domain-model upgrade. A mission is the durable objective record for coordinated work: it owns intent, constraints, risks, validation expectations, and links to milestones, plans, evidence, epics, and issues without being represented as a generic issue or label.

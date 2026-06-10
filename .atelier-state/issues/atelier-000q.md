@@ -18,9 +18,9 @@ parent: "atelier-000m"
 priority: "P3"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "[CLOSEOUT] Validate Milestone 3 worktree ergonomics"
-updated_at: "2026-06-08T19:31:09+00:00"
+updated_at: "2026-06-10T15:05:55.216685816+00:00"
 ---
 
 

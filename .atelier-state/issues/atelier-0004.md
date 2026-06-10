@@ -17,9 +17,9 @@ parent: null
 priority: "P3"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide first artifact storage backends for evidence"
-updated_at: "2026-06-08T17:33:27+00:00"
+updated_at: "2026-06-10T14:51:19.776106093+00:00"
 ---
 
 

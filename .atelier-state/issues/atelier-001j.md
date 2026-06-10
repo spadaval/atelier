@@ -19,9 +19,9 @@ parent: "atelier-000u"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add first-class evidence commands"
-updated_at: "2026-06-09T17:32:21.600560606+00:00"
+updated_at: "2026-06-10T14:51:26.280656318+00:00"
 ---
 
 Add first-class evidence commands for validation proof records.

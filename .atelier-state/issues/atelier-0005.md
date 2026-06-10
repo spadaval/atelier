@@ -23,9 +23,9 @@ parent: "atelier-000j"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement atelier link add/remove/list with validation"
-updated_at: "2026-06-10T00:23:25.579173201+00:00"
+updated_at: "2026-06-10T14:56:32.739557039+00:00"
 ---
 
 Support explicit typed links through a preferred generic `atelier link add/remove/list` surface after the project-scoped random ID cutover. Links are the semantic graph that connects first-class records; dependencies remain true sequencing only.

@@ -20,9 +20,9 @@ parent: null
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Milestone 3: Work, branch, and worktree ergonomics"
-updated_at: "2026-06-09T17:30:36.212120280+00:00"
+updated_at: "2026-06-10T15:05:55.233884219+00:00"
 ---
 
 Add Braid/Worktrunk-style work, branch, and Git worktree ergonomics while keeping Git as the underlying mechanism. This milestone creates the normal agent workflow surface around `atelier work start`, `atelier work finish`, `atelier work status`, and `atelier worktree for`, replacing scattered claim/session/timer behavior for normal tracked work.

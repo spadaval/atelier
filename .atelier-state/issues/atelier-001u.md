@@ -19,9 +19,9 @@ parent: "atelier-001n"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement atomic issue graph bulk apply"
-updated_at: "2026-06-10T00:23:39.275641351+00:00"
+updated_at: "2026-06-10T15:05:38.571560376+00:00"
 ---
 
 Implement the first bulk apply slice for issue records: create multiple issues with parent-child hierarchy, dependencies, labels, priorities, issue types, descriptions, acceptance criteria, and notes from one JSON file. This slice must use the project-scoped random record ID allocator and must not create numeric or typed-prefix issue IDs.

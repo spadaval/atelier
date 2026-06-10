@@ -16,9 +16,9 @@ parent: "atelier-001n"
 priority: "P3"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate and document bulk plan apply workflow"
-updated_at: "2026-06-09T19:47:26.351979530+00:00"
+updated_at: "2026-06-10T15:05:38.596309925+00:00"
 ---
 
 Prove the bulk JSON apply workflow with realistic agent-generated plans, including nested issues, cross-links, blockers, and first-class record references.

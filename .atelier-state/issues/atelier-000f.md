@@ -12,6 +12,7 @@ evidence_required: []
 id: "atelier-000f"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "feature"
 - "spec"
 - "validator"
@@ -22,9 +23,9 @@ parent: "atelier-000m"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement atelier work start/finish/status"
-updated_at: "2026-06-09T19:42:25.839666147+00:00"
+updated_at: "2026-06-10T14:51:26.353744549+00:00"
 ---
 
 Implement the work-facing lifecycle commands around claims, branch/worktree association, and closeout validators: atelier work start <id>, atelier work finish <id>, and atelier work status. This becomes the normal path for tracked agent work and supersedes scattered timer/session-work usage for ordinary workflow.

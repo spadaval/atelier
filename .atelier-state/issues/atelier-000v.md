@@ -20,9 +20,9 @@ parent: "atelier-000m"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement worktree and branch helper commands"
-updated_at: "2026-06-09T17:30:36.274899497+00:00"
+updated_at: "2026-06-10T14:51:59.743735264+00:00"
 ---
 
 Add helpers for normal work branches, optional mission branches, and work-associated worktrees while remaining a convenience layer over Git. Helpers should consume the configured branch/path policy and workflow setup hooks rather than launching or supervising agents.

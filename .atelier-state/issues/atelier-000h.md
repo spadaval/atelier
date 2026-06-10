@@ -18,9 +18,9 @@ parent: "atelier-000j"
 priority: "P3"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "[CLOSEOUT] Validate Milestone 4 domain model"
-updated_at: "2026-06-08T17:33:27+00:00"
+updated_at: "2026-06-10T15:05:55.226416391+00:00"
 ---
 
 

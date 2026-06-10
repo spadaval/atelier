@@ -26,9 +26,9 @@ parent: "atelier-000j"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add first-class mission, milestone checkpoint, plan, evidence, and workflow validator records"
-updated_at: "2026-06-10T00:23:17.052081446+00:00"
+updated_at: "2026-06-10T14:51:59.670497926+00:00"
 ---
 
 Integrate first-class mission, milestone checkpoint, plan, evidence, and workflow validator records across storage and command layers after the project-scoped random ID cutover. Keep this issue as the integration parent for persistence, export/rebuild, and post-cutover record behavior after the focused command slices land.

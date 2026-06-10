@@ -10,6 +10,7 @@ evidence_required: []
 id: "atelier-001i"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "beads:type:feature"
 - "cli"
 - "domain-model"
@@ -19,9 +20,9 @@ parent: "atelier-000u"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add first-class plan commands"
-updated_at: "2026-06-09T17:32:21.590790757+00:00"
+updated_at: "2026-06-10T04:30:15.278404729+00:00"
 ---
 
 Add first-class durable plan commands for execution intent that must survive across sessions or agents.

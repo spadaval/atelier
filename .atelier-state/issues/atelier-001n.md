@@ -21,9 +21,9 @@ parent: "atelier-000j"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add bulk graph apply from JSON plan files"
-updated_at: "2026-06-10T00:23:39.231288808+00:00"
+updated_at: "2026-06-10T15:05:38.605006117+00:00"
 ---
 
 Add an agent-facing bulk creation/update command for complex plans, similar in spirit to `jira plan`, that can materialize many issues and first-class records from one JSON file while preserving hierarchy, typed links, dependency sequencing, and the single project-scoped random record ID model.
