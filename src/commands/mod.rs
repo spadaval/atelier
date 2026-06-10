@@ -1,3 +1,4 @@
+pub mod activity_log;
 pub mod agent;
 pub mod agent_factory;
 pub mod archive;
@@ -8,6 +9,7 @@ pub mod delete;
 pub mod deps;
 pub mod evidence;
 pub mod export;
+pub mod history;
 pub mod import;
 pub mod init;
 pub mod label;

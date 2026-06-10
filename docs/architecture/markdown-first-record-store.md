@@ -72,6 +72,55 @@ Markdown records discovered under `.atelier-state/`. It ignores local-only
 runtime state except where runtime tables must be recreated empty or migrated
 for schema compatibility.
 
+Issue activity history is canonical sidecar state under
+`.atelier-state/issues/<issue-id>.activity/`. Each activity entry is a Markdown
+file named with a UTC microsecond timestamp ID:
+`YYYYMMDDTHHMMSSffffffZ.md`. If multiple entries share the same timestamp,
+writers append deterministic `-01`, `-02`, and later suffixes while refusing to
+overwrite an existing file.
+
+Activity front matter uses `schema: "atelier.activity"` and
+`schema_version: 1` with these required fields:
+
+- `id`: timestamp activity ID matching the file name.
+- `subject_kind`: `issue` in V1.
+- `subject_id`: canonical issue ID.
+- `event_type`: one of `comment`, `note`, `handoff`, `decision`, `plan`,
+  `close_reason`, `status_changed`, `field_changed`, `work_started`,
+  `work_finished`, or `evidence_attached`.
+- `actor`: user or agent identity that produced the event.
+- `created_at`: RFC3339 timestamp.
+- `summary`: one-line event summary.
+
+The Markdown body stores user-authored text or lightweight event details.
+Evidence remains a rich first-class record under `.atelier-state/evidence/`;
+issue activity records only lightweight `evidence_attached` references such as
+`evidence_id` and `result` so operators can follow up with
+`atelier evidence show`.
+
+`atelier history` reads activity sidecars directly. It defaults to newest-first
+global issue activity with `--limit 50` and supports `--issue`, `--type`,
+`--since`, `--until`, `--limit`, and global `--json`. Human output includes the
+timestamp, event type, issue, actor, summary, and body. JSON output returns the
+same filtered item stream for agents and validation.
+
+`atelier issue show` uses the same sidecars for its bounded recent activity
+preview when they exist, and falls back to legacy SQLite notes/comments when a
+repository has not yet written activity sidecars.
+
+`atelier export` preserves existing issue activity sidecars as canonical files
+and `atelier export --check` validates them instead of reporting them as
+untracked drift. `atelier rebuild` validates sidecars, rejects activity entries
+whose subject issue is missing, and keeps the runtime projection rebuildable
+from `.atelier-state/` alone.
+
+The explicit one-off migration path for old local SQLite comments is
+`scripts/migrate_sqlite_comments_to_activity.py`. Operators run it manually with
+`--repo <path>` and may use `--dry-run` before writing. The script migrates
+comments and close reasons only, refuses to overwrite existing activity IDs,
+skips equivalent already-migrated entries on repeated runs, and prints a
+conversion summary. It is intentionally not a normal `atelier migrate` command.
+
 `atelier doctor` reports both canonical projection health and runtime-state
 health. A repository can be rebuild-ready even when optional runtime state is
 absent. A runtime-state failure should not imply canonical record loss unless

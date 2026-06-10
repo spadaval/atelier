@@ -19,9 +19,9 @@ parent: "atelier-r4cf"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Record evidence attachments in issue activity"
-updated_at: "2026-06-10T16:00:59.269185814+00:00"
+updated_at: "2026-06-10T17:35:56.728302758+00:00"
 ---
 
 Bridge rich evidence records into issue activity history without flattening evidence.

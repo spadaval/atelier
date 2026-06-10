@@ -18,9 +18,9 @@ parent: "atelier-r4cf"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Rebuild and export issue activity sidecars"
-updated_at: "2026-06-10T16:00:59.309465327+00:00"
+updated_at: "2026-06-10T17:32:25.922110761+00:00"
 ---
 
 Make activity sidecars canonical state for export, rebuild, and projections.

@@ -17,9 +17,9 @@ parent: "atelier-r4cf"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Document issue activity history"
-updated_at: "2026-06-10T16:00:59.351671663+00:00"
+updated_at: "2026-06-10T17:38:39.026306267+00:00"
 ---
 
 Document the issue activity history model and operator workflows.

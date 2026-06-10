@@ -18,9 +18,9 @@ parent: "atelier-r4cf"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add SQLite comments-to-activity migration script"
-updated_at: "2026-06-10T16:00:59.329418067+00:00"
+updated_at: "2026-06-10T17:37:47.184466923+00:00"
 ---
 
 Provide the one-off migration path for existing local SQLite comments and close reasons.

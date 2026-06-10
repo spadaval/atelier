@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::activity::IssueActivity;
 use crate::db::{validate_relation_type, Database};
 use crate::models::{DomainRecord, Issue};
 use crate::record_id;
@@ -49,6 +50,7 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     let mut issue_ids = BTreeSet::new();
     let mut record_refs = BTreeSet::new();
     let mut canonical_paths = BTreeSet::new();
+    let mut activity_subject_ids = BTreeSet::new();
 
     for relative in discover_issue_record_paths(state_dir)? {
         canonical_paths.insert(relative.clone());
@@ -60,6 +62,12 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
             );
         }
         issues.push(issue);
+    }
+    let activity_paths = discover_issue_activity_paths(state_dir)?;
+    for relative in activity_paths {
+        let activity = IssueActivity::load(state_dir, &relative)?;
+        canonical_paths.insert(relative);
+        activity_subject_ids.insert(activity.subject_id);
     }
     for kind in ["mission", "milestone", "plan", "evidence"] {
         for relative in discover_record_paths(state_dir, kind)? {
@@ -79,6 +87,9 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
 
     let mut relations = Vec::new();
     let mut relation_keys = BTreeSet::new();
+    for subject_id in &activity_subject_ids {
+        ensure_issue_exists(subject_id, &issue_ids, "activity", subject_id)?;
+    }
     for issue in &issues {
         if let Some(parent_id) = &issue.issue.parent_id {
             ensure_issue_exists(parent_id, &issue_ids, "parent", &issue.issue.id)?;
@@ -159,6 +170,13 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".activity"))
+            {
+                continue;
+            }
             collect_issue_record_paths(root, &path, records)?;
         } else if path.is_file() {
             let relative = path
@@ -187,6 +205,37 @@ fn discover_record_paths(state_dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
     collect_issue_record_paths(state_dir, &record_dir, &mut records)?;
     records.sort();
     Ok(records)
+}
+
+fn discover_issue_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
+    let issue_dir = state_dir.join("issues");
+    if !issue_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut records = Vec::new();
+    collect_issue_activity_paths(state_dir, &issue_dir, &mut records)?;
+    records.sort();
+    Ok(records)
+}
+
+fn collect_issue_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".activity"))
+            {
+                collect_canonical_files(root, &path, records)?;
+            } else {
+                collect_issue_activity_paths(root, &path, records)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn ensure_no_unsupported_canonical_files(
@@ -1013,6 +1062,32 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_accepts_issue_activity_sidecars() {
+        let (db, dir) = setup_test_db();
+        let id = db.create_issue("Activity", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_activity_sidecar(&state_dir, &id);
+
+        run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap();
+        validate_canonical_state(&state_dir).unwrap();
+    }
+
+    #[test]
+    fn rebuild_rejects_activity_for_missing_issue() {
+        let (db, dir) = setup_test_db();
+        db.create_issue("Only issue", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_activity_sidecar(&state_dir, "atelier-miss");
+
+        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Issue atelier-miss has activity reference to missing issue atelier-miss"));
+    }
+
+    #[test]
     fn rebuild_reports_path_id_mismatch() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Mismatch", None, "medium").unwrap();
@@ -1123,5 +1198,20 @@ mod tests {
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error.to_string().contains("Invalid link relation type ''"));
+    }
+
+    fn write_activity_sidecar(state_dir: &Path, issue_id: &str) {
+        let activity_path = state_dir
+            .join("issues")
+            .join(format!("{issue_id}.activity"))
+            .join("20260610T181920123456Z.md");
+        fs::create_dir_all(activity_path.parent().unwrap()).unwrap();
+        fs::write(
+            activity_path,
+            format!(
+                "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Activity\"\n---\n\nBody\n"
+            ),
+        )
+        .unwrap();
     }
 }

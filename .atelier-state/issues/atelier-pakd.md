@@ -18,9 +18,9 @@ parent: "atelier-pd0w"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate better issue show human output and regressions"
-updated_at: "2026-06-10T16:09:12.937352005+00:00"
+updated_at: "2026-06-10T17:43:46.296355536+00:00"
 ---
 
 Validate the complete Better Issue View behavior across integration, focused helper, and regression coverage.

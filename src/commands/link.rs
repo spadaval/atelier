@@ -19,6 +19,9 @@ pub fn add(
         target_id,
         relation_type,
     )?;
+    if inserted {
+        record_evidence_activity(db, source_kind, source_id, target_kind, target_id)?;
+    }
     if json_output {
         println!(
             "{}",
@@ -35,6 +38,34 @@ pub fn add(
         println!("Link already exists");
     }
     Ok(())
+}
+
+fn record_evidence_activity(
+    db: &Database,
+    source_kind: &str,
+    source_id: &str,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<()> {
+    match (source_kind, target_kind) {
+        ("evidence", "issue") => {
+            let evidence = db.require_record("evidence", source_id)?;
+            super::activity_log::record_evidence_attached(
+                target_id,
+                source_id,
+                Some(&evidence.status),
+            )
+        }
+        ("issue", "evidence") => {
+            let evidence = db.require_record("evidence", target_id)?;
+            super::activity_log::record_evidence_attached(
+                source_id,
+                target_id,
+                Some(&evidence.status),
+            )
+        }
+        _ => Ok(()),
+    }
 }
 
 pub fn remove(

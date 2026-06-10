@@ -8,6 +8,7 @@ id: "atelier-r4cf"
 issue_type: "epic"
 labels:
 - "activity"
+- "assignee:root"
 - "epic"
 - "history"
 - "migration"
@@ -17,9 +18,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Issue-centered activity history"
-updated_at: "2026-06-10T16:00:00.692912198+00:00"
+updated_at: "2026-06-10T17:43:57.667530036+00:00"
 ---
 
 Create the canonical issue-centered activity history system from the supplied plan.

@@ -2,8 +2,9 @@ use anyhow::{anyhow, bail, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use crate::activity::list_issue_activities;
 use crate::db::Database;
 use crate::models::{Comment, Issue};
 use crate::utils::format_issue_id;
@@ -272,95 +273,278 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
     if json_output {
         print_success("issue.show", serde_json::to_value(object)?)
     } else {
-        println!("Issue {}: {}", object.id, object.title);
-        println!("Status: {}", object.status);
-        println!("Type: {}", object.issue_type);
-        println!("Priority: {}", object.priority);
-        if let Some(owner) = &object.owner {
-            println!("Owner: {owner}");
-        }
-        if let Some(assignee) = &object.assignee {
-            println!("Assignee: {assignee}");
-        }
-        if let Some(parent_id) = db.require_issue(&id)?.parent_id {
-            let numeric_parent = format_issue_id(&parent_id);
-            if let Some(parent) = &object.parent {
-                if parent != &numeric_parent {
-                    println!("Parent: {numeric_parent} ({parent})");
-                } else {
-                    println!("Parent: {numeric_parent}");
-                }
-            } else {
-                println!("Parent: {numeric_parent}");
-            }
-        }
-        if !object.labels.is_empty() {
-            println!("Labels: {}", object.labels.join(", "));
-        }
-        if let Some(description) = &object.description {
-            println!("\nDescription:\n{description}");
-        }
-        if let Some(acceptance) = &object.acceptance_criteria {
-            println!("\nAcceptance Criteria:\n{acceptance}");
-        }
-        println!(
-            "\nBlocked by: {}",
-            names_or_none(&dependency_names_for_text(db, db.get_blockers(&id)?)?)
-        );
-        println!(
-            "Blocking: {}",
-            names_or_none(&dependency_names_for_text(db, db.get_blocking(&id)?)?)
-        );
-        if !object.notes.is_empty() {
-            println!("\nNotes:");
-            for note in &object.notes {
-                println!(
-                    "  [{}] {}",
-                    note.created_at,
-                    note.body.replace('\n', "\n  ")
-                );
-            }
-        }
-        let subissues = db.get_subissues(&id)?;
-        if !subissues.is_empty() {
-            println!("\nSubissues:");
-            for subissue in subissues {
-                println!(
-                    "  {} [{}] {} - {}",
-                    format_issue_id(&subissue.id),
-                    subissue.status,
-                    subissue.priority,
-                    subissue.title
-                );
-            }
-        }
-        if let Some(reason) = &object.close_reason {
-            println!("Close reason: {reason}");
-        }
-        Ok(())
+        render_issue_show_human(db, &id, &object)
     }
 }
 
-fn dependency_names_for_text(db: &Database, ids: Vec<String>) -> Result<Vec<String>> {
+fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObject) -> Result<()> {
+    println!("{} [{}] {}", object.id, object.issue_type, object.title);
+    println!(
+        "{}",
+        "=".repeat(object.id.len() + object.issue_type.len() + object.title.len() + 4)
+    );
+    println!("Status:   {}", object.status);
+    println!("Type:     {}", object.issue_type);
+    println!("Priority: {}", object.priority);
+    println!("Created:  {}", object.created_at);
+    println!("Updated:  {}", object.updated_at);
+    if let Some(closed_at) = &object.closed_at {
+        println!("Closed:   {closed_at}");
+    }
+    if let Some(owner) = &object.owner {
+        println!("Owner:    {owner}");
+    }
+    if let Some(assignee) = &object.assignee {
+        println!("Assignee: {assignee}");
+    }
+    if !object.labels.is_empty() {
+        println!("Labels:   {}", object.labels.join(", "));
+    }
+
+    render_parent_context(db, canonical_id)?;
+
+    print_text_section("Description", object.description.as_deref());
+    print_text_section("Acceptance Criteria", object.acceptance_criteria.as_deref());
+    print_text_section("Close Reason", object.close_reason.as_deref());
+
+    render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
+    render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
+    render_subissue_section(db, canonical_id)?;
+    render_recent_activity_section(canonical_id, object)?;
+    render_command_footer(object);
+    Ok(())
+}
+
+fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
+    let issue = db.require_issue(canonical_id)?;
+    println!("\nHierarchy");
+    println!("---------");
+    match issue.parent_id {
+        Some(parent_id) => {
+            let parent = db.require_issue(&parent_id)?;
+            println!(
+                "Parent: {} [{}] {} - {}",
+                format_issue_id(&parent.id),
+                parent.status,
+                parent.priority,
+                parent.title
+            );
+        }
+        None => println!("Parent: (none)"),
+    }
+    Ok(())
+}
+
+fn print_text_section(title: &str, body: Option<&str>) {
+    if let Some(body) = body.map(str::trim).filter(|body| !body.is_empty()) {
+        println!("\n{title}");
+        println!("{}", "-".repeat(title.len()));
+        println!("{body}");
+    }
+}
+
+fn render_dependency_section(
+    db: &Database,
+    title: &str,
+    ids: Vec<String>,
+    blockers: bool,
+) -> Result<()> {
+    println!("\n{title}");
+    println!("{}", "-".repeat(title.len()));
+    let rows = dependency_rows_for_text(db, ids, blockers)?;
+    if rows.is_empty() {
+        println!("(none)");
+    } else {
+        for row in rows {
+            println!("  {row}");
+        }
+    }
+    Ok(())
+}
+
+fn dependency_rows_for_text(
+    db: &Database,
+    ids: Vec<String>,
+    blockers: bool,
+) -> Result<Vec<String>> {
     ids.into_iter()
         .map(|id| {
             let issue = db.require_issue(&id)?;
-            let numeric = format_issue_id(&id);
-            let agent_id = issue_id_for_agent(db, &issue)?;
-            if agent_id == numeric {
-                Ok(numeric)
+            let marker = if blockers && issue.status == "open" {
+                " OPEN BLOCKER"
             } else {
-                Ok(format!("{numeric} ({agent_id})"))
-            }
+                ""
+            };
+            Ok(format!(
+                "{} [{}] {} - {}{}",
+                issue_id_for_agent(db, &issue)?,
+                issue.status,
+                issue.priority,
+                issue.title,
+                marker
+            ))
         })
         .collect()
 }
 
-fn names_or_none(names: &[String]) -> String {
-    if names.is_empty() {
-        "(none)".to_string()
+fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
+    let mut subissues = db.get_subissues(canonical_id)?;
+    println!("\nSubissues");
+    println!("---------");
+    if subissues.is_empty() {
+        println!("(none)");
+        return Ok(());
+    }
+
+    println!("{}", subissue_summary(&subissues));
+    subissues.sort_by(|a, b| {
+        status_rank(&a.status)
+            .cmp(&status_rank(&b.status))
+            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
+            .then(a.id.cmp(&b.id))
+            .then(a.title.cmp(&b.title))
+    });
+    for subissue in subissues {
+        println!(
+            "  {} [{}] {} - {}",
+            format_issue_id(&subissue.id),
+            subissue.status,
+            subissue.priority,
+            subissue.title
+        );
+    }
+    Ok(())
+}
+
+fn subissue_summary(subissues: &[Issue]) -> String {
+    let mut statuses = BTreeMap::<String, usize>::new();
+    let mut priorities = BTreeMap::<String, usize>::new();
+    for subissue in subissues {
+        *statuses.entry(subissue.status.clone()).or_default() += 1;
+        *priorities.entry(subissue.priority.clone()).or_default() += 1;
+    }
+    format!(
+        "{} total | status: {} | priority: {}",
+        subissues.len(),
+        joined_counts(statuses),
+        joined_counts(priorities)
+    )
+}
+
+fn joined_counts(counts: BTreeMap<String, usize>) -> String {
+    counts
+        .into_iter()
+        .map(|(name, count)| format!("{name}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn status_rank(status: &str) -> u8 {
+    match status {
+        "open" => 0,
+        "in_progress" => 1,
+        "blocked" => 2,
+        "closed" => 3,
+        _ => 4,
+    }
+}
+
+fn priority_rank(priority: &str) -> u8 {
+    match priority {
+        "critical" => 0,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        _ => 4,
+    }
+}
+
+fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> Result<()> {
+    println!("\nRecent Activity");
+    println!("---------------");
+    let activity = recent_activity_lines(canonical_id, object)?;
+    if activity.is_empty() {
+        println!("(none)");
+        return Ok(());
+    }
+    for line in activity {
+        println!("  {line}");
+    }
+    Ok(())
+}
+
+fn render_command_footer(object: &IssueObject) {
+    println!("\nNext Commands");
+    println!("-------------");
+    println!("  atelier issue comment {} \"...\"", object.id);
+    if object.status == "closed" {
+        println!("  atelier issue reopen {}", object.id);
     } else {
-        names.join(", ")
+        println!("  atelier work start {}", object.id);
+        println!("  atelier issue close {} --reason \"...\"", object.id);
+    }
+}
+
+fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec<String>> {
+    if let Some(state_dir) = find_state_dir_from_cwd()? {
+        let activities = list_issue_activities(&state_dir, canonical_id)?;
+        if !activities.is_empty() {
+            return Ok(activities
+                .iter()
+                .rev()
+                .take(5)
+                .map(|activity| {
+                    let body = activity.body.replace('\n', "\n  ");
+                    if body.trim().is_empty() {
+                        format!(
+                            "[{}] {}: {}",
+                            activity.created_at.to_rfc3339(),
+                            activity.event_type,
+                            activity.summary
+                        )
+                    } else {
+                        format!(
+                            "[{}] {}: {}\n  {}",
+                            activity.created_at.to_rfc3339(),
+                            activity.event_type,
+                            activity.summary,
+                            body
+                        )
+                    }
+                })
+                .collect());
+        }
+    }
+
+    Ok(object
+        .notes
+        .iter()
+        .rev()
+        .take(5)
+        .map(|note| {
+            format!(
+                "[{}] {}: {}",
+                note.created_at,
+                note.kind,
+                note.body.replace('\n', "\n  ")
+            )
+        })
+        .collect())
+}
+
+fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
+    let mut current = std::env::current_dir()?;
+    loop {
+        let state_dir = current.join(".atelier-state");
+        if state_dir.is_dir() {
+            return Ok(Some(state_dir));
+        }
+        if current.join(".atelier").is_dir() {
+            return Ok(None);
+        }
+        if !current.pop() {
+            return Ok(None);
+        }
     }
 }
 
@@ -530,12 +714,30 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
         if db.update_issue(&id, input.title, input.description, input.priority)? {
             if input.title.is_some() {
                 changed_fields.push("title");
+                crate::commands::activity_log::record_field_changed(
+                    &id,
+                    "title",
+                    Some(&previous.title),
+                    input.title,
+                )?;
             }
             if input.description.is_some() {
                 changed_fields.push("description");
+                crate::commands::activity_log::record_field_changed(
+                    &id,
+                    "description",
+                    previous.description.as_deref(),
+                    input.description,
+                )?;
             }
             if input.priority.is_some() {
                 changed_fields.push("priority");
+                crate::commands::activity_log::record_field_changed(
+                    &id,
+                    "priority",
+                    Some(&previous.priority),
+                    input.priority,
+                )?;
             }
         }
     }
@@ -545,14 +747,29 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
             "open" => {
                 db.reopen_issue(&id)?;
                 changed_fields.push("status");
+                crate::commands::activity_log::record_status_changed(
+                    &id,
+                    &previous.status,
+                    "open",
+                )?;
             }
             "closed" => {
                 db.close_issue(&id)?;
                 changed_fields.push("status");
+                crate::commands::activity_log::record_status_changed(
+                    &id,
+                    &previous.status,
+                    "closed",
+                )?;
             }
             "in_progress" => {
                 db.add_label(&id, "status:in_progress")?;
                 changed_fields.push("status");
+                crate::commands::activity_log::record_status_changed(
+                    &id,
+                    &previous.status,
+                    "in_progress",
+                )?;
             }
             other => bail!("Invalid status '{other}'. Valid values: open, in_progress, closed"),
         }
@@ -561,12 +778,19 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
     for label in input.labels {
         db.add_label(&id, label)?;
         changed_fields.push("labels");
+        crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
     }
 
     if let Some(parent) = input.parent {
         let parent_id = parent.map(|parent| resolve_id(db, parent)).transpose()?;
         db.update_parent(&id, parent_id.as_deref())?;
         changed_fields.push("parent");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "parent",
+            previous.parent_id.as_deref(),
+            parent_id.as_deref(),
+        )?;
     }
 
     if input.claim {
@@ -577,11 +801,18 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
         db.add_label(&id, &format!("assignee:{assignee}"))?;
         db.add_comment(&id, &format!("Claimed by {assignee}"), "handoff")?;
         changed_fields.push("assignee");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "assignee",
+            previous_assignee.as_deref(),
+            Some(&assignee),
+        )?;
     }
 
     if let Some(note) = input.append_notes {
         db.add_comment(&id, note, "handoff")?;
         changed_fields.push("notes");
+        crate::commands::activity_log::record_note(&id, note)?;
     }
 
     if changed_fields.is_empty() {
@@ -637,9 +868,12 @@ pub fn close(
                 .join(", ")
         );
     }
+    let previous = db.require_issue(&id)?;
     db.close_issue(&id)?;
+    crate::commands::activity_log::record_status_changed(&id, &previous.status, "closed")?;
     if let Some(reason) = reason {
         db.add_comment(&id, &format!("Close reason: {reason}"), "resolution")?;
+        crate::commands::activity_log::record_close_reason(&id, reason)?;
     }
     let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
@@ -657,7 +891,9 @@ pub fn close(
 
 pub fn reopen(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
+    let previous = db.require_issue(&id)?;
     db.reopen_issue(&id)?;
+    crate::commands::activity_log::record_status_changed(&id, &previous.status, "open")?;
     let object = issue_object(db, db.require_issue(&id)?)?;
     if json_output {
         print_success("issue.reopen", serde_json::to_value(object)?)
@@ -965,4 +1201,54 @@ fn current_actor() -> String {
     std::env::var("ATELIER_AGENT")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "agent".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn setup_test_db() -> (Database, tempfile::TempDir) {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("test.db")).unwrap();
+        (db, dir)
+    }
+
+    #[test]
+    fn dependency_rows_include_context_and_open_blocker_marker() {
+        let (db, _dir) = setup_test_db();
+        let blocked = db.create_issue("Blocked issue", None, "medium").unwrap();
+        let blocker = db.create_issue("Blocking issue", None, "high").unwrap();
+        db.add_dependency(&blocked, &blocker).unwrap();
+
+        let rows = dependency_rows_for_text(&db, db.get_blockers(&blocked).unwrap(), true).unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].contains(&format_issue_id(&blocker)));
+        assert!(rows[0].contains("[open] high - Blocking issue"));
+        assert!(rows[0].contains("OPEN BLOCKER"));
+    }
+
+    #[test]
+    fn subissue_summary_counts_statuses_and_priorities() {
+        let (db, _dir) = setup_test_db();
+        let parent = db.create_issue("Parent", None, "high").unwrap();
+        let child_a = db
+            .create_subissue(&parent, "First child", None, "high")
+            .unwrap();
+        let child_b = db
+            .create_subissue(&parent, "Second child", None, "low")
+            .unwrap();
+        db.close_issue(&child_b).unwrap();
+
+        let subissues = db.get_subissues(&parent).unwrap();
+        let summary = subissue_summary(&subissues);
+
+        assert!(summary.contains("2 total"));
+        assert!(summary.contains("closed=1"));
+        assert!(summary.contains("open=1"));
+        assert!(summary.contains("high=1"));
+        assert!(summary.contains("low=1"));
+        assert!(subissues.iter().any(|issue| issue.id == child_a));
+    }
 }

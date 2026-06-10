@@ -16,9 +16,9 @@ parent: "atelier-pd0w"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Render richer issue show human header and core sections"
-updated_at: "2026-06-10T16:09:12.870412513+00:00"
+updated_at: "2026-06-10T17:29:23.393254540+00:00"
 ---
 
 Implement the core richer human layout for `atelier issue show <id>`.

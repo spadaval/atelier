@@ -17,9 +17,9 @@ parent: "atelier-pd0w"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add recent activity preview and command footer to issue show"
-updated_at: "2026-06-10T16:09:12.915812699+00:00"
+updated_at: "2026-06-10T17:29:23.603761796+00:00"
 ---
 
 Add a bounded recent activity preview and concise next-command footer to the human `issue show` view.

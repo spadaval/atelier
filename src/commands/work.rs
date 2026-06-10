@@ -57,6 +57,7 @@ pub fn start(db: &Database, id: &str, json_output: bool) -> Result<()> {
     let branch = current_branch().ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
     db.start_work_association(id, branch.as_deref(), Some(&path))?;
+    crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
     ensure_session_work(db, id)?;
     if json_output {
         println!(
@@ -87,6 +88,9 @@ pub fn finish(db: &Database, id: &str, json_output: bool) -> Result<()> {
         bail!("Canonical export is stale:\n{}", export_stale.join("\n"));
     }
     let finished = db.finish_work_association(id)?;
+    if finished {
+        crate::commands::activity_log::record_work_finished(id)?;
+    }
     if json_output {
         println!(
             "{}",
@@ -198,6 +202,11 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>, json_output: bo
     }
     let setup_hooks = run_worktree_setup_hooks(&root, &worktree_path, id, &branch)?;
     db.start_work_association(id, Some(&branch), Some(&worktree_path.to_string_lossy()))?;
+    crate::commands::activity_log::record_work_started(
+        id,
+        Some(&branch),
+        Some(&worktree_path.to_string_lossy()),
+    )?;
     if json_output {
         println!(
             "{}",
@@ -436,7 +445,7 @@ fn dirty_paths(path: &Path) -> Result<Vec<String>> {
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(git_status_path)
-        .filter(|path| !path.starts_with(".atelier/"))
+        .filter(|path| !is_workflow_generated_dirty_path(path))
         .collect())
 }
 
@@ -498,7 +507,7 @@ fn ensure_clean_worktree() -> Result<()> {
     let dirty = status
         .lines()
         .filter_map(git_status_path)
-        .filter(|path| !path.starts_with(".atelier/"))
+        .filter(|path| !is_workflow_generated_dirty_path(path))
         .collect::<Vec<_>>();
     if !dirty.is_empty() {
         bail!(
@@ -507,6 +516,13 @@ fn ensure_clean_worktree() -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn is_workflow_generated_dirty_path(path: &str) -> bool {
+    path.starts_with(".atelier/")
+        || (path.starts_with(".atelier-state/issues/")
+            && (path.ends_with(".activity/")
+                || (path.contains(".activity/") && path.ends_with(".md"))))
 }
 
 fn git_status_path(line: &str) -> Option<String> {

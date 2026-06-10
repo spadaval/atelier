@@ -21,9 +21,9 @@ parent: "atelier-r4cf"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate issue activity history end to end"
-updated_at: "2026-06-10T16:00:59.368552201+00:00"
+updated_at: "2026-06-10T17:43:46.476755383+00:00"
 ---
 
 Validate issue-centered activity history end to end.

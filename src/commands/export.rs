@@ -111,7 +111,7 @@ pub fn run_json(db: &Database, output_path: Option<&str>) -> Result<()> {
 }
 
 pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
-    let files = build_canonical_projection(db)?;
+    let files = build_canonical_projection(db, state_dir)?;
 
     if check {
         let stale = stale_projection_entries(state_dir, &files)?;
@@ -132,11 +132,11 @@ pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()>
 }
 
 pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
-    let files = build_canonical_projection(db)?;
+    let files = build_canonical_projection(db, state_dir)?;
     stale_projection_entries(state_dir, &files)
 }
 
-fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
+fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<ProjectionFile>> {
     let mut issues = db.list_issues(Some("all"), None, None)?;
     issues.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -155,9 +155,54 @@ fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
             });
         }
     }
+    preserve_existing_activity_files(state_dir, &mut files)?;
 
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
+}
+
+fn preserve_existing_activity_files(
+    state_dir: &Path,
+    files: &mut Vec<ProjectionFile>,
+) -> Result<()> {
+    if !state_dir.exists() {
+        return Ok(());
+    }
+    for relative in canonical_files_under(state_dir)? {
+        if !is_issue_activity_path(&relative) {
+            continue;
+        }
+        files.push(ProjectionFile {
+            bytes: fs::read(state_dir.join(&relative)).with_context(|| {
+                format!(
+                    "Failed to read canonical activity {}",
+                    display_state_path(&relative)
+                )
+            })?,
+            path: relative,
+        });
+    }
+    Ok(())
+}
+
+fn is_issue_activity_path(relative: &Path) -> bool {
+    let mut components = relative.components();
+    let Some(std::path::Component::Normal(root)) = components.next() else {
+        return false;
+    };
+    if root != "issues" {
+        return false;
+    }
+    let Some(std::path::Component::Normal(dir)) = components.next() else {
+        return false;
+    };
+    if !dir.to_string_lossy().ends_with(".activity") {
+        return false;
+    }
+    let Some(std::path::Component::Normal(file)) = components.next() else {
+        return false;
+    };
+    components.next().is_none() && file.to_string_lossy().ends_with(".md")
 }
 
 fn write_canonical_projection(state_dir: &Path, files: &[ProjectionFile]) -> Result<()> {
@@ -768,6 +813,31 @@ mod tests {
     }
 
     #[test]
+    fn test_canonical_export_preserves_issue_activity_sidecars() {
+        let (db, dir) = setup_test_db();
+        let state_dir = dir.path().join(".atelier-state");
+        let id = db.create_issue("Activity", None, "medium").unwrap();
+        run_canonical(&db, &state_dir, false).unwrap();
+        let activity_path = state_dir
+            .join("issues")
+            .join(format!("{id}.activity"))
+            .join("20260610T181920123456Z.md");
+        fs::create_dir_all(activity_path.parent().unwrap()).unwrap();
+        fs::write(
+            &activity_path,
+            format!(
+                "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Activity\"\n---\n\nBody\n"
+            ),
+        )
+        .unwrap();
+
+        run_canonical(&db, &state_dir, false).unwrap();
+
+        assert!(activity_path.exists());
+        assert!(run_canonical(&db, &state_dir, true).is_ok());
+    }
+
+    #[test]
     fn test_canonical_changed_record_export_rewrites_issue() {
         let (db, dir) = setup_test_db();
         let state_dir = dir.path().join(".atelier-state");
@@ -889,7 +959,8 @@ mod tests {
 
     #[test]
     fn test_canonical_markdown_serialization_stability() {
-        let (db, _dir) = setup_test_db();
+        let (db, dir) = setup_test_db();
+        let state_dir = dir.path().join(".atelier-state");
         let parent = db
             .create_issue("Parent", Some("Parent body\r\nline 2"), "high")
             .unwrap();
@@ -901,8 +972,8 @@ mod tests {
         db.add_dependency(&child, &parent).unwrap();
         db.add_typed_relation(&parent, &child, "derived").unwrap();
 
-        let first = build_canonical_projection(&db).unwrap();
-        let second = build_canonical_projection(&db).unwrap();
+        let first = build_canonical_projection(&db, &state_dir).unwrap();
+        let second = build_canonical_projection(&db, &state_dir).unwrap();
         let issue = first
             .iter()
             .find(|file| file.path == issue_record_path(&child))

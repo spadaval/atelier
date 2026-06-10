@@ -1,0 +1,150 @@
+use anyhow::Result;
+use chrono::Utc;
+use std::path::PathBuf;
+
+use crate::activity::{create_issue_activity, ActivityEventType};
+
+pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
+    let (event_type, summary) = match kind {
+        "note" => (ActivityEventType::Note, "Added note"),
+        "handoff" => (ActivityEventType::Handoff, "Added handoff"),
+        "decision" => (ActivityEventType::Decision, "Added decision"),
+        "plan" => (ActivityEventType::Plan, "Added plan"),
+        _ => (ActivityEventType::Comment, "Added comment"),
+    };
+    record(issue_id, event_type, summary, body)
+}
+
+pub fn record_note(issue_id: &str, body: &str) -> Result<()> {
+    record(issue_id, ActivityEventType::Note, "Added note", body)
+}
+
+pub fn record_close_reason(issue_id: &str, reason: &str) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::CloseReason,
+        "Recorded close reason",
+        reason,
+    )
+}
+
+pub fn record_status_changed(issue_id: &str, old: &str, new: &str) -> Result<()> {
+    if old == new {
+        return Ok(());
+    }
+    record(
+        issue_id,
+        ActivityEventType::StatusChanged,
+        &format!("Changed status from {old} to {new}"),
+        &field_change_body("status", Some(old), Some(new)),
+    )
+}
+
+pub fn record_field_changed(
+    issue_id: &str,
+    field: &str,
+    old: Option<&str>,
+    new: Option<&str>,
+) -> Result<()> {
+    if old == new {
+        return Ok(());
+    }
+    record(
+        issue_id,
+        ActivityEventType::FieldChanged,
+        &format!("Changed {field}"),
+        &field_change_body(field, old, new),
+    )
+}
+
+pub fn record_work_started(
+    issue_id: &str,
+    branch: Option<&str>,
+    worktree_path: Option<&str>,
+) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::WorkStarted,
+        "Started work",
+        &work_body(branch, worktree_path),
+    )
+}
+
+pub fn record_work_finished(issue_id: &str) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::WorkFinished,
+        "Finished work",
+        "finished: true",
+    )
+}
+
+pub fn record_evidence_attached(
+    issue_id: &str,
+    evidence_id: &str,
+    result: Option<&str>,
+) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::EvidenceAttached,
+        &format!("Attached evidence {evidence_id}"),
+        &format!(
+            "evidence_id: {}\nresult: {}",
+            scalar(evidence_id),
+            option_scalar(result)
+        ),
+    )
+}
+
+fn record(issue_id: &str, event_type: ActivityEventType, summary: &str, body: &str) -> Result<()> {
+    let Some(state_dir) = current_state_dir_for_issue(issue_id) else {
+        return Ok(());
+    };
+    create_issue_activity(
+        &state_dir,
+        issue_id,
+        event_type,
+        &current_actor(),
+        Utc::now(),
+        summary,
+        body,
+    )?;
+    Ok(())
+}
+
+fn current_state_dir_for_issue(issue_id: &str) -> Option<PathBuf> {
+    let state_dir = std::env::current_dir().ok()?.join(".atelier-state");
+    let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
+    issue_file.is_file().then_some(state_dir)
+}
+
+fn current_actor() -> String {
+    std::env::var("ATELIER_AGENT")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "agent".to_string())
+}
+
+fn field_change_body(field: &str, old: Option<&str>, new: Option<&str>) -> String {
+    format!(
+        "field: {}\nold: {}\nnew: {}",
+        scalar(field),
+        option_scalar(old),
+        option_scalar(new)
+    )
+}
+
+fn work_body(branch: Option<&str>, worktree_path: Option<&str>) -> String {
+    format!(
+        "branch: {}\nworktree_path: {}",
+        option_scalar(branch),
+        option_scalar(worktree_path)
+    )
+}
+
+fn option_scalar(value: Option<&str>) -> String {
+    value.map(scalar).unwrap_or_else(|| "null".to_string())
+}
+
+fn scalar(value: &str) -> String {
+    serde_json::to_string(value).expect("string serialization cannot fail")
+}

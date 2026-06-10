@@ -11,6 +11,7 @@ id: "atelier-8o8v"
 issue_type: "task"
 labels:
 - "activity"
+- "assignee:root"
 - "cli"
 - "durability"
 - "issue"
@@ -19,9 +20,9 @@ parent: "atelier-r4cf"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Write issue mutations as activity entries"
-updated_at: "2026-06-10T16:00:59.246554229+00:00"
+updated_at: "2026-06-10T17:33:14.622812806+00:00"
 ---
 
 Write activity sidecars directly from future issue mutations.

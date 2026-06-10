@@ -8,6 +8,7 @@ id: "atelier-pd0w"
 issue_type: "epic"
 labels:
 - "agent-factory"
+- "assignee:root"
 - "cli"
 - "human-output"
 - "issue-show"
@@ -16,9 +17,9 @@ parent: "atelier-r4cf"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Better issue show human view"
-updated_at: "2026-06-10T16:08:34.447073812+00:00"
+updated_at: "2026-06-10T17:43:52.159841537+00:00"
 ---
 
 Upgrade the default human output for `atelier issue show <id>` into a richer, scan-friendly single-issue view inspired by `jira work --format details`.

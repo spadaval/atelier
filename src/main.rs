@@ -1,3 +1,4 @@
+mod activity;
 mod commands;
 mod daemon;
 mod db;
@@ -87,6 +88,25 @@ enum Commands {
         /// Canonical state directory to rebuild from
         #[arg(short, long)]
         input: Option<String>,
+    },
+
+    /// Show issue activity history from canonical sidecars
+    History {
+        /// Restrict history to one issue ID
+        #[arg(long)]
+        issue: Option<String>,
+        /// Include entries at or after this date or RFC3339 timestamp
+        #[arg(long)]
+        since: Option<String>,
+        /// Include entries at or before this date or RFC3339 timestamp
+        #[arg(long)]
+        until: Option<String>,
+        /// Restrict history to one activity event type
+        #[arg(long = "type")]
+        event_type: Option<String>,
+        /// Maximum entries to show
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
     },
 
     /// Import issues from JSON file
@@ -1840,6 +1860,25 @@ fn run() -> Result<()> {
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
             let db_path = repo_root.join(".atelier").join("state.db");
             commands::agent_factory::rebuild(&state_dir, &db_path, json)
+        }
+
+        Commands::History {
+            issue,
+            since,
+            until,
+            event_type,
+            limit,
+        } => {
+            let repo_root = find_repo_root_for_rebuild()?;
+            commands::history::run(
+                &repo_root.join(".atelier-state"),
+                issue.as_deref(),
+                since.as_deref(),
+                until.as_deref(),
+                event_type.as_deref(),
+                limit,
+                json,
+            )
         }
 
         Commands::Import { input } => {

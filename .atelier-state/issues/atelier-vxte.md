@@ -17,9 +17,9 @@ parent: "atelier-pd0w"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add hierarchy and dependency context to issue show"
-updated_at: "2026-06-10T16:09:12.894589289+00:00"
+updated_at: "2026-06-10T17:29:23.402451775+00:00"
 ---
 
 Add hierarchy and dependency context to the richer human `issue show` view.

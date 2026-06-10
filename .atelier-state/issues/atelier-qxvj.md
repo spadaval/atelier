@@ -15,6 +15,7 @@ id: "atelier-qxvj"
 issue_type: "task"
 labels:
 - "activity"
+- "assignee:root"
 - "markdown"
 - "record-store"
 - "storage"
@@ -23,9 +24,9 @@ parent: "atelier-r4cf"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define canonical issue activity sidecars"
-updated_at: "2026-06-10T16:00:59.223312574+00:00"
+updated_at: "2026-06-10T17:25:44.417915345+00:00"
 ---
 
 Implement the canonical issue activity sidecar model.

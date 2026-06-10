@@ -29,6 +29,7 @@ pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<(
         );
     }
     db.add_comment(issue_id, content, kind)?;
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
     println!("Added comment to issue {}", format_issue_id(issue_id));
     Ok(())
 }

@@ -35,7 +35,8 @@
   behavior, and risk-scaled examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
   RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
-  durable writes, rebuildable SQLite indexes, and local runtime data.
+  durable writes, issue activity sidecars, rebuildable SQLite indexes, and
+  local runtime data.
 - [docs/architecture/mission-control-tui.md](architecture/mission-control-tui.md):
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.

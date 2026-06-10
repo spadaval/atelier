@@ -67,6 +67,36 @@ fn issue_id_by_title(dir: &Path, title: &str) -> String {
         .to_string()
 }
 
+fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
+    let activity_dir = dir
+        .join(".atelier-state")
+        .join("issues")
+        .join(format!("{issue_id}.activity"));
+    let mut paths = std::fs::read_dir(&activity_dir)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", activity_dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|path| {
+            std::fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
+        })
+        .collect()
+}
+
+fn assert_activity_contains(texts: &[String], event_type: &str, expected: &[&str]) {
+    let needle = format!("event_type: \"{event_type}\"");
+    assert!(
+        texts
+            .iter()
+            .any(|text| text.contains(&needle) && expected.iter().all(|part| text.contains(part))),
+        "missing activity {event_type} containing {expected:?}; activities:\n{}",
+        texts.join("\n--- activity ---\n")
+    );
+}
+
 fn register_issue_id(dir: &Path, id: String) {
     if !is_record_id(&id) {
         return;
@@ -355,6 +385,247 @@ fn test_show_issue() {
 }
 
 #[test]
+fn test_show_issue_rich_human_output() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["create", "Parent issue", "-p", "high"]);
+    run_atelier(
+        dir.path(),
+        &["subissue", "1", "Target issue", "-p", "medium"],
+    );
+    run_atelier(dir.path(), &["subissue", "2", "Child issue", "-p", "low"]);
+    run_atelier(dir.path(), &["create", "Blocking issue", "-p", "high"]);
+    run_atelier(dir.path(), &["create", "Downstream issue", "-p", "low"]);
+    run_atelier(dir.path(), &["block", "2", "4"]);
+    run_atelier(dir.path(), &["block", "5", "2"]);
+    run_atelier(dir.path(), &["comment", "2", "Recent note"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["show", "2"]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Target issue"));
+    assert!(stdout.contains("Status:   open"));
+    assert!(stdout.contains("Type:     task"));
+    assert!(stdout.contains("Priority: medium"));
+    assert!(stdout.contains("Parent issue"));
+    assert!(stdout.contains("1 total | status: open=1 | priority: low=1"));
+    assert!(stdout.contains("Blocking issue"));
+    assert!(stdout.contains("OPEN BLOCKER"));
+    assert!(stdout.contains("Downstream issue"));
+    assert!(stdout.contains("Recent Activity"));
+    assert!(stdout.contains("Recent note"));
+    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("atelier issue comment"));
+    assert!(stdout.contains("atelier work start"));
+}
+
+#[test]
+fn test_issue_show_json_shape_stays_compatible() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["create", "JSON issue", "-d", "JSON description"],
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "1"]);
+
+    assert!(success, "json show failed: {stderr}");
+    let value = json_value(&stdout);
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "issue.show");
+    assert_eq!(value["data"]["title"], "JSON issue");
+    assert_eq!(value["data"]["description"], "JSON description");
+    assert!(value["data"]["dependencies"].is_array());
+    assert!(value["data"]["dependents"].is_array());
+    assert!(value["data"]["notes"].is_array());
+    assert!(value["data"]["recent_activity"].is_null());
+}
+
+#[test]
+fn test_show_closed_issue_includes_close_reason() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["create", "Closed issue"]);
+    run_atelier(dir.path(), &["close", "1", "--reason", "Done enough"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
+
+    assert!(success, "issue show failed: {stderr}");
+    assert!(stdout.contains("Closed issue"));
+    assert!(stdout.contains("Closed:"));
+    assert!(stdout.contains("Close Reason"));
+    assert!(stdout.contains("Done enough"));
+    assert!(stdout.contains("atelier issue reopen"));
+}
+
+#[test]
+fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["create", "Activity issue"]);
+    run_atelier(dir.path(), &["comment", "1", "Legacy note"]);
+    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    let activity_dir = dir
+        .path()
+        .join(".atelier-state")
+        .join("issues")
+        .join(format!("{issue_id}.activity"));
+    std::fs::create_dir_all(&activity_dir).unwrap();
+    std::fs::write(
+        activity_dir.join("20260610T181920123456Z.md"),
+        format!(
+            "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Canonical activity\"\n---\n\nSidecar body\n"
+        ),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["show", "1"]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Canonical activity"));
+    assert!(stdout.contains("Sidecar body"));
+    assert!(!stdout.contains("Legacy note"));
+}
+
+#[test]
+fn test_history_reads_activity_sidecars_with_filters_and_json() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["create", "First issue"]);
+    run_atelier(dir.path(), &["create", "Second issue"]);
+    let first = issue_id_by_title(dir.path(), "First issue");
+    let second = issue_id_by_title(dir.path(), "Second issue");
+    write_activity_fixture(
+        dir.path(),
+        &first,
+        "20260610T181920123456Z",
+        "comment",
+        "First comment",
+        "First body",
+    );
+    write_activity_fixture(
+        dir.path(),
+        &second,
+        "20260610T181921123456Z",
+        "evidence_attached",
+        "Evidence attached",
+        "evidence_id: \"ev-1\"\nresult: \"pass\"",
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--limit", "1"]);
+    assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains("Evidence attached"));
+    assert!(!stdout.contains("First comment"));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--issue",
+            first.as_str(),
+            "--type",
+            "comment",
+            "--since",
+            "2026-06-10",
+        ],
+    );
+    assert!(success, "filtered history failed: {stderr}");
+    assert!(stdout.contains("First comment"));
+    assert!(!stdout.contains("Evidence attached"));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "history", "--type", "evidence_attached"],
+    );
+    assert!(success, "json history failed: {stderr}");
+    let value = json_value(&stdout);
+    assert_eq!(value["ok"], true);
+    assert_eq!(value["command"], "history");
+    assert_eq!(value["data"]["count"], 1);
+    assert_eq!(value["data"]["items"][0]["issue"], second);
+    assert_eq!(value["data"]["items"][0]["event_type"], "evidence_attached");
+    assert!(value["data"]["items"][0]["body"]
+        .as_str()
+        .unwrap()
+        .contains("evidence_id"));
+}
+
+#[test]
+fn test_history_empty_and_invalid_limit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
+    assert!(success, "empty history failed: {stderr}");
+    assert!(stdout.contains("No history found."));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["history", "--limit", "0"]);
+    assert!(!success, "zero limit should fail");
+    assert!(stderr.contains("--limit must be greater than 0"));
+}
+
+#[test]
+fn test_evidence_issue_link_creates_history_activity() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["create", "Evidence issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Evidence issue");
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "evidence",
+            "add",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Cargo test passed",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    let evidence = json_value(&evidence_out);
+    let evidence_id = evidence["id"].as_str().unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "link",
+            "add",
+            "evidence",
+            evidence_id,
+            "issue",
+            issue_id.as_str(),
+            "--type",
+            "validates",
+        ],
+    );
+    assert!(success, "evidence link failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--issue",
+            issue_id.as_str(),
+            "--type",
+            "evidence_attached",
+        ],
+    );
+
+    assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
+    assert!(stdout.contains("result: \"pass\""));
+}
+
+#[test]
 fn test_show_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -362,6 +633,34 @@ fn test_show_nonexistent_issue() {
     let (success, _, stderr) = run_atelier(dir.path(), &["show", "999"]);
 
     assert!(!success || stderr.contains("not found") || stderr.contains("No issue"));
+}
+
+fn write_activity_fixture(
+    dir: &Path,
+    issue_id: &str,
+    activity_id: &str,
+    event_type: &str,
+    summary: &str,
+    body: &str,
+) {
+    let activity_dir = dir
+        .join(".atelier-state")
+        .join("issues")
+        .join(format!("{issue_id}.activity"));
+    std::fs::create_dir_all(&activity_dir).unwrap();
+    std::fs::write(
+        activity_dir.join(format!("{activity_id}.md")),
+        format!(
+            "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"{activity_id}\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"{event_type}\"\nactor: \"tester\"\ncreated_at: \"{}-{}-{}T{}:{}:{}.123456Z\"\nsummary: \"{summary}\"\n---\n\n{body}\n",
+            &activity_id[0..4],
+            &activity_id[4..6],
+            &activity_id[6..8],
+            &activity_id[9..11],
+            &activity_id[11..13],
+            &activity_id[13..15],
+        ),
+    )
+    .unwrap();
 }
 
 // ==================== Issue Update Tests ====================
@@ -458,7 +757,9 @@ fn test_import_beads_jsonl_fixture_round_trip() {
 
     let (_, show_out, _) = run_atelier(dir.path(), &["show", "3"]);
     assert!(show_out.contains("Parent: atelier-0001"));
-    assert!(show_out.contains("Blocked by: atelier-0002"));
+    assert!(show_out.contains("Blocked by"));
+    assert!(show_out.contains("atelier-0002 [open]"));
+    assert!(show_out.contains("OPEN BLOCKER"));
     assert!(show_out.contains("Acceptance Criteria"));
 
     let (updated, _, update_err) = run_atelier(
@@ -471,7 +772,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
 
     let (_, closed_show, _) = run_atelier(dir.path(), &["show", "2"]);
     assert!(closed_show.contains("Imported Beads issue updated"));
-    assert!(closed_show.contains("Status: closed"));
+    assert!(closed_show.contains("Status:   closed"));
 
     let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(!fresh, "mutating imported issue should stale export");
@@ -539,6 +840,124 @@ fn test_add_comment() {
 
     let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
     assert!(show_out.contains("This is a comment"));
+}
+
+#[test]
+fn test_issue_mutations_create_activity_sidecars() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    for (kind, body) in [
+        ("human", "Plain comment body"),
+        ("note", "Operator note body"),
+        ("plan", "Plan body"),
+        ("decision", "Decision body"),
+        ("handoff", "Handoff body"),
+    ] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "comment", &issue_id, body, "--kind", kind],
+        );
+        assert!(success, "issue comment {kind} failed: {stderr}");
+    }
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &issue_id,
+            "--append-notes",
+            "Append note body",
+            "--claim",
+        ],
+    );
+    assert!(success, "issue update notes/claim failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &issue_id,
+            "--title",
+            "Activity issue renamed",
+            "--priority",
+            "high",
+            "--status",
+            "in_progress",
+            "--label",
+            "activity-label",
+        ],
+    );
+    assert!(success, "issue update fields failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &issue_id, "--status", "closed"],
+    );
+    assert!(success, "issue update status closed failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &issue_id, "--reason", "Close reason body"],
+    );
+    assert!(success, "issue close reason failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "reopen", &issue_id]);
+    assert!(success, "issue reopen failed: {stderr}");
+
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(&activities, "comment", &["Plain comment body"]);
+    assert_activity_contains(&activities, "note", &["Operator note body"]);
+    assert_activity_contains(&activities, "note", &["Append note body"]);
+    assert_activity_contains(&activities, "plan", &["Plan body"]);
+    assert_activity_contains(&activities, "decision", &["Decision body"]);
+    assert_activity_contains(&activities, "handoff", &["Handoff body"]);
+    assert_activity_contains(
+        &activities,
+        "field_changed",
+        &[
+            "field: \"title\"",
+            "old: \"Activity issue\"",
+            "new: \"Activity issue renamed\"",
+        ],
+    );
+    assert_activity_contains(
+        &activities,
+        "field_changed",
+        &["field: \"priority\"", "old: \"medium\"", "new: \"high\""],
+    );
+    assert_activity_contains(
+        &activities,
+        "field_changed",
+        &["field: \"labels\"", "new: \"activity-label\""],
+    );
+    assert_activity_contains(
+        &activities,
+        "field_changed",
+        &["field: \"assignee\"", "new: "],
+    );
+    assert_activity_contains(
+        &activities,
+        "status_changed",
+        &["old: \"open\"", "new: \"in_progress\""],
+    );
+    assert_activity_contains(
+        &activities,
+        "status_changed",
+        &["old: \"open\"", "new: \"closed\""],
+    );
+    assert_activity_contains(
+        &activities,
+        "status_changed",
+        &["old: \"closed\"", "new: \"open\""],
+    );
+    assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
 }
 
 // ==================== Dependencies Tests ====================
@@ -3162,6 +3581,13 @@ hooks:
         run_atelier(dir.path(), &["--json", "work", "finish", &issue_id]);
     assert!(success, "work finish failed: {stderr}");
     assert_eq!(json_value(&finish_out)["finished"], true);
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activities,
+        "work_started",
+        &["branch: ", "worktree_path: "],
+    );
+    assert_activity_contains(&activities, "work_finished", &["finished: true"]);
 
     let worktree_path = dir.path().join(".atelier-worktrees").join(&issue_id);
     let worktree_arg = worktree_path.to_string_lossy().to_string();
