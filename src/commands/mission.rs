@@ -40,7 +40,9 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
     let mut plans = Vec::new();
     let mut evidence = Vec::new();
     let mut milestones = Vec::new();
+    let mut mission_blockers = Vec::new();
     let mut seen_records = BTreeSet::new();
+    let mut seen_mission_blockers = BTreeSet::new();
     let mut seen_work = BTreeSet::new();
     let mut work = BTreeMap::from([
         ("done".to_string(), Vec::<Value>::new()),
@@ -64,6 +66,17 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
                 milestones.push(record_summary(db, kind, linked_id)?)
             }
             "issue" => {
+                if link.relation_type == "blocked_by" {
+                    if seen_mission_blockers.insert(linked_id.to_string()) {
+                        let issue = db.require_issue(linked_id)?;
+                        mission_blockers.push(issue_json_with_relation(
+                            db,
+                            &issue,
+                            &link.relation_type,
+                        )?);
+                    }
+                    continue;
+                }
                 if !seen_work.insert(linked_id.to_string()) {
                     continue;
                 }
@@ -71,15 +84,7 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
                 let bucket = issue_bucket(db, &issue)?;
                 work.get_mut(bucket)
                     .expect("known work bucket")
-                    .push(json!({
-                        "id": issue.id,
-                        "title": issue.title,
-                        "status": issue.status,
-                        "priority": issue.priority,
-                        "issue_type": issue.issue_type,
-                        "relation_type": link.relation_type,
-                        "open_blockers": open_blockers(db, &issue.id)?,
-                    }));
+                    .push(issue_json_with_relation(db, &issue, &link.relation_type)?);
             }
             _ => {}
         }
@@ -94,6 +99,7 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
                 "milestones": milestones,
                 "evidence": evidence,
                 "work": work,
+                "mission_blockers": mission_blockers,
                 "evidence_gaps": if evidence.is_empty() {
                     vec!["No evidence records are linked to this mission.".to_string()]
                 } else {
@@ -126,6 +132,7 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
         work["done"].len(),
         work["backlog"].len()
     );
+    println!("Mission blockers: {}", mission_blockers.len());
     if evidence.is_empty() {
         println!("Evidence gap: no evidence records are linked to this mission.");
     }
@@ -236,6 +243,18 @@ fn record_summary(db: &Database, kind: &str, id: &str) -> Result<Value> {
         "kind": record.kind,
         "title": record.title,
         "status": record.status,
+    }))
+}
+
+fn issue_json_with_relation(db: &Database, issue: &Issue, relation_type: &str) -> Result<Value> {
+    Ok(json!({
+        "id": issue.id,
+        "title": issue.title,
+        "status": issue.status,
+        "priority": issue.priority,
+        "issue_type": issue.issue_type,
+        "relation_type": relation_type,
+        "open_blockers": open_blockers(db, &issue.id)?,
     }))
 }
 

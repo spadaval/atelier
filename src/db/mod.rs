@@ -29,6 +29,7 @@ pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &[
 
 pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "advances",
+    "blocked_by",
     "has_checkpoint",
     "contributes_to",
     "planned_by",

@@ -44,7 +44,8 @@ workflow proof:
 
 ```text
 mission has_checkpoint milestone
-epic advances mission
+mission advances issue
+mission blocked_by issue
 epic contributes_to milestone
 issue part_of epic
 issue contributes_to milestone
@@ -61,6 +62,11 @@ issue blocks issue
 decision blocks epic
 validator failure blocks transition
 ```
+
+Mission work and mission blockers are distinct. `mission advances issue` means
+the issue or epic is part of the mission's execution/progress graph. `mission
+blocked_by issue` means the issue, decision, or validation item is gating the
+mission but is not necessarily ordinary mission scope.
 
 ## Agent Workflow
 

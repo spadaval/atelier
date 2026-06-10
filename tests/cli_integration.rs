@@ -3538,6 +3538,35 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "mission-work link failed: {stderr}");
+    let (success, blocker_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "issue",
+            "create",
+            "Resolve mission blocker",
+            "--issue-type",
+            "decision",
+        ],
+    );
+    assert!(success, "blocker issue create failed: {stderr}");
+    let blocker = json_value(&blocker_out);
+    let blocker_id = blocker["data"]["id"].as_str().unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "link",
+            "add",
+            "mission",
+            mission_id,
+            "issue",
+            blocker_id,
+            "--type",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "mission-blocker link failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed: {stderr}");
@@ -3584,6 +3613,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert_eq!(view["plans"].as_array().unwrap().len(), 1);
     assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+    assert_eq!(view["mission_blockers"].as_array().unwrap().len(), 1);
+    assert_eq!(view["mission_blockers"][0]["id"], blocker_id);
 
     let (success, show_out, stderr) =
         run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
@@ -3592,6 +3623,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert_eq!(show["plans"].as_array().unwrap().len(), 1);
     assert_eq!(show["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(show["work"]["ready"].as_array().unwrap().len(), 1);
+    assert_eq!(show["mission_blockers"].as_array().unwrap().len(), 1);
 }
 
 #[test]
