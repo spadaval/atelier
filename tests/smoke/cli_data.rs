@@ -27,10 +27,10 @@ fn test_export_empty_db_json() {
 fn test_export_json_format() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "First issue", "-p", "high"]);
-    h.run_ok(&["create", "Second issue", "-d", "Has a description"]);
-    h.run_ok(&["label", "1", "bug"]);
-    h.run_ok(&["comment", "1", "A comment on issue 1"]);
+    h.run_ok(&["issue", "create", "First issue", "-p", "high"]);
+    h.run_ok(&["issue", "create", "Second issue", "-d", "Has a description"]);
+    h.run_ok(&["issue", "label", "1", "bug"]);
+    h.run_ok(&["issue", "comment", "1", "A comment on issue 1"]);
 
     let export_path = h.temp_dir.path().join("export.json");
     h.run_ok(&["export", "-o", export_path.to_str().unwrap(), "-f", "json"]);
@@ -63,9 +63,9 @@ fn test_export_json_format() {
 fn test_export_markdown_format() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Open issue", "-p", "high"]);
-    h.run_ok(&["create", "Closed issue"]);
-    h.run_ok(&["close", "2"]);
+    h.run_ok(&["issue", "create", "Open issue", "-p", "high"]);
+    h.run_ok(&["issue", "create", "Closed issue"]);
+    h.run_ok(&["issue", "close", "2"]);
 
     let export_path = h.temp_dir.path().join("export.md");
     h.run_ok(&[
@@ -100,11 +100,11 @@ fn test_export_markdown_format() {
 fn test_canonical_export_check_cli() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Canonical issue"]);
+    h.run_ok(&["issue", "create", "Canonical issue"]);
     h.run_ok(&["export"]);
     h.run_ok(&["export", "--check"]);
 
-    h.run_ok(&["update", "1", "--title", "Changed canonical issue"]);
+    h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
     let result = h.run_err(&["export", "--check"]);
     assert!(
         result.stderr.contains("Canonical export is stale"),
@@ -139,16 +139,22 @@ fn test_import_export_roundtrip() {
 
     // Create 10 issues with labels and comments
     for i in 1..=10 {
-        h.run_ok(&["create", &format!("Roundtrip issue {}", i), "-p", "medium"]);
+        h.run_ok(&[
+            "issue",
+            "create",
+            &format!("Roundtrip issue {}", i),
+            "-p",
+            "medium",
+        ]);
     }
-    h.run_ok(&["label", "1", "bug"]);
-    h.run_ok(&["label", "2", "feature"]);
-    h.run_ok(&["label", "3", "bug"]);
-    h.run_ok(&["comment", "1", "Comment on issue 1"]);
-    h.run_ok(&["comment", "2", "Comment on issue 2"]);
-    h.run_ok(&["comment", "5", "Comment on issue 5"]);
-    h.run_ok(&["close", "4"]);
-    h.run_ok(&["close", "7"]);
+    h.run_ok(&["issue", "label", "1", "bug"]);
+    h.run_ok(&["issue", "label", "2", "feature"]);
+    h.run_ok(&["issue", "label", "3", "bug"]);
+    h.run_ok(&["issue", "comment", "1", "Comment on issue 1"]);
+    h.run_ok(&["issue", "comment", "2", "Comment on issue 2"]);
+    h.run_ok(&["issue", "comment", "5", "Comment on issue 5"]);
+    h.run_ok(&["issue", "close", "4"]);
+    h.run_ok(&["issue", "close", "7"]);
 
     // Export
     let export1_path = h.temp_dir.path().join("export1.json");
@@ -206,8 +212,8 @@ fn test_import_export_roundtrip() {
 fn test_archive_full_lifecycle() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Archive me"]);
-    h.run_ok(&["close", "1"]);
+    h.run_ok(&["issue", "create", "Archive me"]);
+    h.run_ok(&["issue", "close", "1"]);
 
     let result = h.run_ok(&["archive", "add", "1"]);
     assert_stdout_contains(&result, "Archived");
@@ -219,12 +225,12 @@ fn test_archive_full_lifecycle() {
     );
 
     // Should not appear in open or closed lists
-    let open_list = h.run_ok(&["list", "-s", "open"]);
+    let open_list = h.run_ok(&["issue", "list", "-s", "open"]);
     assert!(
         !open_list.stdout.contains("Archive me"),
         "Archived issue should not appear in open list"
     );
-    let closed_list = h.run_ok(&["list", "-s", "closed"]);
+    let closed_list = h.run_ok(&["issue", "list", "-s", "closed"]);
     assert!(
         !closed_list.stdout.contains("Archive me"),
         "Archived issue should not appear in closed list"
@@ -235,7 +241,7 @@ fn test_archive_full_lifecycle() {
     assert_stdout_contains(&unarchive_result, "Unarchived");
 
     // Should now appear in closed list
-    let closed_list = h.run_ok(&["list", "-s", "closed"]);
+    let closed_list = h.run_ok(&["issue", "list", "-s", "closed"]);
     assert!(
         closed_list.stdout.contains("Archive me"),
         "Unarchived issue should appear in closed list"
@@ -247,7 +253,7 @@ fn test_archive_full_lifecycle() {
 fn test_archive_open_issue_fails_smoke() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Open issue"]);
+    h.run_ok(&["issue", "create", "Open issue"]);
 
     let result = h.run_err(&["archive", "add", "1"]);
     assert!(
@@ -266,10 +272,10 @@ fn test_archive_older_batch() {
     let h = SmokeHarness::new();
 
     for i in 1..=5 {
-        h.run_ok(&["create", &format!("Issue {}", i)]);
+        h.run_ok(&["issue", "create", &format!("Issue {}", i)]);
     }
     for i in 1..=5 {
-        h.run_ok(&["close", &i.to_string()]);
+        h.run_ok(&["issue", "close", &i.to_string()]);
     }
 
     let result = h.run_ok(&["archive", "older", "0"]);
@@ -294,7 +300,7 @@ fn test_archive_older_batch() {
 fn test_unarchive_not_archived() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Not archived"]);
+    h.run_ok(&["issue", "create", "Not archived"]);
 
     let result = h.run_err(&["archive", "remove", "1"]);
     assert!(
@@ -312,11 +318,11 @@ fn test_unarchive_not_archived() {
 fn test_next_suggests_highest_priority() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Low prio task", "-p", "low"]);
-    h.run_ok(&["create", "Critical task", "-p", "critical"]);
-    h.run_ok(&["create", "Medium task", "-p", "medium"]);
+    h.run_ok(&["issue", "create", "Low prio task", "-p", "low"]);
+    h.run_ok(&["issue", "create", "Critical task", "-p", "critical"]);
+    h.run_ok(&["issue", "create", "Medium task", "-p", "medium"]);
 
-    let next = h.run_ok(&["next"]);
+    let next = h.run_ok(&["issue", "next"]);
     // The critical task should be suggested first
     assert!(
         next.stdout.contains("Critical task"),
@@ -329,11 +335,11 @@ fn test_next_suggests_highest_priority() {
 fn test_next_skips_blocked() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Blocked task", "-p", "critical"]);
-    h.run_ok(&["create", "Blocker task", "-p", "low"]);
-    h.run_ok(&["block", "1", "2"]);
+    h.run_ok(&["issue", "create", "Blocked task", "-p", "critical"]);
+    h.run_ok(&["issue", "create", "Blocker task", "-p", "low"]);
+    h.run_ok(&["issue", "block", "1", "2"]);
 
-    let next = h.run_ok(&["next"]);
+    let next = h.run_ok(&["issue", "next"]);
     // Should suggest the blocker (which is unblocked) not the blocked task
     assert!(
         !next.stdout.contains("Blocked task") || next.stdout.contains("Blocker task"),

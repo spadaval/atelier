@@ -15,9 +15,9 @@ parent: null
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Delete associated internal code and storage"
-updated_at: "2026-06-10T20:37:17.169064451+00:00"
+updated_at: "2026-06-10T21:39:24.641767824+00:00"
 ---
 
 Remove unreachable command modules, DB helpers, models, runtime files, migrations or tables where safe, and stale docs/tests after command removal.

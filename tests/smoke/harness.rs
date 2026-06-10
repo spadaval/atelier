@@ -63,8 +63,7 @@ impl SmokeHarness {
 
     /// Run an Atelier CLI command and return the full result.
     pub fn run(&self, args: &[&str]) -> CmdResult {
-        let canonical_args = canonicalize_legacy_test_args(args);
-        let translated_args = self.translate_issue_refs_owned(&canonical_args);
+        let translated_args = self.translate_issue_refs_owned(args);
         let output = Command::new(&self.atelier_bin)
             .current_dir(self.temp_dir.path())
             .args(&translated_args)
@@ -127,14 +126,14 @@ impl SmokeHarness {
         )
     }
 
-    fn translate_issue_refs_owned(&self, args: &[String]) -> Vec<String> {
+    fn translate_issue_refs_owned<T: AsRef<str>>(&self, args: &[T]) -> Vec<String> {
         args.iter()
             .enumerate()
             .map(|(index, arg)| {
                 if issue_ref_position(args, index) {
-                    self.translate_issue_ref(arg.as_str())
+                    self.translate_issue_ref(arg.as_ref())
                 } else {
-                    arg.to_string()
+                    arg.as_ref().to_string()
                 }
             })
             .collect()
@@ -196,48 +195,6 @@ impl SmokeHarness {
             ids.push(id);
         }
     }
-}
-
-fn canonicalize_legacy_test_args(args: &[&str]) -> Vec<String> {
-    let offset = command_offset(args);
-    let mut translated = args
-        .iter()
-        .map(|arg| (*arg).to_string())
-        .collect::<Vec<_>>();
-    let Some(command) = args.get(offset) else {
-        return translated;
-    };
-    let issue_commands = [
-        "create",
-        "quick",
-        "subissue",
-        "list",
-        "search",
-        "show",
-        "update",
-        "close",
-        "close-all",
-        "reopen",
-        "delete",
-        "comment",
-        "label",
-        "unlabel",
-        "block",
-        "unblock",
-        "blocked",
-        "ready",
-        "relate",
-        "unrelate",
-        "related",
-        "impact",
-        "next",
-        "tree",
-        "tested",
-    ];
-    if issue_commands.contains(command) {
-        translated.insert(offset, "issue".to_string());
-    }
-    translated
 }
 
 fn is_record_id(value: &str) -> bool {

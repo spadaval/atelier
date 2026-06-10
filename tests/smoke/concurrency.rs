@@ -39,7 +39,7 @@ fn test_concurrent_creates_10() {
     );
 
     // DB should be consistent — listing should work
-    let result = h.run_ok(&["list", "-s", "all"]);
+    let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }
 
@@ -50,7 +50,7 @@ fn test_concurrent_reads() {
 
     // Create some issues first
     for i in 0..5 {
-        h.run_ok(&["create", &format!("Issue {}", i)]);
+        h.run_ok(&["issue", "create", &format!("Issue {}", i)]);
     }
 
     let bin = h.atelier_bin.clone();
@@ -86,7 +86,7 @@ fn test_concurrent_mixed_operations() {
 
     // Seed with some issues
     for i in 0..3 {
-        h.run_ok(&["create", &format!("Seed issue {}", i)]);
+        h.run_ok(&["issue", "create", &format!("Seed issue {}", i)]);
     }
 
     let bin = h.atelier_bin.clone();
@@ -144,6 +144,6 @@ fn test_concurrent_mixed_operations() {
     );
 
     // DB should still be consistent after all operations
-    let result = h.run_ok(&["list", "-s", "all"]);
+    let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }

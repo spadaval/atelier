@@ -14,8 +14,7 @@ fn json_value(stdout: &str) -> serde_json::Value {
 
 /// Helper to run atelier commands in a temp directory
 fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
-    let canonical_args = canonicalize_legacy_test_args(args);
-    let translated_args = translate_issue_refs_owned(dir, &canonical_args);
+    let translated_args = translate_issue_refs_owned(dir, args);
     run_atelier_raw(
         dir,
         &translated_args
@@ -41,48 +40,6 @@ fn run_atelier_raw(dir: &Path, args: &[&str]) -> (bool, String, String) {
     }
 
     (output.status.success(), stdout, stderr)
-}
-
-fn canonicalize_legacy_test_args(args: &[&str]) -> Vec<String> {
-    let offset = command_offset(args);
-    let mut translated = args
-        .iter()
-        .map(|arg| (*arg).to_string())
-        .collect::<Vec<_>>();
-    let Some(command) = args.get(offset) else {
-        return translated;
-    };
-    let issue_commands = [
-        "create",
-        "quick",
-        "subissue",
-        "list",
-        "search",
-        "show",
-        "update",
-        "close",
-        "close-all",
-        "reopen",
-        "delete",
-        "comment",
-        "label",
-        "unlabel",
-        "block",
-        "unblock",
-        "blocked",
-        "ready",
-        "relate",
-        "unrelate",
-        "related",
-        "impact",
-        "next",
-        "tree",
-        "tested",
-    ];
-    if issue_commands.contains(command) {
-        translated.insert(offset, "issue".to_string());
-    }
-    translated
 }
 
 /// Initialize atelier in a temp directory
@@ -205,14 +162,14 @@ fn is_record_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
-fn translate_issue_refs_owned(dir: &Path, args: &[String]) -> Vec<String> {
+fn translate_issue_refs_owned<T: AsRef<str>>(dir: &Path, args: &[T]) -> Vec<String> {
     args.iter()
         .enumerate()
         .map(|(index, arg)| {
             if issue_ref_position(args, index) {
-                translate_issue_ref(dir, arg.as_str())
+                translate_issue_ref(dir, arg.as_ref())
             } else {
-                arg.to_string()
+                arg.as_ref().to_string()
             }
         })
         .collect()
@@ -380,7 +337,7 @@ fn test_create_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["create", "Test issue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "create", "Test issue"]);
 
     assert!(success);
     assert!(
@@ -395,12 +352,15 @@ fn test_create_issue_with_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, _) = run_atelier(dir.path(), &["create", "High priority issue", "-p", "high"]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "create", "High priority issue", "-p", "high"],
+    );
 
     assert!(success);
 
     // Verify it was created with correct priority
-    let (_, list_out, _) = run_atelier(dir.path(), &["list"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(list_out.contains("high"));
 }
 
@@ -412,6 +372,7 @@ fn test_create_issue_with_description() {
     let (success, _, _) = run_atelier(
         dir.path(),
         &[
+            "issue",
             "create",
             "Issue with desc",
             "-d",
@@ -422,7 +383,7 @@ fn test_create_issue_with_description() {
     assert!(success);
 
     // Verify description in show
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Detailed description"));
 }
 
@@ -431,8 +392,8 @@ fn test_create_subissue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent issue"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["subissue", "1", "Child issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
 
     assert!(success);
     assert!(
@@ -442,7 +403,7 @@ fn test_create_subissue() {
     );
 
     // Verify parent-child relationship in show
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Child") || show_out.contains("subissue"));
 }
 
@@ -453,7 +414,7 @@ fn test_list_empty() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
 
     assert!(success);
     assert!(
@@ -468,10 +429,10 @@ fn test_list_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["create", "Issue 2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
 
     assert!(success);
     assert!(stdout.contains("Issue 1"));
@@ -483,15 +444,15 @@ fn test_list_filter_by_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Open issue"]);
-    run_atelier(dir.path(), &["create", "Closed issue"]);
-    run_atelier(dir.path(), &["close", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Open issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
+    run_atelier(dir.path(), &["issue", "close", "2"]);
 
-    let (_, open_list, _) = run_atelier(dir.path(), &["list", "-s", "open"]);
+    let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "open"]);
     assert!(open_list.contains("Open issue"));
     assert!(!open_list.contains("Closed issue"));
 
-    let (_, closed_list, _) = run_atelier(dir.path(), &["list", "-s", "closed"]);
+    let (_, closed_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "closed"]);
     assert!(closed_list.contains("Closed issue"));
     assert!(!closed_list.contains("Open issue"));
 }
@@ -501,12 +462,12 @@ fn test_list_filter_by_label() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Bug issue"]);
-    run_atelier(dir.path(), &["create", "Feature issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
-    run_atelier(dir.path(), &["label", "2", "feature"]);
+    run_atelier(dir.path(), &["issue", "create", "Bug issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Feature issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "label", "2", "feature"]);
 
-    let (_, bug_list, _) = run_atelier(dir.path(), &["list", "-l", "bug"]);
+    let (_, bug_list, _) = run_atelier(dir.path(), &["issue", "list", "-l", "bug"]);
     assert!(bug_list.contains("Bug issue"));
     assert!(!bug_list.contains("Feature issue"));
 }
@@ -518,9 +479,12 @@ fn test_show_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue", "-d", "Description"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Test issue", "-d", "Description"],
+    );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Test issue"));
@@ -532,19 +496,31 @@ fn test_show_issue_rich_human_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent issue", "-p", "high"]);
     run_atelier(
         dir.path(),
-        &["subissue", "1", "Target issue", "-p", "medium"],
+        &["issue", "create", "Parent issue", "-p", "high"],
     );
-    run_atelier(dir.path(), &["subissue", "2", "Child issue", "-p", "low"]);
-    run_atelier(dir.path(), &["create", "Blocking issue", "-p", "high"]);
-    run_atelier(dir.path(), &["create", "Downstream issue", "-p", "low"]);
-    run_atelier(dir.path(), &["block", "2", "4"]);
-    run_atelier(dir.path(), &["block", "5", "2"]);
-    run_atelier(dir.path(), &["comment", "2", "Recent note"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Target issue", "-p", "medium"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "2", "Child issue", "-p", "low"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocking issue", "-p", "high"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Downstream issue", "-p", "low"],
+    );
+    run_atelier(dir.path(), &["issue", "block", "2", "4"]);
+    run_atelier(dir.path(), &["issue", "block", "5", "2"]);
+    run_atelier(dir.path(), &["issue", "comment", "2", "Recent note"]);
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["show", "2"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "2"]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
@@ -570,7 +546,7 @@ fn test_issue_show_json_shape_stays_compatible() {
 
     run_atelier(
         dir.path(),
-        &["create", "JSON issue", "-d", "JSON description"],
+        &["issue", "create", "JSON issue", "-d", "JSON description"],
     );
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "1"]);
@@ -592,8 +568,11 @@ fn test_show_closed_issue_includes_close_reason() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Closed issue"]);
-    run_atelier(dir.path(), &["close", "1", "--reason", "Done enough"]);
+    run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "close", "1", "--reason", "Done enough"],
+    );
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -610,8 +589,8 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Activity issue"]);
-    run_atelier(dir.path(), &["comment", "1", "Legacy note"]);
+    run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "Legacy note"]);
     let issue_id = issue_id_by_title(dir.path(), "Activity issue");
     let activity_dir = dir
         .path()
@@ -627,7 +606,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Canonical activity"));
@@ -641,8 +620,8 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "First issue"]);
-    run_atelier(dir.path(), &["create", "Second issue"]);
+    run_atelier(dir.path(), &["issue", "create", "First issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Second issue"]);
     let first = issue_id_by_title(dir.path(), "First issue");
     let second = issue_id_by_title(dir.path(), "Second issue");
     write_activity_fixture(
@@ -721,7 +700,7 @@ fn test_evidence_issue_link_creates_history_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Evidence issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Evidence issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Evidence issue");
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
@@ -776,7 +755,7 @@ fn test_show_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["show", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", "999"]);
 
     assert!(!success || stderr.contains("not found") || stderr.contains("No issue"));
 }
@@ -816,12 +795,15 @@ fn test_update_issue_title() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Original title"]);
-    let (success, _, _) = run_atelier(dir.path(), &["update", "1", "--title", "Updated title"]);
+    run_atelier(dir.path(), &["issue", "create", "Original title"]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "update", "1", "--title", "Updated title"],
+    );
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Updated title"));
 }
 
@@ -830,10 +812,10 @@ fn test_update_issue_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue", "-p", "low"]);
-    run_atelier(dir.path(), &["update", "1", "-p", "critical"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue", "-p", "low"]);
+    run_atelier(dir.path(), &["issue", "update", "1", "-p", "critical"]);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("critical"));
 }
 
@@ -844,13 +826,13 @@ fn test_close_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "close", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Closed") || stdout.contains("closed"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("closed"));
 }
 
@@ -859,14 +841,14 @@ fn test_reopen_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
-    run_atelier(dir.path(), &["close", "1"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["reopen", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "reopen", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Reopened") || stdout.contains("reopen"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("open"));
 }
 
@@ -897,11 +879,11 @@ fn test_import_beads_jsonl_fixture_round_trip() {
         .join("atelier-0001.md")
         .exists());
 
-    let (_, list_out, _) = run_atelier(dir.path(), &["list", "--status", "all"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(list_out.contains("Mission: Replace Beads"));
     assert!(list_out.contains("Dogfood Atelier"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "3"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "3"]);
     assert!(show_out.contains("Parent: atelier-0001"));
     assert!(show_out.contains("Blocked by"));
     assert!(show_out.contains("atelier-0002 [open]"));
@@ -910,13 +892,19 @@ fn test_import_beads_jsonl_fixture_round_trip() {
 
     let (updated, _, update_err) = run_atelier(
         dir.path(),
-        &["update", "2", "--title", "Imported Beads issue updated"],
+        &[
+            "issue",
+            "update",
+            "2",
+            "--title",
+            "Imported Beads issue updated",
+        ],
     );
     assert!(updated, "update failed: {update_err}");
-    let (closed, _, close_err) = run_atelier(dir.path(), &["close", "2"]);
+    let (closed, _, close_err) = run_atelier(dir.path(), &["issue", "close", "2"]);
     assert!(closed, "close failed: {close_err}");
 
-    let (_, closed_show, _) = run_atelier(dir.path(), &["show", "2"]);
+    let (_, closed_show, _) = run_atelier(dir.path(), &["issue", "show", "2"]);
     assert!(closed_show.contains("Imported Beads issue updated"));
     assert!(closed_show.contains("Status:   closed"));
 
@@ -932,12 +920,12 @@ fn test_delete_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "To delete"]);
-    let (success, _, _) = run_atelier(dir.path(), &["delete", "1", "-f"]);
+    run_atelier(dir.path(), &["issue", "create", "To delete"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "delete", "1", "-f"]);
 
     assert!(success);
 
-    let (_, list_out, _) = run_atelier(dir.path(), &["list"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(!list_out.contains("To delete"));
 }
 
@@ -948,12 +936,12 @@ fn test_add_label() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
-    let (success, _, _) = run_atelier(dir.path(), &["label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("bug"));
 }
 
@@ -962,13 +950,13 @@ fn test_remove_label() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
-    let (success, _, _) = run_atelier(dir.path(), &["unlabel", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "unlabel", "1", "bug"]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(!show_out.contains("bug") || show_out.contains("Labels: none"));
 }
 
@@ -979,12 +967,12 @@ fn test_add_comment() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
-    let (success, _, _) = run_atelier(dir.path(), &["comment", "1", "This is a comment"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "comment", "1", "This is a comment"]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("This is a comment"));
 }
 
@@ -1113,13 +1101,13 @@ fn test_block_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Blocked issue"]);
-    run_atelier(dir.path(), &["create", "Blocker issue"]);
-    let (success, _, _) = run_atelier(dir.path(), &["block", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "block", "1", "2"]);
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["blocked"]);
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
     assert!(blocked_out.contains("Blocked issue"));
 }
 
@@ -1128,14 +1116,14 @@ fn test_unblock_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Blocked issue"]);
-    run_atelier(dir.path(), &["create", "Blocker issue"]);
-    run_atelier(dir.path(), &["block", "1", "2"]);
-    let (success, _, _) = run_atelier(dir.path(), &["unblock", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
+    run_atelier(dir.path(), &["issue", "block", "1", "2"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "unblock", "1", "2"]);
 
     assert!(success);
 
-    let (_, blocked_out, _) = run_atelier(dir.path(), &["blocked"]);
+    let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
     assert!(!blocked_out.contains("Blocked issue"));
 }
 
@@ -1144,12 +1132,12 @@ fn test_ready_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Blocked issue"]);
-    run_atelier(dir.path(), &["create", "Blocker issue"]);
-    run_atelier(dir.path(), &["create", "Ready issue"]);
-    run_atelier(dir.path(), &["block", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Ready issue"]);
+    run_atelier(dir.path(), &["issue", "block", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["ready"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
 
     assert!(success);
     assert!(stdout.contains("Ready issue"));
@@ -1190,7 +1178,7 @@ fn test_session_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Working issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Working issue"]);
     run_atelier(dir.path(), &["session", "start"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["session", "work", "1"]);
 
@@ -1219,11 +1207,11 @@ fn test_search_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Authentication bug"]);
-    run_atelier(dir.path(), &["create", "Dark mode feature"]);
-    run_atelier(dir.path(), &["create", "Auth improvements"]);
+    run_atelier(dir.path(), &["issue", "create", "Authentication bug"]);
+    run_atelier(dir.path(), &["issue", "create", "Dark mode feature"]);
+    run_atelier(dir.path(), &["issue", "create", "Auth improvements"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["search", "auth"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "auth"]);
 
     assert!(success);
     assert!(stdout.contains("Authentication") || stdout.contains("Auth"));
@@ -1237,7 +1225,7 @@ fn test_command_without_init() {
     let dir = tempdir().unwrap();
     // Don't init
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
 
     // The CLI walks up parent directories to find .atelier, so from a temp dir
     // inside the project tree, it may find the project's own .atelier.
@@ -1263,7 +1251,8 @@ fn test_invalid_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["create", "Issue", "-p", "invalid"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Issue", "-p", "invalid"]);
 
     assert!(!success, "Creating issue with invalid priority should fail");
     assert!(
@@ -1281,12 +1270,12 @@ fn test_sql_injection_in_title_cli() {
     init_atelier(dir.path());
 
     let malicious = "'; DROP TABLE issues; --";
-    let (success, _, _) = run_atelier(dir.path(), &["create", malicious]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", malicious]);
 
     assert!(success);
 
     // Verify database is intact
-    let (success2, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success2, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success2);
     assert!(stdout.contains(malicious));
 }
@@ -1297,11 +1286,11 @@ fn test_special_characters_in_fields() {
     init_atelier(dir.path());
 
     let special = "Test <>&\"'\\n\\t issue";
-    let (success, _, _) = run_atelier(dir.path(), &["create", special]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", special]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Test"));
 }
 
@@ -1311,11 +1300,11 @@ fn test_unicode_in_cli() {
     init_atelier(dir.path());
 
     let unicode = "测试问题 🐛 émoji";
-    let (success, _, _) = run_atelier(dir.path(), &["create", unicode]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", unicode]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("测试") || show_out.contains("🐛"));
 }
 
@@ -1327,8 +1316,8 @@ fn test_archive_closed_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to archive"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "add", "1"]);
 
     assert!(success);
@@ -1341,7 +1330,7 @@ fn test_archive_open_issue_fails() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Open issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Open issue"]);
     let (success, stdout, stderr) = run_atelier(dir.path(), &["archive", "add", "1"]);
 
     // Should fail or warn - can't archive open issues
@@ -1360,9 +1349,9 @@ fn test_archive_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to archive"]);
-    run_atelier(dir.path(), &["create", "Open issue"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
+    run_atelier(dir.path(), &["issue", "create", "Open issue"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
     run_atelier(dir.path(), &["archive", "add", "1"]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "list"]);
@@ -1377,8 +1366,8 @@ fn test_unarchive_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to archive"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
     run_atelier(dir.path(), &["archive", "add", "1"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "remove", "1"]);
 
@@ -1391,7 +1380,7 @@ fn test_unarchive_issue() {
     );
 
     // Should now be in closed list, not archived
-    let (_, closed_list, _) = run_atelier(dir.path(), &["list", "-s", "closed"]);
+    let (_, closed_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "closed"]);
     assert!(closed_list.contains("Issue to archive"));
 }
 
@@ -1453,8 +1442,8 @@ fn test_milestone_add_issues() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["milestone", "create", "v1.0"]);
-    run_atelier(dir.path(), &["create", "Feature 1"]);
-    run_atelier(dir.path(), &["create", "Feature 2"]);
+    run_atelier(dir.path(), &["issue", "create", "Feature 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Feature 2"]);
 
     let (success, _, _) = run_atelier(dir.path(), &["milestone", "add", "1", "1", "2"]);
 
@@ -1502,7 +1491,7 @@ fn test_timer_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to time"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["start", "1"]);
 
     assert!(success);
@@ -1515,7 +1504,7 @@ fn test_timer_stop() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to time"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
     run_atelier(dir.path(), &["start", "1"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["stop"]);
 
@@ -1529,7 +1518,7 @@ fn test_timer_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue to time"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
     run_atelier(dir.path(), &["start", "1"]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["timer"]);
@@ -1563,10 +1552,10 @@ fn test_relate_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["create", "Issue 2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
 
-    let (success, _, _) = run_atelier(dir.path(), &["relate", "1", "2"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
 
     assert!(success);
 }
@@ -1576,11 +1565,11 @@ fn test_related_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["create", "Issue 2"]);
-    run_atelier(dir.path(), &["relate", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["related", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "related", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Issue 2") || stdout.contains("#2"));
@@ -1591,14 +1580,14 @@ fn test_unrelate_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["create", "Issue 2"]);
-    run_atelier(dir.path(), &["relate", "1", "2"]);
-    let (success, _, _) = run_atelier(dir.path(), &["unrelate", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "unrelate", "1", "2"]);
 
     assert!(success);
 
-    let (_, related_out, _) = run_atelier(dir.path(), &["related", "1"]);
+    let (_, related_out, _) = run_atelier(dir.path(), &["issue", "related", "1"]);
     assert!(!related_out.contains("Issue 2") || related_out.contains("No related"));
 }
 
@@ -1684,10 +1673,10 @@ fn test_tree_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent issue"]);
-    run_atelier(dir.path(), &["subissue", "1", "Child issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["tree"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree"]);
 
     assert!(success);
     assert!(stdout.contains("Parent issue"));
@@ -1699,11 +1688,11 @@ fn test_tree_with_status_filter() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Open parent"]);
-    run_atelier(dir.path(), &["create", "Closed parent"]);
-    run_atelier(dir.path(), &["close", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Open parent"]);
+    run_atelier(dir.path(), &["issue", "create", "Closed parent"]);
+    run_atelier(dir.path(), &["issue", "close", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["tree", "-s", "open"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree", "-s", "open"]);
 
     assert!(success);
     assert!(stdout.contains("Open parent"));
@@ -1718,14 +1707,20 @@ fn test_next_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Low priority", "-p", "low"]);
-    run_atelier(dir.path(), &["create", "High priority", "-p", "high"]);
     run_atelier(
         dir.path(),
-        &["create", "Critical priority", "-p", "critical"],
+        &["issue", "create", "Low priority", "-p", "low"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "High priority", "-p", "high"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Critical priority", "-p", "critical"],
     );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     // Should suggest critical or high priority issue
@@ -1742,7 +1737,7 @@ fn test_next_no_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     assert!(
@@ -1760,8 +1755,8 @@ fn test_export_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["create", "Issue 2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 2"]);
 
     let export_path = dir.path().join("export.json");
     let (success, _, _) = run_atelier(
@@ -1784,7 +1779,10 @@ fn test_export_markdown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1", "-d", "Description 1"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Issue 1", "-d", "Description 1"],
+    );
 
     let export_path = dir.path().join("export.md");
     let (success, _, _) = run_atelier(
@@ -1816,7 +1814,7 @@ fn test_import_json() {
     init_atelier(dir.path());
 
     // Create issues and export
-    run_atelier(dir.path(), &["create", "Exported Issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Exported Issue"]);
     let export_path = dir.path().join("export.json");
     run_atelier(
         dir.path(),
@@ -1832,7 +1830,7 @@ fn test_import_json() {
     assert!(success);
 
     // Verify imported issue exists
-    let (_, list_out, _) = run_atelier(dir2.path(), &["list", "-s", "all"]);
+    let (_, list_out, _) = run_atelier(dir2.path(), &["issue", "list", "-s", "all"]);
     assert!(list_out.contains("Exported Issue") || list_out.contains("#1"));
 }
 
@@ -1843,7 +1841,7 @@ fn test_tested_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["tested"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tested"]);
 
     assert!(success);
     assert!(
@@ -1860,11 +1858,11 @@ fn test_create_with_template() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, _) = run_atelier(dir.path(), &["create", "Bug report", "-t", "bug"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Bug report", "-t", "bug"]);
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Bug report"));
 }
 
@@ -1876,12 +1874,18 @@ fn test_create_all_priorities() {
     for priority in &["low", "medium", "high", "critical"] {
         let (success, _, _) = run_atelier(
             dir.path(),
-            &["create", &format!("{} issue", priority), "-p", priority],
+            &[
+                "issue",
+                "create",
+                &format!("{} issue", priority),
+                "-p",
+                priority,
+            ],
         );
         assert!(success, "Failed to create {} priority issue", priority);
     }
 
-    let (_, list_out, _) = run_atelier(dir.path(), &["list"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(list_out.contains("low"));
     assert!(list_out.contains("medium"));
     assert!(list_out.contains("high"));
@@ -1893,12 +1897,15 @@ fn test_subissue_with_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent"]);
-    let (success, _, _) = run_atelier(dir.path(), &["subissue", "1", "Child", "-p", "critical"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent"]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Child", "-p", "critical"],
+    );
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "2"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "2"]);
     assert!(show_out.contains("critical"));
 }
 
@@ -1907,15 +1914,15 @@ fn test_subissue_with_description() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent"]);
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["subissue", "1", "Child", "-d", "Child description"],
+        &["issue", "subissue", "1", "Child", "-d", "Child description"],
     );
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "2"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "2"]);
     assert!(show_out.contains("Child description"));
 }
 
@@ -1926,7 +1933,7 @@ fn test_delete_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["delete", "999", "-f"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "delete", "999", "-f"]);
 
     // Should fail or warn about nonexistent issue
     assert!(!success || stderr.contains("not found") || stderr.contains("No issue"));
@@ -1937,15 +1944,15 @@ fn test_delete_with_subissues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Parent"]);
-    run_atelier(dir.path(), &["subissue", "1", "Child"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child"]);
 
-    let (success, _, _) = run_atelier(dir.path(), &["delete", "1", "-f"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "delete", "1", "-f"]);
 
     assert!(success);
 
     // Both parent and child should be gone
-    let (_, list_out, _) = run_atelier(dir.path(), &["list", "-s", "all"]);
+    let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list", "-s", "all"]);
     assert!(!list_out.contains("Parent"));
     assert!(!list_out.contains("Child"));
 }
@@ -2017,11 +2024,17 @@ fn test_next_with_blocked_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Blocked issue", "-p", "critical"]);
-    run_atelier(dir.path(), &["create", "Blocker issue", "-p", "low"]);
-    run_atelier(dir.path(), &["block", "1", "2"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocked issue", "-p", "critical"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocker issue", "-p", "low"],
+    );
+    run_atelier(dir.path(), &["issue", "block", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     // Should suggest the blocker, not the blocked issue
@@ -2041,10 +2054,10 @@ fn test_next_all_closed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue 1"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     assert!(
@@ -2062,8 +2075,8 @@ fn test_archive_older_days() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Old issue"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Old issue"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
     // Try to archive issues older than 0 days (should include our just-closed issue)
     let (success, _, _) = run_atelier(dir.path(), &["archive", "older", "0"]);
@@ -2077,8 +2090,8 @@ fn test_archive_already_archived() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
     run_atelier(dir.path(), &["archive", "add", "1"]);
 
     // Try to archive again
@@ -2102,7 +2115,7 @@ fn test_milestone_remove_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["milestone", "create", "v1.0"]);
-    run_atelier(dir.path(), &["create", "Feature"]);
+    run_atelier(dir.path(), &["issue", "create", "Feature"]);
     run_atelier(dir.path(), &["milestone", "add", "1", "1"]);
 
     let (success, _, _) = run_atelier(dir.path(), &["milestone", "remove", "1", "1"]);
@@ -2148,10 +2161,10 @@ fn test_list_filter_by_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Low issue", "-p", "low"]);
-    run_atelier(dir.path(), &["create", "High issue", "-p", "high"]);
+    run_atelier(dir.path(), &["issue", "create", "Low issue", "-p", "low"]);
+    run_atelier(dir.path(), &["issue", "create", "High issue", "-p", "high"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["list", "-p", "high"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "-p", "high"]);
 
     assert!(success);
     assert!(stdout.contains("High issue"));
@@ -2163,11 +2176,11 @@ fn test_list_all_statuses() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Open issue"]);
-    run_atelier(dir.path(), &["create", "Closed issue"]);
-    run_atelier(dir.path(), &["close", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Open issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
+    run_atelier(dir.path(), &["issue", "close", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["list", "-s", "all"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "-s", "all"]);
 
     assert!(success);
     assert!(stdout.contains("Open issue"));
@@ -2181,12 +2194,15 @@ fn test_update_description() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
-    let (success, _, _) = run_atelier(dir.path(), &["update", "1", "-d", "New description"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "update", "1", "-d", "New description"],
+    );
 
     assert!(success);
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("New description"));
 }
 
@@ -2195,7 +2211,8 @@ fn test_update_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["update", "999", "--title", "New"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "update", "999", "--title", "New"]);
 
     assert!(!success || stderr.contains("not found") || stderr.contains("No issue"));
 }
@@ -2207,11 +2224,11 @@ fn test_show_with_labels() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
-    run_atelier(dir.path(), &["label", "1", "urgent"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "urgent"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("bug"));
@@ -2223,11 +2240,11 @@ fn test_show_with_comments() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
-    run_atelier(dir.path(), &["comment", "1", "First comment"]);
-    run_atelier(dir.path(), &["comment", "1", "Second comment"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "First comment"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "Second comment"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("First comment"));
@@ -2239,11 +2256,11 @@ fn test_show_with_blockers() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Blocked"]);
-    run_atelier(dir.path(), &["create", "Blocker"]);
-    run_atelier(dir.path(), &["block", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocked"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker"]);
+    run_atelier(dir.path(), &["issue", "block", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(
@@ -2260,9 +2277,9 @@ fn test_search_no_results() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["search", "nonexistent"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "nonexistent"]);
 
     assert!(success);
     assert!(
@@ -2279,10 +2296,16 @@ fn test_search_in_description() {
 
     run_atelier(
         dir.path(),
-        &["create", "Generic title", "-d", "specific_keyword_here"],
+        &[
+            "issue",
+            "create",
+            "Generic title",
+            "-d",
+            "specific_keyword_here",
+        ],
     );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["search", "specific_keyword"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "specific_keyword"]);
 
     assert!(success);
     assert!(stdout.contains("Generic title") || stdout.contains("#1"));
@@ -2314,22 +2337,25 @@ fn test_full_issue_lifecycle() {
     init_atelier(dir.path());
 
     // Create
-    run_atelier(dir.path(), &["create", "Lifecycle test", "-p", "high"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Lifecycle test", "-p", "high"],
+    );
 
     // Add labels
-    run_atelier(dir.path(), &["label", "1", "feature"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "feature"]);
 
     // Add comment
-    run_atelier(dir.path(), &["comment", "1", "Working on this"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "Working on this"]);
 
     // Update
-    run_atelier(dir.path(), &["update", "1", "-p", "critical"]);
+    run_atelier(dir.path(), &["issue", "update", "1", "-p", "critical"]);
 
     // Close
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
     // Verify final state
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success);
     assert!(stdout.contains("Lifecycle test"));
     assert!(stdout.contains("critical"));
@@ -2344,23 +2370,23 @@ fn test_dependency_chain() {
     init_atelier(dir.path());
 
     // Create a chain: 1 <- 2 <- 3 (3 blocks 2, 2 blocks 1)
-    run_atelier(dir.path(), &["create", "Final task"]);
-    run_atelier(dir.path(), &["create", "Middle task"]);
-    run_atelier(dir.path(), &["create", "First task"]);
+    run_atelier(dir.path(), &["issue", "create", "Final task"]);
+    run_atelier(dir.path(), &["issue", "create", "Middle task"]);
+    run_atelier(dir.path(), &["issue", "create", "First task"]);
 
-    run_atelier(dir.path(), &["block", "1", "2"]);
-    run_atelier(dir.path(), &["block", "2", "3"]);
+    run_atelier(dir.path(), &["issue", "block", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "block", "2", "3"]);
 
     // Only issue 3 should be ready
-    let (success, stdout, _) = run_atelier(dir.path(), &["ready"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
     assert!(success);
     assert!(stdout.contains("First task") || stdout.contains("#3"));
     assert!(!stdout.contains("Final task"));
     assert!(!stdout.contains("Middle task"));
 
     // Close 3, now 2 should be ready
-    run_atelier(dir.path(), &["close", "3"]);
-    let (_, stdout, _) = run_atelier(dir.path(), &["ready"]);
+    run_atelier(dir.path(), &["issue", "close", "3"]);
+    let (_, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
     assert!(stdout.contains("Middle task") || stdout.contains("#2"));
 }
 
@@ -2373,12 +2399,24 @@ fn test_next_with_multiple_ready_issues() {
     init_atelier(dir.path());
 
     // Create multiple issues with different priorities
-    run_atelier(dir.path(), &["create", "Low prio task", "-p", "low"]);
-    run_atelier(dir.path(), &["create", "Medium prio task", "-p", "medium"]);
-    run_atelier(dir.path(), &["create", "High prio task", "-p", "high"]);
-    run_atelier(dir.path(), &["create", "Critical task", "-p", "critical"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Low prio task", "-p", "low"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Medium prio task", "-p", "medium"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "High prio task", "-p", "high"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Critical task", "-p", "critical"],
+    );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     // Should recommend highest priority first
@@ -2396,6 +2434,7 @@ fn test_next_with_description() {
     run_atelier(
         dir.path(),
         &[
+            "issue",
             "create",
             "Task with description",
             "-p",
@@ -2405,7 +2444,7 @@ fn test_next_with_description() {
         ],
     );
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     assert!(stdout.contains("description") || stdout.contains("Task with description"));
@@ -2418,15 +2457,18 @@ fn test_next_with_subissue_progress() {
     init_atelier(dir.path());
 
     // Create parent with subissues
-    run_atelier(dir.path(), &["create", "Parent task", "-p", "high"]);
-    run_atelier(dir.path(), &["subissue", "1", "Sub 1"]);
-    run_atelier(dir.path(), &["subissue", "1", "Sub 2"]);
-    run_atelier(dir.path(), &["subissue", "1", "Sub 3"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent task", "-p", "high"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sub 1"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sub 2"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sub 3"]);
 
     // Close one subissue to create progress
-    run_atelier(dir.path(), &["close", "2"]);
+    run_atelier(dir.path(), &["issue", "close", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     // Should show progress
@@ -2445,17 +2487,17 @@ fn test_next_only_subissues_ready() {
     init_atelier(dir.path());
 
     // Create parent that is blocked
-    run_atelier(dir.path(), &["create", "Blocker"]);
-    run_atelier(dir.path(), &["create", "Parent"]);
-    run_atelier(dir.path(), &["block", "2", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent"]);
+    run_atelier(dir.path(), &["issue", "block", "2", "1"]);
 
     // Create unblocked subissue under the blocked parent
-    run_atelier(dir.path(), &["subissue", "2", "Subissue"]);
+    run_atelier(dir.path(), &["issue", "subissue", "2", "Subissue"]);
 
     // Close the blocker - now parent has only subissue as ready issue
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["next"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
     assert!(success);
     // Should show something - either parent or subissue
@@ -2476,8 +2518,8 @@ fn test_import_with_parent_relationships() {
     init_atelier(dir.path());
 
     // Create and export issues with parent-child relationship
-    run_atelier(dir.path(), &["create", "Parent issue"]);
-    run_atelier(dir.path(), &["subissue", "1", "Child issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
 
     let export_path = dir.path().join("export.json");
     run_atelier(
@@ -2499,7 +2541,7 @@ fn test_import_with_parent_relationships() {
     assert!(stdout.contains("Imported") || stdout.contains("import"));
 
     // Verify the parent-child relationship was preserved
-    let (_, tree_out, _) = run_atelier(dir2.path(), &["tree"]);
+    let (_, tree_out, _) = run_atelier(dir2.path(), &["issue", "tree"]);
     assert!(tree_out.contains("Parent") && tree_out.contains("Child"));
 }
 
@@ -2511,11 +2553,11 @@ fn test_import_with_labels_and_comments() {
     init_atelier(dir.path());
 
     // Create issue with labels and comments
-    run_atelier(dir.path(), &["create", "Labeled issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
-    run_atelier(dir.path(), &["label", "1", "urgent"]);
-    run_atelier(dir.path(), &["comment", "1", "First comment"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "Labeled issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "urgent"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "First comment"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
     let export_path = dir.path().join("export.json");
     run_atelier(
@@ -2536,7 +2578,7 @@ fn test_import_with_labels_and_comments() {
 
     // Verify labels and status were preserved
     let labeled_id = issue_id_by_title(dir2.path(), "Labeled issue");
-    let (_, show_out, _) = run_atelier(dir2.path(), &["show", &labeled_id]);
+    let (_, show_out, _) = run_atelier(dir2.path(), &["issue", "show", &labeled_id]);
     assert!(show_out.contains("bug") || show_out.contains("Label"));
     assert!(show_out.contains("closed") || show_out.contains("Closed"));
 }
@@ -2574,7 +2616,7 @@ fn test_session_status_with_active_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Active task"]);
+    run_atelier(dir.path(), &["issue", "create", "Active task"]);
     run_atelier(dir.path(), &["session", "start"]);
     run_atelier(dir.path(), &["session", "work", "1"]);
 
@@ -2593,13 +2635,21 @@ fn test_template_with_priority_override() {
     // Bug template defaults to high, override to critical
     let (success, stdout, _) = run_atelier(
         dir.path(),
-        &["create", "Critical bug", "-t", "bug", "-p", "critical"],
+        &[
+            "issue",
+            "create",
+            "Critical bug",
+            "-t",
+            "bug",
+            "-p",
+            "critical",
+        ],
     );
 
     assert!(success);
     assert!(stdout.contains("atelier-"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("critical"));
 }
 
@@ -2612,6 +2662,7 @@ fn test_template_with_user_description() {
     let (success, stdout, _) = run_atelier(
         dir.path(),
         &[
+            "issue",
             "create",
             "Bug with details",
             "-t",
@@ -2624,7 +2675,7 @@ fn test_template_with_user_description() {
     assert!(success);
     assert!(stdout.contains("atelier-"));
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     // Should have both template prefix and user description
     assert!(show_out.contains("User provided details") || show_out.contains("Steps to reproduce"));
 }
@@ -2635,7 +2686,7 @@ fn test_subissue_invalid_parent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["subissue", "999", "Orphan"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "subissue", "999", "Orphan"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999") || stderr.contains("Parent"));
@@ -2647,14 +2698,14 @@ fn test_related_issues_display() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue A"]);
-    run_atelier(dir.path(), &["create", "Issue B"]);
-    run_atelier(dir.path(), &["create", "Issue C"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue A"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue B"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue C"]);
 
-    run_atelier(dir.path(), &["relate", "1", "2"]);
-    run_atelier(dir.path(), &["relate", "1", "3"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "3"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["related", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "related", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Issue B") || stdout.contains("#2"));
@@ -2667,12 +2718,12 @@ fn test_multiple_labels() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Multi-label issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
-    run_atelier(dir.path(), &["label", "1", "urgent"]);
-    run_atelier(dir.path(), &["label", "1", "frontend"]);
+    run_atelier(dir.path(), &["issue", "create", "Multi-label issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "urgent"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "frontend"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("bug"));
@@ -2687,9 +2738,9 @@ fn test_export_markdown_format() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue for markdown"]);
-    run_atelier(dir.path(), &["label", "1", "test"]);
-    run_atelier(dir.path(), &["comment", "1", "Test comment"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue for markdown"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "test"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "Test comment"]);
 
     let export_path = dir.path().join("export.md");
     let (success, _, stderr) = run_atelier(
@@ -2727,8 +2778,8 @@ fn test_archive_older_no_matches() {
     init_atelier(dir.path());
 
     // Create and close an issue (just now, so not old)
-    run_atelier(dir.path(), &["create", "New issue"]);
-    run_atelier(dir.path(), &["close", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "New issue"]);
+    run_atelier(dir.path(), &["issue", "close", "1"]);
 
     // Archive issues older than 30 days - should find none
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "older", "30"]);
@@ -2749,9 +2800,9 @@ fn test_relate_nonexistent_first_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Existing"]);
+    run_atelier(dir.path(), &["issue", "create", "Existing"]);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["relate", "999", "1"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "relate", "999", "1"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2762,9 +2813,9 @@ fn test_relate_nonexistent_second_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Existing"]);
+    run_atelier(dir.path(), &["issue", "create", "Existing"]);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["relate", "1", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "relate", "1", "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2775,12 +2826,12 @@ fn test_relate_already_related() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue A"]);
-    run_atelier(dir.path(), &["create", "Issue B"]);
-    run_atelier(dir.path(), &["relate", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue A"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue B"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
 
     // Try to relate again
-    let (success, stdout, _) = run_atelier(dir.path(), &["relate", "1", "2"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
 
     assert!(success);
     assert!(stdout.contains("already") || stdout.contains("related"));
@@ -2791,11 +2842,11 @@ fn test_unrelate_no_relation() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue A"]);
-    run_atelier(dir.path(), &["create", "Issue B"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue A"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue B"]);
 
     // Try to unrelate issues that aren't related
-    let (success, stdout, _) = run_atelier(dir.path(), &["unrelate", "1", "2"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "unrelate", "1", "2"]);
 
     assert!(success);
     assert!(
@@ -2810,9 +2861,9 @@ fn test_related_no_relations() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Solo issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Solo issue"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["related", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "related", "1"]);
 
     assert!(success);
     assert!(
@@ -2827,7 +2878,7 @@ fn test_related_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["related", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "related", "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2839,7 +2890,7 @@ fn test_label_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["label", "999", "bug"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "label", "999", "bug"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2850,11 +2901,11 @@ fn test_label_already_exists() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
-    run_atelier(dir.path(), &["label", "1", "bug"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
 
     // Try to add same label again
-    let (success, stdout, _) = run_atelier(dir.path(), &["label", "1", "bug"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
 
     assert!(success);
     assert!(stdout.contains("already") || stdout.contains("exists"));
@@ -2865,7 +2916,7 @@ fn test_unlabel_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["unlabel", "999", "bug"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "unlabel", "999", "bug"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2876,9 +2927,9 @@ fn test_unlabel_nonexistent_label() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["unlabel", "1", "nonexistent"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "unlabel", "1", "nonexistent"]);
 
     assert!(success);
     assert!(
@@ -2894,7 +2945,8 @@ fn test_create_invalid_priority() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["create", "Issue", "-p", "invalid"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Issue", "-p", "invalid"]);
 
     assert!(!success);
     assert!(
@@ -2908,7 +2960,8 @@ fn test_create_unknown_template() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["create", "Issue", "-t", "unknown"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Issue", "-t", "unknown"]);
 
     assert!(!success);
     assert!(
@@ -2922,9 +2975,9 @@ fn test_block_self() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["block", "1", "1"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "1"]);
 
     assert!(!success, "Blocking an issue by itself should fail");
     assert!(
@@ -2939,9 +2992,9 @@ fn test_block_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["block", "1", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -2954,10 +3007,10 @@ fn test_session_status_deleted_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "To delete"]);
+    run_atelier(dir.path(), &["issue", "create", "To delete"]);
     run_atelier(dir.path(), &["session", "start"]);
     run_atelier(dir.path(), &["session", "work", "1"]);
-    run_atelier(dir.path(), &["delete", "1", "-f"]);
+    run_atelier(dir.path(), &["issue", "delete", "1", "-f"]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["session", "status"]);
 
@@ -2972,11 +3025,11 @@ fn test_show_with_related_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Main issue"]);
-    run_atelier(dir.path(), &["create", "Related issue"]);
-    run_atelier(dir.path(), &["relate", "1", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Main issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Related issue"]);
+    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Related") || stdout.contains("#2") || stdout.contains("Main issue"));
@@ -3026,20 +3079,20 @@ fn test_stress_very_long_title() {
 
     // Within the 512-char limit: should succeed
     let ok_title = "A".repeat(512);
-    let (success, stdout, _) = run_atelier(dir.path(), &["create", &ok_title]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "create", &ok_title]);
     assert!(success);
     assert!(stdout.contains("atelier-"));
 
     // Verify it can be listed and shown
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success);
 
     // Over the 512-char limit: should fail
     let too_long = "A".repeat(513);
-    let (success, _, _) = run_atelier(dir.path(), &["create", &too_long]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", &too_long]);
     assert!(!success);
 }
 
@@ -3052,11 +3105,14 @@ fn test_stress_very_long_description() {
 
     // Use 5000 chars - safe for Windows command line limits
     let long_desc = "B".repeat(5000);
-    let (success, _, _) = run_atelier(dir.path(), &["create", "Long desc issue", "-d", &long_desc]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Long desc issue", "-d", &long_desc],
+    );
 
     assert!(success);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success);
     // Should contain at least part of the description
     assert!(stdout.contains("BBBB"));
@@ -3071,17 +3127,17 @@ fn test_stress_many_issues() {
     // Create 100 issues
     for i in 0..100 {
         let title = format!("Issue number {}", i);
-        let (success, _, _) = run_atelier(dir.path(), &["create", &title]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "create", &title]);
         assert!(success, "Failed to create issue {}", i);
     }
 
     // Verify list works
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Issue number 99"));
 
     // Verify search works on large DB
-    let (success, stdout, _) = run_atelier(dir.path(), &["search", "number 50"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "number 50"]);
     assert!(success);
     assert!(stdout.contains("50"));
 }
@@ -3093,18 +3149,18 @@ fn test_stress_deep_nesting() {
     init_atelier(dir.path());
 
     // Create root issue
-    run_atelier(dir.path(), &["create", "Level 0"]);
+    run_atelier(dir.path(), &["issue", "create", "Level 0"]);
 
     // Create 20 levels of nesting
     for i in 1..=20 {
         let parent_id = i.to_string();
         let title = format!("Level {}", i);
-        let (success, _, _) = run_atelier(dir.path(), &["subissue", &parent_id, &title]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "subissue", &parent_id, &title]);
         assert!(success, "Failed to create subissue at level {}", i);
     }
 
     // Verify tree command handles deep nesting
-    let (success, stdout, _) = run_atelier(dir.path(), &["tree"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree"]);
     assert!(success);
     assert!(stdout.contains("Level 20"));
 }
@@ -3124,12 +3180,12 @@ fn test_security_sql_injection_title() {
     ];
 
     for title in malicious_titles {
-        let (success, _, _) = run_atelier(dir.path(), &["create", title]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "create", title]);
         assert!(success, "Failed to create issue with title: {}", title);
     }
 
     // Verify all issues exist and DB is intact
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("DROP TABLE")); // Title should be stored literally
 }
@@ -3140,7 +3196,7 @@ fn test_security_sql_injection_search() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Normal issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Normal issue"]);
 
     let malicious_searches = [
         "' OR '1'='1",
@@ -3150,13 +3206,13 @@ fn test_security_sql_injection_search() {
     ];
 
     for query in malicious_searches {
-        let (success, _, _) = run_atelier(dir.path(), &["search", query]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "search", query]);
         // Should not crash, may or may not find results
         assert!(success, "Search crashed with query: {}", query);
     }
 
     // DB should still be intact
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Normal issue"));
 }
@@ -3171,10 +3227,10 @@ fn test_security_null_bytes() {
     // Null bytes are rejected at the OS level (can't pass via command line)
     // This is actually GOOD security behavior - we test that the app
     // handles other special chars correctly instead
-    let (success, _, _) = run_atelier(dir.path(), &["create", "Test with special: \t\r"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Test with special: \t\r"]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -3193,11 +3249,11 @@ fn test_security_control_characters() {
     ];
 
     for input in control_inputs {
-        let (success, _, _) = run_atelier(dir.path(), &["create", input]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "create", input]);
         assert!(success, "Failed with input containing control chars");
     }
 
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -3208,7 +3264,7 @@ fn test_edge_empty_strings() {
     init_atelier(dir.path());
 
     // Empty title - should either fail or succeed (both acceptable, just don't crash)
-    let (success, stdout, _) = run_atelier(dir.path(), &["create", ""]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "create", ""]);
     if success {
         // If it accepted empty title, verify the issue was created
         assert!(
@@ -3219,11 +3275,11 @@ fn test_edge_empty_strings() {
     }
 
     // Empty comment
-    run_atelier(dir.path(), &["create", "Issue"]);
-    let (_, _, _) = run_atelier(dir.path(), &["comment", "1", ""]);
+    run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    let (_, _, _) = run_atelier(dir.path(), &["issue", "comment", "1", ""]);
 
     // Empty label
-    let (_, _, _) = run_atelier(dir.path(), &["label", "1", ""]);
+    let (_, _, _) = run_atelier(dir.path(), &["issue", "label", "1", ""]);
 }
 
 /// Test integer overflow in IDs
@@ -3232,10 +3288,10 @@ fn test_edge_large_ids() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "Test"]);
+    run_atelier(dir.path(), &["issue", "create", "Test"]);
 
     // Very large IDs - should fail with "not found" since issue doesn't exist
-    let (success, _, stderr) = run_atelier(dir.path(), &["show", "9223372036854775807"]); // i64::MAX
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", "9223372036854775807"]); // i64::MAX
     assert!(!success, "Show with non-existent large ID should fail");
     assert!(
         stderr.contains("not found"),
@@ -3244,11 +3300,11 @@ fn test_edge_large_ids() {
     );
 
     // Overflow ID - should fail with parse error or not found
-    let (success, _, _) = run_atelier(dir.path(), &["show", "99999999999999999999999"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "show", "99999999999999999999999"]);
     assert!(!success, "Show with overflow ID should fail");
 
     // Negative IDs - clap may reject or db returns not found
-    let (success, _, _) = run_atelier(dir.path(), &["show", "-1"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "show", "-1"]);
     assert!(!success, "Show with negative ID should fail");
 }
 
@@ -3261,16 +3317,16 @@ fn test_stress_rapid_operations() {
     // Rapid create/close/reopen cycle
     for i in 0..20 {
         let title = format!("Rapid issue {}", i);
-        run_atelier(dir.path(), &["create", &title]);
+        run_atelier(dir.path(), &["issue", "create", &title]);
         let id = (i + 1).to_string();
-        run_atelier(dir.path(), &["close", &id]);
-        run_atelier(dir.path(), &["reopen", &id]);
-        run_atelier(dir.path(), &["comment", &id, "Rapid comment"]);
-        run_atelier(dir.path(), &["label", &id, "rapid"]);
+        run_atelier(dir.path(), &["issue", "close", &id]);
+        run_atelier(dir.path(), &["issue", "reopen", &id]);
+        run_atelier(dir.path(), &["issue", "comment", &id, "Rapid comment"]);
+        run_atelier(dir.path(), &["issue", "label", &id, "rapid"]);
     }
 
     // Verify all operations completed
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Rapid issue 19"));
 }
@@ -3285,11 +3341,19 @@ fn test_integrity_export_import_roundtrip() {
     // Create complex data
     run_atelier(
         dir.path(),
-        &["create", "Parent", "-p", "high", "-d", "Parent desc"],
+        &[
+            "issue",
+            "create",
+            "Parent",
+            "-p",
+            "high",
+            "-d",
+            "Parent desc",
+        ],
     );
-    run_atelier(dir.path(), &["subissue", "1", "Child"]);
-    run_atelier(dir.path(), &["label", "1", "important"]);
-    run_atelier(dir.path(), &["comment", "1", "Test comment"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child"]);
+    run_atelier(dir.path(), &["issue", "label", "1", "important"]);
+    run_atelier(dir.path(), &["issue", "comment", "1", "Test comment"]);
 
     // Export
     let export_path = dir.path().join("backup.json");
@@ -3312,12 +3376,12 @@ fn test_integrity_export_import_roundtrip() {
 
     // Verify data integrity - title and structure preserved
     let parent_id = issue_id_by_title(dir2.path(), "Parent");
-    let (success, stdout, _) = run_atelier(dir2.path(), &["show", &parent_id]);
+    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "show", &parent_id]);
     assert!(success);
     assert!(stdout.contains("Parent"));
 
     // Verify child was imported
-    let (success, stdout, _) = run_atelier(dir2.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("Child") || stdout.contains("#2"));
 }
@@ -4173,12 +4237,16 @@ fn test_unicode_arrows_in_title() {
     // The exact issue that caused the original panic
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["create", "Add keyboard shortcuts for swiping (← →)"],
+        &[
+            "issue",
+            "create",
+            "Add keyboard shortcuts for swiping (← →)",
+        ],
     );
     assert!(success);
 
     // List should not panic
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("←") || stdout.contains("...")); // Either shows or truncates
 }
@@ -4203,12 +4271,12 @@ fn test_unicode_variety_in_titles() {
     ];
 
     for (i, title) in unicode_titles.iter().enumerate() {
-        let (success, _, _) = run_atelier(dir.path(), &["create", title]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "create", title]);
         assert!(success, "Failed to create issue with title: {}", title);
 
         // Verify it can be shown without panic
         let id = (i + 1).to_string();
-        let (success, _, _) = run_atelier(dir.path(), &["show", &id]);
+        let (success, _, _) = run_atelier(dir.path(), &["issue", "show", &id]);
         assert!(
             success,
             "Failed to show issue #{} with title: {}",
@@ -4218,7 +4286,7 @@ fn test_unicode_variety_in_titles() {
     }
 
     // List all - tests truncation on long Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -4232,6 +4300,7 @@ fn test_unicode_in_descriptions_and_comments() {
     let (success, _, _) = run_atelier(
         dir.path(),
         &[
+            "issue",
             "create",
             "Unicode test",
             "-d",
@@ -4243,12 +4312,12 @@ fn test_unicode_in_descriptions_and_comments() {
     // Add Unicode comment
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["comment", "1", "Comment: ← back, → forward, ↑ up"],
+        &["issue", "comment", "1", "Comment: ← back, → forward, ↑ up"],
     );
     assert!(success);
 
     // Show should display without panic
-    let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success);
     assert!(
         stdout.contains("日本語"),
@@ -4263,20 +4332,20 @@ fn test_unicode_search() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "日本語のテスト"]);
-    run_atelier(dir.path(), &["create", "Test with arrows ← →"]);
-    run_atelier(dir.path(), &["create", "Emoji test 🎉"]);
+    run_atelier(dir.path(), &["issue", "create", "日本語のテスト"]);
+    run_atelier(dir.path(), &["issue", "create", "Test with arrows ← →"]);
+    run_atelier(dir.path(), &["issue", "create", "Emoji test 🎉"]);
 
     // Search for Japanese
-    let (success, _, _) = run_atelier(dir.path(), &["search", "日本"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "日本"]);
     assert!(success);
 
     // Search for emoji
-    let (success, _, _) = run_atelier(dir.path(), &["search", "🎉"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "🎉"]);
     assert!(success);
 
     // Search for arrow
-    let (success, _, _) = run_atelier(dir.path(), &["search", "←"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "←"]);
     assert!(success);
 }
 
@@ -4289,20 +4358,23 @@ fn test_unicode_long_string_truncation() {
     // Create title that's definitely longer than truncation limit
     // Using 3-byte UTF-8 chars (←) to maximize byte/char mismatch
     let long_arrows = "←".repeat(60);
-    let (success, _, _) = run_atelier(dir.path(), &["create", &format!("Long: {}", long_arrows)]);
+    let (success, _, _) = run_atelier(
+        dir.path(),
+        &["issue", "create", &format!("Long: {}", long_arrows)],
+    );
     assert!(success);
 
     // List must not panic on truncation
-    let (success, stdout, _) = run_atelier(dir.path(), &["list"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
     assert!(stdout.contains("...") || stdout.contains("Long:"));
 
     // Create title with mixed byte-length chars
     let mixed = "a←b→c↑d↓e🎉f".repeat(10);
-    let (success, _, _) = run_atelier(dir.path(), &["create", &mixed]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", &mixed]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }
 
@@ -4312,16 +4384,16 @@ fn test_unicode_in_dependencies() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["create", "ブロッカー (blocker) ←"]);
-    run_atelier(dir.path(), &["create", "待機中 (waiting) →"]);
-    run_atelier(dir.path(), &["block", "2", "1"]);
+    run_atelier(dir.path(), &["issue", "create", "ブロッカー (blocker) ←"]);
+    run_atelier(dir.path(), &["issue", "create", "待機中 (waiting) →"]);
+    run_atelier(dir.path(), &["issue", "block", "2", "1"]);
 
     // Blocked list with Unicode
-    let (success, _, _) = run_atelier(dir.path(), &["blocked"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "blocked"]);
     assert!(success);
 
     // Ready list
-    let (success, _, _) = run_atelier(dir.path(), &["ready"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "ready"]);
     assert!(success);
 }
 
@@ -4335,8 +4407,11 @@ fn test_unicode_export_import_roundtrip() {
     let unicode_title = "Test: 日本語 ← → 🎉";
     let unicode_desc = "Description: 中文 العربية Русский";
 
-    run_atelier(dir.path(), &["create", unicode_title, "-d", unicode_desc]);
-    run_atelier(dir.path(), &["comment", "1", "コメント (comment)"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", unicode_title, "-d", unicode_desc],
+    );
+    run_atelier(dir.path(), &["issue", "comment", "1", "コメント (comment)"]);
 
     // Export
     let export_path = dir.path().join("unicode_backup.json");
@@ -4362,7 +4437,7 @@ fn test_unicode_export_import_roundtrip() {
 
     // Verify Unicode preserved
     let unicode_id = issue_id_by_title(dir2.path(), unicode_title);
-    let (success, stdout, _) = run_atelier(dir2.path(), &["show", &unicode_id]);
+    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "show", &unicode_id]);
     assert!(success);
     assert!(
         stdout.contains("日本語") || stdout.contains("Test:"),
@@ -4379,22 +4454,26 @@ fn test_unicode_special_characters() {
     // Zero-width characters (shouldn't break anything)
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["create", "Test\u{200B}with\u{200B}zero\u{200B}width"],
+        &[
+            "issue",
+            "create",
+            "Test\u{200B}with\u{200B}zero\u{200B}width",
+        ],
     );
     assert!(success);
 
     // RTL override characters
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["create", "Test \u{202E}desrever\u{202C} normal"],
+        &["issue", "create", "Test \u{202E}desrever\u{202C} normal"],
     );
     assert!(success);
 
     // Combining characters (accent marks)
-    let (success, _, _) = run_atelier(dir.path(), &["create", "Café résumé naïve"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Café résumé naïve"]);
     assert!(success);
 
     // All should list without panic
-    let (success, _, _) = run_atelier(dir.path(), &["list"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 }

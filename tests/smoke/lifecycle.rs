@@ -9,7 +9,7 @@ use super::harness::SmokeHarness;
 fn test_timer_roundtrip() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Timer roundtrip issue"]);
+    h.run_ok(&["issue", "create", "Timer roundtrip issue"]);
 
     // Start the timer (top-level `start` command).
     let start = h.run_ok(&["start", "1"]);
@@ -64,7 +64,7 @@ fn test_timer_roundtrip() {
 #[ignore = "legacy command surface removed"]
 fn test_timer_start_already_running() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Double-start issue"]);
+    h.run_ok(&["issue", "create", "Double-start issue"]);
 
     h.run_ok(&["start", "1"]);
 
@@ -109,7 +109,7 @@ fn test_timer_stop_not_running() {
 fn test_session_full_lifecycle() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Session lifecycle issue"]);
+    h.run_ok(&["issue", "create", "Session lifecycle issue"]);
 
     // Start session.
     let start = h.run_ok(&["session", "start"]);
@@ -210,10 +210,10 @@ fn test_session_end_without_start() {
 fn test_issue_tree_with_subissues() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Parent lifecycle issue"]);
-    h.run_ok(&["subissue", "1", "Child lifecycle issue"]);
+    h.run_ok(&["issue", "create", "Parent lifecycle issue"]);
+    h.run_ok(&["issue", "subissue", "1", "Child lifecycle issue"]);
 
-    let tree = h.run_ok(&["tree"]);
+    let tree = h.run_ok(&["issue", "tree"]);
     assert!(tree.stdout.contains("Parent lifecycle issue"));
     assert!(tree.stdout.contains("Child lifecycle issue"));
 }
@@ -222,11 +222,11 @@ fn test_issue_tree_with_subissues() {
 fn test_issue_tree_deep_nesting() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Root issue"]);
-    h.run_ok(&["subissue", "1", "Child issue"]);
-    h.run_ok(&["subissue", "2", "Grandchild issue"]);
+    h.run_ok(&["issue", "create", "Root issue"]);
+    h.run_ok(&["issue", "subissue", "1", "Child issue"]);
+    h.run_ok(&["issue", "subissue", "2", "Grandchild issue"]);
 
-    let tree = h.run_ok(&["tree"]);
+    let tree = h.run_ok(&["issue", "tree"]);
     assert!(tree.stdout.contains("Root issue"));
     assert!(tree.stdout.contains("Child issue"));
     assert!(tree.stdout.contains("Grandchild issue"));
@@ -236,12 +236,12 @@ fn test_issue_tree_deep_nesting() {
 fn test_issue_tree_status_filter() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Filterable parent"]);
-    h.run_ok(&["subissue", "1", "Open child"]);
-    h.run_ok(&["subissue", "1", "Closed child"]);
-    h.run_ok(&["close", "3"]);
+    h.run_ok(&["issue", "create", "Filterable parent"]);
+    h.run_ok(&["issue", "subissue", "1", "Open child"]);
+    h.run_ok(&["issue", "subissue", "1", "Closed child"]);
+    h.run_ok(&["issue", "close", "3"]);
 
-    let tree = h.run_ok(&["tree", "-s", "open"]);
+    let tree = h.run_ok(&["issue", "tree", "-s", "open"]);
     assert!(tree.stdout.contains("Open child"));
     assert!(
         !tree.stdout_contains("Closed child"),
@@ -258,29 +258,29 @@ fn test_issue_tree_status_filter() {
 fn test_dependency_chain_and_ready() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Issue A"]);
-    h.run_ok(&["create", "Issue B"]);
-    h.run_ok(&["create", "Issue C"]);
+    h.run_ok(&["issue", "create", "Issue A"]);
+    h.run_ok(&["issue", "create", "Issue B"]);
+    h.run_ok(&["issue", "create", "Issue C"]);
 
     // A blocked by B, B blocked by C
-    h.run_ok(&["block", "1", "2"]);
-    h.run_ok(&["block", "2", "3"]);
+    h.run_ok(&["issue", "block", "1", "2"]);
+    h.run_ok(&["issue", "block", "2", "3"]);
 
     // Only C should be ready
-    let ready = h.run_ok(&["ready"]);
+    let ready = h.run_ok(&["issue", "ready"]);
     assert!(ready.stdout.contains("Issue C"));
     assert!(!ready.stdout.contains("Issue A"));
     assert!(!ready.stdout.contains("Issue B"));
 
     // Close C, then B should become ready
-    h.run_ok(&["close", "3"]);
-    let ready2 = h.run_ok(&["ready"]);
+    h.run_ok(&["issue", "close", "3"]);
+    let ready2 = h.run_ok(&["issue", "ready"]);
     assert!(ready2.stdout.contains("Issue B"));
     assert!(!ready2.stdout.contains("Issue A"));
 
     // Close B, then A should become ready
-    h.run_ok(&["close", "2"]);
-    let ready3 = h.run_ok(&["ready"]);
+    h.run_ok(&["issue", "close", "2"]);
+    let ready3 = h.run_ok(&["issue", "ready"]);
     assert!(ready3.stdout.contains("Issue A"));
 }
 
@@ -288,15 +288,15 @@ fn test_dependency_chain_and_ready() {
 fn test_circular_dependency_prevented() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["create", "Issue 1"]);
-    h.run_ok(&["create", "Issue 2"]);
-    h.run_ok(&["create", "Issue 3"]);
+    h.run_ok(&["issue", "create", "Issue 1"]);
+    h.run_ok(&["issue", "create", "Issue 2"]);
+    h.run_ok(&["issue", "create", "Issue 3"]);
 
-    h.run_ok(&["block", "1", "2"]);
-    h.run_ok(&["block", "2", "3"]);
+    h.run_ok(&["issue", "block", "1", "2"]);
+    h.run_ok(&["issue", "block", "2", "3"]);
 
     // Attempting to create cycle 3 -> 1 should fail
-    let result = h.run(&["block", "3", "1"]);
+    let result = h.run(&["issue", "block", "3", "1"]);
     assert!(
         !result.success || result.stderr.contains("circular"),
         "Circular dependency should be rejected.\nstdout: {}\nstderr: {}",
@@ -319,8 +319,8 @@ fn test_milestone_full_lifecycle() {
     assert!(create.stdout.contains("Created milestone"));
 
     // Add issues
-    h.run_ok(&["create", "Feature 1"]);
-    h.run_ok(&["create", "Feature 2"]);
+    h.run_ok(&["issue", "create", "Feature 1"]);
+    h.run_ok(&["issue", "create", "Feature 2"]);
     h.run_ok(&["milestone", "add", "1", "1"]);
     h.run_ok(&["milestone", "add", "1", "2"]);
 
@@ -331,8 +331,8 @@ fn test_milestone_full_lifecycle() {
     assert!(show.stdout.contains("Feature 2"));
 
     // Close issues and milestone
-    h.run_ok(&["close", "1"]);
-    h.run_ok(&["close", "2"]);
+    h.run_ok(&["issue", "close", "1"]);
+    h.run_ok(&["issue", "close", "2"]);
     h.run_ok(&["milestone", "close", "1"]);
 
     let show_closed = h.run_ok(&["milestone", "show", "1"]);

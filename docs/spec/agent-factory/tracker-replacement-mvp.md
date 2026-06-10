@@ -171,9 +171,9 @@ used by workers and orchestrators:
 | `bd update <id> --title ... --description ... --priority ...` | `atelier issue update <id> --title ... --description ... --priority ...` |
 | `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |
 | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` |
-| `bd ready` | `atelier issue ready` or flat alias `atelier ready` |
-| `bd list --status=open` | `atelier issue list --status open` or flat alias `atelier list --status open` |
-| `bd search "<topic>"` | `atelier issue search "<topic>"` or flat alias `atelier search "<topic>"` |
+| `bd ready` | `atelier issue ready` |
+| `bd list --status=open` | `atelier issue list --status open` |
+| `bd search "<topic>"` | `atelier issue search "<topic>"` |
 | `bd create ...` | `atelier issue create ...` |
 | `bd dep add <blocked> <blocker>` | `atelier dep add <blocked> <blocker>` |
 | `bd dep remove <blocked> <blocker>` | `atelier dep remove <blocked> <blocker>` |

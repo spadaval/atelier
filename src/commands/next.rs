@@ -41,7 +41,7 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
     if ready.is_empty() {
         println!("No issues ready to work on.");
         println!(
-            "Use 'atelier list' to see all issues or 'atelier blocked' to see blocked issues."
+            "Use 'atelier issue list' to see all issues or 'atelier issue blocked' to see blocked issues."
         );
         return Ok(());
     }

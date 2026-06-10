@@ -201,8 +201,8 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  atelier session start     # Start a session");
-    println!("  atelier create \"Task\"     # Create an issue");
+    println!("  atelier issue create \"Task\"     # Create an issue");
+    println!("  atelier work start <issue-id>    # Start tracked work");
 
     Ok(())
 }

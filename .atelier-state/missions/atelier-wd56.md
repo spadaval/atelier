@@ -20,9 +20,9 @@ links:
   type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Simplify Atelier command surface and delete legacy command code"
-updated_at: "2026-06-10T20:37:05.079899571+00:00"
+updated_at: "2026-06-10T21:39:24.666159172+00:00"
 ---
 
 Simplify Atelier's CLI by deleting old compatibility commands, inherited utility surfaces, and the code that only exists to support them. The end state is a smaller command surface centered on documented core workflows, with hard removal of non-core compatibility paths instead of warning shims.

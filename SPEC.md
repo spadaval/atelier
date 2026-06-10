@@ -405,9 +405,9 @@ Representative commands:
 
 ```text
 atelier init
-atelier next
-atelier ready
-atelier show atelier-z1p8
+atelier issue next
+atelier issue ready
+atelier issue show atelier-z1p8
 atelier issue create
 atelier mission create
 atelier milestone create
