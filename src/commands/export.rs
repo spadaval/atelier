@@ -602,7 +602,6 @@ fn write_issue_md(md: &mut String, db: &Database, issue: &Issue) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -930,25 +929,14 @@ mod tests {
         );
     }
 
-    proptest! {
-        #[test]
-        fn prop_export_never_panics(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, dir) = setup_test_db();
-            db.create_issue(&title, None, "medium").unwrap();
-            let output_path = dir.path().join("export.json");
-            let result = run_json(&db, Some(output_path.to_str().unwrap()));
-            prop_assert!(result.is_ok());
-        }
-
-        #[test]
-        fn prop_json_is_valid(title in "[a-zA-Z0-9 ]{1,30}") {
-            let (db, dir) = setup_test_db();
-            db.create_issue(&title, None, "medium").unwrap();
-            let output_path = dir.path().join("export.json");
-            run_json(&db, Some(output_path.to_str().unwrap())).unwrap();
-            let content = fs::read_to_string(&output_path).unwrap();
-            let result: Result<ExportData, _> = serde_json::from_str(&content);
-            prop_assert!(result.is_ok());
-        }
+    #[test]
+    fn test_export_json_file_is_valid() {
+        let (db, dir) = setup_test_db();
+        db.create_issue("Exported issue", None, "medium").unwrap();
+        let output_path = dir.path().join("export.json");
+        run_json(&db, Some(output_path.to_str().unwrap())).unwrap();
+        let content = fs::read_to_string(&output_path).unwrap();
+        let result: Result<ExportData, _> = serde_json::from_str(&content);
+        assert!(result.is_ok());
     }
 }

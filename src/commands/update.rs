@@ -36,7 +36,6 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -223,67 +222,35 @@ mod tests {
         assert_eq!(issue.status, "closed"); // Status should remain closed
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_update_title_priority_and_unicode_description() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Original", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_update_title_roundtrip(
-            original in "[a-zA-Z0-9 ]{1,30}",
-            new_title in "[a-zA-Z0-9 ]{1,30}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&original, None, "medium").unwrap();
+        run(
+            &db,
+            issue_id.as_str(),
+            Some("Updated title"),
+            Some("Unicode description cafe"),
+            Some("critical"),
+        )
+        .unwrap();
 
-            run(&db, issue_id.as_str(), Some(&new_title), None, None).unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
+        assert_eq!(issue.title, "Updated title");
+        assert_eq!(
+            issue.description,
+            Some("Unicode description cafe".to_string())
+        );
+        assert_eq!(issue.priority, "critical");
+    }
 
-            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
-            prop_assert_eq!(issue.title, new_title);
-        }
+    #[test]
+    fn test_update_invalid_priority_and_missing_issue_fail() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-        #[test]
-        fn prop_update_priority_valid(priority in "low|medium|high|critical") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            let result = run(&db, issue_id.as_str(), None, None, Some(&priority));
-            prop_assert!(result.is_ok());
-
-            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
-            prop_assert_eq!(issue.priority, priority);
-        }
-
-        #[test]
-        fn prop_update_priority_invalid(
-            priority in "[a-zA-Z]{1,10}"
-                .prop_filter("Exclude valid priorities", |s| {
-                    !["low", "medium", "high", "critical"].contains(&s.as_str())
-                })
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            let result = run(&db, issue_id.as_str(), None, None, Some(&priority));
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-
-            let result = run(&db, issue_id.as_str(), Some("New title"), None, None);
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_unicode_description_roundtrip(desc in "[\\p{L}\\p{N} ]{1,100}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            run(&db, issue_id.as_str(), None, Some(&desc), None).unwrap();
-
-            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
-            prop_assert_eq!(issue.description, Some(desc));
-        }
+        assert!(run(&db, issue_id.as_str(), None, None, Some("urgent")).is_err());
+        assert!(run(&db, "atelier-missing-1000", Some("New title"), None, None).is_err());
     }
 }

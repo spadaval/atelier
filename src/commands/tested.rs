@@ -17,7 +17,6 @@ pub fn run(atelier_dir: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     #[test]
@@ -114,15 +113,12 @@ mod tests {
         assert!(marker_path.exists());
     }
 
-    proptest! {
-        #[test]
-        fn prop_run_never_panics_with_valid_dir(subdir in "[a-z]{1,10}") {
-            let dir = tempdir().unwrap();
-            let atelier_dir = dir.path().join(&subdir);
-            std::fs::create_dir_all(&atelier_dir).unwrap();
+    #[test]
+    fn test_run_with_valid_subdir() {
+        let dir = tempdir().unwrap();
+        let atelier_dir = dir.path().join("subdir");
+        std::fs::create_dir_all(&atelier_dir).unwrap();
 
-            let result = run(&atelier_dir);
-            prop_assert!(result.is_ok());
-        }
+        assert!(run(&atelier_dir).is_ok());
     }
 }

@@ -49,7 +49,6 @@ pub fn reopen(db: &Database, id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -158,47 +157,24 @@ mod tests {
         assert_eq!(issue.status, "closed");
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_close_reopen_and_missing_issue_status_paths() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Status issue", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_close_sets_status_to_closed(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            close(&db, issue_id.as_str()).unwrap();
+        close(&db, issue_id.as_str()).unwrap();
+        assert_eq!(
+            db.get_issue(issue_id.as_str()).unwrap().unwrap().status,
+            "closed"
+        );
 
-            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
-            prop_assert_eq!(issue.status, "closed");
-        }
+        reopen(&db, issue_id.as_str()).unwrap();
+        assert_eq!(
+            db.get_issue(issue_id.as_str()).unwrap().unwrap().status,
+            "open"
+        );
 
-        #[test]
-        fn prop_reopen_sets_status_to_open(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            db.close_issue(issue_id.as_str()).unwrap();
-
-            reopen(&db, issue_id.as_str()).unwrap();
-
-            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
-            prop_assert_eq!(issue.status, "open");
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_close_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-            let result = close(&db, issue_id.as_str());
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_reopen_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-
-            let result = reopen(&db, issue_id.as_str());
-            prop_assert!(result.is_err());
-        }
+        assert!(close(&db, "atelier-missing-1000").is_err());
+        assert!(reopen(&db, "atelier-missing-1000").is_err());
     }
 }

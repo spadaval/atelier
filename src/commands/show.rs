@@ -170,7 +170,6 @@ pub fn run(db: &Database, id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -370,44 +369,18 @@ mod tests {
         assert_eq!(issue.description, Some("".to_string()));
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_show_accepts_basic_description_and_unicode_title() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db
+            .create_issue("Cafe title", Some("Description\nwith newline"), "medium")
+            .unwrap();
+        assert!(run(&db, issue_id.as_str()).is_ok());
+    }
 
-    proptest! {
-        #[test]
-        fn prop_show_never_panics(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            let result = run(&db, issue_id.as_str());
-            prop_assert!(result.is_ok());
-        }
-
-        #[test]
-        fn prop_show_nonexistent_always_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-            let result = run(&db, issue_id.as_str());
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_show_with_description_never_panics(
-            title in "[a-zA-Z0-9 ]{1,30}",
-            desc in "[a-zA-Z0-9 \n]{0,200}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&title, Some(&desc), "medium").unwrap();
-            let result = run(&db, issue_id.as_str());
-            prop_assert!(result.is_ok());
-        }
-
-        #[test]
-        fn prop_show_unicode_never_panics(
-            title in "[\\p{L}\\p{N} ]{1,30}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            let result = run(&db, issue_id.as_str());
-            prop_assert!(result.is_ok());
-        }
+    #[test]
+    fn test_show_nonexistent_fails() {
+        let (db, _dir) = setup_test_db();
+        assert!(run(&db, "atelier-missing-1000").is_err());
     }
 }

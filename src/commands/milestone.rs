@@ -153,7 +153,6 @@ pub fn delete(db: &Database, id: i64) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -281,25 +280,15 @@ mod tests {
         assert_eq!(closed_count, 1, "1 of 2 issues should be closed");
     }
 
-    proptest! {
-        #[test]
-        fn prop_create_milestone_persists(name in "[a-zA-Z0-9 ]{1,30}") {
-            let (db, _dir) = setup_test_db();
-            create(&db, &name, None).unwrap();
-            let milestones = db.list_milestones(None).unwrap();
-            prop_assert_eq!(milestones.len(), 1);
-            prop_assert_eq!(&milestones[0].name, &name);
-        }
+    #[test]
+    fn test_create_and_list_milestones() {
+        let (db, _dir) = setup_test_db();
+        create(&db, "v1.0", None).unwrap();
+        db.create_milestone("v2.0", None).unwrap();
+        list(&db, None).unwrap();
 
-        #[test]
-        fn prop_list_returns_correct_count(count in 0usize..5) {
-            let (db, _dir) = setup_test_db();
-            for i in 0..count {
-                db.create_milestone(&format!("v{}.0", i), None).unwrap();
-            }
-            list(&db, None).unwrap();
-            let milestones = db.list_milestones(None).unwrap();
-            prop_assert_eq!(milestones.len(), count);
-        }
+        let milestones = db.list_milestones(None).unwrap();
+        assert_eq!(milestones.len(), 2);
+        assert!(milestones.iter().any(|milestone| milestone.name == "v1.0"));
     }
 }

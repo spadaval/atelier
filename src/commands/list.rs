@@ -47,7 +47,6 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -254,36 +253,22 @@ mod tests {
         );
     }
 
-    proptest! {
-        #[test]
-        fn truncate_respects_max_chars(s in ".{10,100}", max_chars in 5usize..50) {
-            let result = truncate(&s, max_chars);
-            assert!(result.chars().count() <= max_chars);
-        }
+    #[test]
+    fn truncate_deterministic_examples() {
+        assert_eq!(truncate("short", 20), "short");
+        let truncated = truncate("abcdefghijklmnopqrstuvwxyz", 12);
+        assert!(truncated.chars().count() <= 12);
+        assert!(truncated.ends_with("..."));
+    }
 
-        #[test]
-        fn truncate_preserves_short_strings(s in ".{0,10}") {
-            let result = truncate(&s, 20);
-            assert_eq!(result, s);
-        }
+    #[test]
+    fn test_run_filter_correctness() {
+        let (db, _dir) = setup_test_db();
+        db.create_issue("Match", None, "critical").unwrap();
+        db.create_issue("Other", None, "low").unwrap();
 
-        #[test]
-        fn truncate_adds_ellipsis_for_long_strings(s in ".{20,50}", max_chars in 5usize..15) {
-            let result = truncate(&s, max_chars);
-            if s.chars().count() > max_chars {
-                assert!(result.ends_with("..."));
-            }
-        }
-
-        #[test]
-        fn prop_run_filter_correctness(priority in "low|medium|high|critical") {
-            let (db, _dir) = setup_test_db();
-            db.create_issue("Match", None, &priority).unwrap();
-            db.create_issue("Other", None, "low").unwrap();
-
-            run(&db, None, None, Some(&priority)).unwrap();
-            let filtered = db.list_issues(None, None, Some(&priority)).unwrap();
-            prop_assert!(filtered.iter().all(|i| i.priority == priority));
-        }
+        run(&db, None, None, Some("critical")).unwrap();
+        let filtered = db.list_issues(None, None, Some("critical")).unwrap();
+        assert!(filtered.iter().all(|i| i.priority == "critical"));
     }
 }

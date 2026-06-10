@@ -210,7 +210,6 @@ pub fn last_handoff(db: &Database) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, std::path::PathBuf, tempfile::TempDir) {
@@ -447,40 +446,20 @@ mod tests {
         );
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_start_end_cycle_handoff_and_missing_work() {
+        let (db, cl, _dir) = setup_test_db();
 
-    proptest! {
-        #[test]
-        fn prop_start_end_cycle(iterations in 1usize..5) {
-            let (db, cl, _dir) = setup_test_db();
+        start(&db, &cl).unwrap();
+        assert!(db.get_current_session().unwrap().is_some());
+        end(&db, Some("handoff notes")).unwrap();
+        assert!(db.get_current_session().unwrap().is_none());
+        assert_eq!(
+            db.get_last_session().unwrap().unwrap().handoff_notes,
+            Some("handoff notes".to_string())
+        );
 
-            for _ in 0..iterations {
-                start(&db, &cl).unwrap();
-                prop_assert!(db.get_current_session().unwrap().is_some());
-                end(&db, None).unwrap();
-                prop_assert!(db.get_current_session().unwrap().is_none());
-            }
-        }
-
-        #[test]
-        fn prop_handoff_notes_roundtrip(notes in "[a-zA-Z0-9 ]{0,100}") {
-            let (db, cl, _dir) = setup_test_db();
-
-            start(&db, &cl).unwrap();
-            end(&db, Some(&notes)).unwrap();
-
-            let last = db.get_last_session().unwrap().unwrap();
-            prop_assert_eq!(last.handoff_notes, Some(notes));
-        }
-
-        #[test]
-        fn prop_work_nonexistent_fails(issue_id in 1000i64..10000) {
-            let (db, cl, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-
-            start(&db, &cl).unwrap();
-            let result = work(&db, &issue_id, &cl);
-            prop_assert!(result.is_err());
-        }
+        start(&db, &cl).unwrap();
+        assert!(work(&db, "atelier-missing-1000", &cl).is_err());
     }
 }

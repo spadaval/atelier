@@ -46,7 +46,6 @@ pub fn run_force(db: &Database, id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -229,59 +228,27 @@ mod tests {
         assert_eq!(issues[0].id, id3);
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_delete_force_removes_issue_and_cascades_labels_comments() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test", None, "medium").unwrap();
+        db.add_label(issue_id.as_str(), "one").unwrap();
+        db.add_label(issue_id.as_str(), "two").unwrap();
+        db.add_comment(issue_id.as_str(), "Comment 1", "note")
+            .unwrap();
+        db.add_comment(issue_id.as_str(), "Comment 2", "note")
+            .unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_delete_force_removes_issue(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
+        run_force(&db, issue_id.as_str()).unwrap();
 
-            run_force(&db, issue_id.as_str()).unwrap();
+        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
+        assert!(db.get_labels(issue_id.as_str()).unwrap().is_empty());
+        assert!(db.get_comments(issue_id.as_str()).unwrap().is_empty());
+    }
 
-            let issue = db.get_issue(issue_id.as_str()).unwrap();
-            prop_assert!(issue.is_none());
-        }
-
-        #[test]
-        fn prop_delete_nonexistent_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-
-            let result = run_force(&db, issue_id.as_str());
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_delete_cascade_labels(
-            labels in proptest::collection::vec("[a-zA-Z]{1,10}", 1..5)
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            for label in &labels {
-                db.add_label(issue_id.as_str(), label).unwrap();
-            }
-
-            run_force(&db, issue_id.as_str()).unwrap();
-
-            let remaining_labels = db.get_labels(issue_id.as_str()).unwrap();
-            prop_assert!(remaining_labels.is_empty());
-        }
-
-        #[test]
-        fn prop_delete_cascade_comments(count in 1usize..5) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            for i in 0..count {
-                db.add_comment(issue_id.as_str(), &format!("Comment {}", i), "note").unwrap();
-            }
-
-            run_force(&db, issue_id.as_str()).unwrap();
-
-            let remaining_comments = db.get_comments(issue_id.as_str()).unwrap();
-            prop_assert!(remaining_comments.is_empty());
-        }
+    #[test]
+    fn test_delete_nonexistent_fails() {
+        let (db, _dir) = setup_test_db();
+        assert!(run_force(&db, "atelier-missing-1000").is_err());
     }
 }

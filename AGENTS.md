@@ -27,7 +27,8 @@
 
 ```bash
 cargo fmt -- --check
-cargo test
+cargo nextest run
+cargo nextest run --profile extended --run-ignored=only
 git diff --check
 atelier issue ready
 atelier export --check

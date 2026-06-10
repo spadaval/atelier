@@ -69,7 +69,6 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -176,26 +175,16 @@ mod tests {
         assert_eq!(all.len(), 2);
     }
 
-    proptest! {
-        #[test]
-        fn prop_run_never_panics(count in 0usize..5) {
-            let (db, _dir) = setup_test_db();
-            for i in 0..count {
-                db.create_issue(&format!("Issue {}", i), None, "medium").unwrap();
-            }
-            let result = run(&db, None);
-            prop_assert!(result.is_ok());
-        }
+    #[test]
+    fn test_run_accepts_empty_flat_and_hierarchical_trees() {
+        let (db, _dir) = setup_test_db();
+        assert!(run(&db, None).is_ok());
 
-        #[test]
-        fn prop_hierarchy_never_panics(depth in 1usize..4) {
-            let (db, _dir) = setup_test_db();
-            let mut parent_id = db.create_issue("Root", None, "high").unwrap();
-            for i in 0..depth {
-                parent_id = db.create_subissue(&parent_id, &format!("Child {}", i), None, "medium").unwrap();
-            }
-            let result = run(&db, None);
-            prop_assert!(result.is_ok());
-        }
+        let root = db.create_issue("Root", None, "high").unwrap();
+        let child = db.create_subissue(&root, "Child", None, "medium").unwrap();
+        db.create_subissue(&child, "Grandchild", None, "medium")
+            .unwrap();
+
+        assert!(run(&db, None).is_ok());
     }
 }

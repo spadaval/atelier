@@ -146,7 +146,6 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, std::path::PathBuf, tempfile::TempDir) {
@@ -284,21 +283,15 @@ mod tests {
         );
     }
 
-    proptest! {
-        #[test]
-        fn prop_priority_weight_valid(priority in "low|medium|high|critical") {
-            let weight = priority_weight(&priority);
-            prop_assert!((1..=4).contains(&weight));
+    #[test]
+    fn test_priority_weight_and_run_with_multiple_issues() {
+        for priority in ["low", "medium", "high", "critical"] {
+            assert!((1..=4).contains(&priority_weight(priority)));
         }
 
-        #[test]
-        fn prop_run_never_panics(count in 0usize..5) {
-            let (db, cl, _dir) = setup_test_db();
-            for i in 0..count {
-                db.create_issue(&format!("Issue {}", i), None, "medium").unwrap();
-            }
-            let result = run(&db, &cl);
-            prop_assert!(result.is_ok());
-        }
+        let (db, cl, _dir) = setup_test_db();
+        db.create_issue("Issue 1", None, "medium").unwrap();
+        db.create_issue("Issue 2", None, "medium").unwrap();
+        assert!(run(&db, &cl).is_ok());
     }
 }

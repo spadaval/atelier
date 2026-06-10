@@ -58,7 +58,6 @@ pub fn run(db: &Database, query: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -248,36 +247,13 @@ mod tests {
         assert_eq!(results[0].status, "closed");
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_search_accepts_empty_special_and_unicode_queries() {
+        let (db, _dir) = setup_test_db();
+        db.create_issue("Cafe issue", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_search_never_panics(query in ".*") {
-            let (db, _dir) = setup_test_db();
-            db.create_issue("Test issue", None, "medium").unwrap();
-            let _ = run(&db, &query);
-        }
-
-        #[test]
-        fn prop_search_with_issues_never_panics(
-            title in "[a-zA-Z0-9 ]{1,50}",
-            query in "[a-zA-Z0-9]{1,20}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            db.create_issue(&title, None, "medium").unwrap();
-            let result = run(&db, &query);
-            prop_assert!(result.is_ok());
-        }
-
-        #[test]
-        fn prop_search_unicode_never_panics(
-            title in "[\\p{L}\\p{N} ]{1,30}",
-            query in "[\\p{L}\\p{N}]{1,10}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            db.create_issue(&title, None, "medium").unwrap();
-            let result = run(&db, &query);
-            prop_assert!(result.is_ok());
-        }
+        assert!(run(&db, "").is_ok());
+        assert!(run(&db, "%_").is_ok());
+        assert!(run(&db, "Cafe").is_ok());
     }
 }

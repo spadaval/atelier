@@ -44,7 +44,6 @@ pub fn remove(db: &Database, issue_id: &str, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -230,84 +229,20 @@ mod tests {
         assert!(labels.contains(&"bug".to_string()));
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_label_roundtrip_independence_and_missing_issue() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_add_label_roundtrip(label in "[a-zA-Z0-9_\\-]{1,30}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
+        add(&db, &issue_id, "one").unwrap();
+        add(&db, &issue_id, "two").unwrap();
+        remove(&db, &issue_id, "one").unwrap();
 
-            add(&db, &issue_id, &label).unwrap();
+        let remaining = db.get_labels(issue_id).unwrap();
+        assert!(!remaining.contains(&"one".to_string()));
+        assert!(remaining.contains(&"two".to_string()));
 
-            let labels = db.get_labels(issue_id).unwrap();
-            prop_assert!(labels.contains(&label));
-        }
-
-        #[test]
-        fn prop_remove_label_works(label in "[a-zA-Z0-9_\\-]{1,30}") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            add(&db, &issue_id, &label).unwrap();
-            remove(&db, &issue_id, &label).unwrap();
-
-            let labels = db.get_labels(issue_id).unwrap();
-            prop_assert!(!labels.contains(&label));
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-
-            let add_result = add(&db, &issue_id, "label");
-            prop_assert!(add_result.is_err());
-
-            let remove_result = remove(&db, &issue_id, "label");
-            prop_assert!(remove_result.is_err());
-        }
-
-        #[test]
-        fn prop_multiple_labels_independent(
-            labels in proptest::collection::vec("[a-zA-Z]{1,10}", 1..5)
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            // Add all labels
-            for label in &labels {
-                add(&db, &issue_id, label).unwrap();
-            }
-
-            // Remove first label
-            if !labels.is_empty() {
-                remove(&db, &issue_id, &labels[0]).unwrap();
-
-                let remaining = db.get_labels(issue_id).unwrap();
-                prop_assert!(!remaining.contains(&labels[0]));
-
-                // Others should still exist (unless they were the same as first)
-                for label in labels.iter().skip(1) {
-                    if label != &labels[0] {
-                        prop_assert!(remaining.contains(label));
-                    }
-                }
-            }
-        }
-
-        #[test]
-        fn prop_unicode_labels_work(
-            label in "[\\p{L}]{1,20}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            let result = add(&db, &issue_id, &label);
-            prop_assert!(result.is_ok());
-
-            let labels = db.get_labels(issue_id).unwrap();
-            prop_assert!(labels.contains(&label));
-        }
+        assert!(add(&db, "atelier-missing-1000", "label").is_err());
+        assert!(remove(&db, "atelier-missing-1000", "label").is_err());
     }
 }

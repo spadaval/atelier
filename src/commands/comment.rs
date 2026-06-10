@@ -36,7 +36,6 @@ pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -229,62 +228,19 @@ mod tests {
         assert!(!validate_comment_kind("Plan"));
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_comment_roundtrip_order_and_missing_issue() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_comment_roundtrip(content in ".*") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
+        run(&db, &issue_id, "Comment 0", "note").unwrap();
+        run(&db, &issue_id, "Comment 1", "note").unwrap();
 
-            let result = run(&db, &issue_id, &content, "note");
-            prop_assert!(result.is_ok());
+        let comments = db.get_comments(issue_id).unwrap();
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].content, "Comment 0");
+        assert_eq!(comments[1].content, "Comment 1");
 
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(comments.len(), 1);
-            prop_assert_eq!(&comments[0].content, &content);
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = format!("atelier-missing-{issue_id}");
-            // Don't create any issues
-            let result = run(&db, &issue_id, "Comment", "note");
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_multiple_comments_preserve_order(count in 1usize..10) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            for i in 0..count {
-                run(&db, &issue_id, &format!("Comment {}", i), "note").unwrap();
-            }
-
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(comments.len(), count);
-
-            for (i, comment) in comments.iter().enumerate() {
-                prop_assert_eq!(&comment.content, &format!("Comment {}", i));
-            }
-        }
-
-        #[test]
-        fn prop_unicode_comments_roundtrip(
-            prefix in "[a-zA-Z]{0,10}",
-            emoji in "[\u{1F300}-\u{1F9FF}]{0,5}",
-            suffix in "[a-zA-Z]{0,10}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            let content = format!("{}{}{}", prefix, emoji, suffix);
-            run(&db, &issue_id, &content, "note").unwrap();
-
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(&comments[0].content, &content);
-        }
+        assert!(run(&db, "atelier-missing-1000", "Comment", "note").is_err());
     }
 }

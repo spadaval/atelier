@@ -2,12 +2,17 @@
 
 ## Commands
 
+Install `cargo-nextest` before running the default Rust test command:
+`cargo install cargo-nextest --locked`.
+
 | Command | Owns |
 | --- | --- |
 | `git diff --check` | whitespace and patch hygiene |
 | `git diff --check -- '*.md'` | Markdown whitespace hygiene |
 | `cargo fmt -- --check` | Rust formatting |
-| `cargo test` | full Rust unit, integration, and smoke test suite |
+| `cargo nextest run` | default Rust unit, integration, and smoke test suite |
+| `cargo nextest run --profile extended --run-ignored=only` | opt-in extended property tests marked `prop_extended_` |
+| `cargo test` | Cargo/libtest compatibility check |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |
 | `atelier export --check` | canonical record and derived projection freshness |

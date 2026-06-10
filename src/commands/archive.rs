@@ -83,7 +83,6 @@ pub fn archive_older(db: &Database, days: i64) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -224,25 +223,16 @@ mod tests {
         assert!(!closed_issues.iter().any(|i| i.id == id));
     }
 
-    proptest! {
-        #[test]
-        fn prop_archive_requires_closed(title in "[a-zA-Z0-9 ]{1,30}") {
-            let (db, _dir) = setup_test_db();
-            let id = db.create_issue(&title, None, "medium").unwrap();
+    #[test]
+    fn test_archive_requires_closed_and_succeeds_after_close() {
+        let (db, _dir) = setup_test_db();
+        let id = db.create_issue("Archive me", None, "medium").unwrap();
 
-            let result = archive(&db, &id);
-            prop_assert!(result.is_err());
-        }
+        assert!(archive(&db, &id).is_err());
 
-        #[test]
-        fn prop_archive_closed_succeeds(title in "[a-zA-Z0-9 ]{1,30}") {
-            let (db, _dir) = setup_test_db();
-            let id = db.create_issue(&title, None, "medium").unwrap();
-            db.close_issue(&id).unwrap();
-
-            archive(&db, &id).unwrap();
-            let archived = db.list_archived_issues().unwrap();
-            prop_assert!(archived.iter().any(|i| i.id == id));
-        }
+        db.close_issue(&id).unwrap();
+        archive(&db, &id).unwrap();
+        let archived = db.list_archived_issues().unwrap();
+        assert!(archived.iter().any(|i| i.id == id));
     }
 }

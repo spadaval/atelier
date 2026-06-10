@@ -500,7 +500,6 @@ fn import_issue(db: &Database, issue: &ExportedIssue, parent_id: Option<&str>) -
 mod tests {
     use super::super::export::{ExportData, ExportedIssue};
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -771,15 +770,12 @@ mod tests {
             .exists());
     }
 
-    proptest! {
-        #[test]
-        fn prop_import_never_panics(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, dir) = setup_test_db();
-            let json = create_test_export(vec![make_issue(1, &title, None, "open")]);
-            let import_path = dir.path().join("import.json");
-            fs::write(&import_path, json).unwrap();
-            let result = run_json(&db, &import_path);
-            prop_assert!(result.is_ok());
-        }
+    #[test]
+    fn test_import_valid_export_succeeds() {
+        let (db, dir) = setup_test_db();
+        let json = create_test_export(vec![make_issue(1, "Imported issue", None, "open")]);
+        let import_path = dir.path().join("import.json");
+        fs::write(&import_path, json).unwrap();
+        assert!(run_json(&db, &import_path).is_ok());
     }
 }

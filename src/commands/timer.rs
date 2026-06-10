@@ -103,7 +103,6 @@ pub fn status(db: &Database) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -211,18 +210,15 @@ mod tests {
         assert!(active.is_none());
     }
 
-    proptest! {
-        #[test]
-        fn prop_start_stop_roundtrip(idx in 0usize..5) {
-            let (db, _dir) = setup_test_db();
-            let ids: Vec<String> = (0..5).map(|i| db.create_issue(&format!("Issue {}", i), None, "medium").unwrap()).collect();
-            let id = &ids[idx];
+    #[test]
+    fn test_start_stop_roundtrip() {
+        let (db, _dir) = setup_test_db();
+        let id = db.create_issue("Issue", None, "medium").unwrap();
 
-            start(&db, &id).unwrap();
-            prop_assert!(db.get_active_timer().unwrap().is_some());
+        start(&db, &id).unwrap();
+        assert!(db.get_active_timer().unwrap().is_some());
 
-            stop(&db).unwrap();
-            prop_assert!(db.get_active_timer().unwrap().is_none());
-        }
+        stop(&db).unwrap();
+        assert!(db.get_active_timer().unwrap().is_none());
     }
 }

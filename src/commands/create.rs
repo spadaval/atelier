@@ -232,7 +232,6 @@ pub fn run_subissue(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
 
     // ==================== Unit Tests ====================
 
@@ -325,26 +324,17 @@ mod tests {
         assert!(prefix.contains("Acceptance criteria"));
     }
 
-    // ==================== Property-Based Tests ====================
-
-    proptest! {
-        #[test]
-        fn prop_invalid_priorities_never_validate(
-            priority in "[a-zA-Z]{1,20}"
-                .prop_filter("Exclude valid priorities", |s| {
-                    !["low", "medium", "high", "critical"].contains(&s.as_str())
-                })
-        ) {
-            prop_assert!(!validate_priority(&priority));
+    #[test]
+    fn test_invalid_priorities_never_validate() {
+        for priority in ["urgent", "minor", "blocker", "p0", "mediumish"] {
+            assert!(!validate_priority(priority));
         }
+    }
 
-        #[test]
-        fn prop_unknown_template_returns_none(name in "[a-zA-Z]{5,20}"
-            .prop_filter("Exclude known templates", |s| {
-                !["bug", "feature", "refactor", "research", "audit", "continuation", "investigation"].contains(&s.as_str())
-            })
-        ) {
-            prop_assert!(get_template(&name).is_none());
+    #[test]
+    fn test_unknown_template_returns_none() {
+        for name in ["unknown", "bugs", "Feature", "roadmap"] {
+            assert!(get_template(name).is_none());
         }
     }
 }

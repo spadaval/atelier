@@ -84,7 +84,6 @@ pub fn list_ready(db: &Database) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -304,24 +303,21 @@ mod tests {
         assert!(ready.iter().any(|i| i.id == blocked));
     }
 
-    proptest! {
-        #[test]
-        fn truncate_respects_limit(s in ".{10,100}", max_chars in 5usize..50) {
-            let result = truncate(&s, max_chars);
-            assert!(result.chars().count() <= max_chars);
-        }
+    #[test]
+    fn truncate_respects_limit() {
+        assert!(truncate("abcdefghijklmnopqrstuvwxyz", 12).chars().count() <= 12);
+    }
 
-        #[test]
-        fn prop_block_creates_dependency(title1 in "[a-zA-Z ]{1,20}", title2 in "[a-zA-Z ]{1,20}") {
-            let (db, _dir) = setup_test_db();
-            let issue1 = db.create_issue(&title1, None, "medium").unwrap();
-            let issue2 = db.create_issue(&title2, None, "medium").unwrap();
+    #[test]
+    fn test_block_creates_dependency() {
+        let (db, _dir) = setup_test_db();
+        let issue1 = db.create_issue("Blocked", None, "medium").unwrap();
+        let issue2 = db.create_issue("Blocker", None, "medium").unwrap();
 
-            block(&db, &issue1, &issue2).unwrap();
-            let blockers = db.get_blockers(&issue1).unwrap();
-            prop_assert!(blockers.contains(&issue2));
-            let blocked = db.list_blocked_issues().unwrap();
-            prop_assert!(blocked.iter().any(|i| i.id == issue1));
-        }
+        block(&db, &issue1, &issue2).unwrap();
+        let blockers = db.get_blockers(&issue1).unwrap();
+        assert!(blockers.contains(&issue2));
+        let blocked = db.list_blocked_issues().unwrap();
+        assert!(blocked.iter().any(|i| i.id == issue1));
     }
 }

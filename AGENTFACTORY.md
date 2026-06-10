@@ -50,10 +50,13 @@ concrete files, commands, and product-specific skills.
 - Markdown formatting: `git diff --check -- '*.md'`
 - Rust formatting: `cargo fmt -- --check`
 - Diff whitespace: `git diff --check`
+- Rust test suite: `cargo nextest run`
+- Extended property tests:
+  `cargo nextest run --profile extended --run-ignored=only`
 - Tracker export freshness: `atelier export --check`
 - Tracker lint: `atelier lint`
 - Tracker health: `atelier doctor`
-- Full repository check: `cargo test`
+- Cargo compatibility check: `cargo test`
 
 ## Product-Specific Skills
 
