@@ -115,7 +115,7 @@ fn dedup_marker(file_a: &str, file_b: &str) -> String {
     format!("<!-- cpitd:file_a={}:file_b={} -->", a, b)
 }
 
-fn find_existing_clone_issue(db: &Database, file_a: &str, file_b: &str) -> Result<Option<i64>> {
+fn find_existing_clone_issue(db: &Database, file_a: &str, file_b: &str) -> Result<Option<String>> {
     let marker = dedup_marker(file_a, file_b);
     let issues = db.list_issues(Some("open"), Some("cpitd"), None)?;
     for issue in issues {
@@ -169,7 +169,7 @@ fn format_clone_description(report: &CpitdCloneReport) -> String {
     desc
 }
 
-fn create_clone_issue(db: &Database, report: &CpitdCloneReport, quiet: bool) -> Result<i64> {
+fn create_clone_issue(db: &Database, report: &CpitdCloneReport, quiet: bool) -> Result<String> {
     let title = format!(
         "Code clone: {} <-> {} ({} lines)",
         shorten_path(&report.file_a),
@@ -179,27 +179,27 @@ fn create_clone_issue(db: &Database, report: &CpitdCloneReport, quiet: bool) -> 
 
     let description = format_clone_description(report);
     let id = db.create_issue(&title, Some(&description), "low")?;
-    db.add_label(id, "cpitd")?;
-    db.add_label(id, "refactor")?;
+    db.add_label(&id, "cpitd")?;
+    db.add_label(&id, "refactor")?;
 
     if !quiet {
-        println!("  Created issue #{}: {}", id, title);
+        println!("  Created issue {}: {}", id, title);
     }
 
     Ok(id)
 }
 
-fn relate_clone_issues(db: &Database, created: &[(i64, String, String)]) -> Result<()> {
-    let mut file_to_issues: HashMap<&str, Vec<i64>> = HashMap::new();
+fn relate_clone_issues(db: &Database, created: &[(String, String, String)]) -> Result<()> {
+    let mut file_to_issues: HashMap<&str, Vec<String>> = HashMap::new();
     for (id, file_a, file_b) in created {
-        file_to_issues.entry(file_a).or_default().push(*id);
-        file_to_issues.entry(file_b).or_default().push(*id);
+        file_to_issues.entry(file_a).or_default().push(id.clone());
+        file_to_issues.entry(file_b).or_default().push(id.clone());
     }
     for ids in file_to_issues.values() {
         for i in 0..ids.len() {
             for j in (i + 1)..ids.len() {
                 // Ignore errors (e.g. relation already exists)
-                let _ = db.add_relation(ids[i], ids[j]);
+                let _ = db.add_relation(&ids[i], &ids[j]);
             }
         }
     }
@@ -254,7 +254,7 @@ pub fn scan(
 
     let mut created_count = 0usize;
     let mut updated_count = 0usize;
-    let mut created_ids: Vec<(i64, String, String)> = Vec::new();
+    let mut created_ids: Vec<(String, String, String)> = Vec::new();
 
     for report in &output.clone_reports {
         match find_existing_clone_issue(db, &report.file_a, &report.file_b)? {
@@ -264,10 +264,10 @@ pub fn scan(
                     report.total_cloned_lines,
                     report.groups.len(),
                 );
-                db.add_comment(existing_id, &comment, "note")?;
+                db.add_comment(&existing_id, &comment, "note")?;
                 updated_count += 1;
                 if !quiet {
-                    println!("  Updated issue #{} (clone still present)", existing_id);
+                    println!("  Updated issue {} (clone still present)", existing_id);
                 }
             }
             None => {
@@ -300,7 +300,7 @@ pub fn status(db: &Database) -> Result<()> {
     } else {
         println!("{} open clone issue(s):\n", issues.len());
         for issue in &issues {
-            println!("  #{:<4} {}", issue.id, issue.title);
+            println!("  {:<16} {}", issue.id, issue.title);
         }
     }
 
@@ -317,7 +317,7 @@ pub fn clear(db: &Database) -> Result<()> {
 
     let count = issues.len();
     for issue in &issues {
-        db.close_issue(issue.id)?;
+        db.close_issue(&issue.id)?;
     }
 
     println!("Closed {} cpitd clone issue(s).", count);

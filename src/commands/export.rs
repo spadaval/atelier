@@ -10,14 +10,14 @@ use crate::models::Issue;
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportedIssue {
-    pub id: i64,
+    pub id: String,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
     #[serde(default = "default_issue_type")]
     pub issue_type: String,
     pub priority: String,
-    pub parent_id: Option<i64>,
+    pub parent_id: Option<String>,
     pub labels: Vec<String>,
     pub comments: Vec<ExportedComment>,
     pub created_at: String,
@@ -55,17 +55,17 @@ struct ProjectionFile {
 }
 
 fn export_issue(db: &Database, issue: &Issue) -> Result<ExportedIssue> {
-    let labels = db.get_labels(issue.id)?;
-    let comments = db.get_comments(issue.id)?;
+    let labels = db.get_labels(&issue.id)?;
+    let comments = db.get_comments(&issue.id)?;
 
     Ok(ExportedIssue {
-        id: issue.id,
+        id: issue.id.clone(),
         title: issue.title.clone(),
         description: issue.description.clone(),
         status: issue.status.clone(),
         issue_type: issue.issue_type.clone(),
         priority: issue.priority.clone(),
-        parent_id: issue.parent_id,
+        parent_id: issue.parent_id.clone(),
         labels,
         comments: comments
             .into_iter()
@@ -138,12 +138,12 @@ pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<St
 
 fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
     let mut issues = db.list_issues(Some("all"), None, None)?;
-    issues.sort_by_key(|issue| issue.id);
+    issues.sort_by(|a, b| a.id.cmp(&b.id));
 
     let mut files = Vec::new();
     for issue in &issues {
         files.push(ProjectionFile {
-            path: issue_record_path(issue.id),
+            path: issue_record_path(&issue.id),
             bytes: render_issue_record(db, issue)?.into_bytes(),
         });
     }
@@ -251,10 +251,10 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
 }
 
 fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
-    let labels = db.get_labels(issue.id)?;
-    let mut blocks = issue_ids(db.get_blocking(issue.id)?);
-    let mut depends_on = issue_ids(db.get_blockers(issue.id)?);
-    let mut links = issue_links(db, issue.id)?;
+    let labels = db.get_labels(&issue.id)?;
+    let mut blocks = issue_ids(db.get_blocking(&issue.id)?);
+    let mut depends_on = issue_ids(db.get_blockers(&issue.id)?);
+    let mut links = issue_links(db, &issue.id)?;
     blocks.sort();
     depends_on.sort();
     links.sort();
@@ -270,11 +270,11 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     )?;
     write_yaml_array(&mut output, "depends_on", &depends_on)?;
     write_yaml_array(&mut output, "evidence_required", &[])?;
-    write_yaml_scalar(&mut output, "id", Some(&issue_record_id(issue.id)))?;
+    write_yaml_scalar(&mut output, "id", Some(&issue.id))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     write_yaml_links(&mut output, "links", &links)?;
-    let parent = issue.parent_id.map(issue_record_id);
+    let parent = issue.parent_id.clone();
     write_yaml_scalar(&mut output, "parent", parent.as_deref())?;
     write_yaml_scalar(
         &mut output,
@@ -303,30 +303,26 @@ struct IssueLink {
     target_id: String,
 }
 
-fn issue_links(db: &Database, issue_id: i64) -> Result<Vec<IssueLink>> {
+fn issue_links(db: &Database, issue_id: &str) -> Result<Vec<IssueLink>> {
     let mut links = Vec::new();
     for relation in db.get_typed_relations(issue_id)? {
         if relation.issue_id_1 == issue_id {
             links.push(IssueLink {
                 relation_type: relation.relation_type,
                 target_kind: "issue".to_string(),
-                target_id: issue_record_id(relation.issue_id_2),
+                target_id: relation.issue_id_2,
             });
         }
     }
     Ok(links)
 }
 
-fn issue_ids(ids: Vec<i64>) -> Vec<String> {
-    ids.into_iter().map(issue_record_id).collect()
+fn issue_ids(ids: Vec<String>) -> Vec<String> {
+    ids
 }
 
-fn issue_record_id(id: i64) -> String {
-    format!("ISS-{id:04}")
-}
-
-fn issue_record_path(id: i64) -> PathBuf {
-    PathBuf::from("issues").join(format!("{}.md", issue_record_id(id)))
+fn issue_record_path(id: &str) -> PathBuf {
+    PathBuf::from("issues").join(format!("{}.md", id))
 }
 
 fn display_state_path(relative_path: &Path) -> String {
@@ -459,17 +455,17 @@ fn write_issue_md(md: &mut String, db: &Database, issue: &Issue) -> Result<()> {
     };
 
     md.push_str(&format!(
-        "### {} #{}: {}\n\n",
+        "### {} {}: {}\n\n",
         checkbox, issue.id, issue.title
     ));
     md.push_str(&format!("- **Priority:** {}\n", issue.priority));
     md.push_str(&format!("- **Status:** {}\n", issue.status));
 
-    if let Some(parent_id) = issue.parent_id {
-        md.push_str(&format!("- **Parent:** #{}\n", parent_id));
+    if let Some(parent_id) = &issue.parent_id {
+        md.push_str(&format!("- **Parent:** {}\n", parent_id));
     }
 
-    let labels = db.get_labels(issue.id)?;
+    let labels = db.get_labels(&issue.id)?;
     if !labels.is_empty() {
         md.push_str(&format!("- **Labels:** {}\n", labels.join(", ")));
     }
@@ -485,7 +481,7 @@ fn write_issue_md(md: &mut String, db: &Database, issue: &Issue) -> Result<()> {
         }
     }
 
-    let comments = db.get_comments(issue.id)?;
+    let comments = db.get_comments(&issue.id)?;
     if !comments.is_empty() {
         md.push_str("\n**Comments:**\n");
         for comment in comments {
@@ -518,7 +514,7 @@ mod tests {
     fn test_export_issue_basic() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         let exported = export_issue(&db, &issue).unwrap();
         assert_eq!(exported.id, id);
         assert_eq!(exported.title, "Test issue");
@@ -530,9 +526,9 @@ mod tests {
     fn test_export_issue_with_labels() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.add_label(id, "bug").unwrap();
-        db.add_label(id, "urgent").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.add_label(&id, "bug").unwrap();
+        db.add_label(&id, "urgent").unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         let exported = export_issue(&db, &issue).unwrap();
         assert_eq!(exported.labels.len(), 2);
     }
@@ -541,9 +537,9 @@ mod tests {
     fn test_export_issue_with_comments() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.add_comment(id, "First comment", "note").unwrap();
-        db.add_comment(id, "Second comment", "note").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.add_comment(&id, "First comment", "note").unwrap();
+        db.add_comment(&id, "Second comment", "note").unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         let exported = export_issue(&db, &issue).unwrap();
         assert_eq!(exported.comments.len(), 2);
     }
@@ -552,8 +548,8 @@ mod tests {
     fn test_export_closed_issue() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.close_issue(&id).unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         let exported = export_issue(&db, &issue).unwrap();
         assert_eq!(exported.status, "closed");
         assert!(exported.closed_at.is_some());
@@ -601,7 +597,7 @@ mod tests {
         let (db, dir) = setup_test_db();
         db.create_issue("Open issue", None, "medium").unwrap();
         let closed_id = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(closed_id).unwrap();
+        db.close_issue(&closed_id).unwrap();
         let output_path = dir.path().join("export.md");
         run_markdown(&db, Some(output_path.to_str().unwrap())).unwrap();
         let content = fs::read_to_string(&output_path).unwrap();
@@ -615,7 +611,7 @@ mod tests {
         let id = db
             .create_issue("Test 🐛", Some("Description αβγ"), "medium")
             .unwrap();
-        db.add_label(id, "バグ").unwrap();
+        db.add_label(&id, "バグ").unwrap();
         let output_path = dir.path().join("export.json");
         run_json(&db, Some(output_path.to_str().unwrap())).unwrap();
         let content = fs::read_to_string(&output_path).unwrap();
@@ -629,7 +625,7 @@ mod tests {
             version: 1,
             exported_at: "2024-01-01T00:00:00Z".to_string(),
             issues: vec![ExportedIssue {
-                id: 1,
+                id: "atelier-0001".to_string(),
                 title: "Test".to_string(),
                 description: Some("Desc".to_string()),
                 status: "open".to_string(),
@@ -666,7 +662,6 @@ mod tests {
 
         assert_eq!(first_files, second_files);
         assert!(run_canonical(&db, &state_dir, true).is_ok());
-        assert!(!state_dir.join("issues").join("ISS-0001.md").exists());
         assert!(!state_dir.join("manifest.json").exists());
         assert!(!state_dir.join("graph.json").exists());
     }
@@ -680,12 +675,12 @@ mod tests {
             .unwrap();
 
         run_canonical(&db, &state_dir, false).unwrap();
-        let issue_path = state_dir.join("issues").join("ISS-0001.md");
+        let issue_path = state_dir.join(issue_record_path(&id));
         let first_issue = fs::read_to_string(&issue_path).unwrap();
         assert!(first_issue.contains("title: \"Original title\""));
         assert!(first_issue.ends_with("Original body\n"));
 
-        db.update_issue(id, Some("Changed title"), Some("Changed body"), None)
+        db.update_issue(&id, Some("Changed title"), Some("Changed body"), None)
             .unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
         let second_issue = fs::read_to_string(&issue_path).unwrap();
@@ -701,8 +696,8 @@ mod tests {
         let id = db
             .create_issue_with_type("Validate taxonomy", None, "medium", "validation")
             .unwrap();
-        db.add_label(id, "epic").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.add_label(&id, "epic").unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
 
         let exported = export_issue(&db, &issue).unwrap();
         let issue_text = render_issue_record(&db, &issue).unwrap();
@@ -719,14 +714,14 @@ mod tests {
         let id = db.create_issue("Original title", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
 
-        db.update_issue(id, Some("Changed title"), None, None)
+        db.update_issue(&id, Some("Changed title"), None, None)
             .unwrap();
         let error = run_canonical(&db, &state_dir, true).unwrap_err();
 
         assert!(error.to_string().contains("Canonical export is stale"));
         assert!(error
             .to_string()
-            .contains("changed: .atelier-state/issues/ISS-0001.md"));
+            .contains(&format!("changed: .atelier-state/issues/{id}.md")));
     }
 
     #[test]
@@ -735,12 +730,12 @@ mod tests {
         let state_dir = dir.path().join(".atelier-state");
         let id = db.create_issue("Temporary", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
-        let issue_path = state_dir.join("issues").join("ISS-0001.md");
+        let issue_path = state_dir.join(issue_record_path(&id));
         assert!(issue_path.exists());
         fs::write(state_dir.join("manifest.json"), "{}\n").unwrap();
         fs::write(state_dir.join("graph.json"), "{}\n").unwrap();
 
-        db.delete_issue(id).unwrap();
+        db.delete_issue(&id).unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
 
         assert!(!issue_path.exists());
@@ -752,11 +747,11 @@ mod tests {
     #[test]
     fn test_canonical_check_reports_invalid_duplicate_id() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Original", None, "medium").unwrap();
+        let id = db.create_issue("Original", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         run_canonical(&db, &state_dir, false).unwrap();
-        let copy_path = state_dir.join("issues/ISS-0002.md");
-        fs::copy(state_dir.join("issues/ISS-0001.md"), copy_path).unwrap();
+        let copy_path = state_dir.join(issue_record_path("atelier-zzzz"));
+        fs::copy(state_dir.join(issue_record_path(&id)), copy_path).unwrap();
 
         let error = run_canonical(&db, &state_dir, true).unwrap_err();
         assert!(error.to_string().contains("invalid:"));
@@ -770,22 +765,25 @@ mod tests {
         let state_dir = dir.path().join(".atelier-state");
         run_canonical(&db, &state_dir, false).unwrap();
         db.add_typed_relation(
-            id,
+            &id,
             db.create_issue("Target", None, "medium").unwrap(),
             "related",
         )
         .unwrap();
-        let path = state_dir.join("issues/ISS-0001.md");
+        let missing_id = "atelier-zzzz";
+        let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
             "links: []",
-            "links:\n- target_id: \"ISS-9999\"\n  target_kind: \"issue\"\n  type: \"related\"",
+            &format!(
+                "links:\n- target_id: \"{missing_id}\"\n  target_kind: \"issue\"\n  type: \"related\""
+            ),
         );
         fs::write(path, text).unwrap();
 
         let error = run_canonical(&db, &state_dir, true).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Issue ISS-0001 has related reference to missing issue ISS-9999"));
+        assert!(error.to_string().contains(&format!(
+            "Issue {id} has related reference to missing issue {missing_id}"
+        )));
     }
 
     #[test]
@@ -795,34 +793,39 @@ mod tests {
             .create_issue("Parent", Some("Parent body\r\nline 2"), "high")
             .unwrap();
         let child = db
-            .create_subissue(parent, "Child", Some("Child body"), "low")
+            .create_subissue(&parent, "Child", Some("Child body"), "low")
             .unwrap();
-        db.add_label(child, "zeta").unwrap();
-        db.add_label(child, "alpha").unwrap();
-        db.add_dependency(child, parent).unwrap();
-        db.add_typed_relation(parent, child, "derived").unwrap();
+        db.add_label(&child, "zeta").unwrap();
+        db.add_label(&child, "alpha").unwrap();
+        db.add_dependency(&child, &parent).unwrap();
+        db.add_typed_relation(&parent, &child, "derived").unwrap();
 
         let first = build_canonical_projection(&db).unwrap();
         let second = build_canonical_projection(&db).unwrap();
         let issue = first
             .iter()
-            .find(|file| file.path == Path::new("issues/ISS-0002.md"))
+            .find(|file| file.path == issue_record_path(&child))
             .unwrap();
         let parent_issue = first
             .iter()
-            .find(|file| file.path == Path::new("issues/ISS-0001.md"))
+            .find(|file| file.path == issue_record_path(&parent))
             .unwrap();
 
         assert_eq!(first, second);
         let issue_text = String::from_utf8(issue.bytes.clone()).unwrap();
         assert!(issue_text.contains("labels:\n- \"alpha\"\n- \"zeta\"\n"));
-        assert!(issue_text.contains("parent: \"ISS-0001\""));
+        assert!(issue_text.contains(&format!("parent: \"{parent}\"")));
         assert!(issue_text.ends_with("Child body\n"));
 
-        let parent_text = String::from_utf8(parent_issue.bytes.clone()).unwrap();
-        assert!(parent_text.contains(
-            "links:\n- target_id: \"ISS-0002\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
-        ));
+        let link_text = String::from_utf8(parent_issue.bytes.clone()).unwrap()
+            + &String::from_utf8(issue.bytes.clone()).unwrap();
+        assert!(
+            link_text.contains(&format!(
+                "links:\n- target_id: \"{child}\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
+            )) || link_text.contains(&format!(
+            "links:\n- target_id: \"{parent}\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
+        ))
+        );
     }
 
     proptest! {

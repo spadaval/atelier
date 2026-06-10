@@ -24,12 +24,13 @@ pub fn run(db: &Database, query: &str) -> Result<()> {
         let status_marker = if issue.status == "closed" { "✓" } else { " " };
         let parent_str = issue
             .parent_id
+            .as_ref()
             .map(|p| format!(" (sub of {})", format_issue_id(p)))
             .unwrap_or_default();
 
         println!(
             "{:<5} [{}] {:8} {}{} {}",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             status_marker,
             issue.priority,
             issue.title,
@@ -205,7 +206,7 @@ mod tests {
     fn test_search_finds_in_comments() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Generic issue", None, "medium").unwrap();
-        db.add_comment(id, "Found the root cause in authentication module", "note")
+        db.add_comment(&id, "Found the root cause in authentication module", "note")
             .unwrap();
 
         run(&db, "authentication").unwrap();
@@ -223,7 +224,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let parent_id = db.create_issue("Parent feature", None, "high").unwrap();
         let sub_id = db
-            .create_subissue(parent_id, "Sub task authentication", None, "medium")
+            .create_subissue(&parent_id, "Sub task authentication", None, "medium")
             .unwrap();
 
         run(&db, "authentication").unwrap();
@@ -239,7 +240,7 @@ mod tests {
         let id = db
             .create_issue("Fix authentication bug", None, "high")
             .unwrap();
-        db.close_issue(id).unwrap();
+        db.close_issue(&id).unwrap();
 
         run(&db, "authentication").unwrap();
         let results = db.search_issues("authentication").unwrap();

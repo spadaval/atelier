@@ -30,7 +30,7 @@ proptest! {
     fn prop_title_roundtrip(title in safe_string()) {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue(&title, None, "medium").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         prop_assert_eq!(issue.title, title);
     }
 
@@ -39,7 +39,7 @@ proptest! {
     fn prop_description_roundtrip(desc in safe_string()) {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test", Some(&desc), "medium").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         prop_assert_eq!(issue.description, Some(desc));
     }
 
@@ -48,7 +48,7 @@ proptest! {
     fn prop_priority_valid(priority in valid_priority()) {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test", None, &priority).unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         prop_assert_eq!(issue.priority, priority);
     }
 
@@ -57,8 +57,8 @@ proptest! {
     fn prop_label_roundtrip(label in "[a-zA-Z0-9_\\-]{1,50}") {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test", None, "medium").unwrap();
-        db.add_label(id, &label).unwrap();
-        let labels = db.get_labels(id).unwrap();
+        db.add_label(&id, &label).unwrap();
+        let labels = db.get_labels(&id).unwrap();
         prop_assert!(labels.contains(&label));
     }
 
@@ -67,8 +67,8 @@ proptest! {
     fn prop_comment_roundtrip(content in safe_string()) {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test", None, "medium").unwrap();
-        db.add_comment(id, &content, "note").unwrap();
-        let comments = db.get_comments(id).unwrap();
+        db.add_comment(&id, &content, "note").unwrap();
+        let comments = db.get_comments(&id).unwrap();
         prop_assert_eq!(comments.len(), 1);
         prop_assert_eq!(&comments[0].content, &content);
     }
@@ -90,12 +90,12 @@ proptest! {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue(&title, None, "medium").unwrap();
 
-        db.close_issue(id).unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.close_issue(&id).unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         prop_assert_eq!(issue.status, "closed");
 
-        db.reopen_issue(id).unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        db.reopen_issue(&id).unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
         prop_assert_eq!(issue.status, "open");
     }
 
@@ -107,14 +107,14 @@ proptest! {
         }
         let (db, _dir) = setup_test_db();
 
-        // Create both issues
-        for i in 1..=std::cmp::max(a, b) {
-            db.create_issue(&format!("Issue {}", i), None, "medium").unwrap();
-        }
-
-        db.add_dependency(a, b).unwrap();
-        let blockers = db.get_blockers(a).unwrap();
-        prop_assert!(blockers.contains(&b));
+        let ids: Vec<String> = (1..=std::cmp::max(a, b))
+            .map(|i| db.create_issue(&format!("Issue {}", i), None, "medium").unwrap())
+            .collect();
+        let source_id = ids[(a - 1) as usize].clone();
+        let blocker_id = ids[(b - 1) as usize].clone();
+        db.add_dependency(&source_id, &blocker_id).unwrap();
+        let blockers = db.get_blockers(&source_id).unwrap();
+        prop_assert!(blockers.contains(&blocker_id));
     }
 
     /// Search should find issues with matching titles
@@ -147,11 +147,11 @@ proptest! {
 
         // Create a linear dependency chain: 0 <- 1 <- 2 <- ... <- n-1
         for i in 0..chain_len - 1 {
-            db.add_dependency(ids[i], ids[i + 1]).unwrap();
+            db.add_dependency(&ids[i], &ids[i + 1]).unwrap();
         }
 
         // Trying to close the cycle (n-1 <- 0) should fail
-        let result = db.add_dependency(ids[chain_len - 1], ids[0]);
+        let result = db.add_dependency(&ids[chain_len - 1], &ids[0]);
         prop_assert!(result.is_err(), "Circular dependency should be rejected");
     }
 
@@ -166,7 +166,7 @@ proptest! {
         // Create children
         let mut child_ids = Vec::new();
         for i in 0..child_count {
-            let id = db.create_subissue(parent_id, &format!("Child {}", i), None, "low").unwrap();
+            let id = db.create_subissue(&parent_id, &format!("Child {}", i), None, "low").unwrap();
             child_ids.push(id);
         }
 
@@ -175,7 +175,7 @@ proptest! {
         prop_assert_eq!(issues_before.len(), child_count + 1);
 
         // Delete parent
-        db.delete_issue(parent_id).unwrap();
+        db.delete_issue(&parent_id).unwrap();
 
         // All children should be gone too
         let issues_after = db.list_issues(None, None, None).unwrap();
@@ -183,7 +183,7 @@ proptest! {
 
         // Verify each child is gone
         for child_id in child_ids {
-            let child = db.get_issue(child_id).unwrap();
+            let child = db.get_issue(&child_id).unwrap();
             prop_assert!(child.is_none(), "Child should be deleted");
         }
     }
@@ -202,7 +202,7 @@ proptest! {
 
         // Create some dependencies (each issue blocked by next, except last)
         for i in 0..issue_count - 1 {
-            let _ = db.add_dependency(ids[i], ids[i + 1]);
+            let _ = db.add_dependency(&ids[i], &ids[i + 1]);
         }
 
         // Get ready issues
@@ -210,9 +210,9 @@ proptest! {
 
         // Verify: no ready issue should have open blockers
         for issue in &ready {
-            let blockers = db.get_blockers(issue.id).unwrap();
+            let blockers = db.get_blockers(&issue.id).unwrap();
             for blocker_id in blockers {
-                if let Some(blocker) = db.get_issue(blocker_id).unwrap() {
+                if let Some(blocker) = db.get_issue(&blocker_id).unwrap() {
                     prop_assert_ne!(
                         blocker.status, "open",
                         "Ready issue {} has open blocker {}",
@@ -231,14 +231,14 @@ proptest! {
         // Create issue and session
         let issue_id = db.create_issue(&title, None, "medium").unwrap();
         let session_id = db.start_session().unwrap();
-        db.set_session_issue(session_id, issue_id).unwrap();
+        db.set_session_issue(session_id, &issue_id).unwrap();
 
         // Verify session has issue
         let session = db.get_current_session().unwrap().unwrap();
-        prop_assert_eq!(session.active_issue_id, Some(issue_id));
+        prop_assert_eq!(session.active_issue_id, Some(issue_id.clone()));
 
         // Delete the issue
-        db.delete_issue(issue_id).unwrap();
+        db.delete_issue(&issue_id).unwrap();
 
         // Session should still exist but with NULL active_issue_id
         let session_after = db.get_current_session().unwrap().unwrap();

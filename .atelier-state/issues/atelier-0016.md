@@ -1,0 +1,34 @@
+---
+acceptance: []
+blocks: []
+created_at: "2026-06-08T19:40:12+00:00"
+depends_on: []
+evidence_required: []
+id: "atelier-0016"
+issue_type: "task"
+labels:
+- "agent-factory"
+- "assignee:root"
+- "closeout"
+- "migration"
+- "mission"
+- "task"
+- "tracker"
+links: []
+parent: "atelier-000z"
+priority: "P2"
+schema: "atelier.issue"
+schema_version: 1
+status: "closed"
+title: "[CLOSEOUT] Retire Beads from Atelier and Agent Factory"
+updated_at: "2026-06-08T22:40:41.088923833+00:00"
+---
+
+
+Close out the Beads replacement mission after Atelier is live for this repo and Agent Factory supports Atelier tracker bindings. This owns cleanup, archival, and final proof that Beads is no longer part of the normal operating path.
+
+Do not delete historical data needed for audit; archive it clearly.
+
+## Acceptance Criteria
+
+Classify every mission success criterion as pass, deferred to a named bead, blocked with reason, or not applicable; Beads files and Dolt state are archived or removed according to a documented policy; docs no longer instruct normal agents to use bd for /root/atelier; Agent Factory skill changes are verified; final validation evidence is linked from the closeout notes.

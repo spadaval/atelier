@@ -6,7 +6,8 @@ use super::{parse_datetime, Database, MAX_COMMENT_LEN};
 use crate::models::Comment;
 
 impl Database {
-    pub fn add_comment(&self, issue_id: i64, content: &str, kind: &str) -> Result<i64> {
+    pub fn add_comment(&self, issue_id: impl ToString, content: &str, kind: &str) -> Result<i64> {
+        let issue_id = issue_id.to_string();
         if content.len() > MAX_COMMENT_LEN {
             anyhow::bail!(
                 "Comment exceeds maximum length of {} bytes",
@@ -23,11 +24,12 @@ impl Database {
 
     pub fn add_comment_at(
         &self,
-        issue_id: i64,
+        issue_id: impl ToString,
         content: &str,
         kind: &str,
         created_at: &str,
     ) -> Result<i64> {
+        let issue_id = issue_id.to_string();
         if content.len() > MAX_COMMENT_LEN {
             anyhow::bail!(
                 "Comment exceeds maximum length of {} bytes",
@@ -41,7 +43,8 @@ impl Database {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn get_comments(&self, issue_id: i64) -> Result<Vec<Comment>> {
+    pub fn get_comments(&self, issue_id: impl ToString) -> Result<Vec<Comment>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             "SELECT id, issue_id, content, created_at, kind FROM comments WHERE issue_id = ?1 ORDER BY created_at",
         )?;

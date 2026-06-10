@@ -4,9 +4,9 @@ use std::io::{self, Write};
 use crate::db::Database;
 use crate::utils::format_issue_id;
 
-pub fn run(db: &Database, id: i64, force: bool) -> Result<()> {
+pub fn run(db: &Database, id: &str, force: bool) -> Result<()> {
     // Check if issue exists first
-    let issue = match db.get_issue(id)? {
+    let issue = match db.get_issue(&id)? {
         Some(i) => i,
         None => bail!("Issue {} not found", format_issue_id(id)),
     };
@@ -28,7 +28,7 @@ pub fn run(db: &Database, id: i64, force: bool) -> Result<()> {
         }
     }
 
-    if db.delete_issue(id)? {
+    if db.delete_issue(&id)? {
         println!("Deleted issue {}", format_issue_id(id));
     } else {
         bail!("Failed to delete issue {}", format_issue_id(id));
@@ -39,7 +39,7 @@ pub fn run(db: &Database, id: i64, force: bool) -> Result<()> {
 
 /// Internal function for testing without stdin interaction
 #[cfg(test)]
-pub fn run_force(db: &Database, id: i64) -> Result<()> {
+pub fn run_force(db: &Database, id: &str) -> Result<()> {
     run(db, id, true)
 }
 
@@ -63,11 +63,11 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("To delete", None, "medium").unwrap();
 
-        let result = run_force(&db, issue_id);
+        let result = run_force(&db, issue_id.as_str());
         assert!(result.is_ok());
 
         // Verify issue is deleted
-        let issue = db.get_issue(issue_id).unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap();
         assert!(issue.is_none());
     }
 
@@ -75,7 +75,7 @@ mod tests {
     fn test_delete_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = run_force(&db, 99999);
+        let result = run_force(&db, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -84,13 +84,13 @@ mod tests {
     fn test_delete_cascades_labels() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
-        db.add_label(issue_id, "bug").unwrap();
-        db.add_label(issue_id, "urgent").unwrap();
+        db.add_label(issue_id.as_str(), "bug").unwrap();
+        db.add_label(issue_id.as_str(), "urgent").unwrap();
 
-        run_force(&db, issue_id).unwrap();
+        run_force(&db, issue_id.as_str()).unwrap();
 
         // Labels should be gone
-        let labels = db.get_labels(issue_id).unwrap();
+        let labels = db.get_labels(issue_id.as_str()).unwrap();
         assert!(labels.is_empty());
     }
 
@@ -98,13 +98,15 @@ mod tests {
     fn test_delete_cascades_comments() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
-        db.add_comment(issue_id, "Comment 1", "note").unwrap();
-        db.add_comment(issue_id, "Comment 2", "note").unwrap();
+        db.add_comment(issue_id.as_str(), "Comment 1", "note")
+            .unwrap();
+        db.add_comment(issue_id.as_str(), "Comment 2", "note")
+            .unwrap();
 
-        run_force(&db, issue_id).unwrap();
+        run_force(&db, issue_id.as_str()).unwrap();
 
         // Comments should be gone
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.get_comments(issue_id.as_str()).unwrap();
         assert!(comments.is_empty());
     }
 
@@ -113,17 +115,17 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let parent_id = db.create_issue("Parent", None, "high").unwrap();
         let child1 = db
-            .create_subissue(parent_id, "Child 1", None, "medium")
+            .create_subissue(&parent_id, "Child 1", None, "medium")
             .unwrap();
         let child2 = db
-            .create_subissue(parent_id, "Child 2", None, "low")
+            .create_subissue(&parent_id, "Child 2", None, "low")
             .unwrap();
 
-        run_force(&db, parent_id).unwrap();
+        run_force(&db, &parent_id).unwrap();
 
         // All children should be deleted
-        assert!(db.get_issue(child1).unwrap().is_none());
-        assert!(db.get_issue(child2).unwrap().is_none());
+        assert!(db.get_issue(&child1).unwrap().is_none());
+        assert!(db.get_issue(&child2).unwrap().is_none());
     }
 
     #[test]
@@ -131,13 +133,13 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let blocker = db.create_issue("Blocker", None, "high").unwrap();
         let blocked = db.create_issue("Blocked", None, "medium").unwrap();
-        db.add_dependency(blocked, blocker).unwrap();
+        db.add_dependency(&blocked, &blocker).unwrap();
 
         // Delete the blocker
-        run_force(&db, blocker).unwrap();
+        run_force(&db, &blocker).unwrap();
 
         // The blocked issue should no longer have this blocker
-        let blockers = db.get_blockers(blocked).unwrap();
+        let blockers = db.get_blockers(&blocked).unwrap();
         assert!(!blockers.contains(&blocker));
     }
 
@@ -146,10 +148,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
-        db.add_relation(issue1, issue2).unwrap();
+        db.add_relation(&issue1, &issue2).unwrap();
 
         // Delete issue1
-        run_force(&db, issue1).unwrap();
+        run_force(&db, &issue1).unwrap();
 
         // issue2 should no longer have this relation
         let related = db.get_related_issues(issue2).unwrap();
@@ -160,37 +162,37 @@ mod tests {
     fn test_delete_closed_issue() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
+        db.close_issue(issue_id.as_str()).unwrap();
 
-        let result = run_force(&db, issue_id);
+        let result = run_force(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        assert!(db.get_issue(issue_id).unwrap().is_none());
+        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
     }
 
     #[test]
     fn test_delete_archived_issue() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Archived issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
-        db.archive_issue(issue_id).unwrap();
+        db.close_issue(issue_id.as_str()).unwrap();
+        db.archive_issue(issue_id.as_str()).unwrap();
 
-        let result = run_force(&db, issue_id);
+        let result = run_force(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        assert!(db.get_issue(issue_id).unwrap().is_none());
+        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
     }
 
     #[test]
     fn test_delete_issue_with_timer() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Timed issue", None, "medium").unwrap();
-        db.start_timer(issue_id).unwrap();
+        db.start_timer(&issue_id).unwrap();
 
-        let result = run_force(&db, issue_id);
+        let result = run_force(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        assert!(db.get_issue(issue_id).unwrap().is_none());
+        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
     }
 
     #[test]
@@ -198,9 +200,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Milestone issue", None, "medium").unwrap();
         let milestone_id = db.create_milestone("v1.0", None).unwrap();
-        db.add_issue_to_milestone(milestone_id, issue_id).unwrap();
+        db.add_issue_to_milestone(milestone_id, issue_id.as_str())
+            .unwrap();
 
-        let result = run_force(&db, issue_id);
+        let result = run_force(&db, issue_id.as_str());
         assert!(result.is_ok());
 
         // Milestone should still exist
@@ -217,8 +220,8 @@ mod tests {
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
         let id3 = db.create_issue("Issue 3", None, "medium").unwrap();
 
-        run_force(&db, id1).unwrap();
-        run_force(&db, id2).unwrap();
+        run_force(&db, &id1).unwrap();
+        run_force(&db, &id2).unwrap();
 
         // Only id3 should remain
         let issues = db.list_issues(None, None, None).unwrap();
@@ -234,17 +237,18 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue(&title, None, "medium").unwrap();
 
-            run_force(&db, issue_id).unwrap();
+            run_force(&db, issue_id.as_str()).unwrap();
 
-            let issue = db.get_issue(issue_id).unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap();
             prop_assert!(issue.is_none());
         }
 
         #[test]
         fn prop_delete_nonexistent_fails(issue_id in 1000i64..10000) {
             let (db, _dir) = setup_test_db();
+            let issue_id = format!("atelier-missing-{issue_id}");
 
-            let result = run_force(&db, issue_id);
+            let result = run_force(&db, issue_id.as_str());
             prop_assert!(result.is_err());
         }
 
@@ -256,12 +260,12 @@ mod tests {
             let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
             for label in &labels {
-                db.add_label(issue_id, label).unwrap();
+                db.add_label(issue_id.as_str(), label).unwrap();
             }
 
-            run_force(&db, issue_id).unwrap();
+            run_force(&db, issue_id.as_str()).unwrap();
 
-            let remaining_labels = db.get_labels(issue_id).unwrap();
+            let remaining_labels = db.get_labels(issue_id.as_str()).unwrap();
             prop_assert!(remaining_labels.is_empty());
         }
 
@@ -271,12 +275,12 @@ mod tests {
             let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
             for i in 0..count {
-                db.add_comment(issue_id, &format!("Comment {}", i), "note").unwrap();
+                db.add_comment(issue_id.as_str(), &format!("Comment {}", i), "note").unwrap();
             }
 
-            run_force(&db, issue_id).unwrap();
+            run_force(&db, issue_id.as_str()).unwrap();
 
-            let remaining_comments = db.get_comments(issue_id).unwrap();
+            let remaining_comments = db.get_comments(issue_id.as_str()).unwrap();
             prop_assert!(remaining_comments.is_empty());
         }
     }

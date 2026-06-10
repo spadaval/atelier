@@ -3,8 +3,8 @@ use anyhow::{bail, Result};
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
 
-pub fn close(db: &Database, id: i64) -> Result<()> {
-    if db.close_issue(id)? {
+pub fn close(db: &Database, id: &str) -> Result<()> {
+    if db.close_issue(&id)? {
         println!("Closed issue {}", format_issue_id(id));
     } else {
         bail!("Issue {} not found", format_issue_id(id));
@@ -29,7 +29,7 @@ pub fn close_all(
     for issue in &issues {
         match commands::agent_factory::close(db, &issue.id.to_string(), None, false) {
             Ok(()) => closed_count += 1,
-            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(issue.id), e),
+            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
         }
     }
 
@@ -37,8 +37,8 @@ pub fn close_all(
     Ok(())
 }
 
-pub fn reopen(db: &Database, id: i64) -> Result<()> {
-    if db.reopen_issue(id)? {
+pub fn reopen(db: &Database, id: &str) -> Result<()> {
+    if db.reopen_issue(&id)? {
         println!("Reopened issue {}", format_issue_id(id));
     } else {
         bail!("Issue {} not found", format_issue_id(id));
@@ -66,10 +66,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = close(&db, issue_id);
+        let result = close(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "closed");
         assert!(issue.closed_at.is_some());
     }
@@ -78,7 +78,7 @@ mod tests {
     fn test_close_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = close(&db, 99999);
+        let result = close(&db, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -88,10 +88,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
 
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
+        db.close_issue(issue_id.as_str()).unwrap();
 
         // Closing again should be fine (idempotent at db level)
-        let result = close(&db, issue_id);
+        let result = close(&db, issue_id.as_str());
         assert!(result.is_ok());
     }
 
@@ -102,12 +102,12 @@ mod tests {
         let (db, _dir) = setup_test_db();
 
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
+        db.close_issue(issue_id.as_str()).unwrap();
 
-        let result = reopen(&db, issue_id);
+        let result = reopen(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "open");
         assert!(issue.closed_at.is_none());
     }
@@ -116,7 +116,7 @@ mod tests {
     fn test_reopen_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = reopen(&db, 99999);
+        let result = reopen(&db, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -128,10 +128,10 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         // Reopening an open issue - succeeds (idempotent operation)
-        let result = reopen(&db, issue_id);
+        let result = reopen(&db, issue_id.as_str());
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "open");
     }
 
@@ -143,18 +143,18 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         // Close
-        close(&db, issue_id).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        close(&db, issue_id.as_str()).unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "closed");
 
         // Reopen
-        reopen(&db, issue_id).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        reopen(&db, issue_id.as_str()).unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "open");
 
         // Close again
-        close(&db, issue_id).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        close(&db, issue_id.as_str()).unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.status, "closed");
     }
 
@@ -165,9 +165,9 @@ mod tests {
         fn prop_close_sets_status_to_closed(title in "[a-zA-Z0-9 ]{1,50}") {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            close(&db, issue_id).unwrap();
+            close(&db, issue_id.as_str()).unwrap();
 
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
             prop_assert_eq!(issue.status, "closed");
         }
 
@@ -176,26 +176,28 @@ mod tests {
             let (db, _dir) = setup_test_db();
 
             let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            db.close_issue(issue_id).unwrap();
+            db.close_issue(issue_id.as_str()).unwrap();
 
-            reopen(&db, issue_id).unwrap();
+            reopen(&db, issue_id.as_str()).unwrap();
 
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
             prop_assert_eq!(issue.status, "open");
         }
 
         #[test]
         fn prop_nonexistent_issue_close_fails(issue_id in 1000i64..10000) {
             let (db, _dir) = setup_test_db();
-            let result = close(&db, issue_id);
+            let issue_id = format!("atelier-missing-{issue_id}");
+            let result = close(&db, issue_id.as_str());
             prop_assert!(result.is_err());
         }
 
         #[test]
         fn prop_nonexistent_issue_reopen_fails(issue_id in 1000i64..10000) {
             let (db, _dir) = setup_test_db();
+            let issue_id = format!("atelier-missing-{issue_id}");
 
-            let result = reopen(&db, issue_id);
+            let result = reopen(&db, issue_id.as_str());
             prop_assert!(result.is_err());
         }
     }

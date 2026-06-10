@@ -68,7 +68,12 @@ impl Database {
         Ok(milestones)
     }
 
-    pub fn add_issue_to_milestone(&self, milestone_id: i64, issue_id: i64) -> Result<bool> {
+    pub fn add_issue_to_milestone(
+        &self,
+        milestone_id: i64,
+        issue_id: impl ToString,
+    ) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         let result = self.conn.execute(
             "INSERT OR IGNORE INTO milestone_issues (milestone_id, issue_id) VALUES (?1, ?2)",
             params![milestone_id, issue_id],
@@ -76,7 +81,12 @@ impl Database {
         Ok(result > 0)
     }
 
-    pub fn remove_issue_from_milestone(&self, milestone_id: i64, issue_id: i64) -> Result<bool> {
+    pub fn remove_issue_from_milestone(
+        &self,
+        milestone_id: i64,
+        issue_id: impl ToString,
+    ) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         let rows = self.conn.execute(
             "DELETE FROM milestone_issues WHERE milestone_id = ?1 AND issue_id = ?2",
             params![milestone_id, issue_id],
@@ -118,7 +128,8 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn get_issue_milestone(&self, issue_id: i64) -> Result<Option<Milestone>> {
+    pub fn get_issue_milestone(&self, issue_id: impl ToString) -> Result<Option<Milestone>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             r#"
             SELECT m.id, m.name, m.description, m.status, m.created_at, m.closed_at

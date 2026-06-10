@@ -53,17 +53,17 @@ impl LocksFile {
     }
 
     /// Check if a specific issue is locked.
-    pub fn is_locked(&self, issue_id: i64) -> bool {
+    pub fn is_locked(&self, issue_id: &str) -> bool {
         self.locks.contains_key(&issue_id.to_string())
     }
 
     /// Get the lock for a specific issue.
-    pub fn get_lock(&self, issue_id: i64) -> Option<&Lock> {
+    pub fn get_lock(&self, issue_id: &str) -> Option<&Lock> {
         self.locks.get(&issue_id.to_string())
     }
 
     /// Check if an issue is locked by a specific agent.
-    pub fn is_locked_by(&self, issue_id: i64, agent_id: &str) -> bool {
+    pub fn is_locked_by(&self, issue_id: &str, agent_id: &str) -> bool {
         self.locks
             .get(&issue_id.to_string())
             .map(|l| l.agent_id == agent_id)
@@ -71,11 +71,11 @@ impl LocksFile {
     }
 
     /// List all issue IDs locked by a specific agent.
-    pub fn agent_locks(&self, agent_id: &str) -> Vec<i64> {
+    pub fn agent_locks(&self, agent_id: &str) -> Vec<String> {
         self.locks
             .iter()
             .filter(|(_, lock)| lock.agent_id == agent_id)
-            .filter_map(|(id, _)| id.parse().ok())
+            .map(|(id, _)| id.clone())
             .collect()
     }
 
@@ -100,7 +100,7 @@ impl LocksFile {
 pub struct Heartbeat {
     pub agent_id: String,
     pub last_heartbeat: DateTime<Utc>,
-    pub active_issue_id: Option<i64>,
+    pub active_issue_id: Option<String>,
     pub machine_id: String,
 }
 
@@ -169,26 +169,26 @@ mod tests {
     #[test]
     fn test_is_locked() {
         let locks = sample_locks_file();
-        assert!(locks.is_locked(5));
-        assert!(locks.is_locked(8));
-        assert!(!locks.is_locked(1));
+        assert!(locks.is_locked("5"));
+        assert!(locks.is_locked("8"));
+        assert!(!locks.is_locked("1"));
     }
 
     #[test]
     fn test_get_lock() {
         let locks = sample_locks_file();
-        let lock = locks.get_lock(5).unwrap();
+        let lock = locks.get_lock("5").unwrap();
         assert_eq!(lock.agent_id, "worker-1");
-        assert!(locks.get_lock(99).is_none());
+        assert!(locks.get_lock("99").is_none());
     }
 
     #[test]
     fn test_is_locked_by() {
         let locks = sample_locks_file();
-        assert!(locks.is_locked_by(5, "worker-1"));
-        assert!(!locks.is_locked_by(5, "worker-2"));
-        assert!(locks.is_locked_by(8, "worker-2"));
-        assert!(!locks.is_locked_by(99, "worker-1"));
+        assert!(locks.is_locked_by("5", "worker-1"));
+        assert!(!locks.is_locked_by("5", "worker-2"));
+        assert!(locks.is_locked_by("8", "worker-2"));
+        assert!(!locks.is_locked_by("99", "worker-1"));
     }
 
     #[test]
@@ -196,10 +196,10 @@ mod tests {
         let locks = sample_locks_file();
         let mut w1 = locks.agent_locks("worker-1");
         w1.sort();
-        assert_eq!(w1, vec![5]);
+        assert_eq!(w1, vec!["5".to_string()]);
         let mut w2 = locks.agent_locks("worker-2");
         w2.sort();
-        assert_eq!(w2, vec![8]);
+        assert_eq!(w2, vec!["8".to_string()]);
         assert!(locks.agent_locks("nobody").is_empty());
     }
 
@@ -241,12 +241,12 @@ mod tests {
         let hb = Heartbeat {
             agent_id: "worker-1".to_string(),
             last_heartbeat: Utc::now(),
-            active_issue_id: Some(42),
+            active_issue_id: Some("42".to_string()),
             machine_id: "my-host".to_string(),
         };
         let json = serde_json::to_string(&hb).unwrap();
         let parsed: Heartbeat = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.agent_id, hb.agent_id);
-        assert_eq!(parsed.active_issue_id, Some(42));
+        assert_eq!(parsed.active_issue_id, Some("42".to_string()));
     }
 }

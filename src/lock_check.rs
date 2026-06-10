@@ -23,7 +23,7 @@ pub enum LockStatus {
 /// Returns `LockStatus` without blocking — callers decide how to handle.
 /// Gracefully degrades: if agent config is missing, sync fails, or we're
 /// offline, returns `NotConfigured` so single-agent usage is unaffected.
-pub fn check_lock(atelier_dir: &Path, issue_id: i64) -> Result<LockStatus> {
+pub fn check_lock(atelier_dir: &Path, issue_id: &str) -> Result<LockStatus> {
     // If no agent config, we're in single-agent mode — no lock checking
     let agent = match AgentConfig::load(atelier_dir)? {
         Some(a) => a,
@@ -98,7 +98,7 @@ fn read_auto_steal_config(atelier_dir: &Path) -> Option<u64> {
 /// Returns `Ok(true)` if the lock was auto-stolen, `Ok(false)` if not eligible.
 fn auto_steal_if_configured(
     atelier_dir: &Path,
-    issue_id: i64,
+    issue_id: &str,
     stale_agent_id: &str,
     db: &Database,
 ) -> Result<bool> {
@@ -142,7 +142,7 @@ fn auto_steal_if_configured(
         "[auto-steal] Lock auto-stolen from agent '{}' (stale for {} min, threshold: {} min)",
         stale_agent_id, stale_minutes, auto_steal_threshold
     );
-    if let Err(e) = db.add_comment(issue_id, &comment, "system") {
+    if let Err(e) = db.add_comment(&issue_id, &comment, "system") {
         tracing::warn!("could not add audit comment for lock steal: {e}");
     }
 
@@ -153,7 +153,7 @@ fn auto_steal_if_configured(
 ///
 /// When `auto_steal_stale_locks` is configured in hook-config.json and the lock
 /// has been stale long enough, automatically steals it and records an audit comment.
-pub fn enforce_lock(atelier_dir: &Path, issue_id: i64, db: &Database) -> Result<()> {
+pub fn enforce_lock(atelier_dir: &Path, issue_id: &str, db: &Database) -> Result<()> {
     match check_lock(atelier_dir, issue_id)? {
         LockStatus::NotConfigured | LockStatus::Available | LockStatus::LockedBySelf => Ok(()),
         LockStatus::LockedByOther { agent_id, stale } => {
@@ -224,7 +224,7 @@ mod tests {
         let atelier_dir = dir.path().join(".atelier");
         std::fs::create_dir_all(&atelier_dir).unwrap();
 
-        let status = check_lock(&atelier_dir, 1).unwrap();
+        let status = check_lock(&atelier_dir, "atelier-0001").unwrap();
         assert_eq!(status, LockStatus::NotConfigured);
     }
 
@@ -235,7 +235,7 @@ mod tests {
         std::fs::create_dir_all(&atelier_dir).unwrap();
 
         let db = temp_db();
-        assert!(enforce_lock(&atelier_dir, 1, &db).is_ok());
+        assert!(enforce_lock(&atelier_dir, "atelier-0001", &db).is_ok());
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
         std::fs::create_dir_all(&atelier_dir).unwrap();
         write_agent_config(&atelier_dir, "worker-1");
 
-        let status = check_lock(&atelier_dir, 42).unwrap();
+        let status = check_lock(&atelier_dir, "atelier-0016").unwrap();
         assert_eq!(status, LockStatus::NotConfigured);
     }
 
@@ -257,7 +257,7 @@ mod tests {
         write_agent_config(&atelier_dir, "worker-1");
 
         let db = temp_db();
-        assert!(enforce_lock(&atelier_dir, 42, &db).is_ok());
+        assert!(enforce_lock(&atelier_dir, "atelier-0016", &db).is_ok());
     }
 
     #[test]

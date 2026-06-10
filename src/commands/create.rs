@@ -136,18 +136,18 @@ pub fn run(
 
     // Auto-add label from template
     if let Some(lbl) = template_label {
-        db.add_label(id, lbl)?;
+        db.add_label(&id, lbl)?;
     }
 
     // Add user-specified labels
     for lbl in opts.labels {
-        db.add_label(id, lbl)?;
+        db.add_label(&id, lbl)?;
     }
 
     if opts.quiet {
         println!("{}", id);
     } else {
-        println!("Created issue {}", format_issue_id(id));
+        println!("Created issue {}", format_issue_id(&id));
         if let Some(tmpl) = template {
             println!("  Applied template: {}", tmpl);
         }
@@ -158,11 +158,11 @@ pub fn run(
         if let Ok(Some(session)) = db.get_current_session() {
             // Enforce lock check if atelier_dir is available
             if let Some(dir) = opts.atelier_dir {
-                lock_check::enforce_lock(dir, id, db)?;
+                lock_check::enforce_lock(dir, &id, db)?;
             }
-            db.set_session_issue(session.id, id)?;
+            db.set_session_issue(session.id, &id)?;
             if !opts.quiet {
-                println!("Now working on: {} {}", format_issue_id(id), title);
+                println!("Now working on: {} {}", format_issue_id(&id), title);
             }
         } else if !opts.quiet {
             tracing::warn!("--work specified but no active session");
@@ -174,7 +174,7 @@ pub fn run(
 
 pub fn run_subissue(
     db: &Database,
-    parent_id: i64,
+    parent_id: &str,
     title: &str,
     description: Option<&str>,
     priority: &str,
@@ -189,16 +189,16 @@ pub fn run_subissue(
     }
 
     // Verify parent exists
-    let parent = db.get_issue(parent_id)?;
+    let parent = db.get_issue(&parent_id)?;
     if parent.is_none() {
-        bail!("Parent issue {} not found", format_issue_id(parent_id));
+        bail!("Parent issue {} not found", format_issue_id(&parent_id));
     }
 
-    let id = db.create_subissue(parent_id, title, description, priority)?;
+    let id = db.create_subissue(&parent_id, title, description, priority)?;
 
     // Add user-specified labels
     for lbl in opts.labels {
-        db.add_label(id, lbl)?;
+        db.add_label(&id, lbl)?;
     }
 
     if opts.quiet {
@@ -206,8 +206,8 @@ pub fn run_subissue(
     } else {
         println!(
             "Created subissue {} under {}",
-            format_issue_id(id),
-            format_issue_id(parent_id)
+            format_issue_id(&id),
+            format_issue_id(&parent_id)
         );
     }
 
@@ -215,11 +215,11 @@ pub fn run_subissue(
     if opts.work {
         if let Ok(Some(session)) = db.get_current_session() {
             if let Some(dir) = opts.atelier_dir {
-                lock_check::enforce_lock(dir, id, db)?;
+                lock_check::enforce_lock(dir, &id, db)?;
             }
-            db.set_session_issue(session.id, id)?;
+            db.set_session_issue(session.id, &id)?;
             if !opts.quiet {
-                println!("Now working on: {} {}", format_issue_id(id), title);
+                println!("Now working on: {} {}", format_issue_id(&id), title);
             }
         } else if !opts.quiet {
             tracing::warn!("--work specified but no active session");

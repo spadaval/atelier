@@ -523,7 +523,7 @@ impl SyncManager {
     pub fn claim_lock(
         &self,
         agent: &AgentConfig,
-        issue_id: i64,
+        issue_id: &str,
         branch: Option<&str>,
         force: bool,
     ) -> Result<bool> {
@@ -607,7 +607,7 @@ impl SyncManager {
     /// Release a lock on an issue.
     ///
     /// Returns `Ok(true)` if released, `Ok(false)` if not locked.
-    pub fn release_lock(&self, agent: &AgentConfig, issue_id: i64, force: bool) -> Result<bool> {
+    pub fn release_lock(&self, agent: &AgentConfig, issue_id: &str, force: bool) -> Result<bool> {
         let locks = self.read_locks()?;
 
         match locks.get_lock(issue_id) {
@@ -695,7 +695,11 @@ impl SyncManager {
     // --- Heartbeats ---
 
     /// Write and push a heartbeat file for this agent.
-    pub fn push_heartbeat(&self, agent: &AgentConfig, active_issue_id: Option<i64>) -> Result<()> {
+    pub fn push_heartbeat(
+        &self,
+        agent: &AgentConfig,
+        active_issue_id: Option<String>,
+    ) -> Result<()> {
         let heartbeat = Heartbeat {
             agent_id: agent.agent_id.clone(),
             last_heartbeat: Utc::now(),
@@ -777,7 +781,7 @@ impl SyncManager {
     }
 
     /// Find locks that have gone stale (no heartbeat within the timeout).
-    pub fn find_stale_locks(&self) -> Result<Vec<(i64, String)>> {
+    pub fn find_stale_locks(&self) -> Result<Vec<(String, String)>> {
         let locks = self.read_locks()?;
         let heartbeats = self.read_heartbeats()?;
         let timeout = chrono::Duration::minutes(locks.settings.stale_lock_timeout_minutes as i64);
@@ -793,16 +797,14 @@ impl SyncManager {
                         < timeout
             });
             if !has_fresh_heartbeat {
-                if let Ok(id) = issue_id_str.parse::<i64>() {
-                    stale.push((id, lock.agent_id.clone()));
-                }
+                stale.push((issue_id_str.clone(), lock.agent_id.clone()));
             }
         }
         Ok(stale)
     }
 
     /// Find stale locks with their age in minutes.
-    pub fn find_stale_locks_with_age(&self) -> Result<Vec<(i64, String, u64)>> {
+    pub fn find_stale_locks_with_age(&self) -> Result<Vec<(String, String, u64)>> {
         let locks = self.read_locks()?;
         let heartbeats = self.read_heartbeats()?;
         let timeout = chrono::Duration::minutes(locks.settings.stale_lock_timeout_minutes as i64);
@@ -826,9 +828,11 @@ impl SyncManager {
             };
 
             if age >= timeout {
-                if let Ok(id) = issue_id_str.parse::<i64>() {
-                    stale.push((id, lock.agent_id.clone(), age.num_minutes() as u64));
-                }
+                stale.push((
+                    issue_id_str.clone(),
+                    lock.agent_id.clone(),
+                    age.num_minutes() as u64,
+                ));
             }
         }
         Ok(stale)
@@ -931,7 +935,7 @@ mod tests {
         let hb = Heartbeat {
             agent_id: "worker-1".to_string(),
             last_heartbeat: Utc::now(),
-            active_issue_id: Some(5),
+            active_issue_id: Some("5".to_string()),
             machine_id: "test-host".to_string(),
         };
         let json = serde_json::to_string_pretty(&hb).unwrap();
@@ -941,7 +945,7 @@ mod tests {
         let heartbeats = sync.read_heartbeats().unwrap();
         assert_eq!(heartbeats.len(), 1);
         assert_eq!(heartbeats[0].agent_id, "worker-1");
-        assert_eq!(heartbeats[0].active_issue_id, Some(5));
+        assert_eq!(heartbeats[0].active_issue_id, Some("5".to_string()));
     }
 
     #[test]
@@ -979,7 +983,7 @@ mod tests {
         let sync = SyncManager::new(&atelier_dir).unwrap();
         let stale = sync.find_stale_locks().unwrap();
         assert_eq!(stale.len(), 1);
-        assert_eq!(stale[0], (5, "worker-1".to_string()));
+        assert_eq!(stale[0], ("5".to_string(), "worker-1".to_string()));
     }
 
     #[test]
@@ -1007,7 +1011,7 @@ mod tests {
         let hb = Heartbeat {
             agent_id: "worker-1".to_string(),
             last_heartbeat: Utc::now(),
-            active_issue_id: Some(5),
+            active_issue_id: Some("5".to_string()),
             machine_id: "test".to_string(),
         };
         std::fs::write(

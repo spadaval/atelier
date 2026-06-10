@@ -6,7 +6,7 @@ use crate::utils::format_issue_id;
 
 pub fn run(
     db: &Database,
-    id: i64,
+    id: &str,
     title: Option<&str>,
     description: Option<&str>,
     priority: Option<&str>,
@@ -24,7 +24,7 @@ pub fn run(
         }
     }
 
-    if db.update_issue(id, title, description, priority)? {
+    if db.update_issue(&id, title, description, priority)? {
         println!("Updated issue {}", format_issue_id(id));
     } else {
         bail!("Issue {} not found", format_issue_id(id));
@@ -53,10 +53,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Original title", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, Some("New title"), None, None);
+        let result = run(&db, issue_id.as_str(), Some("New title"), None, None);
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, "New title");
     }
 
@@ -65,10 +65,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, None, Some("New description"), None);
+        let result = run(&db, issue_id.as_str(), None, Some("New description"), None);
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.description, Some("New description".to_string()));
     }
 
@@ -77,10 +77,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, None, None, Some("critical"));
+        let result = run(&db, issue_id.as_str(), None, None, Some("critical"));
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.priority, "critical");
     }
 
@@ -93,14 +93,14 @@ mod tests {
 
         let result = run(
             &db,
-            issue_id,
+            &issue_id,
             Some("New title"),
             Some("New description"),
             Some("high"),
         );
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, "New title");
         assert_eq!(issue.description, Some("New description".to_string()));
         assert_eq!(issue.priority, "high");
@@ -111,7 +111,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, None, None, None);
+        let result = run(&db, issue_id.as_str(), None, None, None);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -123,7 +123,7 @@ mod tests {
     fn test_update_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = run(&db, 99999, Some("New title"), None, None);
+        let result = run(&db, "atelier-missing", Some("New title"), None, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -133,7 +133,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, None, None, Some("urgent"));
+        let result = run(&db, issue_id.as_str(), None, None, Some("urgent"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid priority"));
     }
@@ -146,9 +146,9 @@ mod tests {
             .unwrap();
 
         // Only update title
-        run(&db, issue_id, Some("New title"), None, None).unwrap();
+        run(&db, issue_id.as_str(), Some("New title"), None, None).unwrap();
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, "New title");
         assert_eq!(issue.description, Some("Original desc".to_string()));
         assert_eq!(issue.priority, "high");
@@ -159,10 +159,16 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Original", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, Some("新しいタイトル 🎉"), None, None);
+        let result = run(
+            &db,
+            issue_id.as_str(),
+            Some("新しいタイトル 🎉"),
+            None,
+            None,
+        );
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, "新しいタイトル 🎉");
     }
 
@@ -173,10 +179,10 @@ mod tests {
             .create_issue("Test", Some("Has description"), "medium")
             .unwrap();
 
-        let result = run(&db, issue_id, None, Some(""), None);
+        let result = run(&db, issue_id.as_str(), None, Some(""), None);
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.description, Some("".to_string()));
     }
 
@@ -186,10 +192,10 @@ mod tests {
         let issue_id = db.create_issue("Original", None, "medium").unwrap();
 
         let malicious = "'; DROP TABLE issues; --";
-        let result = run(&db, issue_id, Some(malicious), None, None);
+        let result = run(&db, issue_id.as_str(), Some(malicious), None, None);
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, malicious);
 
         // Verify database is intact
@@ -201,12 +207,18 @@ mod tests {
     fn test_update_closed_issue() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
+        db.close_issue(issue_id.as_str()).unwrap();
 
-        let result = run(&db, issue_id, Some("Updated closed issue"), None, None);
+        let result = run(
+            &db,
+            issue_id.as_str(),
+            Some("Updated closed issue"),
+            None,
+            None,
+        );
         assert!(result.is_ok());
 
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
+        let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
         assert_eq!(issue.title, "Updated closed issue");
         assert_eq!(issue.status, "closed"); // Status should remain closed
     }
@@ -222,9 +234,9 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue(&original, None, "medium").unwrap();
 
-            run(&db, issue_id, Some(&new_title), None, None).unwrap();
+            run(&db, issue_id.as_str(), Some(&new_title), None, None).unwrap();
 
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
             prop_assert_eq!(issue.title, new_title);
         }
 
@@ -233,10 +245,10 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-            let result = run(&db, issue_id, None, None, Some(&priority));
+            let result = run(&db, issue_id.as_str(), None, None, Some(&priority));
             prop_assert!(result.is_ok());
 
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
             prop_assert_eq!(issue.priority, priority);
         }
 
@@ -250,15 +262,16 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-            let result = run(&db, issue_id, None, None, Some(&priority));
+            let result = run(&db, issue_id.as_str(), None, None, Some(&priority));
             prop_assert!(result.is_err());
         }
 
         #[test]
         fn prop_nonexistent_issue_fails(issue_id in 1000i64..10000) {
             let (db, _dir) = setup_test_db();
+            let issue_id = format!("atelier-missing-{issue_id}");
 
-            let result = run(&db, issue_id, Some("New title"), None, None);
+            let result = run(&db, issue_id.as_str(), Some("New title"), None, None);
             prop_assert!(result.is_err());
         }
 
@@ -267,9 +280,9 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-            run(&db, issue_id, None, Some(&desc), None).unwrap();
+            run(&db, issue_id.as_str(), None, Some(&desc), None).unwrap();
 
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
+            let issue = db.get_issue(issue_id.as_str()).unwrap().unwrap();
             prop_assert_eq!(issue.description, Some(desc));
         }
     }

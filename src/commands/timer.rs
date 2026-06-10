@@ -4,9 +4,9 @@ use chrono::Utc;
 use crate::db::Database;
 use crate::utils::format_issue_id;
 
-pub fn start(db: &Database, issue_id: i64) -> Result<()> {
+pub fn start(db: &Database, issue_id: &str) -> Result<()> {
     // Verify issue exists
-    let issue = match db.get_issue(issue_id)? {
+    let issue = match db.get_issue(&issue_id)? {
         Some(i) => i,
         None => bail!("Issue {} not found", format_issue_id(issue_id)),
     };
@@ -21,7 +21,7 @@ pub fn start(db: &Database, issue_id: i64) -> Result<()> {
         } else {
             bail!(
                 "Timer already running for issue {}. Stop it first with 'atelier stop'.",
-                format_issue_id(active_id)
+                format_issue_id(&active_id)
             );
         }
     }
@@ -44,9 +44,9 @@ pub fn stop(db: &Database) -> Result<()> {
     };
     let duration = Utc::now().signed_duration_since(started_at);
 
-    db.stop_timer(issue_id)?;
+    db.stop_timer(&issue_id)?;
 
-    let issue = db.get_issue(issue_id)?;
+    let issue = db.get_issue(&issue_id)?;
     let title = issue
         .map(|i| i.title)
         .unwrap_or_else(|| "(deleted)".to_string());
@@ -55,11 +55,15 @@ pub fn stop(db: &Database) -> Result<()> {
     let minutes = duration.num_minutes() % 60;
     let seconds = duration.num_seconds() % 60;
 
-    println!("Stopped timer for {}: {}", format_issue_id(issue_id), title);
+    println!(
+        "Stopped timer for {}: {}",
+        format_issue_id(&issue_id),
+        title
+    );
     println!("Time spent: {}h {}m {}s", hours, minutes, seconds);
 
     // Show total time for this issue
-    let total = db.get_total_time(issue_id)?;
+    let total = db.get_total_time(&issue_id)?;
     let total_hours = total / 3600;
     let total_minutes = (total % 3600) / 60;
     println!(
@@ -80,12 +84,12 @@ pub fn status(db: &Database) -> Result<()> {
             let minutes = duration.num_minutes() % 60;
             let seconds = duration.num_seconds() % 60;
 
-            let issue = db.get_issue(issue_id)?;
+            let issue = db.get_issue(&issue_id)?;
             let title = issue
                 .map(|i| i.title)
                 .unwrap_or_else(|| "(deleted)".to_string());
 
-            println!("Timer running: {} {}", format_issue_id(issue_id), title);
+            println!("Timer running: {} {}", format_issue_id(&issue_id), title);
             println!("Elapsed: {}h {}m {}s", hours, minutes, seconds);
         }
         None => {
@@ -114,7 +118,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = start(&db, id);
+        let result = start(&db, &id);
         assert!(result.is_ok());
 
         let active = db.get_active_timer().unwrap();
@@ -126,7 +130,7 @@ mod tests {
     fn test_start_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = start(&db, 99999);
+        let result = start(&db, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -136,8 +140,8 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        start(&db, id).unwrap();
-        let result = start(&db, id);
+        start(&db, &id).unwrap();
+        let result = start(&db, &id);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("already running"));
     }
@@ -148,8 +152,8 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        start(&db, id1).unwrap();
-        let result = start(&db, id2);
+        start(&db, &id1).unwrap();
+        let result = start(&db, &id2);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Stop it first"));
     }
@@ -159,7 +163,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        start(&db, id).unwrap();
+        start(&db, &id).unwrap();
         let result = stop(&db);
         assert!(result.is_ok());
 
@@ -189,7 +193,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        start(&db, id).unwrap();
+        start(&db, &id).unwrap();
         let result = status(&db);
         assert!(result.is_ok());
     }
@@ -199,7 +203,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        start(&db, id).unwrap();
+        start(&db, &id).unwrap();
         status(&db).unwrap();
         stop(&db).unwrap();
 
@@ -211,10 +215,10 @@ mod tests {
         #[test]
         fn prop_start_stop_roundtrip(idx in 0usize..5) {
             let (db, _dir) = setup_test_db();
-            let ids: Vec<i64> = (0..5).map(|i| db.create_issue(&format!("Issue {}", i), None, "medium").unwrap()).collect();
-            let id = ids[idx];
+            let ids: Vec<String> = (0..5).map(|i| db.create_issue(&format!("Issue {}", i), None, "medium").unwrap()).collect();
+            let id = &ids[idx];
 
-            start(&db, id).unwrap();
+            start(&db, &id).unwrap();
             prop_assert!(db.get_active_timer().unwrap().is_some());
 
             stop(&db).unwrap();

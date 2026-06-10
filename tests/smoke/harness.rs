@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 use tempfile::TempDir;
 
 /// Result of running an Atelier CLI command.
@@ -27,6 +28,7 @@ impl CmdResult {
 pub struct SmokeHarness {
     pub temp_dir: TempDir,
     pub atelier_bin: PathBuf,
+    issue_ids: Mutex<Vec<String>>,
 }
 
 impl SmokeHarness {
@@ -38,6 +40,7 @@ impl SmokeHarness {
         let harness = SmokeHarness {
             temp_dir,
             atelier_bin: bin,
+            issue_ids: Mutex::new(Vec::new()),
         };
 
         // Run atelier init
@@ -54,23 +57,32 @@ impl SmokeHarness {
         SmokeHarness {
             temp_dir,
             atelier_bin: bin,
+            issue_ids: Mutex::new(Vec::new()),
         }
     }
 
     /// Run an Atelier CLI command and return the full result.
     pub fn run(&self, args: &[&str]) -> CmdResult {
+        let translated_args = self.translate_issue_refs(args);
         let output = Command::new(&self.atelier_bin)
             .current_dir(self.temp_dir.path())
-            .args(args)
+            .args(&translated_args)
             .output()
             .expect("failed to execute atelier");
 
-        CmdResult {
+        let result = CmdResult {
             success: output.status.success(),
             exit_code: output.status.code().unwrap_or(-1),
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
             stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        };
+
+        if result.success {
+            self.register_issue_ids_from_stdout(&result.stdout);
+            self.register_issue_ids_from_state();
         }
+
+        result
     }
 
     /// Run an Atelier CLI command and assert it succeeds.
@@ -103,6 +115,123 @@ impl SmokeHarness {
     /// Path to the SQLite database.
     pub fn db_path(&self) -> PathBuf {
         self.atelier_dir().join("state.db")
+    }
+
+    fn translate_issue_refs(&self, args: &[&str]) -> Vec<String> {
+        args.iter()
+            .enumerate()
+            .map(|(index, arg)| {
+                if issue_ref_position(args, index) {
+                    self.translate_issue_ref(arg)
+                } else {
+                    (*arg).to_string()
+                }
+            })
+            .collect()
+    }
+
+    fn translate_issue_ref(&self, value: &str) -> String {
+        let numeric = value.strip_prefix('#').unwrap_or(value);
+        match numeric.parse::<usize>() {
+            Ok(ordinal) => self.issue_ref(ordinal),
+            Err(_) => value.to_string(),
+        }
+    }
+
+    fn issue_ref(&self, ordinal: usize) -> String {
+        self.issue_ids
+            .lock()
+            .unwrap()
+            .get(ordinal - 1)
+            .cloned()
+            .unwrap_or_else(|| ordinal.to_string())
+    }
+
+    fn register_issue_ids_from_stdout(&self, stdout: &str) {
+        let bytes = stdout.as_bytes();
+        let mut index = 0;
+        while let Some(offset) = stdout[index..].find("atelier-") {
+            let start = index + offset;
+            let mut end = start;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'-') {
+                end += 1;
+            }
+            self.register_issue_id(stdout[start..end].to_string());
+            index = end;
+        }
+    }
+
+    fn register_issue_ids_from_state(&self) {
+        let issues_dir = self.temp_dir.path().join(".atelier-state/issues");
+        let Ok(entries) = std::fs::read_dir(issues_dir) else {
+            return;
+        };
+        let mut ids = entries
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.path().file_stem()?.to_str().map(str::to_owned))
+            .filter(|id| is_record_id(id))
+            .collect::<Vec<_>>();
+        ids.sort();
+        for id in ids {
+            self.register_issue_id(id);
+        }
+    }
+
+    fn register_issue_id(&self, id: String) {
+        if !is_record_id(&id) {
+            return;
+        }
+        let mut ids = self.issue_ids.lock().unwrap();
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+}
+
+fn is_record_id(value: &str) -> bool {
+    let Some((slug, suffix)) = value.rsplit_once('-') else {
+        return false;
+    };
+    !slug.is_empty()
+        && suffix.len() == 4
+        && slug
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+fn command_offset(args: &[&str]) -> usize {
+    args.iter()
+        .position(|arg| !arg.starts_with('-'))
+        .unwrap_or(args.len())
+}
+
+fn issue_ref_position(args: &[&str], index: usize) -> bool {
+    let offset = command_offset(args);
+    if index <= offset {
+        return false;
+    }
+
+    match args.get(offset..).unwrap_or_default() {
+        ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
+            index == offset + 1
+        }
+        ["label" | "unlabel" | "comment", ..] => index == offset + 1,
+        ["block" | "unblock" | "relate" | "unrelate", ..] => {
+            index == offset + 1 || index == offset + 2
+        }
+        ["subissue", ..] => index == offset + 1,
+        ["session", "work", ..] => index == offset + 2,
+        ["archive", "add" | "remove", ..] => index == offset + 2,
+        ["milestone", "add" | "remove", ..] => index > offset + 2,
+        ["issue", "show" | "update" | "impact", ..] => index == offset + 2,
+        ["issue", "subissue", ..] => index == offset + 2,
+        ["issue", "relate", ..] => index == offset + 2 || index == offset + 3,
+        ["dep", "list", ..] => index == offset + 2,
+        ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
+        _ => false,
     }
 }
 

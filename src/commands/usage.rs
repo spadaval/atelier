@@ -2,7 +2,6 @@ use anyhow::Result;
 
 use crate::db::Database;
 use crate::token_usage::ParsedUsage;
-use crate::utils::format_issue_id;
 
 pub fn record(db: &Database, usage: &ParsedUsage) -> Result<()> {
     let id = db.create_token_usage(usage)?;
@@ -89,7 +88,7 @@ pub fn list(
 
         println!(
             "{:<5} {:<12} {:<10} {:<22} {:>10} {:>10} {:>8}",
-            format_issue_id(entry.id),
+            entry.id,
             truncate(&entry.agent_id, 12),
             model_short,
             ts,

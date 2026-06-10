@@ -1,0 +1,26 @@
+---
+acceptance: []
+blocks: []
+created_at: "2026-06-08T22:34:34.779357612+00:00"
+depends_on: []
+evidence_required: []
+id: "atelier-0018"
+issue_type: "task"
+labels:
+- "agent-factory"
+- "assignee:root"
+- "status:in_progress"
+- "task"
+- "validation"
+links: []
+parent: "atelier-0015"
+priority: "P3"
+schema: "atelier.issue"
+schema_version: 1
+status: "closed"
+title: "Validate dependency edge add remove for Agent Factory workflow"
+updated_at: "2026-06-08T22:34:53.200182347+00:00"
+---
+
+
+Short-lived validation task used by atelier-z1p.6 to prove Agent Factory dependency add/remove commands through Atelier.

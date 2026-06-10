@@ -7,20 +7,21 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{validate_relation_type, Database};
 use crate::models::Issue;
+use crate::record_id;
 
 #[derive(Debug)]
 struct CanonicalIssue {
     issue: Issue,
     labels: Vec<String>,
-    blocks: Vec<i64>,
-    depends_on: Vec<i64>,
-    relations: Vec<(i64, i64, String)>,
+    blocks: Vec<String>,
+    depends_on: Vec<String>,
+    relations: Vec<(String, String, String)>,
 }
 
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
-    relations: Vec<(i64, i64, String)>,
+    relations: Vec<(String, String, String)>,
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -42,10 +43,10 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     for relative in discover_issue_record_paths(state_dir)? {
         canonical_paths.insert(relative.clone());
         let issue = load_issue_record(state_dir, &relative)?;
-        if !issue_ids.insert(issue.issue.id) {
+        if !issue_ids.insert(issue.issue.id.clone()) {
             bail!(
                 "Duplicate issue ID in canonical projection: {}",
-                issue_record_id(issue.issue.id)
+                issue.issue.id
             );
         }
         issues.push(issue);
@@ -55,32 +56,27 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     let mut relations = Vec::new();
     let mut relation_keys = BTreeSet::new();
     for issue in &issues {
-        if let Some(parent_id) = issue.issue.parent_id {
-            ensure_issue_exists(parent_id, &issue_ids, "parent", issue.issue.id)?;
+        if let Some(parent_id) = &issue.issue.parent_id {
+            ensure_issue_exists(parent_id, &issue_ids, "parent", &issue.issue.id)?;
         }
         for blocked_id in &issue.blocks {
-            ensure_issue_exists(*blocked_id, &issue_ids, "blocks", issue.issue.id)?;
+            ensure_issue_exists(blocked_id, &issue_ids, "blocks", &issue.issue.id)?;
         }
         for blocker_id in &issue.depends_on {
-            ensure_issue_exists(*blocker_id, &issue_ids, "depends_on", issue.issue.id)?;
+            ensure_issue_exists(blocker_id, &issue_ids, "depends_on", &issue.issue.id)?;
         }
 
         for relation in &issue.relations {
-            ensure_issue_exists(relation.1, &issue_ids, &relation.2, issue.issue.id)?;
-            let key = (relation.0, relation.1, relation.2.clone());
+            ensure_issue_exists(&relation.1, &issue_ids, &relation.2, &issue.issue.id)?;
+            let key = (relation.0.clone(), relation.1.clone(), relation.2.clone());
             if !relation_keys.insert(key.clone()) {
-                bail!(
-                    "Duplicate typed link {} -> {} ({})",
-                    issue_record_id(key.0),
-                    issue_record_id(key.1),
-                    key.2
-                );
+                bail!("Duplicate typed link {} -> {} ({})", key.0, key.1, key.2);
             }
             relations.push(key);
         }
     }
 
-    issues.sort_by_key(|issue| issue.issue.id);
+    issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
     Ok(RebuildProjection { issues, relations })
 }
 
@@ -199,14 +195,15 @@ fn load_issue_record(state_dir: &Path, relative: &Path) -> Result<CanonicalIssue
     }
 
     let canonical_id = require_scalar(&front_matter, "id", &relative)?;
-    let id = parse_issue_id(&canonical_id).with_context(|| {
+    record_id::validate_record_id(&canonical_id).with_context(|| {
         format!(
             "Invalid issue id {} in {}",
             canonical_id,
             display_state_path(&relative)
         )
     })?;
-    let expected = issue_record_path(id);
+    let id = canonical_id.clone();
+    let expected = issue_record_path(&id);
     if relative != expected {
         bail!(
             "Issue id {} in {} does not match canonical path {}",
@@ -219,7 +216,7 @@ fn load_issue_record(state_dir: &Path, relative: &Path) -> Result<CanonicalIssue
     let parent_id = optional_issue_id(&front_matter, "parent", &relative)?;
     let blocks = issue_id_array(&front_matter, "blocks", &relative)?;
     let depends_on = issue_id_array(&front_matter, "depends_on", &relative)?;
-    let relations = typed_links(&front_matter, "links", id, &relative)?;
+    let relations = typed_links(&front_matter, "links", &id, &relative)?;
     let status = require_scalar(&front_matter, "status", &relative)?;
     let issue_type = require_scalar(&front_matter, "issue_type", &relative)?;
     crate::db::validate_issue_type(&issue_type)
@@ -280,25 +277,25 @@ fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result
             for issue in &rebuild.issues {
                 if issue.issue.parent_id.is_some() {
                     db.update_parent_import(
-                        issue.issue.id,
-                        issue.issue.parent_id,
+                        &issue.issue.id,
+                        issue.issue.parent_id.as_deref(),
                         &issue.issue.updated_at,
                     )?;
                 }
             }
             for issue in &rebuild.issues {
                 for label in &issue.labels {
-                    db.add_label(issue.issue.id, label)?;
+                    db.add_label(&issue.issue.id, label)?;
                 }
                 for blocked_id in &issue.blocks {
-                    db.add_dependency(*blocked_id, issue.issue.id)?;
+                    db.add_dependency(blocked_id, &issue.issue.id)?;
                 }
                 for blocker_id in &issue.depends_on {
-                    db.add_dependency(issue.issue.id, *blocker_id)?;
+                    db.add_dependency(&issue.issue.id, blocker_id)?;
                 }
             }
             for (source, target, relation_type) in &rebuild.relations {
-                db.add_typed_relation(*source, *target, relation_type)?;
+                db.add_typed_relation(&source, &target, relation_type)?;
             }
             Ok(())
         })?;
@@ -506,18 +503,19 @@ fn issue_id_array(
     values: &BTreeMap<String, Value>,
     key: &str,
     relative: &Path,
-) -> Result<Vec<i64>> {
+) -> Result<Vec<String>> {
     string_array(values, key, relative)?
         .into_iter()
         .map(|value| {
-            parse_issue_id(&value).with_context(|| {
+            record_id::validate_record_id(&value).with_context(|| {
                 format!(
                     "Invalid issue id '{}' in key '{}' of {}",
                     value,
                     key,
                     display_state_path(relative)
                 )
-            })
+            })?;
+            Ok(value)
         })
         .collect()
 }
@@ -525,9 +523,9 @@ fn issue_id_array(
 fn typed_links(
     values: &BTreeMap<String, Value>,
     key: &str,
-    source_id: i64,
+    source_id: &str,
     relative: &Path,
-) -> Result<Vec<(i64, i64, String)>> {
+) -> Result<Vec<(String, String, String)>> {
     let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
         anyhow!(
             "Missing array front matter key '{}' in {}",
@@ -571,13 +569,14 @@ fn typed_links(
                     display_state_path(relative)
                 )
             })?;
-        let target_id = parse_issue_id(target).with_context(|| {
+        record_id::validate_record_id(target).with_context(|| {
             format!(
                 "Invalid link target_id '{}' in {}",
                 target,
                 display_state_path(relative)
             )
         })?;
+        let target_id = target.to_string();
         let relation_type = object
             .get("type")
             .and_then(Value::as_str)
@@ -589,12 +588,16 @@ fn typed_links(
                 display_state_path(relative)
             )
         })?;
-        let link = (source_id, target_id, relation_type.to_string());
+        let link = (
+            source_id.to_string(),
+            target_id.clone(),
+            relation_type.to_string(),
+        );
         if !seen.insert(link.clone()) {
             bail!(
                 "Duplicate link {} -> {} ({}) in {}",
-                issue_record_id(source_id),
-                issue_record_id(target_id),
+                source_id,
+                target_id,
                 relation_type,
                 display_state_path(relative)
             );
@@ -608,17 +611,20 @@ fn optional_issue_id(
     values: &BTreeMap<String, Value>,
     key: &str,
     relative: &Path,
-) -> Result<Option<i64>> {
+) -> Result<Option<String>> {
     match values.get(key) {
         Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => parse_issue_id(value).map(Some).with_context(|| {
-            format!(
-                "Invalid issue id '{}' in key '{}' of {}",
-                value,
-                key,
-                display_state_path(relative)
-            )
-        }),
+        Some(Value::String(value)) => {
+            record_id::validate_record_id(value).with_context(|| {
+                format!(
+                    "Invalid issue id '{}' in key '{}' of {}",
+                    value,
+                    key,
+                    display_state_path(relative)
+                )
+            })?;
+            Ok(Some(value.clone()))
+        }
         _ => bail!(
             "Key '{}' in {} must be an issue id string or null",
             key,
@@ -628,41 +634,23 @@ fn optional_issue_id(
 }
 
 fn ensure_issue_exists(
-    id: i64,
-    issue_ids: &BTreeSet<i64>,
+    id: &str,
+    issue_ids: &BTreeSet<String>,
     relation: &str,
-    source_id: i64,
+    source_id: &str,
 ) -> Result<()> {
-    if issue_ids.contains(&id) {
+    if issue_ids.contains(id) {
         Ok(())
     } else {
         bail!(
-            "Issue ISS-{source_id:04} has {} reference to missing issue ISS-{id:04}",
+            "Issue {source_id} has {} reference to missing issue {id}",
             relation
         )
     }
 }
 
-fn parse_issue_id(id: &str) -> Result<i64> {
-    let suffix = id
-        .strip_prefix("ISS-")
-        .ok_or_else(|| anyhow!("expected ISS-<number>"))?;
-    if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
-        bail!("expected ISS-<number>");
-    }
-    let number = suffix.parse::<i64>()?;
-    if number <= 0 {
-        bail!("issue id suffix must be positive");
-    }
-    Ok(number)
-}
-
-fn issue_record_id(id: i64) -> String {
-    format!("ISS-{id:04}")
-}
-
-fn issue_record_path(id: i64) -> PathBuf {
-    PathBuf::from("issues").join(format!("{}.md", issue_record_id(id)))
+fn issue_record_path(id: &str) -> PathBuf {
+    PathBuf::from("issues").join(format!("{id}.md"))
 }
 
 fn db_priority(priority: &str) -> Result<String> {
@@ -704,12 +692,12 @@ mod tests {
             .create_issue("Parent", Some("Parent body"), "high")
             .unwrap();
         let child = db
-            .create_subissue(parent, "Child", Some("Child body"), "low")
+            .create_subissue(&parent, "Child", Some("Child body"), "low")
             .unwrap();
-        db.add_label(child, "alpha").unwrap();
-        db.add_label(child, "zeta").unwrap();
-        db.add_dependency(child, parent).unwrap();
-        db.add_typed_relation(parent, child, "derived").unwrap();
+        db.add_label(&child, "alpha").unwrap();
+        db.add_label(&child, "zeta").unwrap();
+        db.add_dependency(&child, &parent).unwrap();
+        db.add_typed_relation(&parent, &child, "derived").unwrap();
 
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
@@ -718,24 +706,24 @@ mod tests {
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
-        let rebuilt_parent = rebuilt.get_issue(parent).unwrap().unwrap();
-        let rebuilt_child = rebuilt.get_issue(child).unwrap().unwrap();
+        let rebuilt_parent = rebuilt.get_issue(&parent).unwrap().unwrap();
+        let rebuilt_child = rebuilt.get_issue(&child).unwrap().unwrap();
         assert_eq!(rebuilt_parent.title, "Parent");
         assert_eq!(rebuilt_child.title, "Child");
-        assert_eq!(rebuilt_child.parent_id, Some(parent));
+        assert_eq!(rebuilt_child.parent_id, Some(parent.clone()));
         assert_eq!(rebuilt_child.priority, "low");
-        assert_eq!(rebuilt.get_labels(child).unwrap(), vec!["alpha", "zeta"]);
-        assert_eq!(rebuilt.get_blockers(child).unwrap(), vec![parent]);
-        assert_eq!(rebuilt.get_blocking(parent).unwrap(), vec![child]);
+        assert_eq!(rebuilt.get_labels(&child).unwrap(), vec!["alpha", "zeta"]);
+        assert_eq!(rebuilt.get_blockers(&child).unwrap(), vec![parent.clone()]);
+        assert_eq!(rebuilt.get_blocking(&parent).unwrap(), vec![child.clone()]);
 
         let rebuilt_state_dir = dir.path().join(".rebuilt-state");
         export::run_canonical(&rebuilt, &rebuilt_state_dir, false).unwrap();
         assert_eq!(
-            fs::read_to_string(state_dir.join("issues/ISS-0002.md")).unwrap(),
-            fs::read_to_string(rebuilt_state_dir.join("issues/ISS-0002.md")).unwrap()
+            fs::read_to_string(state_dir.join(issue_record_path(&child))).unwrap(),
+            fs::read_to_string(rebuilt_state_dir.join(issue_record_path(&child))).unwrap()
         );
         assert!(!rebuilt_state_dir.join("graph.json").exists());
-        assert_eq!(rebuilt.get_typed_relations(parent).unwrap().len(), 1);
+        assert_eq!(rebuilt.get_typed_relations(&parent).unwrap().len(), 1);
     }
 
     #[test]
@@ -745,7 +733,7 @@ mod tests {
         let parent = db
             .create_issue("Parent", Some("Parent body"), "high")
             .unwrap();
-        db.update_parent(child, Some(parent)).unwrap();
+        db.update_parent(&child, Some(&parent)).unwrap();
 
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
@@ -754,8 +742,8 @@ mod tests {
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
-        let rebuilt_child = rebuilt.get_issue(child).unwrap().unwrap();
-        assert_eq!(rebuilt_child.parent_id, Some(parent));
+        let rebuilt_child = rebuilt.get_issue(&child).unwrap().unwrap();
+        assert_eq!(rebuilt_child.parent_id, Some(parent.clone()));
     }
 
     #[test]
@@ -773,42 +761,43 @@ mod tests {
     #[test]
     fn rebuild_reports_path_id_mismatch() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Mismatch", None, "medium").unwrap();
+        let id = db.create_issue("Mismatch", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
+        let wrong_id = "atelier-zzzz";
         fs::rename(
-            state_dir.join("issues/ISS-0001.md"),
-            state_dir.join("issues/ISS-0002.md"),
+            state_dir.join(issue_record_path(&id)),
+            state_dir.join(issue_record_path(wrong_id)),
         )
         .unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("does not match canonical path .atelier-state/issues/ISS-0001.md"));
+        assert!(error.to_string().contains(&format!(
+            "does not match canonical path .atelier-state/issues/{id}.md"
+        )));
     }
 
     #[test]
     fn rebuild_reports_malformed_front_matter() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Malformed", None, "medium").unwrap();
+        let id = db.create_issue("Malformed", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        fs::write(state_dir.join("issues/ISS-0001.md"), "not front matter\n").unwrap();
+        fs::write(state_dir.join(issue_record_path(&id)), "not front matter\n").unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Missing YAML front matter in .atelier-state/issues/ISS-0001.md"));
+        assert!(error.to_string().contains(&format!(
+            "Missing YAML front matter in .atelier-state/issues/{id}.md"
+        )));
     }
 
     #[test]
     fn rebuild_reports_schema_mismatch() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Wrong schema", None, "medium").unwrap();
+        let id = db.create_issue("Wrong schema", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        let path = state_dir.join("issues/ISS-0001.md");
+        let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path)
             .unwrap()
             .replace("schema: \"atelier.issue\"", "schema: \"atelier.graph\"");
@@ -823,32 +812,36 @@ mod tests {
     #[test]
     fn rebuild_reports_dangling_dependency_and_duplicate_link() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Source", None, "medium").unwrap();
+        let id = db.create_issue("Source", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
-        let path = state_dir.join("issues/ISS-0001.md");
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace("depends_on: []", "depends_on:\n- \"ISS-9999\"");
+        let missing_id = "atelier-zzzz";
+        let path = state_dir.join(issue_record_path(&id));
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "depends_on: []",
+            &format!("depends_on:\n- \"{missing_id}\""),
+        );
         fs::write(&path, text).unwrap();
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Issue ISS-0001 has depends_on reference to missing issue ISS-9999"));
+        assert!(error.to_string().contains(&format!(
+            "Issue {id} has depends_on reference to missing issue {missing_id}"
+        )));
 
         let text = fs::read_to_string(&path)
             .unwrap()
-            .replace("depends_on:\n- \"ISS-9999\"", "depends_on: []")
+            .replace(&format!("depends_on:\n- \"{missing_id}\""), "depends_on: []")
             .replace(
                 "links: []",
-                "links:\n- target_id: \"ISS-0001\"\n  target_kind: \"issue\"\n  type: \"related\"\n- target_id: \"ISS-0001\"\n  target_kind: \"issue\"\n  type: \"related\"",
+                &format!(
+                    "links:\n- target_id: \"{id}\"\n  target_kind: \"issue\"\n  type: \"related\"\n- target_id: \"{id}\"\n  target_kind: \"issue\"\n  type: \"related\""
+                ),
             );
         fs::write(&path, text).unwrap();
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Duplicate link ISS-0001 -> ISS-0001 (related)"));
+            .contains(&format!("Duplicate link {id} -> {id} (related)")));
     }
 
     #[test]
@@ -856,11 +849,19 @@ mod tests {
         let (db, dir) = setup_test_db();
         let first = db.create_issue("First", None, "medium").unwrap();
         let second = db.create_issue("Second", None, "medium").unwrap();
-        db.add_typed_relation(first, second, "related").unwrap();
+        db.add_typed_relation(&first, &second, "related").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
-        let path = state_dir.join("issues/ISS-0001.md");
+        let path = [first.as_str(), second.as_str()]
+            .into_iter()
+            .map(|id| state_dir.join(issue_record_path(id)))
+            .find(|path| {
+                fs::read_to_string(path)
+                    .map(|text| text.contains("type: \"related\""))
+                    .unwrap_or(false)
+            })
+            .unwrap();
         let text = fs::read_to_string(&path)
             .unwrap()
             .replace("type: \"related\"", "type: \"\"");

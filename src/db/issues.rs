@@ -5,6 +5,7 @@ use rusqlite::params;
 use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
 use crate::models::Issue;
+use crate::record_id;
 
 impl Database {
     pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
@@ -47,10 +48,6 @@ impl Database {
 
     pub fn insert_issue_import(&self, issue: &Issue) -> Result<()> {
         self.insert_issue_rebuild(issue)?;
-        self.conn.execute(
-            "UPDATE sqlite_sequence SET seq = MAX(seq, ?1) WHERE name = 'issues'",
-            params![issue.id],
-        )?;
         Ok(())
     }
 
@@ -59,17 +56,17 @@ impl Database {
         title: &str,
         description: Option<&str>,
         priority: &str,
-    ) -> Result<i64> {
+    ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, "task", None)
     }
 
     pub fn create_subissue(
         &self,
-        parent_id: i64,
+        parent_id: &str,
         title: &str,
         description: Option<&str>,
         priority: &str,
-    ) -> Result<i64> {
+    ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, "task", Some(parent_id))
     }
 
@@ -79,18 +76,18 @@ impl Database {
         description: Option<&str>,
         priority: &str,
         issue_type: &str,
-    ) -> Result<i64> {
+    ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, issue_type, None)
     }
 
     pub fn create_subissue_with_type(
         &self,
-        parent_id: i64,
+        parent_id: &str,
         title: &str,
         description: Option<&str>,
         priority: &str,
         issue_type: &str,
-    ) -> Result<i64> {
+    ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, issue_type, Some(parent_id))
     }
 
@@ -100,8 +97,8 @@ impl Database {
         description: Option<&str>,
         priority: &str,
         issue_type: &str,
-        parent_id: Option<i64>,
-    ) -> Result<i64> {
+        parent_id: Option<&str>,
+    ) -> Result<String> {
         validate_priority(priority)?;
         validate_issue_type(issue_type)?;
         if title.len() > MAX_TITLE_LEN {
@@ -118,15 +115,21 @@ impl Database {
                 );
             }
         }
+        if let Some(parent_id) = parent_id {
+            record_id::validate_record_id(parent_id)?;
+        }
+        let id =
+            record_id::allocate_issue_id(|candidate| Ok(self.get_issue(candidate)?.is_some()))?;
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO issues (title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 'open', ?6, ?6)",
-            params![title, description, priority, issue_type, parent_id, now],
+            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, ?7)",
+            params![id, title, description, priority, issue_type, parent_id, now],
         )?;
-        Ok(self.conn.last_insert_rowid())
+        Ok(id)
     }
 
-    pub fn get_subissues(&self, parent_id: i64) -> Result<Vec<Issue>> {
+    pub fn get_subissues(&self, parent_id: impl ToString) -> Result<Vec<Issue>> {
+        let parent_id = parent_id.to_string();
         let mut stmt = self.conn.prepare(
             "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
         )?;
@@ -138,7 +141,8 @@ impl Database {
         Ok(issues)
     }
 
-    pub fn get_issue(&self, id: i64) -> Result<Option<Issue>> {
+    pub fn get_issue(&self, id: impl ToString) -> Result<Option<Issue>> {
+        let id = id.to_string();
         let mut stmt = self.conn.prepare(
             "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
         )?;
@@ -148,25 +152,29 @@ impl Database {
         Ok(issue)
     }
 
-    pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<i64>> {
-        let normalized = issue_ref.trim().trim_start_matches('#');
+    pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<String>> {
+        let normalized = issue_ref.trim();
         if normalized.is_empty() {
             return Ok(None);
         }
 
-        if let Ok(id) = normalized.parse::<i64>() {
-            if self.get_issue(id)?.is_some() {
-                return Ok(Some(id));
-            }
+        if record_id::validate_record_id(normalized).is_err() {
+            return Ok(None);
+        }
+
+        if self.get_issue(normalized)?.is_some() {
+            return Ok(Some(normalized.to_string()));
         }
 
         Ok(None)
     }
 
     /// Get an issue by ID, returning an error if not found.
-    pub fn require_issue(&self, id: i64) -> Result<Issue> {
-        self.get_issue(id)?
-            .ok_or_else(|| anyhow::anyhow!("Issue {} not found", crate::utils::format_issue_id(id)))
+    pub fn require_issue(&self, id: impl ToString) -> Result<Issue> {
+        let id = id.to_string();
+        self.get_issue(&id)?.ok_or_else(|| {
+            anyhow::anyhow!("Issue {} not found", crate::utils::format_issue_id(&id))
+        })
     }
 
     pub fn list_issues(
@@ -223,7 +231,7 @@ impl Database {
 
     pub fn update_issue(
         &self,
-        id: i64,
+        id: impl ToString,
         title: Option<&str>,
         description: Option<&str>,
         priority: Option<&str>,
@@ -267,7 +275,7 @@ impl Database {
             params_vec.push(Box::new(p.to_string()));
         }
 
-        params_vec.push(Box::new(id));
+        params_vec.push(Box::new(id.to_string()));
         let sql = format!(
             "UPDATE issues SET {} WHERE id = ?{}",
             updates.join(", "),
@@ -280,7 +288,8 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn close_issue(&self, id: i64) -> Result<bool> {
+    pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
+        let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE issues SET status = 'closed', closed_at = ?1, updated_at = ?1 WHERE id = ?2",
@@ -289,7 +298,8 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn reopen_issue(&self, id: i64) -> Result<bool> {
+    pub fn reopen_issue(&self, id: impl ToString) -> Result<bool> {
+        let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE issues SET status = 'open', closed_at = NULL, updated_at = ?1 WHERE id = ?2",
@@ -298,14 +308,16 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn delete_issue(&self, id: i64) -> Result<bool> {
+    pub fn delete_issue(&self, id: impl ToString) -> Result<bool> {
+        let id = id.to_string();
         let rows = self
             .conn
             .execute("DELETE FROM issues WHERE id = ?1", [id])?;
         Ok(rows > 0)
     }
 
-    pub fn update_parent(&self, id: i64, parent_id: Option<i64>) -> Result<bool> {
+    pub fn update_parent(&self, id: impl ToString, parent_id: Option<&str>) -> Result<bool> {
+        let id = id.to_string();
         let now = chrono::Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
@@ -316,10 +328,11 @@ impl Database {
 
     pub fn update_parent_import(
         &self,
-        id: i64,
-        parent_id: Option<i64>,
+        id: impl ToString,
+        parent_id: Option<&str>,
         updated_at: &DateTime<Utc>,
     ) -> Result<bool> {
+        let id = id.to_string();
         let rows = self.conn.execute(
             "UPDATE issues SET parent_id = ?1, updated_at = ?2 WHERE id = ?3",
             params![parent_id, updated_at.to_rfc3339(), id],

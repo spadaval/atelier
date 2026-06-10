@@ -12,10 +12,12 @@ impl Database {
     /// Defaults to "related" if no type is specified.
     pub fn add_typed_relation(
         &self,
-        issue_id_1: i64,
-        issue_id_2: i64,
+        issue_id_1: impl ToString,
+        issue_id_2: impl ToString,
         relation_type: &str,
     ) -> Result<bool> {
+        let issue_id_1 = issue_id_1.to_string();
+        let issue_id_2 = issue_id_2.to_string();
         if issue_id_1 == issue_id_2 {
             anyhow::bail!("Cannot relate an issue to itself");
         }
@@ -33,17 +35,23 @@ impl Database {
     }
 
     /// Backward-compatible: add a "related" relation.
-    pub fn add_relation(&self, issue_id_1: i64, issue_id_2: i64) -> Result<bool> {
+    pub fn add_relation(
+        &self,
+        issue_id_1: impl ToString,
+        issue_id_2: impl ToString,
+    ) -> Result<bool> {
         self.add_typed_relation(issue_id_1, issue_id_2, "related")
     }
 
     /// Remove a typed relation between two issues.
     pub fn remove_typed_relation(
         &self,
-        issue_id_1: i64,
-        issue_id_2: i64,
+        issue_id_1: impl ToString,
+        issue_id_2: impl ToString,
         relation_type: &str,
     ) -> Result<bool> {
+        let issue_id_1 = issue_id_1.to_string();
+        let issue_id_2 = issue_id_2.to_string();
         let (a, b) = if issue_id_1 < issue_id_2 {
             (issue_id_1, issue_id_2)
         } else {
@@ -57,7 +65,8 @@ impl Database {
     }
 
     /// Get all related issues (any relation type).
-    pub fn get_related_issues(&self, issue_id: i64) -> Result<Vec<Issue>> {
+    pub fn get_related_issues(&self, issue_id: impl ToString) -> Result<Vec<Issue>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             r#"
             SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
@@ -79,7 +88,8 @@ impl Database {
     }
 
     /// Get all relations for an issue with their types.
-    pub fn get_typed_relations(&self, issue_id: i64) -> Result<Vec<Relation>> {
+    pub fn get_typed_relations(&self, issue_id: impl ToString) -> Result<Vec<Relation>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             r#"
             SELECT issue_id_1, issue_id_2, relation_type, created_at
@@ -106,9 +116,10 @@ impl Database {
     /// Get issues related by a specific relation type.
     pub fn get_issues_by_relation_type(
         &self,
-        issue_id: i64,
+        issue_id: impl ToString,
         relation_type: &str,
     ) -> Result<Vec<Issue>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(
             r#"
             SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
@@ -136,19 +147,20 @@ impl Database {
     /// transitively. "assumption" links are included one hop from the source
     /// because shared assumptions should be reviewed without treating the whole
     /// cluster as invalidated.
-    pub fn downstream_impact(&self, source_id: i64) -> Result<Vec<Issue>> {
+    pub fn downstream_impact(&self, source_id: impl ToString) -> Result<Vec<Issue>> {
+        let source_id = source_id.to_string();
         let mut visited = std::collections::HashSet::new();
         let mut queue = std::collections::VecDeque::new();
         let mut affected = Vec::new();
 
-        queue.push_back(source_id);
-        visited.insert(source_id);
+        queue.push_back(source_id.clone());
+        visited.insert(source_id.clone());
 
         while let Some(current_id) = queue.pop_front() {
             // 1. Children (parent_id = current) are downstream work.
-            let children = self.get_subissues(current_id)?;
+            let children = self.get_subissues(&current_id)?;
             for child in children {
-                if visited.insert(child.id) {
+                if visited.insert(child.id.clone()) {
                     affected.push(child.clone());
                     queue.push_back(child.id);
                 }
@@ -156,9 +168,9 @@ impl Database {
 
             // 2. Impact-bearing typed relations describe downstream dependency.
             for relation_type in TRANSITIVE_IMPACT_RELATIONS {
-                let linked = self.get_issues_by_relation_type(current_id, relation_type)?;
+                let linked = self.get_issues_by_relation_type(&current_id, relation_type)?;
                 for issue in linked {
-                    if visited.insert(issue.id) {
+                    if visited.insert(issue.id.clone()) {
                         affected.push(issue.clone());
                         queue.push_back(issue.id);
                     }
@@ -167,9 +179,9 @@ impl Database {
 
             // 3. "assumption" links are one hop only from the source.
             if current_id == source_id {
-                let shared = self.get_issues_by_relation_type(current_id, "assumption")?;
+                let shared = self.get_issues_by_relation_type(&current_id, "assumption")?;
                 for issue in shared {
-                    if visited.insert(issue.id) {
+                    if visited.insert(issue.id.clone()) {
                         affected.push(issue.clone());
                     }
                 }
@@ -180,7 +192,7 @@ impl Database {
     }
 
     /// Compatibility alias for the hidden falsification-oriented command path.
-    pub fn falsification_cascade(&self, falsified_id: i64) -> Result<Vec<Issue>> {
+    pub fn falsification_cascade(&self, falsified_id: impl ToString) -> Result<Vec<Issue>> {
         self.downstream_impact(falsified_id)
     }
 }

@@ -25,7 +25,7 @@ fn priority_weight(priority: &str) -> i32 {
 
 /// Calculate progress for issues with subissues
 fn calculate_progress(db: &Database, issue: &Issue) -> Result<Progress> {
-    let subissues = db.get_subissues(issue.id)?;
+    let subissues = db.get_subissues(&issue.id)?;
     if subissues.is_empty() {
         return Ok(None);
     }
@@ -57,7 +57,7 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
 
         // Best-effort: skip issues locked by other agents
         if let Ok(LockStatus::LockedByOther { stale: false, .. }) =
-            lock_check::check_lock(atelier_dir, issue.id)
+            lock_check::check_lock(atelier_dir, &issue.id)
         {
             continue;
         }
@@ -84,12 +84,12 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
         if let Some(issue) = ready.first() {
             println!(
                 "Next: {} [{}] {}",
-                format_issue_id(issue.id),
+                format_issue_id(&issue.id),
                 issue.priority,
                 issue.title
             );
-            if let Some(parent_id) = issue.parent_id {
-                println!("       (subissue of {})", format_issue_id(parent_id));
+            if let Some(parent_id) = &issue.parent_id {
+                println!("       (subissue of {})", format_issue_id(&parent_id));
             }
         } else {
             println!("No issues ready to work on.");
@@ -101,7 +101,7 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
     let (top, _score, progress) = &scored[0];
     println!(
         "Next: {} [{}] {}",
-        format_issue_id(top.id),
+        format_issue_id(&top.id),
         top.priority,
         top.title
     );
@@ -132,7 +132,7 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
             };
             println!(
                 "  {} [{}] {}{}",
-                format_issue_id(issue.id),
+                format_issue_id(&issue.id),
                 issue.priority,
                 issue.title,
                 progress_str
@@ -225,7 +225,7 @@ mod tests {
     fn test_calculate_progress_no_subissues() {
         let (db, _cl, _dir) = setup_test_db();
         let id = db.create_issue("Simple issue", None, "medium").unwrap();
-        let issue = db.get_issue(id).unwrap().unwrap();
+        let issue = db.get_issue(&id).unwrap().unwrap();
 
         let progress = calculate_progress(&db, &issue).unwrap();
         assert!(progress.is_none());
@@ -236,13 +236,13 @@ mod tests {
         let (db, _cl, _dir) = setup_test_db();
         let parent_id = db.create_issue("Parent", None, "high").unwrap();
         let child1 = db
-            .create_subissue(parent_id, "Child 1", None, "medium")
+            .create_subissue(&parent_id, "Child 1", None, "medium")
             .unwrap();
-        db.create_subissue(parent_id, "Child 2", None, "medium")
+        db.create_subissue(&parent_id, "Child 2", None, "medium")
             .unwrap();
-        db.close_issue(child1).unwrap();
+        db.close_issue(&child1).unwrap();
 
-        let issue = db.get_issue(parent_id).unwrap().unwrap();
+        let issue = db.get_issue(&parent_id).unwrap().unwrap();
         let progress = calculate_progress(&db, &issue).unwrap();
 
         assert!(progress.is_some());
@@ -256,7 +256,7 @@ mod tests {
         let (db, cl, _dir) = setup_test_db();
         let blocker = db.create_issue("Blocker", None, "high").unwrap();
         let blocked = db.create_issue("Blocked", None, "critical").unwrap();
-        db.add_dependency(blocked, blocker).unwrap();
+        db.add_dependency(&blocked, &blocker).unwrap();
 
         run(&db, &cl).unwrap();
         let ready = db.list_ready_issues().unwrap();
@@ -274,7 +274,7 @@ mod tests {
     fn test_run_all_issues_closed() {
         let (db, cl, _dir) = setup_test_db();
         let id = db.create_issue("Done", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
+        db.close_issue(&id).unwrap();
 
         run(&db, &cl).unwrap();
         let ready = db.list_ready_issues().unwrap();

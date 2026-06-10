@@ -33,7 +33,7 @@ pub fn run(
         let date = issue.created_at.format("%Y-%m-%d");
         println!(
             "{:<5} {:8} {:<40} {:8} {}",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             status_display,
             truncate(&issue.title, 40),
             issue.priority,
@@ -129,7 +129,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id1 = db.create_issue("Open issue", None, "medium").unwrap();
         let id2 = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(id2).unwrap();
+        db.close_issue(&id2).unwrap();
 
         let issues = db.list_issues(Some("open"), None, None).unwrap();
         assert!(issues.iter().any(|i| i.id == id1));
@@ -144,7 +144,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id1 = db.create_issue("Open issue", None, "medium").unwrap();
         let id2 = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(id2).unwrap();
+        db.close_issue(&id2).unwrap();
 
         let issues = db.list_issues(Some("closed"), None, None).unwrap();
         assert!(!issues.iter().any(|i| i.id == id1));
@@ -159,7 +159,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id1 = db.create_issue("Open issue", None, "medium").unwrap();
         let id2 = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(id2).unwrap();
+        db.close_issue(&id2).unwrap();
 
         run(&db, Some("all"), None, None).unwrap();
         let issues = db.list_issues(Some("all"), None, None).unwrap();
@@ -173,8 +173,8 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id1 = db.create_issue("Bug issue", None, "high").unwrap();
         let id2 = db.create_issue("Feature issue", None, "medium").unwrap();
-        db.add_label(id1, "bug").unwrap();
-        db.add_label(id2, "feature").unwrap();
+        db.add_label(&id1, "bug").unwrap();
+        db.add_label(&id2, "feature").unwrap();
 
         let issues = db.list_issues(None, Some("bug"), None).unwrap();
         assert!(issues.iter().any(|i| i.id == id1));
@@ -204,9 +204,9 @@ mod tests {
         let id1 = db.create_issue("High bug", None, "high").unwrap();
         let id2 = db.create_issue("Low bug", None, "low").unwrap();
         let id3 = db.create_issue("High feature", None, "high").unwrap();
-        db.add_label(id1, "bug").unwrap();
-        db.add_label(id2, "bug").unwrap();
-        db.add_label(id3, "feature").unwrap();
+        db.add_label(&id1, "bug").unwrap();
+        db.add_label(&id2, "bug").unwrap();
+        db.add_label(&id3, "feature").unwrap();
 
         let issues = db
             .list_issues(Some("open"), Some("bug"), Some("high"))

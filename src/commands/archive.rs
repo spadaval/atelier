@@ -3,8 +3,8 @@ use anyhow::{bail, Result};
 use crate::db::Database;
 use crate::utils::format_issue_id;
 
-pub fn archive(db: &Database, id: i64) -> Result<()> {
-    let issue = match db.get_issue(id)? {
+pub fn archive(db: &Database, id: &str) -> Result<()> {
+    let issue = match db.get_issue(&id)? {
         Some(i) => i,
         None => bail!("Issue {} not found", format_issue_id(id)),
     };
@@ -17,7 +17,7 @@ pub fn archive(db: &Database, id: i64) -> Result<()> {
         );
     }
 
-    if db.archive_issue(id)? {
+    if db.archive_issue(&id)? {
         println!("Archived issue {}", format_issue_id(id));
     } else {
         println!("Issue {} could not be archived", format_issue_id(id));
@@ -26,8 +26,8 @@ pub fn archive(db: &Database, id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn unarchive(db: &Database, id: i64) -> Result<()> {
-    if db.unarchive_issue(id)? {
+pub fn unarchive(db: &Database, id: &str) -> Result<()> {
+    if db.unarchive_issue(&id)? {
         println!("Unarchived issue {} (now closed)", format_issue_id(id));
     } else {
         bail!("Issue {} not found or not archived", format_issue_id(id));
@@ -48,11 +48,12 @@ pub fn list(db: &Database) -> Result<()> {
     for issue in issues {
         let parent_str = issue
             .parent_id
+            .as_ref()
             .map(|p| format!(" (sub of {})", format_issue_id(p)))
             .unwrap_or_default();
         println!(
             "{:<5} {:8} {}{}",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             issue.priority,
             issue.title,
             parent_str
@@ -96,9 +97,9 @@ mod tests {
     fn test_archive_closed_issue() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
+        db.close_issue(&id).unwrap();
 
-        archive(&db, id).unwrap();
+        archive(&db, &id).unwrap();
         let archived = db.list_archived_issues().unwrap();
         assert!(
             archived.iter().any(|i| i.id == id),
@@ -111,7 +112,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = archive(&db, id);
+        let result = archive(&db, &id);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -123,7 +124,7 @@ mod tests {
     fn test_archive_nonexistent_fails() {
         let (db, _dir) = setup_test_db();
 
-        let result = archive(&db, 99999);
+        let result = archive(&db, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -132,10 +133,10 @@ mod tests {
     fn test_unarchive_issue() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
-        archive(&db, id).unwrap();
+        db.close_issue(&id).unwrap();
+        archive(&db, &id).unwrap();
 
-        unarchive(&db, id).unwrap();
+        unarchive(&db, &id).unwrap();
         let archived = db.list_archived_issues().unwrap();
         assert!(
             !archived.iter().any(|i| i.id == id),
@@ -153,7 +154,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = unarchive(&db, id);
+        let result = unarchive(&db, &id);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -174,8 +175,8 @@ mod tests {
     fn test_list_with_archived() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
-        archive(&db, id).unwrap();
+        db.close_issue(&id).unwrap();
+        archive(&db, &id).unwrap();
 
         list(&db).unwrap();
         let archived = db.list_archived_issues().unwrap();
@@ -199,13 +200,13 @@ mod tests {
     fn test_archive_unarchive_roundtrip() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
+        db.close_issue(&id).unwrap();
 
-        archive(&db, id).unwrap();
+        archive(&db, &id).unwrap();
         let archived = db.list_archived_issues().unwrap();
         assert!(archived.iter().any(|i| i.id == id));
 
-        unarchive(&db, id).unwrap();
+        unarchive(&db, &id).unwrap();
         let archived = db.list_archived_issues().unwrap();
         assert!(!archived.iter().any(|i| i.id == id));
     }
@@ -214,8 +215,8 @@ mod tests {
     fn test_archived_issue_not_in_open_or_closed_list() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(id).unwrap();
-        archive(&db, id).unwrap();
+        db.close_issue(&id).unwrap();
+        archive(&db, &id).unwrap();
 
         let open_issues = db.list_issues(Some("open"), None, None).unwrap();
         let closed_issues = db.list_issues(Some("closed"), None, None).unwrap();
@@ -229,7 +230,7 @@ mod tests {
             let (db, _dir) = setup_test_db();
             let id = db.create_issue(&title, None, "medium").unwrap();
 
-            let result = archive(&db, id);
+            let result = archive(&db, &id);
             prop_assert!(result.is_err());
         }
 
@@ -237,9 +238,9 @@ mod tests {
         fn prop_archive_closed_succeeds(title in "[a-zA-Z0-9 ]{1,30}") {
             let (db, _dir) = setup_test_db();
             let id = db.create_issue(&title, None, "medium").unwrap();
-            db.close_issue(id).unwrap();
+            db.close_issue(&id).unwrap();
 
-            archive(&db, id).unwrap();
+            archive(&db, &id).unwrap();
             let archived = db.list_archived_issues().unwrap();
             prop_assert!(archived.iter().any(|i| i.id == id));
         }

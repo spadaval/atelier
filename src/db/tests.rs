@@ -15,9 +15,9 @@ fn test_create_and_get_issue() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
-    assert!(id > 0);
+    assert!(!id.is_empty());
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.id, id);
     assert_eq!(issue.title, "Test issue");
     assert_eq!(issue.description, None);
@@ -34,7 +34,7 @@ fn test_create_issue_with_description() {
     let id = db
         .create_issue("Test issue", Some("Detailed description"), "high")
         .unwrap();
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
 
     assert_eq!(issue.title, "Test issue");
     assert_eq!(issue.description, Some("Detailed description".to_string()));
@@ -47,13 +47,13 @@ fn test_create_subissue() {
 
     let parent_id = db.create_issue("Parent issue", None, "high").unwrap();
     let child_id = db
-        .create_subissue(parent_id, "Child issue", None, "medium")
+        .create_subissue(&parent_id, "Child issue", None, "medium")
         .unwrap();
 
-    let child = db.get_issue(child_id).unwrap().unwrap();
-    assert_eq!(child.parent_id, Some(parent_id));
+    let child = db.get_issue(&child_id).unwrap().unwrap();
+    assert_eq!(child.parent_id, Some(parent_id.clone()));
 
-    let subissues = db.get_subissues(parent_id).unwrap();
+    let subissues = db.get_subissues(&parent_id).unwrap();
     assert_eq!(subissues.len(), 1);
     assert_eq!(subissues[0].id, child_id);
 }
@@ -83,7 +83,7 @@ fn test_list_issues_filter_by_status() {
 
     let id1 = db.create_issue("Open issue", None, "low").unwrap();
     let id2 = db.create_issue("To be closed", None, "medium").unwrap();
-    db.close_issue(id2).unwrap();
+    db.close_issue(&id2).unwrap();
 
     let open_issues = db.list_issues(Some("open"), None, None).unwrap();
     assert_eq!(open_issues.len(), 1);
@@ -117,7 +117,7 @@ fn test_update_issue() {
 
     let updated = db
         .update_issue(
-            id,
+            &id,
             Some("Updated title"),
             Some("New description"),
             Some("critical"),
@@ -125,7 +125,7 @@ fn test_update_issue() {
         .unwrap();
     assert!(updated);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, "Updated title");
     assert_eq!(issue.description, Some("New description".to_string()));
     assert_eq!(issue.priority, "critical");
@@ -139,9 +139,9 @@ fn test_update_issue_partial() {
         .create_issue("Original title", Some("Original desc"), "low")
         .unwrap();
 
-    db.update_issue(id, Some("New title"), None, None).unwrap();
+    db.update_issue(&id, Some("New title"), None, None).unwrap();
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, "New title");
     assert_eq!(issue.description, Some("Original desc".to_string()));
     assert_eq!(issue.priority, "low");
@@ -153,17 +153,17 @@ fn test_close_and_reopen_issue() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    let closed = db.close_issue(id).unwrap();
+    let closed = db.close_issue(&id).unwrap();
     assert!(closed);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.status, "closed");
     assert!(issue.closed_at.is_some());
 
-    let reopened = db.reopen_issue(id).unwrap();
+    let reopened = db.reopen_issue(&id).unwrap();
     assert!(reopened);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.status, "open");
     assert!(issue.closed_at.is_none());
 }
@@ -197,11 +197,11 @@ fn test_delete_issue() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("To delete", None, "low").unwrap();
-    assert!(db.get_issue(id).unwrap().is_some());
+    assert!(db.get_issue(&id).unwrap().is_some());
 
-    let deleted = db.delete_issue(id).unwrap();
+    let deleted = db.delete_issue(&id).unwrap();
     assert!(deleted);
-    assert!(db.get_issue(id).unwrap().is_none());
+    assert!(db.get_issue(&id).unwrap().is_none());
 }
 
 #[test]
@@ -219,10 +219,10 @@ fn test_add_and_get_labels() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    db.add_label(id, "bug").unwrap();
-    db.add_label(id, "urgent").unwrap();
+    db.add_label(&id, "bug").unwrap();
+    db.add_label(&id, "urgent").unwrap();
 
-    let labels = db.get_labels(id).unwrap();
+    let labels = db.get_labels(&id).unwrap();
     assert_eq!(labels.len(), 2);
     assert!(labels.contains(&"bug".to_string()));
     assert!(labels.contains(&"urgent".to_string()));
@@ -235,14 +235,14 @@ fn test_add_duplicate_label_returns_false() {
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
     // First add should return true (label was added)
-    let first = db.add_label(id, "bug").unwrap();
+    let first = db.add_label(&id, "bug").unwrap();
     assert!(first, "First add_label should return true");
 
     // Second add should return false (duplicate, nothing inserted)
-    let second = db.add_label(id, "bug").unwrap();
+    let second = db.add_label(&id, "bug").unwrap();
     assert!(!second, "Duplicate add_label should return false");
 
-    let labels = db.get_labels(id).unwrap();
+    let labels = db.get_labels(&id).unwrap();
     assert_eq!(labels.len(), 1);
 }
 
@@ -252,13 +252,13 @@ fn test_remove_label() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    db.add_label(id, "bug").unwrap();
-    db.add_label(id, "urgent").unwrap();
+    db.add_label(&id, "bug").unwrap();
+    db.add_label(&id, "urgent").unwrap();
 
-    let removed = db.remove_label(id, "bug").unwrap();
+    let removed = db.remove_label(&id, "bug").unwrap();
     assert!(removed);
 
-    let labels = db.get_labels(id).unwrap();
+    let labels = db.get_labels(&id).unwrap();
     assert_eq!(labels.len(), 1);
     assert_eq!(labels[0], "urgent");
 }
@@ -268,10 +268,10 @@ fn test_remove_nonexistent_label_returns_false() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
-    db.add_label(id, "bug").unwrap();
+    db.add_label(&id, "bug").unwrap();
 
     // Removing a label that doesn't exist should return false
-    let removed = db.remove_label(id, "nonexistent").unwrap();
+    let removed = db.remove_label(&id, "nonexistent").unwrap();
     assert!(
         !removed,
         "remove_label should return false for nonexistent label"
@@ -285,8 +285,8 @@ fn test_list_issues_filter_by_label() {
     let id1 = db.create_issue("Bug issue", None, "high").unwrap();
     let id2 = db.create_issue("Feature issue", None, "medium").unwrap();
 
-    db.add_label(id1, "bug").unwrap();
-    db.add_label(id2, "feature").unwrap();
+    db.add_label(&id1, "bug").unwrap();
+    db.add_label(&id2, "feature").unwrap();
 
     let bug_issues = db.list_issues(None, Some("bug"), None).unwrap();
     assert_eq!(bug_issues.len(), 1);
@@ -301,12 +301,12 @@ fn test_add_and_get_comments() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    let comment_id = db.add_comment(id, "First comment", "note").unwrap();
+    let comment_id = db.add_comment(&id, "First comment", "note").unwrap();
     assert!(comment_id > 0);
 
-    db.add_comment(id, "Second comment", "note").unwrap();
+    db.add_comment(&id, "Second comment", "note").unwrap();
 
-    let comments = db.get_comments(id).unwrap();
+    let comments = db.get_comments(&id).unwrap();
     assert_eq!(comments.len(), 2);
     assert_eq!(comments[0].content, "First comment");
     assert_eq!(comments[1].content, "Second comment");
@@ -321,13 +321,13 @@ fn test_add_and_get_dependencies() {
     let blocker = db.create_issue("Blocker issue", None, "high").unwrap();
     let blocked = db.create_issue("Blocked issue", None, "medium").unwrap();
 
-    db.add_dependency(blocked, blocker).unwrap();
+    db.add_dependency(&blocked, &blocker).unwrap();
 
-    let blockers = db.get_blockers(blocked).unwrap();
+    let blockers = db.get_blockers(&blocked).unwrap();
     assert_eq!(blockers.len(), 1);
     assert_eq!(blockers[0], blocker);
 
-    let blocking = db.get_blocking(blocker).unwrap();
+    let blocking = db.get_blocking(&blocker).unwrap();
     assert_eq!(blocking.len(), 1);
     assert_eq!(blocking[0], blocked);
 }
@@ -339,11 +339,11 @@ fn test_remove_dependency() {
     let blocker = db.create_issue("Blocker", None, "high").unwrap();
     let blocked = db.create_issue("Blocked", None, "medium").unwrap();
 
-    db.add_dependency(blocked, blocker).unwrap();
-    let removed = db.remove_dependency(blocked, blocker).unwrap();
+    db.add_dependency(&blocked, &blocker).unwrap();
+    let removed = db.remove_dependency(&blocked, &blocker).unwrap();
     assert!(removed);
 
-    let blockers = db.get_blockers(blocked).unwrap();
+    let blockers = db.get_blockers(&blocked).unwrap();
     assert!(blockers.is_empty());
 }
 
@@ -355,7 +355,7 @@ fn test_list_blocked_issues() {
     let blocked = db.create_issue("Blocked", None, "medium").unwrap();
     let unblocked = db.create_issue("Unblocked", None, "low").unwrap();
 
-    db.add_dependency(blocked, blocker).unwrap();
+    db.add_dependency(&blocked, &blocker).unwrap();
 
     let blocked_issues = db.list_blocked_issues().unwrap();
     assert_eq!(blocked_issues.len(), 1);
@@ -373,12 +373,12 @@ fn test_list_ready_issues() {
     let blocked = db.create_issue("Blocked", None, "medium").unwrap();
     let ready = db.create_issue("Ready", None, "low").unwrap();
 
-    db.add_dependency(blocked, blocker).unwrap();
+    db.add_dependency(&blocked, &blocker).unwrap();
 
     let ready_issues = db.list_ready_issues().unwrap();
 
     // Blocker and ready should be in ready list (not blocked by anything)
-    let ready_ids: Vec<i64> = ready_issues.iter().map(|i| i.id).collect();
+    let ready_ids: Vec<String> = ready_issues.iter().map(|i| i.id.clone()).collect();
     assert!(ready_ids.contains(&blocker));
     assert!(ready_ids.contains(&ready));
     assert!(!ready_ids.contains(&blocked));
@@ -391,14 +391,14 @@ fn test_blocked_becomes_ready_when_blocker_closed() {
     let blocker = db.create_issue("Blocker", None, "high").unwrap();
     let blocked = db.create_issue("Blocked", None, "medium").unwrap();
 
-    db.add_dependency(blocked, blocker).unwrap();
+    db.add_dependency(&blocked, &blocker).unwrap();
 
     // Initially blocked
     let blocked_issues = db.list_blocked_issues().unwrap();
     assert_eq!(blocked_issues.len(), 1);
 
     // Close blocker
-    db.close_issue(blocker).unwrap();
+    db.close_issue(&blocker).unwrap();
 
     // Now should be ready
     let blocked_issues = db.list_blocked_issues().unwrap();
@@ -446,7 +446,7 @@ fn test_set_session_issue() {
     let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
     let session_id = db.start_session().unwrap();
 
-    db.set_session_issue(session_id, issue_id).unwrap();
+    db.set_session_issue(session_id, &issue_id).unwrap();
 
     let session = db.get_current_session().unwrap().unwrap();
     assert_eq!(session.active_issue_id, Some(issue_id));
@@ -460,7 +460,7 @@ fn test_start_and_stop_timer() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    let timer_id = db.start_timer(id).unwrap();
+    let timer_id = db.start_timer(&id).unwrap();
     assert!(timer_id > 0);
 
     let active = db.get_active_timer().unwrap();
@@ -523,7 +523,7 @@ fn test_search_issues_by_comment() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Some issue", None, "medium").unwrap();
-    db.add_comment(id, "Found the root cause in authentication module", "note")
+    db.add_comment(&id, "Found the root cause in authentication module", "note")
         .unwrap();
 
     let results = db.search_issues("authentication").unwrap();
@@ -540,9 +540,9 @@ fn test_add_and_get_relations() {
     let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
     let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-    db.add_relation(id1, id2).unwrap();
+    db.add_relation(&id1, &id2).unwrap();
 
-    let related = db.get_related_issues(id1).unwrap();
+    let related = db.get_related_issues(&id1).unwrap();
     assert_eq!(related.len(), 1);
     assert_eq!(related[0].id, id2);
 
@@ -558,7 +558,7 @@ fn test_relation_to_self_fails() {
 
     let id = db.create_issue("Issue", None, "medium").unwrap();
 
-    let result = db.add_relation(id, id);
+    let result = db.add_relation(&id, &id);
     assert!(result.is_err());
 }
 
@@ -569,10 +569,10 @@ fn test_remove_relation() {
     let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
     let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-    db.add_relation(id1, id2).unwrap();
-    db.remove_typed_relation(id1, id2, "related").unwrap();
+    db.add_relation(&id1, &id2).unwrap();
+    db.remove_typed_relation(&id1, &id2, "related").unwrap();
 
-    let related = db.get_related_issues(id1).unwrap();
+    let related = db.get_related_issues(&id1).unwrap();
     assert!(related.is_empty());
 }
 
@@ -609,7 +609,7 @@ fn test_add_issue_to_milestone() {
     let milestone_id = db.create_milestone("v1.0", None).unwrap();
     let issue_id = db.create_issue("Feature", None, "medium").unwrap();
 
-    db.add_issue_to_milestone(milestone_id, issue_id).unwrap();
+    db.add_issue_to_milestone(milestone_id, &issue_id).unwrap();
 
     let issues = db.get_milestone_issues(milestone_id).unwrap();
     assert_eq!(issues.len(), 1);
@@ -638,12 +638,12 @@ fn test_archive_closed_issue() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test", None, "medium").unwrap();
-    db.close_issue(id).unwrap();
+    db.close_issue(&id).unwrap();
 
-    let archived = db.archive_issue(id).unwrap();
+    let archived = db.archive_issue(&id).unwrap();
     assert!(archived);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.status, "archived");
 }
 
@@ -653,10 +653,10 @@ fn test_archive_open_issue_fails() {
 
     let id = db.create_issue("Test", None, "medium").unwrap();
 
-    let archived = db.archive_issue(id).unwrap();
+    let archived = db.archive_issue(&id).unwrap();
     assert!(!archived);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.status, "open");
 }
 
@@ -665,13 +665,13 @@ fn test_unarchive_issue() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test", None, "medium").unwrap();
-    db.close_issue(id).unwrap();
-    db.archive_issue(id).unwrap();
+    db.close_issue(&id).unwrap();
+    db.archive_issue(&id).unwrap();
 
-    let unarchived = db.unarchive_issue(id).unwrap();
+    let unarchived = db.unarchive_issue(&id).unwrap();
     assert!(unarchived);
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.status, "closed");
 }
 
@@ -682,8 +682,8 @@ fn test_list_archived_issues() {
     let id1 = db.create_issue("Archived", None, "medium").unwrap();
     let _id2 = db.create_issue("Open", None, "medium").unwrap();
 
-    db.close_issue(id1).unwrap();
-    db.archive_issue(id1).unwrap();
+    db.close_issue(&id1).unwrap();
+    db.archive_issue(&id1).unwrap();
 
     let archived = db.list_archived_issues().unwrap();
     assert_eq!(archived.len(), 1);
@@ -701,7 +701,7 @@ fn test_sql_injection_in_title() {
     let id = db.create_issue(malicious, None, "medium").unwrap();
 
     // Should have created issue with literal string, not executed SQL
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, malicious);
 
     // Database should still be intact
@@ -718,7 +718,7 @@ fn test_sql_injection_in_description() {
         .create_issue("Normal title", Some(malicious), "medium")
         .unwrap();
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.description, Some(malicious.to_string()));
 }
 
@@ -729,9 +729,9 @@ fn test_sql_injection_in_label() {
     let id = db.create_issue("Test", None, "medium").unwrap();
     let malicious = "bug'; DROP TABLE labels; --";
 
-    db.add_label(id, malicious).unwrap();
+    db.add_label(&id, malicious).unwrap();
 
-    let labels = db.get_labels(id).unwrap();
+    let labels = db.get_labels(&id).unwrap();
     assert_eq!(labels.len(), 1);
     assert_eq!(labels[0], malicious);
 }
@@ -761,9 +761,9 @@ fn test_sql_injection_in_comment() {
     let id = db.create_issue("Test", None, "medium").unwrap();
     let malicious = "comment'); DELETE FROM comments; --";
 
-    db.add_comment(id, malicious, "note").unwrap();
+    db.add_comment(&id, malicious, "note").unwrap();
 
-    let comments = db.get_comments(id).unwrap();
+    let comments = db.get_comments(&id).unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].content, malicious);
 }
@@ -777,7 +777,7 @@ fn test_unicode_in_fields() {
 
     let id = db.create_issue(title, Some(description), "medium").unwrap();
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, title);
     assert_eq!(issue.description, Some(description.to_string()));
 }
@@ -794,7 +794,7 @@ fn test_very_long_strings() {
         .create_issue(&long_title, Some(&long_desc), "medium")
         .unwrap();
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title.len(), MAX_TITLE_LEN);
     assert_eq!(issue.description.unwrap().len(), MAX_DESCRIPTION_LEN);
 
@@ -815,7 +815,7 @@ fn test_null_bytes_in_strings() {
     let title = "test\0null\0bytes";
     let id = db.create_issue(title, None, "medium").unwrap();
 
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, title);
 }
 
@@ -826,13 +826,13 @@ fn test_delete_issue_cascades_labels() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test", None, "medium").unwrap();
-    db.add_label(id, "bug").unwrap();
-    db.add_label(id, "urgent").unwrap();
+    db.add_label(&id, "bug").unwrap();
+    db.add_label(&id, "urgent").unwrap();
 
-    db.delete_issue(id).unwrap();
+    db.delete_issue(&id).unwrap();
 
     // Labels should be gone (via CASCADE)
-    let labels = db.get_labels(id).unwrap();
+    let labels = db.get_labels(&id).unwrap();
     assert!(labels.is_empty());
 }
 
@@ -841,12 +841,12 @@ fn test_delete_issue_cascades_comments() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test", None, "medium").unwrap();
-    db.add_comment(id, "Comment 1", "note").unwrap();
-    db.add_comment(id, "Comment 2", "note").unwrap();
+    db.add_comment(&id, "Comment 1", "note").unwrap();
+    db.add_comment(&id, "Comment 2", "note").unwrap();
 
-    db.delete_issue(id).unwrap();
+    db.delete_issue(&id).unwrap();
 
-    let comments = db.get_comments(id).unwrap();
+    let comments = db.get_comments(&id).unwrap();
     assert!(comments.is_empty());
 }
 
@@ -856,13 +856,13 @@ fn test_delete_parent_cascades_subissues() {
 
     let parent_id = db.create_issue("Parent", None, "high").unwrap();
     let child_id = db
-        .create_subissue(parent_id, "Child", None, "medium")
+        .create_subissue(&parent_id, "Child", None, "medium")
         .unwrap();
 
-    db.delete_issue(parent_id).unwrap();
+    db.delete_issue(&parent_id).unwrap();
 
     // Child should be deleted too
-    assert!(db.get_issue(child_id).unwrap().is_none());
+    assert!(db.get_issue(&child_id).unwrap().is_none());
 }
 
 // ==================== Edge Cases ====================
@@ -872,7 +872,7 @@ fn test_empty_title() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("", None, "medium").unwrap();
-    let issue = db.get_issue(id).unwrap().unwrap();
+    let issue = db.get_issue(&id).unwrap().unwrap();
     assert_eq!(issue.title, "");
 }
 
@@ -884,16 +884,16 @@ fn test_update_parent() {
     let parent2 = db.create_issue("Parent 2", None, "high").unwrap();
     let child = db.create_issue("Child", None, "medium").unwrap();
 
-    db.update_parent(child, Some(parent1)).unwrap();
-    let issue = db.get_issue(child).unwrap().unwrap();
+    db.update_parent(&child, Some(&parent1)).unwrap();
+    let issue = db.get_issue(&child).unwrap().unwrap();
     assert_eq!(issue.parent_id, Some(parent1));
 
-    db.update_parent(child, Some(parent2)).unwrap();
-    let issue = db.get_issue(child).unwrap().unwrap();
+    db.update_parent(&child, Some(&parent2)).unwrap();
+    let issue = db.get_issue(&child).unwrap().unwrap();
     assert_eq!(issue.parent_id, Some(parent2));
 
-    db.update_parent(child, None).unwrap();
-    let issue = db.get_issue(child).unwrap().unwrap();
+    db.update_parent(&child, None).unwrap();
+    let issue = db.get_issue(&child).unwrap().unwrap();
     assert_eq!(issue.parent_id, None);
 }
 
@@ -919,7 +919,7 @@ fn test_corrupted_db_file_empty() {
     let id = db
         .create_issue("Test after recovery", None, "medium")
         .unwrap();
-    assert!(id > 0);
+    assert!(!id.is_empty());
 }
 
 #[test]

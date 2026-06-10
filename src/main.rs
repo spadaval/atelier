@@ -5,6 +5,7 @@ mod identity;
 mod lock_check;
 mod locks;
 mod models;
+mod record_id;
 mod sync;
 mod token_usage;
 mod utils;
@@ -233,7 +234,7 @@ enum Commands {
     #[command(hide = true)]
     Subissue {
         /// Parent issue ID
-        parent: i64,
+        parent: String,
         /// Subissue title
         title: String,
         /// Subissue description
@@ -344,7 +345,7 @@ enum Commands {
     #[command(hide = true)]
     Delete {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Skip confirmation
         #[arg(short, long)]
         force: bool,
@@ -410,9 +411,9 @@ enum Commands {
     #[command(hide = true)]
     Relate {
         /// First issue ID
-        id: i64,
+        id: String,
         /// Second issue ID
-        related: i64,
+        related: String,
         /// Relation type (any string, e.g. related, assumption, falsifies, derived, caused-by)
         #[arg(short = 't', long = "type", default_value = "related")]
         relation_type: String,
@@ -422,9 +423,9 @@ enum Commands {
     #[command(hide = true)]
     Unrelate {
         /// First issue ID
-        id: i64,
+        id: String,
         /// Second issue ID
-        related: i64,
+        related: String,
         /// Relation type to remove
         #[arg(short = 't', long = "type", default_value = "related")]
         relation_type: String,
@@ -434,21 +435,21 @@ enum Commands {
     #[command(hide = true)]
     Related {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Show downstream issue impact from hierarchy and impact-bearing links
     #[command(hide = true)]
     Cascade {
         /// Issue ID to check impact from
-        id: i64,
+        id: String,
     },
 
     /// Mark an assumption as falsified and propagate to downstream issues
     #[command(hide = true)]
     Falsify {
         /// Issue ID of the falsified assumption
-        id: i64,
+        id: String,
     },
 
     /// Suggest next issue (shortcut for `issue next`)
@@ -471,7 +472,7 @@ enum Commands {
     #[command(hide = true, name = "start")]
     TimerStart {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Stop the timer (shortcut for `timer stop`)
@@ -533,7 +534,7 @@ enum IssueCommands {
     /// Create a subissue under a parent issue
     Subissue {
         /// Parent issue ID
-        parent: i64,
+        parent: String,
         /// Subissue title
         title: String,
         /// Subissue description
@@ -636,7 +637,7 @@ enum IssueCommands {
     /// Delete an issue
     Delete {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Skip confirmation
         #[arg(short, long)]
         force: bool,
@@ -694,9 +695,9 @@ enum IssueCommands {
     /// Link two related issues
     Relate {
         /// First issue ID
-        id: i64,
+        id: String,
         /// Second issue ID
-        related: i64,
+        related: String,
         /// Relation type (any string, e.g. related, assumption, falsifies, derived, caused-by)
         #[arg(short = 't', long = "type", default_value = "related")]
         relation_type: String,
@@ -705,9 +706,9 @@ enum IssueCommands {
     /// Remove a relation between issues
     Unrelate {
         /// First issue ID
-        id: i64,
+        id: String,
         /// Second issue ID
-        related: i64,
+        related: String,
         /// Relation type to remove
         #[arg(short = 't', long = "type", default_value = "related")]
         relation_type: String,
@@ -716,27 +717,27 @@ enum IssueCommands {
     /// List related issues
     Related {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 
     /// Show downstream issue impact from hierarchy and impact-bearing links
     Impact {
         /// Issue ID to check impact from
-        id: i64,
+        id: String,
     },
 
     /// Show falsification cascade - compatibility alias for `issue impact`
     #[command(hide = true)]
     Cascade {
         /// Issue ID to check cascade from
-        id: i64,
+        id: String,
     },
 
     /// Mark an assumption as falsified and propagate to downstream issues
     #[command(hide = true)]
     Falsify {
         /// Issue ID of the falsified assumption
-        id: i64,
+        id: String,
     },
 
     /// Suggest the next issue to work on
@@ -762,7 +763,7 @@ enum TimerCommands {
     /// Start a timer for an issue
     Start {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// Stop the current timer
     Stop,
@@ -830,12 +831,12 @@ enum ArchiveCommands {
     /// Archive a closed issue
     Add {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// Unarchive an issue (restore to closed)
     Remove {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// List archived issues
     List,
@@ -872,14 +873,14 @@ enum MilestoneCommands {
         /// Milestone ID
         id: i64,
         /// Issue IDs to add
-        issues: Vec<i64>,
+        issues: Vec<String>,
     },
     /// Remove an issue from a milestone
     Remove {
         /// Milestone ID
         id: i64,
         /// Issue ID to remove
-        issue: i64,
+        issue: String,
     },
     /// Close a milestone
     Close {
@@ -908,7 +909,7 @@ enum SessionCommands {
     /// Set the issue being worked on
     Work {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// Show handoff notes from the previous session
     LastHandoff,
@@ -975,12 +976,12 @@ enum LocksCommands {
     /// Check if a specific issue is locked
     Check {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// Claim a lock on an issue
     Claim {
         /// Issue ID
-        id: i64,
+        id: String,
         /// Branch name associated with the lock
         #[arg(short, long)]
         branch: Option<String>,
@@ -988,12 +989,12 @@ enum LocksCommands {
     /// Release a lock on an issue
     Release {
         /// Issue ID
-        id: i64,
+        id: String,
     },
     /// Force-steal a stale lock
     Steal {
         /// Issue ID
-        id: i64,
+        id: String,
     },
 }
 
@@ -1161,7 +1162,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             };
             commands::create::run_subissue(
                 &db,
-                parent,
+                &parent,
                 &title,
                 description.as_deref(),
                 &priority,
@@ -1260,25 +1261,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Delete { id, force } => {
             let db = get_db()?;
-            commands::delete::run(&db, id, force)
+            commands::delete::run(&db, &id, force)
         }
 
         IssueCommands::Comment { id, text, kind } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::comment::run(&db, resolved, &text, &kind)
+            commands::comment::run(&db, &resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::add(&db, resolved, &label)
+            commands::label::add(&db, &resolved, &label)
         }
 
         IssueCommands::Unlabel { id, label } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::remove(&db, resolved, &label)
+            commands::label::remove(&db, &resolved, &label)
         }
 
         IssueCommands::Block { id, blocker } => {
@@ -1319,7 +1320,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             relation_type,
         } => {
             let db = get_db()?;
-            commands::relate::add_typed(&db, id, related, &relation_type)
+            commands::relate::add_typed(&db, &id, &related, &relation_type)
         }
 
         IssueCommands::Unrelate {
@@ -1328,22 +1329,22 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             relation_type,
         } => {
             let db = get_db()?;
-            commands::relate::remove_typed(&db, id, related, &relation_type)
+            commands::relate::remove_typed(&db, &id, &related, &relation_type)
         }
 
         IssueCommands::Related { id } => {
             let db = get_db()?;
-            commands::relate::list(&db, id)
+            commands::relate::list(&db, &id)
         }
 
         IssueCommands::Impact { id } | IssueCommands::Cascade { id } => {
             let db = get_db()?;
-            commands::relate::impact(&db, id)
+            commands::relate::impact(&db, &id)
         }
 
         IssueCommands::Falsify { id } => {
             let db = get_db()?;
-            commands::relate::falsify(&db, id)
+            commands::relate::falsify(&db, &id)
         }
 
         IssueCommands::Next => {
@@ -1367,7 +1368,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 fn dispatch_timer(action: Option<TimerCommands>) -> Result<()> {
     let db = get_db()?;
     match action {
-        Some(TimerCommands::Start { id }) => commands::timer::start(&db, id),
+        Some(TimerCommands::Start { id }) => commands::timer::start(&db, &id),
         Some(TimerCommands::Stop) => commands::timer::stop(&db),
         Some(TimerCommands::Show) | None => commands::timer::status(&db),
     }
@@ -1703,8 +1704,8 @@ fn run() -> Result<()> {
         Commands::Archive { action } => {
             let db = get_db()?;
             match action {
-                ArchiveCommands::Add { id } => commands::archive::archive(&db, id),
-                ArchiveCommands::Remove { id } => commands::archive::unarchive(&db, id),
+                ArchiveCommands::Add { id } => commands::archive::archive(&db, &id),
+                ArchiveCommands::Remove { id } => commands::archive::unarchive(&db, &id),
                 ArchiveCommands::List => commands::archive::list(&db),
                 ArchiveCommands::Older { days } => commands::archive::archive_older(&db, days),
             }
@@ -1720,7 +1721,7 @@ fn run() -> Result<()> {
                 MilestoneCommands::Show { id } => commands::milestone::show(&db, id),
                 MilestoneCommands::Add { id, issues } => commands::milestone::add(&db, id, &issues),
                 MilestoneCommands::Remove { id, issue } => {
-                    commands::milestone::remove(&db, id, issue)
+                    commands::milestone::remove(&db, id, &issue)
                 }
                 MilestoneCommands::Close { id } => commands::milestone::close(&db, id),
                 MilestoneCommands::Delete { id } => commands::milestone::delete(&db, id),
@@ -1744,7 +1745,7 @@ fn run() -> Result<()> {
                 }
                 SessionCommands::Work { id } => {
                     let atelier_dir = find_atelier_dir()?;
-                    commands::session::work(&db, id, &atelier_dir)
+                    commands::session::work(&db, &id, &atelier_dir)
                 }
                 SessionCommands::LastHandoff => commands::session::last_handoff(&db),
                 SessionCommands::Action { text } => commands::session::action(&db, &text),
@@ -1839,12 +1840,12 @@ fn run() -> Result<()> {
                     let db = get_db()?;
                     commands::locks_cmd::list(&atelier_dir, &db, json)
                 }
-                LocksCommands::Check { id } => commands::locks_cmd::check(&atelier_dir, id),
+                LocksCommands::Check { id } => commands::locks_cmd::check(&atelier_dir, &id),
                 LocksCommands::Claim { id, branch } => {
-                    commands::locks_cmd::claim(&atelier_dir, id, branch.as_deref())
+                    commands::locks_cmd::claim(&atelier_dir, &id, branch.as_deref())
                 }
-                LocksCommands::Release { id } => commands::locks_cmd::release(&atelier_dir, id),
-                LocksCommands::Steal { id } => commands::locks_cmd::steal(&atelier_dir, id),
+                LocksCommands::Release { id } => commands::locks_cmd::release(&atelier_dir, &id),
+                LocksCommands::Steal { id } => commands::locks_cmd::steal(&atelier_dir, &id),
             }
         }
 

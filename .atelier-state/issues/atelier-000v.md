@@ -1,0 +1,32 @@
+---
+acceptance: []
+blocks:
+- "atelier-000n"
+- "atelier-000q"
+created_at: "2026-06-08T17:33:27+00:00"
+depends_on:
+- "atelier-000f"
+- "atelier-000g"
+evidence_required: []
+id: "atelier-000v"
+issue_type: "task"
+labels:
+- "feature"
+- "git"
+- "spec"
+- "worktree"
+links: []
+parent: "atelier-000m"
+priority: "P2"
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Implement worktree and branch helper commands"
+updated_at: "2026-06-09T17:30:36.274899497+00:00"
+---
+
+Add helpers for normal work branches, optional mission branches, and work-associated worktrees while remaining a convenience layer over Git. Helpers should consume the configured branch/path policy and workflow setup hooks rather than launching or supervising agents.
+
+## Acceptance
+
+`atelier worktree for <id>` creates or locates the configured worktree; branch naming follows policy; implementation warns or fails on main according to policy; new worktrees rebuild SQLite from `.atelier-state`; setup hooks can prepare ignored caches or per-worktree local settings; tests or scripted evidence cover branch/worktree association and merge-helper behavior without launching an agent.

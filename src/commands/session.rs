@@ -13,7 +13,7 @@ pub fn start(db: &Database, atelier_dir: &Path) -> Result<()> {
     if let Some(current) = db.get_current_session()? {
         println!(
             "Session {} is already active (started {})",
-            format_issue_id(current.id),
+            current.id,
             current.started_at.format("%Y-%m-%d %H:%M")
         );
         return Ok(());
@@ -42,7 +42,7 @@ pub fn start(db: &Database, atelier_dir: &Path) -> Result<()> {
         .map(|a| a.agent_id);
 
     let id = db.start_session_with_agent(agent_id.as_deref())?;
-    println!("Session {} started.", format_issue_id(id));
+    println!("Session {} started.", id);
     if let Some(ref aid) = agent_id {
         println!("Agent: {}", aid);
     }
@@ -56,7 +56,7 @@ pub fn end(db: &Database, notes: Option<&str>) -> Result<()> {
     };
 
     db.end_session(session.id, notes)?;
-    println!("Session {} ended.", format_issue_id(session.id));
+    println!("Session {} ended.", session.id);
     if notes.is_some() {
         println!("Handoff notes saved.");
     }
@@ -77,17 +77,17 @@ pub fn status(db: &Database) -> Result<()> {
 
     println!(
         "Session {} (started {})",
-        format_issue_id(session.id),
+        session.id,
         session.started_at.format("%Y-%m-%d %H:%M")
     );
 
     if let Some(issue_id) = session.active_issue_id {
-        if let Some(issue) = db.get_issue(issue_id)? {
-            println!("Working on: {} {}", format_issue_id(issue.id), issue.title);
+        if let Some(issue) = db.get_issue(&issue_id)? {
+            println!("Working on: {} {}", format_issue_id(&issue.id), issue.title);
         } else {
             println!(
                 "Working on: {} (issue not found)",
-                format_issue_id(issue_id)
+                format_issue_id(&issue_id)
             );
         }
     } else {
@@ -113,7 +113,7 @@ struct SessionStatus {
 
 #[derive(Serialize)]
 struct ActiveIssue {
-    id: i64,
+    id: String,
     title: String,
 }
 
@@ -149,7 +149,7 @@ pub fn status_json(db: &Database) -> Result<()> {
     Ok(())
 }
 
-pub fn work(db: &Database, issue_id: i64, atelier_dir: &Path) -> Result<()> {
+pub fn work(db: &Database, issue_id: &str, atelier_dir: &Path) -> Result<()> {
     let session = match db.get_current_session()? {
         Some(s) => s,
         None => bail!("No active session. Use 'atelier session start' first."),
@@ -157,7 +157,7 @@ pub fn work(db: &Database, issue_id: i64, atelier_dir: &Path) -> Result<()> {
 
     let issue = match db.get_issue(issue_id)? {
         Some(i) => i,
-        None => bail!("Issue {} not found", format_issue_id(issue_id)),
+        None => bail!("Issue {} not found", format_issue_id(&issue_id)),
     };
 
     // Check lock before allowing work on this issue
@@ -166,7 +166,7 @@ pub fn work(db: &Database, issue_id: i64, atelier_dir: &Path) -> Result<()> {
     db.set_session_issue(session.id, issue_id)?;
     println!(
         "Now working on: {} {}",
-        format_issue_id(issue.id),
+        format_issue_id(&issue.id),
         issue.title
     );
     Ok(())
@@ -316,7 +316,7 @@ mod tests {
 
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
         start(&db, &cl).unwrap();
-        work(&db, issue_id, &cl).unwrap();
+        work(&db, &issue_id, &cl).unwrap();
 
         let result = status(&db);
         assert!(result.is_ok());
@@ -331,7 +331,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
         start(&db, &cl).unwrap();
 
-        let result = work(&db, issue_id, &cl);
+        let result = work(&db, &issue_id, &cl);
         assert!(result.is_ok());
 
         let session = db.get_current_session().unwrap().unwrap();
@@ -344,7 +344,7 @@ mod tests {
 
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = work(&db, issue_id, &cl);
+        let result = work(&db, &issue_id, &cl);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -358,7 +358,7 @@ mod tests {
 
         start(&db, &cl).unwrap();
 
-        let result = work(&db, 99999, &cl);
+        let result = work(&db, "atelier-missing", &cl);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -371,11 +371,11 @@ mod tests {
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
         start(&db, &cl).unwrap();
 
-        work(&db, issue1, &cl).unwrap();
+        work(&db, &issue1, &cl).unwrap();
         let session = db.get_current_session().unwrap().unwrap();
         assert_eq!(session.active_issue_id, Some(issue1));
 
-        work(&db, issue2, &cl).unwrap();
+        work(&db, &issue2, &cl).unwrap();
         let session = db.get_current_session().unwrap().unwrap();
         assert_eq!(session.active_issue_id, Some(issue2));
     }
@@ -429,7 +429,7 @@ mod tests {
 
         // Create and work on issue
         let issue_id = db.create_issue("Feature", None, "high").unwrap();
-        work(&db, issue_id, &cl).unwrap();
+        work(&db, &issue_id, &cl).unwrap();
 
         // Check status
         status(&db).unwrap();
@@ -476,9 +476,10 @@ mod tests {
         #[test]
         fn prop_work_nonexistent_fails(issue_id in 1000i64..10000) {
             let (db, cl, _dir) = setup_test_db();
+            let issue_id = format!("atelier-missing-{issue_id}");
 
             start(&db, &cl).unwrap();
-            let result = work(&db, issue_id, &cl);
+            let result = work(&db, &issue_id, &cl);
             prop_assert!(result.is_err());
         }
     }

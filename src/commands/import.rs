@@ -9,6 +9,7 @@ use std::path::Path;
 use super::export::{ExportData, ExportedIssue};
 use crate::db::Database;
 use crate::models::Issue;
+use crate::record_id;
 use crate::utils::format_issue_id;
 
 pub fn run_json(db: &Database, input_path: &Path) -> Result<()> {
@@ -26,21 +27,21 @@ pub fn run_json(db: &Database, input_path: &Path) -> Result<()> {
     // If any part fails, all changes are rolled back
     let count = db.transaction(|| {
         // Map old IDs to new IDs for parent relationships
-        let mut id_map: HashMap<i64, i64> = HashMap::new();
+        let mut id_map: HashMap<String, String> = HashMap::new();
 
         // First pass: create all issues without parent relationships
         for issue in &data.issues {
             let new_id = import_issue(db, issue, None)?;
-            id_map.insert(issue.id, new_id);
+            id_map.insert(issue.id.clone(), new_id);
         }
 
         // Second pass: update parent relationships
         for issue in &data.issues {
-            if let Some(old_parent_id) = issue.parent_id {
-                if let Some(&new_parent_id) = id_map.get(&old_parent_id) {
-                    if let Some(&new_id) = id_map.get(&issue.id) {
+            if let Some(old_parent_id) = &issue.parent_id {
+                if let Some(new_parent_id) = id_map.get(old_parent_id) {
+                    if let Some(new_id) = id_map.get(&issue.id) {
                         // Update parent_id for this issue
-                        db.update_parent(new_id, Some(new_parent_id))?;
+                        db.update_parent(new_id, Some(new_parent_id.as_str()))?;
                     }
                 }
             }
@@ -104,7 +105,7 @@ pub struct BeadsImportReport {
     blocking_links: usize,
     skipped_records: usize,
     lossy_fields: Vec<LossyField>,
-    id_mapping: BTreeMap<String, i64>,
+    id_mapping: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -171,20 +172,20 @@ fn import_beads_jsonl(db: &Database, input_path: &Path) -> Result<BeadsImportRep
     db.transaction(|| {
         for record in &source_records {
             let id = mapped_id(&id_mapping, &record.id)?;
-            if db.get_issue(id)?.is_some() {
+            if db.get_issue(&id)?.is_some() {
                 bail!(
                     "Import target {} for Beads ID {} already exists",
-                    format_issue_id(id),
+                    format_issue_id(&id),
                     record.id
                 );
             }
 
-            let issue = imported_issue(record, id, &mut lossy_fields)?;
+            let issue = imported_issue(record, id.clone(), &mut lossy_fields)?;
             db.insert_issue_import(&issue)?;
             for label in record.labels.as_deref().unwrap_or_default() {
-                db.add_label(id, label)?;
+                db.add_label(&id, label)?;
             }
-            add_preservation_comments(db, record, id, &mut lossy_fields)?;
+            add_preservation_comments(db, record, &id, &mut lossy_fields)?;
             report_extra_fields(record, &mut lossy_fields);
         }
 
@@ -197,12 +198,12 @@ fn import_beads_jsonl(db: &Database, input_path: &Path) -> Result<BeadsImportRep
                     "parent-child" => {
                         let updated_at = parse_optional_datetime(record.updated_at.as_deref())?
                             .unwrap_or_else(Utc::now);
-                        db.update_parent_import(issue_id, Some(depends_on_id), &updated_at)?;
-                        parent_edges.insert((issue_id, depends_on_id));
+                        db.update_parent_import(&issue_id, Some(&depends_on_id), &updated_at)?;
+                        parent_edges.insert((issue_id.clone(), depends_on_id.clone()));
                     }
                     "blocks" => {
-                        db.add_dependency(issue_id, depends_on_id)?;
-                        block_edges.insert((issue_id, depends_on_id));
+                        db.add_dependency(&issue_id, &depends_on_id)?;
+                        block_edges.insert((issue_id.clone(), depends_on_id.clone()));
                     }
                     other => lossy_fields.push(lossy(
                         &record.id,
@@ -228,7 +229,7 @@ fn import_beads_jsonl(db: &Database, input_path: &Path) -> Result<BeadsImportRep
     })
 }
 
-fn deterministic_id_mapping(records: &[BeadsIssue]) -> Result<BTreeMap<String, i64>> {
+fn deterministic_id_mapping(records: &[BeadsIssue]) -> Result<BTreeMap<String, String>> {
     let mut ids = BTreeSet::new();
     for record in records {
         if !ids.insert(record.id.clone()) {
@@ -238,20 +239,20 @@ fn deterministic_id_mapping(records: &[BeadsIssue]) -> Result<BTreeMap<String, i
     Ok(ids
         .into_iter()
         .enumerate()
-        .map(|(index, id)| (id, index as i64 + 1))
+        .map(|(index, id)| (id, record_id::legacy_issue_id(index as i64 + 1)))
         .collect())
 }
 
-fn mapped_id(mapping: &BTreeMap<String, i64>, source_id: &str) -> Result<i64> {
+fn mapped_id(mapping: &BTreeMap<String, String>, source_id: &str) -> Result<String> {
     mapping
         .get(source_id)
-        .copied()
+        .cloned()
         .ok_or_else(|| anyhow::anyhow!("Dependency references missing Beads ID {}", source_id))
 }
 
 fn imported_issue(
     record: &BeadsIssue,
-    id: i64,
+    id: String,
     lossy_fields: &mut Vec<LossyField>,
 ) -> Result<Issue> {
     let status = match record.status.as_str() {
@@ -336,7 +337,7 @@ fn import_priority(priority: i64, source_id: &str, lossy_fields: &mut Vec<LossyF
 fn add_preservation_comments(
     db: &Database,
     record: &BeadsIssue,
-    id: i64,
+    id: &str,
     lossy_fields: &mut Vec<LossyField>,
 ) -> Result<()> {
     let created_at = record
@@ -390,7 +391,7 @@ fn add_preservation_comments(
 fn validate_dependency_record(
     record: &BeadsIssue,
     dependency: &BeadsDependency,
-    id_mapping: &BTreeMap<String, i64>,
+    id_mapping: &BTreeMap<String, String>,
     lossy_fields: &mut Vec<LossyField>,
 ) -> Result<()> {
     if dependency.issue_id != record.id {
@@ -453,7 +454,7 @@ fn lossy(source_id: &str, field: impl Into<String>, handling: impl Into<String>)
     }
 }
 
-fn import_issue(db: &Database, issue: &ExportedIssue, parent_id: Option<i64>) -> Result<i64> {
+fn import_issue(db: &Database, issue: &ExportedIssue, parent_id: Option<&str>) -> Result<String> {
     let id = if let Some(pid) = parent_id {
         db.create_subissue_with_type(
             pid,
@@ -473,23 +474,23 @@ fn import_issue(db: &Database, issue: &ExportedIssue, parent_id: Option<i64>) ->
 
     // Add labels
     for label in &issue.labels {
-        db.add_label(id, label)?;
+        db.add_label(&id, label)?;
     }
 
     // Add comments
     for comment in &issue.comments {
-        db.add_comment(id, &comment.content, &comment.kind)?;
+        db.add_comment(&id, &comment.content, &comment.kind)?;
     }
 
     // Close if needed
     if issue.status == "closed" {
-        db.close_issue(id)?;
+        db.close_issue(&id)?;
     }
 
     println!(
         "  Imported: {} -> {} {}",
-        format_issue_id(issue.id),
-        format_issue_id(id),
+        format_issue_id(&issue.id),
+        format_issue_id(&id),
         issue.title
     );
     Ok(id)
@@ -520,13 +521,13 @@ mod tests {
 
     fn make_issue(id: i64, title: &str, parent_id: Option<i64>, status: &str) -> ExportedIssue {
         ExportedIssue {
-            id,
+            id: record_id::legacy_issue_id(id),
             title: title.to_string(),
             description: None,
             status: status.to_string(),
             issue_type: "task".to_string(),
             priority: "medium".to_string(),
-            parent_id,
+            parent_id: parent_id.map(record_id::legacy_issue_id),
             labels: vec![],
             comments: vec![],
             created_at: "2024-01-01T00:00:00Z".to_string(),
@@ -582,7 +583,7 @@ mod tests {
         fs::write(&import_path, json).unwrap();
         run_json(&db, &import_path).unwrap();
         let issues = db.list_issues(Some("all"), None, None).unwrap();
-        let labels = db.get_labels(issues[0].id).unwrap();
+        let labels = db.get_labels(&issues[0].id).unwrap();
         assert!(labels.contains(&"bug".to_string()));
         assert_eq!(issues[0].issue_type, "task");
     }
@@ -599,9 +600,9 @@ mod tests {
 
         run_json(&db, &import_path).unwrap();
 
-        let issue = db.get_issue(1).unwrap().unwrap();
+        let issue = db.list_issues(Some("all"), None, None).unwrap().remove(0);
         assert_eq!(issue.issue_type, "validation");
-        assert_eq!(db.get_labels(issue.id).unwrap(), vec!["epic".to_string()]);
+        assert_eq!(db.get_labels(&issue.id).unwrap(), vec!["epic".to_string()]);
     }
 
     #[test]
@@ -647,25 +648,70 @@ mod tests {
         assert_eq!(report.imported_issues, 3);
         assert_eq!(report.parent_child_links, 2);
         assert_eq!(report.blocking_links, 1);
-        assert_eq!(report.id_mapping["atelier-z1p"], 1);
-        assert_eq!(report.id_mapping["atelier-z1p.2"], 2);
-        assert_eq!(report.id_mapping["atelier-z1p.4"], 3);
+        assert_eq!(
+            report.id_mapping["atelier-z1p"],
+            record_id::legacy_issue_id(1)
+        );
+        assert_eq!(
+            report.id_mapping["atelier-z1p.2"],
+            record_id::legacy_issue_id(2)
+        );
+        assert_eq!(
+            report.id_mapping["atelier-z1p.4"],
+            record_id::legacy_issue_id(3)
+        );
 
         let imported = db.list_issues(Some("all"), None, None).unwrap();
         assert_eq!(imported.len(), 3);
-        assert_eq!(db.get_issue(2).unwrap().unwrap().parent_id, Some(1));
-        assert_eq!(db.get_issue(3).unwrap().unwrap().parent_id, Some(1));
-        assert_eq!(db.get_blockers(3).unwrap(), vec![2]);
-        assert_eq!(db.get_blocking(2).unwrap(), vec![3]);
+        assert_eq!(
+            db.get_issue(record_id::legacy_issue_id(2))
+                .unwrap()
+                .unwrap()
+                .parent_id,
+            Some(record_id::legacy_issue_id(1))
+        );
+        assert_eq!(
+            db.get_issue(record_id::legacy_issue_id(3))
+                .unwrap()
+                .unwrap()
+                .parent_id,
+            Some(record_id::legacy_issue_id(1))
+        );
+        assert_eq!(
+            db.get_blockers(record_id::legacy_issue_id(3)).unwrap(),
+            vec![record_id::legacy_issue_id(2)]
+        );
+        assert_eq!(
+            db.get_blocking(record_id::legacy_issue_id(2)).unwrap(),
+            vec![record_id::legacy_issue_id(3)]
+        );
 
-        assert_eq!(db.get_issue(1).unwrap().unwrap().issue_type, "epic");
-        assert_eq!(db.get_issue(2).unwrap().unwrap().issue_type, "feature");
-        assert_eq!(db.get_issue(3).unwrap().unwrap().issue_type, "task");
-        let labels = db.get_labels(3).unwrap();
+        assert_eq!(
+            db.get_issue(record_id::legacy_issue_id(1))
+                .unwrap()
+                .unwrap()
+                .issue_type,
+            "epic"
+        );
+        assert_eq!(
+            db.get_issue(record_id::legacy_issue_id(2))
+                .unwrap()
+                .unwrap()
+                .issue_type,
+            "feature"
+        );
+        assert_eq!(
+            db.get_issue(record_id::legacy_issue_id(3))
+                .unwrap()
+                .unwrap()
+                .issue_type,
+            "task"
+        );
+        let labels = db.get_labels(record_id::legacy_issue_id(3)).unwrap();
         assert!(!labels.contains(&"task".to_string()));
         assert!(!labels.iter().any(|label| label.starts_with("beads:")));
         assert!(!db
-            .get_issue(3)
+            .get_issue(record_id::legacy_issue_id(3))
             .unwrap()
             .unwrap()
             .description
@@ -684,13 +730,21 @@ mod tests {
         .unwrap();
         import_beads_jsonl(&db, &import_path).unwrap();
 
-        super::super::show::run(&db, 2).unwrap();
+        super::super::show::run(&db, &record_id::legacy_issue_id(2)).unwrap();
         assert!(db
-            .update_issue(2, Some("Imported record updated"), None, Some("critical"))
+            .update_issue(
+                record_id::legacy_issue_id(2),
+                Some("Imported record updated"),
+                None,
+                Some("critical")
+            )
             .unwrap());
-        assert!(db.close_issue(2).unwrap());
+        assert!(db.close_issue(record_id::legacy_issue_id(2)).unwrap());
 
-        let issue = db.get_issue(2).unwrap().unwrap();
+        let issue = db
+            .get_issue(record_id::legacy_issue_id(2))
+            .unwrap()
+            .unwrap();
         assert_eq!(issue.title, "Imported record updated");
         assert_eq!(issue.priority, "critical");
         assert_eq!(issue.status, "closed");
@@ -711,7 +765,10 @@ mod tests {
 
         assert!(!state_dir.join("manifest.json").exists());
         assert!(!state_dir.join("graph.json").exists());
-        assert!(state_dir.join("issues").join("ISS-0001.md").exists());
+        assert!(state_dir
+            .join("issues")
+            .join(format!("{}.md", record_id::legacy_issue_id(1)))
+            .exists());
     }
 
     proptest! {

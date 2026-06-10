@@ -3,7 +3,7 @@ use anyhow::{bail, Result};
 use crate::db::Database;
 use crate::utils::{format_issue_id, truncate};
 
-pub fn block(db: &Database, issue_id: i64, blocker_id: i64) -> Result<()> {
+pub fn block(db: &Database, issue_id: &str, blocker_id: &str) -> Result<()> {
     // Check if both issues exist
     db.require_issue(issue_id)?;
     db.require_issue(blocker_id)?;
@@ -12,7 +12,7 @@ pub fn block(db: &Database, issue_id: i64, blocker_id: i64) -> Result<()> {
         bail!("An issue cannot block itself");
     }
 
-    if db.add_dependency(issue_id, blocker_id)? {
+    if db.add_dependency(&issue_id, &blocker_id)? {
         println!(
             "Issue {} is now blocked by {}",
             format_issue_id(issue_id),
@@ -24,8 +24,8 @@ pub fn block(db: &Database, issue_id: i64, blocker_id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn unblock(db: &Database, issue_id: i64, blocker_id: i64) -> Result<()> {
-    if db.remove_dependency(issue_id, blocker_id)? {
+pub fn unblock(db: &Database, issue_id: &str, blocker_id: &str) -> Result<()> {
+    if db.remove_dependency(&issue_id, &blocker_id)? {
         println!(
             "Removed: {} no longer blocked by {}",
             format_issue_id(issue_id),
@@ -47,11 +47,11 @@ pub fn list_blocked(db: &Database) -> Result<()> {
 
     println!("Blocked issues:");
     for issue in issues {
-        let blockers = db.get_blockers(issue.id)?;
-        let blocker_strs: Vec<String> = blockers.iter().map(|b| format_issue_id(*b)).collect();
+        let blockers = db.get_blockers(&issue.id)?;
+        let blocker_strs: Vec<String> = blockers.iter().map(|b| format_issue_id(b)).collect();
         println!(
             "  {:<5} {} (blocked by: {})",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             truncate(&issue.title, 40),
             blocker_strs.join(", ")
         );
@@ -72,7 +72,7 @@ pub fn list_ready(db: &Database) -> Result<()> {
     for issue in issues {
         println!(
             "  {:<5} {:8} {}",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             issue.priority,
             issue.title
         );
@@ -101,8 +101,8 @@ mod tests {
         let issue1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        block(&db, issue1, issue2).unwrap();
-        let blockers = db.get_blockers(issue1).unwrap();
+        block(&db, &issue1, &issue2).unwrap();
+        let blockers = db.get_blockers(&issue1).unwrap();
         assert!(
             blockers.contains(&issue2),
             "Issue 2 should be a blocker of Issue 1"
@@ -114,7 +114,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue = db.create_issue("Issue", None, "medium").unwrap();
 
-        let result = block(&db, 99999, issue);
+        let result = block(&db, "atelier-missing", &issue);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -124,7 +124,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue = db.create_issue("Issue", None, "medium").unwrap();
 
-        let result = block(&db, issue, 99999);
+        let result = block(&db, &issue, "atelier-missing");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -134,7 +134,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue = db.create_issue("Issue", None, "medium").unwrap();
 
-        let result = block(&db, issue, issue);
+        let result = block(&db, &issue, &issue);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -148,9 +148,9 @@ mod tests {
         let issue1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        block(&db, issue1, issue2).unwrap();
-        block(&db, issue1, issue2).unwrap(); // Should succeed, print "already exists"
-        let blockers = db.get_blockers(issue1).unwrap();
+        block(&db, &issue1, &issue2).unwrap();
+        block(&db, &issue1, &issue2).unwrap(); // Should succeed, print "already exists"
+        let blockers = db.get_blockers(&issue1).unwrap();
         assert_eq!(
             blockers.len(),
             1,
@@ -165,10 +165,10 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
-        db.add_dependency(issue1, issue2).unwrap();
+        db.add_dependency(&issue1, &issue2).unwrap();
 
-        unblock(&db, issue1, issue2).unwrap();
-        let blockers = db.get_blockers(issue1).unwrap();
+        unblock(&db, &issue1, &issue2).unwrap();
+        let blockers = db.get_blockers(&issue1).unwrap();
         assert!(
             blockers.is_empty(),
             "Blocker should be removed after unblock"
@@ -182,8 +182,8 @@ mod tests {
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
         // Should succeed gracefully even when no dependency exists
-        unblock(&db, issue1, issue2).unwrap();
-        let blockers = db.get_blockers(issue1).unwrap();
+        unblock(&db, &issue1, &issue2).unwrap();
+        let blockers = db.get_blockers(&issue1).unwrap();
         assert!(blockers.is_empty(), "No blockers should exist");
     }
 
@@ -202,7 +202,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue1 = db.create_issue("Blocked issue", None, "medium").unwrap();
         let issue2 = db.create_issue("Blocker", None, "medium").unwrap();
-        db.add_dependency(issue1, issue2).unwrap();
+        db.add_dependency(&issue1, &issue2).unwrap();
 
         list_blocked(&db).unwrap();
         let blocked = db.list_blocked_issues().unwrap();
@@ -216,11 +216,11 @@ mod tests {
         let blocked = db.create_issue("Blocked", None, "medium").unwrap();
         let blocker1 = db.create_issue("Blocker 1", None, "medium").unwrap();
         let blocker2 = db.create_issue("Blocker 2", None, "medium").unwrap();
-        db.add_dependency(blocked, blocker1).unwrap();
-        db.add_dependency(blocked, blocker2).unwrap();
+        db.add_dependency(&blocked, &blocker1).unwrap();
+        db.add_dependency(&blocked, &blocker2).unwrap();
 
         list_blocked(&db).unwrap();
-        let blockers = db.get_blockers(blocked).unwrap();
+        let blockers = db.get_blockers(&blocked).unwrap();
         assert_eq!(blockers.len(), 2);
         assert!(blockers.contains(&blocker1));
         assert!(blockers.contains(&blocker2));
@@ -252,7 +252,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let blocked = db.create_issue("Blocked", None, "high").unwrap();
         let blocker = db.create_issue("Blocker", None, "medium").unwrap();
-        db.add_dependency(blocked, blocker).unwrap();
+        db.add_dependency(&blocked, &blocker).unwrap();
 
         let ready = db.list_ready_issues().unwrap();
         assert!(!ready.iter().any(|i| i.id == blocked));
@@ -263,7 +263,7 @@ mod tests {
     fn test_list_ready_excludes_closed() {
         let (db, _dir) = setup_test_db();
         let issue = db.create_issue("Closed issue", None, "medium").unwrap();
-        db.close_issue(issue).unwrap();
+        db.close_issue(&issue).unwrap();
 
         let ready = db.list_ready_issues().unwrap();
         assert!(!ready.iter().any(|i| i.id == issue));
@@ -276,11 +276,11 @@ mod tests {
         let issue1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let issue2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        block(&db, issue1, issue2).unwrap();
+        block(&db, &issue1, &issue2).unwrap();
         let blocked = db.list_blocked_issues().unwrap();
         assert!(blocked.iter().any(|i| i.id == issue1));
 
-        unblock(&db, issue1, issue2).unwrap();
+        unblock(&db, &issue1, &issue2).unwrap();
         let blocked = db.list_blocked_issues().unwrap();
         assert!(!blocked.iter().any(|i| i.id == issue1));
     }
@@ -290,14 +290,14 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let blocked = db.create_issue("Blocked", None, "high").unwrap();
         let blocker = db.create_issue("Blocker", None, "medium").unwrap();
-        db.add_dependency(blocked, blocker).unwrap();
+        db.add_dependency(&blocked, &blocker).unwrap();
 
         // Blocked issue should not be ready
         let ready = db.list_ready_issues().unwrap();
         assert!(!ready.iter().any(|i| i.id == blocked));
 
         // Close the blocker
-        db.close_issue(blocker).unwrap();
+        db.close_issue(&blocker).unwrap();
 
         // Now blocked issue should be ready
         let ready = db.list_ready_issues().unwrap();
@@ -317,8 +317,8 @@ mod tests {
             let issue1 = db.create_issue(&title1, None, "medium").unwrap();
             let issue2 = db.create_issue(&title2, None, "medium").unwrap();
 
-            block(&db, issue1, issue2).unwrap();
-            let blockers = db.get_blockers(issue1).unwrap();
+            block(&db, &issue1, &issue2).unwrap();
+            let blockers = db.get_blockers(&issue1).unwrap();
             prop_assert!(blockers.contains(&issue2));
             let blocked = db.list_blocked_issues().unwrap();
             prop_assert!(blocked.iter().any(|i| i.id == issue1));

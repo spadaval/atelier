@@ -1,5 +1,10 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 use tempfile::tempdir;
+
+static TEST_ISSUE_IDS: OnceLock<Mutex<HashMap<PathBuf, Vec<String>>>> = OnceLock::new();
 
 fn json_value(stdout: &str) -> serde_json::Value {
     serde_json::from_str(stdout).unwrap_or_else(|error| {
@@ -8,23 +13,167 @@ fn json_value(stdout: &str) -> serde_json::Value {
 }
 
 /// Helper to run atelier commands in a temp directory
-fn run_atelier(dir: &std::path::Path, args: &[&str]) -> (bool, String, String) {
+fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
+    let translated_args = translate_issue_refs(dir, args);
     let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
-        .args(args)
+        .args(&translated_args)
         .output()
         .expect("Failed to execute atelier");
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
+    if output.status.success() {
+        register_issue_ids_from_stdout(dir, &stdout);
+        register_issue_ids_from_state(dir);
+    }
+
     (output.status.success(), stdout, stderr)
 }
 
 /// Initialize atelier in a temp directory
-fn init_atelier(dir: &std::path::Path) {
+fn init_atelier(dir: &Path) {
     let (success, _, stderr) = run_atelier(dir, &["init"]);
     assert!(success, "Failed to init: {}", stderr);
+}
+
+fn registry() -> &'static Mutex<HashMap<PathBuf, Vec<String>>> {
+    TEST_ISSUE_IDS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn issue_ref(dir: &Path, ordinal: usize) -> String {
+    registry()
+        .lock()
+        .unwrap()
+        .get(dir)
+        .and_then(|ids| ids.get(ordinal - 1))
+        .cloned()
+        .unwrap_or_else(|| ordinal.to_string())
+}
+
+fn issue_id_by_title(dir: &Path, title: &str) -> String {
+    let (success, stdout, stderr) =
+        run_atelier(dir, &["--json", "issue", "list", "--status", "all"]);
+    assert!(success, "issue list failed: {stderr}");
+    let listed = json_value(&stdout);
+    listed["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|issue| issue["title"] == title)
+        .and_then(|issue| issue["id"].as_str())
+        .unwrap_or_else(|| panic!("issue with title {title:?} not found in {stdout}"))
+        .to_string()
+}
+
+fn register_issue_id(dir: &Path, id: String) {
+    if !is_record_id(&id) {
+        return;
+    }
+    let mut map = registry().lock().unwrap();
+    let ids = map.entry(dir.to_path_buf()).or_default();
+    if !ids.contains(&id) {
+        ids.push(id);
+    }
+}
+
+fn register_issue_ids_from_stdout(dir: &Path, stdout: &str) {
+    let bytes = stdout.as_bytes();
+    let mut index = 0;
+    while let Some(offset) = stdout[index..].find("atelier-") {
+        let start = index + offset;
+        let mut end = start;
+        while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'-') {
+            end += 1;
+        }
+        register_issue_id(dir, stdout[start..end].to_string());
+        index = end;
+    }
+}
+
+fn register_issue_ids_from_state(dir: &Path) {
+    let issues_dir = dir.join(".atelier-state/issues");
+    let Ok(entries) = std::fs::read_dir(issues_dir) else {
+        return;
+    };
+    let mut ids = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.path().file_stem()?.to_str().map(str::to_owned))
+        .filter(|id| is_record_id(id))
+        .collect::<Vec<_>>();
+    ids.sort();
+    for id in ids {
+        register_issue_id(dir, id);
+    }
+}
+
+fn is_record_id(value: &str) -> bool {
+    let Some((slug, suffix)) = value.rsplit_once('-') else {
+        return false;
+    };
+    !slug.is_empty()
+        && suffix.len() == 4
+        && slug
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+fn translate_issue_refs(dir: &Path, args: &[&str]) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .map(|(index, arg)| {
+            if issue_ref_position(args, index) {
+                translate_issue_ref(dir, arg)
+            } else {
+                (*arg).to_string()
+            }
+        })
+        .collect()
+}
+
+fn translate_issue_ref(dir: &Path, value: &str) -> String {
+    let numeric = value.strip_prefix('#').unwrap_or(value);
+    match numeric.parse::<usize>() {
+        Ok(ordinal) => issue_ref(dir, ordinal),
+        Err(_) => value.to_string(),
+    }
+}
+
+fn command_offset(args: &[&str]) -> usize {
+    args.iter()
+        .position(|arg| !arg.starts_with('-'))
+        .unwrap_or(args.len())
+}
+
+fn issue_ref_position(args: &[&str], index: usize) -> bool {
+    let offset = command_offset(args);
+    if index <= offset {
+        return false;
+    }
+
+    match args.get(offset..).unwrap_or_default() {
+        ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
+            index == offset + 1
+        }
+        ["label" | "unlabel" | "comment", ..] => index == offset + 1,
+        ["block" | "unblock" | "relate" | "unrelate", ..] => {
+            index == offset + 1 || index == offset + 2
+        }
+        ["subissue", ..] => index == offset + 1,
+        ["session", "work", ..] => index == offset + 2,
+        ["archive", "add" | "remove", ..] => index == offset + 2,
+        ["milestone", "add" | "remove", ..] => index > offset + 2,
+        ["issue", "show" | "update" | "impact", ..] => index == offset + 2,
+        ["issue", "subissue", ..] => index == offset + 2,
+        ["issue", "relate", ..] => index == offset + 2 || index == offset + 3,
+        ["dep", "list", ..] => index == offset + 2,
+        ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
+        _ => false,
+    }
 }
 
 // ==================== Init Tests ====================
@@ -62,8 +211,8 @@ fn test_create_issue() {
 
     assert!(success);
     assert!(
-        stdout.contains("Created issue #1"),
-        "Expected 'Created issue #1' in output, got: {}",
+        stdout.contains("Created issue atelier-"),
+        "Expected project-scoped issue id in output, got: {}",
         stdout
     );
 }
@@ -114,8 +263,8 @@ fn test_create_subissue() {
 
     assert!(success);
     assert!(
-        stdout.contains("Created subissue #2"),
-        "Expected 'Created subissue #2' in output, got: {}",
+        stdout.contains("Created subissue atelier-"),
+        "Expected project-scoped subissue id in output, got: {}",
         stdout
     );
 
@@ -300,7 +449,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
         .path()
         .join(".atelier-state")
         .join("issues")
-        .join("ISS-0001.md")
+        .join("atelier-0001.md")
         .exists());
 
     let (_, list_out, _) = run_atelier(dir.path(), &["list", "--status", "all"]);
@@ -308,8 +457,8 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(list_out.contains("Dogfood Atelier"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["show", "3"]);
-    assert!(show_out.contains("Parent: #1"));
-    assert!(show_out.contains("Blocked by: #2"));
+    assert!(show_out.contains("Parent: atelier-0001"));
+    assert!(show_out.contains("Blocked by: atelier-0002"));
     assert!(show_out.contains("Acceptance Criteria"));
 
     let (updated, _, update_err) = run_atelier(
@@ -903,11 +1052,11 @@ fn test_issue_impact_reports_downstream_work() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "impact", "1"]);
 
     assert!(success, "issue impact failed: {}", stderr);
-    assert!(stdout.contains("#2"));
+    assert!(stdout.contains(&issue_ref(dir.path(), 2)));
     assert!(stdout.contains("Child issue"));
-    assert!(stdout.contains("#3"));
+    assert!(stdout.contains(&issue_ref(dir.path(), 3)));
     assert!(stdout.contains("Derived issue"));
-    assert!(stdout.contains("#4"));
+    assert!(stdout.contains(&issue_ref(dir.path(), 4)));
     assert!(stdout.contains("Caused issue"));
     assert!(stdout.contains("downstream impact"));
 }
@@ -1469,7 +1618,11 @@ fn test_show_with_blockers() {
     let (success, stdout, _) = run_atelier(dir.path(), &["show", "1"]);
 
     assert!(success);
-    assert!(stdout.contains("Blocker") || stdout.contains("#2") || stdout.contains("blocked"));
+    assert!(
+        stdout.contains("Blocker")
+            || stdout.contains(&issue_ref(dir.path(), 2))
+            || stdout.contains("blocked")
+    );
 }
 
 // ==================== Additional Search Edge Cases ====================
@@ -1752,7 +1905,8 @@ fn test_import_with_labels_and_comments() {
     assert!(success);
 
     // Verify labels and status were preserved
-    let (_, show_out, _) = run_atelier(dir2.path(), &["show", "1"]);
+    let labeled_id = issue_id_by_title(dir2.path(), "Labeled issue");
+    let (_, show_out, _) = run_atelier(dir2.path(), &["show", &labeled_id]);
     assert!(show_out.contains("bug") || show_out.contains("Label"));
     assert!(show_out.contains("closed") || show_out.contains("Closed"));
 }
@@ -1811,7 +1965,7 @@ fn test_template_with_priority_override() {
     );
 
     assert!(success);
-    assert!(stdout.contains("#1"));
+    assert!(stdout.contains("atelier-"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
     assert!(show_out.contains("critical"));
@@ -1836,7 +1990,7 @@ fn test_template_with_user_description() {
     );
 
     assert!(success);
-    assert!(stdout.contains("#1"));
+    assert!(stdout.contains("atelier-"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["show", "1"]);
     // Should have both template prefix and user description
@@ -2237,7 +2391,7 @@ fn test_stress_very_long_title() {
     let ok_title = "A".repeat(512);
     let (success, stdout, _) = run_atelier(dir.path(), &["create", &ok_title]);
     assert!(success);
-    assert!(stdout.contains("#1"));
+    assert!(stdout.contains("atelier-"));
 
     // Verify it can be listed and shown
     let (success, _, _) = run_atelier(dir.path(), &["list"]);
@@ -2543,7 +2697,8 @@ fn test_integrity_export_import_roundtrip() {
     assert!(success);
 
     // Verify data integrity - title and structure preserved
-    let (success, stdout, _) = run_atelier(dir2.path(), &["show", "1"]);
+    let parent_id = issue_id_by_title(dir2.path(), "Parent");
+    let (success, stdout, _) = run_atelier(dir2.path(), &["show", &parent_id]);
     assert!(success);
     assert!(stdout.contains("Parent"));
 
@@ -2575,7 +2730,8 @@ fn test_agent_factory_json_command_subset() {
     let created = json_value(&stdout);
     assert_eq!(created["ok"], true);
     assert_eq!(created["command"], "issue.create");
-    assert_eq!(created["data"]["id"], "#1");
+    let task_id = created["data"]["id"].as_str().unwrap().to_string();
+    assert!(task_id.starts_with("atelier-"));
     assert_eq!(created["data"]["issue_type"], "feature");
 
     let (success, stdout, stderr) = run_atelier(
@@ -2606,7 +2762,7 @@ fn test_agent_factory_json_command_subset() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "#1"]);
     assert!(success, "show failed: {stderr}");
     let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["id"], "#1");
+    assert_eq!(shown["data"]["id"], task_id);
     assert_eq!(shown["data"]["notes"][1]["body"], "handoff note");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "ready"]);
@@ -2615,14 +2771,15 @@ fn test_agent_factory_json_command_subset() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Blocker"]);
     assert!(success, "blocker create failed: {stderr}");
+    let blocker_id = issue_ref(dir.path(), 2);
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "add", "1", "2"]);
     assert!(success, "dep add failed: {stderr}");
     let dep = json_value(&stdout);
     assert_eq!(dep["command"], "dep.add");
     assert_eq!(dep["data"]["action"], "add");
     assert_eq!(dep["data"]["state"], "added");
-    assert_eq!(dep["data"]["blocked"], "#1");
-    assert_eq!(dep["data"]["blocker"], "#2");
+    assert_eq!(dep["data"]["blocked"], task_id);
+    assert_eq!(dep["data"]["blocker"], blocker_id);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "1"]);
     assert!(success, "dep list failed: {stderr}");
@@ -2702,8 +2859,12 @@ fn test_issue_type_is_canonical_not_label_derived() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
-    let issue_record =
-        std::fs::read_to_string(dir.path().join(".atelier-state/issues/ISS-0001.md")).unwrap();
+    let issue_record = std::fs::read_to_string(
+        dir.path()
+            .join(".atelier-state/issues")
+            .join(format!("{}.md", issue_ref(dir.path(), 1))),
+    )
+    .unwrap();
     assert!(issue_record.contains("issue_type: \"validation\"\n"));
     assert!(issue_record.contains("labels:\n- \"epic\"\n"));
 }
@@ -2720,16 +2881,16 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
         &["--json", "import-beads", fixture.to_str().unwrap()],
     );
     assert!(success, "import-beads failed: {stderr}");
-    assert!(stdout.contains("\"atelier-z1p.4\": 3"));
+    assert!(stdout.contains("\"atelier-z1p.4\": \"atelier-0003\""));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "3"]);
     assert!(success, "mapped show failed: {stderr}");
     let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["id"], "#3");
-    assert_eq!(shown["data"]["parent"], "#1");
+    assert_eq!(shown["data"]["id"], "atelier-0003");
+    assert_eq!(shown["data"]["parent"], "atelier-0001");
     assert_eq!(shown["data"]["issue_type"], "task");
     assert!(shown["data"]["owner"].is_null());
-    assert_eq!(shown["data"]["dependencies"][0]["id"], "#2");
+    assert_eq!(shown["data"]["dependencies"][0]["id"], "atelier-0002");
     assert!(!shown["data"]["labels"]
         .as_array()
         .unwrap()
@@ -2739,8 +2900,8 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "3"]);
     assert!(success, "mapped dep list failed: {stderr}");
     let deps = json_value(&stdout);
-    assert_eq!(deps["data"]["items"][0]["blocked"], "#3");
-    assert_eq!(deps["data"]["items"][0]["blocker"], "#2");
+    assert_eq!(deps["data"]["items"][0]["blocked"], "atelier-0003");
+    assert_eq!(deps["data"]["items"][0]["blocker"], "atelier-0002");
 }
 
 // ============================================================
@@ -2943,7 +3104,8 @@ fn test_unicode_export_import_roundtrip() {
     assert!(success);
 
     // Verify Unicode preserved
-    let (success, stdout, _) = run_atelier(dir2.path(), &["show", "1"]);
+    let unicode_id = issue_id_by_title(dir2.path(), unicode_title);
+    let (success, stdout, _) = run_atelier(dir2.path(), &["show", &unicode_id]);
     assert!(success);
     assert!(
         stdout.contains("日本語") || stdout.contains("Test:"),

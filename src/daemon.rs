@@ -190,7 +190,7 @@ pub fn run_daemon(atelier_dir: &Path) -> Result<()> {
         let mut active_issue_id = None;
         if let Ok(db) = Database::open(&db_path) {
             if let Ok(Some(session)) = db.get_current_session() {
-                active_issue_id = session.active_issue_id;
+                active_issue_id = session.active_issue_id.clone();
                 let session_data = serde_json::json!({
                     "session_id": session.id,
                     "started_at": session.started_at.to_rfc3339(),

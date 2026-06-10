@@ -3,12 +3,17 @@ use anyhow::Result;
 use crate::db::{validate_relation_type, Database};
 use crate::utils::format_issue_id;
 
-pub fn add_typed(db: &Database, issue_id: i64, related_id: i64, relation_type: &str) -> Result<()> {
+pub fn add_typed(
+    db: &Database,
+    issue_id: &str,
+    related_id: &str,
+    relation_type: &str,
+) -> Result<()> {
     validate_relation_type(relation_type)?;
     db.require_issue(issue_id)?;
     db.require_issue(related_id)?;
 
-    if db.add_typed_relation(issue_id, related_id, relation_type)? {
+    if db.add_typed_relation(&issue_id, &related_id, relation_type)? {
         println!(
             "Linked {} ↔ {} ({})",
             format_issue_id(issue_id),
@@ -29,13 +34,13 @@ pub fn add_typed(db: &Database, issue_id: i64, related_id: i64, relation_type: &
 
 pub fn remove_typed(
     db: &Database,
-    issue_id: i64,
-    related_id: i64,
+    issue_id: &str,
+    related_id: &str,
     relation_type: &str,
 ) -> Result<()> {
     validate_relation_type(relation_type)?;
 
-    if db.remove_typed_relation(issue_id, related_id, relation_type)? {
+    if db.remove_typed_relation(&issue_id, &related_id, relation_type)? {
         println!(
             "Unlinked {} ↔ {} ({})",
             format_issue_id(issue_id),
@@ -54,7 +59,7 @@ pub fn remove_typed(
     Ok(())
 }
 
-pub fn list(db: &Database, issue_id: i64) -> Result<()> {
+pub fn list(db: &Database, issue_id: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
     let relations = db.get_typed_relations(issue_id)?;
@@ -67,13 +72,13 @@ pub fn list(db: &Database, issue_id: i64) -> Result<()> {
     println!("Relations for {}:", format_issue_id(issue_id));
 
     // Group by relation type for cleaner display
-    let mut by_type: std::collections::BTreeMap<String, Vec<i64>> =
+    let mut by_type: std::collections::BTreeMap<String, Vec<String>> =
         std::collections::BTreeMap::new();
     for rel in &relations {
         let other_id = if rel.issue_id_1 == issue_id {
-            rel.issue_id_2
+            rel.issue_id_2.clone()
         } else {
-            rel.issue_id_1
+            rel.issue_id_1.clone()
         };
         by_type
             .entry(rel.relation_type.clone())
@@ -83,8 +88,8 @@ pub fn list(db: &Database, issue_id: i64) -> Result<()> {
 
     for (rel_type, ids) in &by_type {
         println!("\n  [{}]:", rel_type);
-        for &id in ids {
-            if let Some(issue) = db.get_issue(id)? {
+        for id in ids {
+            if let Some(issue) = db.get_issue(&id)? {
                 let status_marker = if issue.status == "closed" { "✓" } else { " " };
                 println!(
                     "    {:<5} [{}] {:8} {}",
@@ -100,7 +105,7 @@ pub fn list(db: &Database, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn impact(db: &Database, issue_id: i64) -> Result<()> {
+pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
     let affected = db.downstream_impact(issue_id)?;
@@ -121,14 +126,14 @@ pub fn impact(db: &Database, issue_id: i64) -> Result<()> {
 
     for issue in &affected {
         let status_marker = if issue.status == "closed" { "✓" } else { " " };
-        let parent_note = if let Some(pid) = issue.parent_id {
+        let parent_note = if let Some(pid) = &issue.parent_id {
             format!(" (child of {})", format_issue_id(pid))
         } else {
             String::new()
         };
         println!(
             "  {:<5} [{}] {:8} {}{}",
-            format_issue_id(issue.id),
+            format_issue_id(&issue.id),
             status_marker,
             issue.priority,
             issue.title,
@@ -145,19 +150,19 @@ pub fn impact(db: &Database, issue_id: i64) -> Result<()> {
     Ok(())
 }
 
-pub fn cascade(db: &Database, issue_id: i64) -> Result<()> {
+pub fn cascade(db: &Database, issue_id: &str) -> Result<()> {
     impact(db, issue_id)
 }
 
 /// Mark an issue as falsified: label it, close it, and show the cascade.
-pub fn falsify(db: &Database, issue_id: i64) -> Result<()> {
+pub fn falsify(db: &Database, issue_id: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
     // Add "falsified" label
-    db.add_label(issue_id, "falsified")?;
+    db.add_label(&issue_id, "falsified")?;
 
     // Close the issue
-    db.close_issue(issue_id)?;
+    db.close_issue(&issue_id)?;
 
     let issue = db
         .get_issue(issue_id)?
@@ -186,7 +191,7 @@ pub fn falsify(db: &Database, issue_id: i64) -> Result<()> {
             let status_marker = if issue.status == "closed" { "✓" } else { " " };
             println!(
                 "  {:<5} [{}] {:8} {}",
-                format_issue_id(issue.id),
+                format_issue_id(&issue.id),
                 status_marker,
                 issue.priority,
                 issue.title
@@ -194,7 +199,7 @@ pub fn falsify(db: &Database, issue_id: i64) -> Result<()> {
 
             // Add a comment on each affected issue
             db.add_comment(
-                issue.id,
+                &issue.id,
                 &format!(
                     "⚠ Upstream assumption {} was falsified. This issue may need reassessment.",
                     format_issue_id(issue_id)
@@ -203,7 +208,7 @@ pub fn falsify(db: &Database, issue_id: i64) -> Result<()> {
             )?;
 
             // Label affected issues
-            db.add_label(issue.id, "needs-reassessment")?;
+            db.add_label(&issue.id, "needs-reassessment")?;
         }
     }
 
@@ -228,7 +233,7 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        let result = add_typed(&db, id1, id2, "related");
+        let result = add_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
 
         let related = db.get_related_issues(id1).unwrap();
@@ -242,15 +247,15 @@ mod tests {
         let id1 = db.create_issue("Assumption A", None, "medium").unwrap();
         let id2 = db.create_issue("Assumption B", None, "medium").unwrap();
 
-        let result = add_typed(&db, id1, id2, "assumption");
+        let result = add_typed(&db, &id1, &id2, "assumption");
         assert!(result.is_ok());
 
-        let by_type = db.get_issues_by_relation_type(id1, "assumption").unwrap();
+        let by_type = db.get_issues_by_relation_type(&id1, "assumption").unwrap();
         assert_eq!(by_type.len(), 1);
         assert_eq!(by_type[0].id, id2);
 
         // Should not appear under "related"
-        let by_related = db.get_issues_by_relation_type(id1, "related").unwrap();
+        let by_related = db.get_issues_by_relation_type(&id1, "related").unwrap();
         assert_eq!(by_related.len(), 0);
     }
 
@@ -260,8 +265,8 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "related").unwrap();
-        add_typed(&db, id1, id2, "assumption").unwrap();
+        add_typed(&db, &id1, &id2, "related").unwrap();
+        add_typed(&db, &id1, &id2, "assumption").unwrap();
 
         let relations = db.get_typed_relations(id1).unwrap();
         assert_eq!(relations.len(), 2);
@@ -274,7 +279,7 @@ mod tests {
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
         // Unknown types are accepted with a warning
-        let result = add_typed(&db, id1, id2, "caused-by");
+        let result = add_typed(&db, &id1, &id2, "caused-by");
         assert!(result.is_ok());
 
         let relations = db.get_typed_relations(id1).unwrap();
@@ -288,7 +293,7 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        let result = add_typed(&db, id1, id2, "");
+        let result = add_typed(&db, &id1, &id2, "");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("empty"));
     }
@@ -299,7 +304,7 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "related").unwrap();
+        add_typed(&db, &id1, &id2, "related").unwrap();
 
         let related1 = db.get_related_issues(id1).unwrap();
         let related2 = db.get_related_issues(id2).unwrap();
@@ -312,7 +317,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Issue 1", None, "medium").unwrap();
 
-        let result = add_typed(&db, id, 99999, "related");
+        let result = add_typed(&db, &id, "atelier-missing", "related");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -323,8 +328,8 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "related").unwrap();
-        let result = add_typed(&db, id1, id2, "related");
+        add_typed(&db, &id1, &id2, "related").unwrap();
+        let result = add_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
 
         let related = db.get_related_issues(id1).unwrap();
@@ -337,8 +342,8 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "related").unwrap();
-        let result = remove_typed(&db, id1, id2, "related");
+        add_typed(&db, &id1, &id2, "related").unwrap();
+        let result = remove_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
 
         let related = db.get_related_issues(id1).unwrap();
@@ -351,10 +356,10 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "assumption").unwrap();
-        add_typed(&db, id1, id2, "related").unwrap();
+        add_typed(&db, &id1, &id2, "assumption").unwrap();
+        add_typed(&db, &id1, &id2, "related").unwrap();
 
-        remove_typed(&db, id1, id2, "assumption").unwrap();
+        remove_typed(&db, &id1, &id2, "assumption").unwrap();
 
         // "related" should still exist
         let relations = db.get_typed_relations(id1).unwrap();
@@ -368,7 +373,7 @@ mod tests {
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
 
-        let result = remove_typed(&db, id1, id2, "related");
+        let result = remove_typed(&db, &id1, &id2, "related");
         assert!(result.is_ok());
     }
 
@@ -379,10 +384,10 @@ mod tests {
         let id2 = db.create_issue("Issue 2", None, "medium").unwrap();
         let id3 = db.create_issue("Issue 3", None, "medium").unwrap();
 
-        add_typed(&db, id1, id2, "related").unwrap();
-        add_typed(&db, id1, id3, "related").unwrap();
+        add_typed(&db, &id1, &id2, "related").unwrap();
+        add_typed(&db, &id1, &id3, "related").unwrap();
 
-        let result = list(&db, id1);
+        let result = list(&db, &id1);
         assert!(result.is_ok());
     }
 
@@ -390,7 +395,7 @@ mod tests {
     fn test_list_relations_nonexistent() {
         let (db, _dir) = setup_test_db();
 
-        let result = list(&db, 99999);
+        let result = list(&db, "atelier-missing");
         assert!(result.is_err());
     }
 
@@ -399,7 +404,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Lonely issue", None, "medium").unwrap();
 
-        let result = list(&db, id);
+        let result = list(&db, &id);
         assert!(result.is_ok());
     }
 
@@ -407,14 +412,14 @@ mod tests {
     fn test_downstream_impact_parent_child() {
         let (db, _dir) = setup_test_db();
         let root = db.create_issue("Root assumption", None, "high").unwrap();
-        let child1 = db.create_subissue(root, "Why 1", None, "medium").unwrap();
-        let child2 = db.create_subissue(root, "Why 2", None, "medium").unwrap();
+        let child1 = db.create_subissue(&root, "Why 1", None, "medium").unwrap();
+        let child2 = db.create_subissue(&root, "Why 2", None, "medium").unwrap();
         let grandchild = db
-            .create_subissue(child1, "Why 1.1", None, "medium")
+            .create_subissue(&child1, "Why 1.1", None, "medium")
             .unwrap();
 
         let affected = db.downstream_impact(root).unwrap();
-        let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
+        let affected_ids: Vec<String> = affected.iter().map(|i| i.id.clone()).collect();
 
         assert!(affected_ids.contains(&child1));
         assert!(affected_ids.contains(&child2));
@@ -430,7 +435,7 @@ mod tests {
             .create_issue("Conclusion built on assumption", None, "medium")
             .unwrap();
 
-        db.add_typed_relation(assumption, conclusion, "derived")
+        db.add_typed_relation(&assumption, &conclusion, "derived")
             .unwrap();
 
         let affected = db.downstream_impact(assumption).unwrap();
@@ -445,12 +450,13 @@ mod tests {
         let caused = db.create_issue("Caused work", None, "medium").unwrap();
         let falsified = db.create_issue("Falsified work", None, "medium").unwrap();
 
-        db.add_typed_relation(source, caused, "caused-by").unwrap();
-        db.add_typed_relation(source, falsified, "falsifies")
+        db.add_typed_relation(&source, &caused, "caused-by")
+            .unwrap();
+        db.add_typed_relation(&source, &falsified, "falsifies")
             .unwrap();
 
         let affected = db.downstream_impact(source).unwrap();
-        let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
+        let affected_ids: Vec<String> = affected.iter().map(|i| i.id.clone()).collect();
 
         assert!(affected_ids.contains(&caused));
         assert!(affected_ids.contains(&falsified));
@@ -467,12 +473,12 @@ mod tests {
             .create_issue("Assumption C (shared with B)", None, "medium")
             .unwrap();
 
-        db.add_typed_relation(a1, a2, "assumption").unwrap();
-        db.add_typed_relation(a2, a3, "assumption").unwrap();
+        db.add_typed_relation(&a1, &a2, "assumption").unwrap();
+        db.add_typed_relation(&a2, &a3, "assumption").unwrap();
 
         // Impact from a1 should flag a2 one hop, but not a3 two hops away.
         let affected = db.downstream_impact(a1).unwrap();
-        let affected_ids: Vec<i64> = affected.iter().map(|i| i.id).collect();
+        let affected_ids: Vec<String> = affected.iter().map(|i| i.id.clone()).collect();
 
         assert!(affected_ids.contains(&a2));
         assert!(!affected_ids.contains(&a3));
@@ -483,19 +489,19 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let root = db.create_issue("Bad assumption", None, "high").unwrap();
         let child = db
-            .create_subissue(root, "Built on bad assumption", None, "medium")
+            .create_subissue(&root, "Built on bad assumption", None, "medium")
             .unwrap();
 
-        falsify(&db, root).unwrap();
+        falsify(&db, &root).unwrap();
 
         // Root should be closed and labeled
-        let root_issue = db.get_issue(root).unwrap().unwrap();
+        let root_issue = db.get_issue(&root).unwrap().unwrap();
         assert_eq!(root_issue.status, "closed");
-        let labels = db.get_labels(root).unwrap();
+        let labels = db.get_labels(&root).unwrap();
         assert!(labels.contains(&"falsified".to_string()));
 
         // Child should be labeled for reassessment
-        let child_labels = db.get_labels(child).unwrap();
+        let child_labels = db.get_labels(&child).unwrap();
         assert!(child_labels.contains(&"needs-reassessment".to_string()));
     }
 }

@@ -26,17 +26,16 @@ pub fn list(atelier_dir: &Path, db: &Database, json_output: bool) -> Result<()> 
     }
 
     let stale = sync.find_stale_locks()?;
-    let stale_ids: Vec<i64> = stale.iter().map(|(id, _)| *id).collect();
+    let stale_ids: Vec<String> = stale.iter().map(|(id, _)| id.clone()).collect();
 
     println!("Active locks:");
     for (issue_id_str, lock) in &locks_file.locks {
-        let issue_id: i64 = issue_id_str.parse().unwrap_or(0);
         let title = db
-            .get_issue(issue_id)?
+            .get_issue(issue_id_str)?
             .map(|i| truncate(&i.title, 40))
             .unwrap_or_else(|| "(unknown issue)".to_string());
 
-        let stale_marker = if stale_ids.contains(&issue_id) {
+        let stale_marker = if stale_ids.contains(issue_id_str) {
             " [STALE]"
         } else {
             ""
@@ -44,7 +43,7 @@ pub fn list(atelier_dir: &Path, db: &Database, json_output: bool) -> Result<()> 
 
         println!(
             "  {:<5} {} -- claimed by {} on {}{}",
-            format_issue_id(issue_id),
+            format_issue_id(issue_id_str),
             title,
             lock.agent_id,
             lock.claimed_at.format("%Y-%m-%d %H:%M"),
@@ -58,7 +57,7 @@ pub fn list(atelier_dir: &Path, db: &Database, json_output: bool) -> Result<()> 
 }
 
 /// `atelier locks check <id>` — check if an issue is locked
-pub fn check(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+pub fn check(atelier_dir: &Path, issue_id: &str) -> Result<()> {
     let sync = SyncManager::new(atelier_dir)?;
     sync.init_cache()?;
     sync.fetch()?;
@@ -77,7 +76,7 @@ pub fn check(atelier_dir: &Path, issue_id: i64) -> Result<()> {
                 println!("  Branch: {}", branch);
             }
             let stale = sync.find_stale_locks()?;
-            if stale.iter().any(|(id, _)| *id == issue_id) {
+            if stale.iter().any(|(id, _)| id == issue_id) {
                 println!("  Warning: this lock appears STALE (no recent heartbeat)");
             }
         }
@@ -92,7 +91,7 @@ pub fn check(atelier_dir: &Path, issue_id: i64) -> Result<()> {
 }
 
 /// `atelier locks claim <id> [--branch <branch>]` — claim a lock
-pub fn claim(atelier_dir: &Path, issue_id: i64, branch: Option<&str>) -> Result<()> {
+pub fn claim(atelier_dir: &Path, issue_id: &str, branch: Option<&str>) -> Result<()> {
     let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
         anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
@@ -119,7 +118,7 @@ pub fn claim(atelier_dir: &Path, issue_id: i64, branch: Option<&str>) -> Result<
 }
 
 /// `atelier locks release <id>` — release a lock
-pub fn release(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+pub fn release(atelier_dir: &Path, issue_id: &str) -> Result<()> {
     let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
         anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
@@ -136,7 +135,7 @@ pub fn release(atelier_dir: &Path, issue_id: i64) -> Result<()> {
 }
 
 /// `atelier locks steal <id>` — force-steal a stale lock
-pub fn steal(atelier_dir: &Path, issue_id: i64) -> Result<()> {
+pub fn steal(atelier_dir: &Path, issue_id: &str) -> Result<()> {
     let agent = AgentConfig::load(atelier_dir)?.ok_or_else(|| {
         anyhow::anyhow!("No agent configured. Run 'atelier agent init <id>' first.")
     })?;
@@ -173,7 +172,7 @@ pub fn sync_cmd(atelier_dir: &Path) -> Result<()> {
     if !stale.is_empty() {
         println!("  Stale locks:");
         for (id, agent) in &stale {
-            println!("    {} (held by '{}')", format_issue_id(*id), agent);
+            println!("    {} (held by '{}')", format_issue_id(id), agent);
         }
     }
 
@@ -226,7 +225,7 @@ pub fn sync_cmd(atelier_dir: &Path) -> Result<()> {
                 "  Your locks: {}",
                 my_locks
                     .iter()
-                    .map(|id| format_issue_id(*id))
+                    .map(|id| format_issue_id(id))
                     .collect::<Vec<_>>()
                     .join(", ")
             );

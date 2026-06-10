@@ -5,7 +5,8 @@ use rusqlite::params;
 use super::{parse_datetime, Database};
 
 impl Database {
-    pub fn start_timer(&self, issue_id: i64) -> Result<i64> {
+    pub fn start_timer(&self, issue_id: impl ToString) -> Result<i64> {
+        let issue_id = issue_id.to_string();
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO time_entries (issue_id, started_at) VALUES (?1, ?2)",
@@ -14,7 +15,8 @@ impl Database {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn stop_timer(&self, issue_id: i64) -> Result<bool> {
+    pub fn stop_timer(&self, issue_id: impl ToString) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         let now = Utc::now();
         let now_str = now.to_rfc3339();
 
@@ -22,7 +24,7 @@ impl Database {
             .conn
             .query_row(
                 "SELECT started_at FROM time_entries WHERE issue_id = ?1 AND ended_at IS NULL",
-                [issue_id],
+                [issue_id.clone()],
                 |row| row.get(0),
             )
             .ok();
@@ -43,8 +45,8 @@ impl Database {
         }
     }
 
-    pub fn get_active_timer(&self) -> Result<Option<(i64, DateTime<Utc>)>> {
-        let result: Option<(i64, String)> = self
+    pub fn get_active_timer(&self) -> Result<Option<(String, DateTime<Utc>)>> {
+        let result: Option<(String, String)> = self
             .conn
             .query_row(
                 "SELECT issue_id, started_at FROM time_entries WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1",
@@ -56,7 +58,8 @@ impl Database {
         Ok(result.map(|(id, started)| (id, parse_datetime(started))))
     }
 
-    pub fn get_total_time(&self, issue_id: i64) -> Result<i64> {
+    pub fn get_total_time(&self, issue_id: impl ToString) -> Result<i64> {
+        let issue_id = issue_id.to_string();
         let total: i64 = self
             .conn
             .query_row(

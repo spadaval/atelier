@@ -6,7 +6,8 @@ use super::{issue_from_row, Database};
 use crate::models::Issue;
 
 impl Database {
-    pub fn archive_issue(&self, id: i64) -> Result<bool> {
+    pub fn archive_issue(&self, id: impl ToString) -> Result<bool> {
+        let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE issues SET status = 'archived', updated_at = ?1 WHERE id = ?2 AND status = 'closed'",
@@ -15,7 +16,8 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn unarchive_issue(&self, id: i64) -> Result<bool> {
+    pub fn unarchive_issue(&self, id: impl ToString) -> Result<bool> {
+        let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE issues SET status = 'closed', updated_at = ?1 WHERE id = ?2 AND status = 'archived'",

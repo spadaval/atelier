@@ -4,7 +4,8 @@ use rusqlite::params;
 use super::{Database, MAX_LABEL_LEN};
 
 impl Database {
-    pub fn add_label(&self, issue_id: i64, label: &str) -> Result<bool> {
+    pub fn add_label(&self, issue_id: impl ToString, label: &str) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         if label.len() > MAX_LABEL_LEN {
             anyhow::bail!(
                 "Label exceeds maximum length of {} characters",
@@ -18,7 +19,8 @@ impl Database {
         Ok(result > 0)
     }
 
-    pub fn remove_label(&self, issue_id: i64, label: &str) -> Result<bool> {
+    pub fn remove_label(&self, issue_id: impl ToString, label: &str) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         let rows = self.conn.execute(
             "DELETE FROM labels WHERE issue_id = ?1 AND label = ?2",
             params![issue_id, label],
@@ -26,7 +28,8 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn get_labels(&self, issue_id: i64) -> Result<Vec<String>> {
+    pub fn get_labels(&self, issue_id: impl ToString) -> Result<Vec<String>> {
+        let issue_id = issue_id.to_string();
         let mut stmt = self
             .conn
             .prepare("SELECT label FROM labels WHERE issue_id = ?1 ORDER BY label")?;

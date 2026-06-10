@@ -74,7 +74,8 @@ impl Database {
         Ok(session)
     }
 
-    pub fn set_session_issue(&self, session_id: i64, issue_id: i64) -> Result<bool> {
+    pub fn set_session_issue(&self, session_id: i64, issue_id: impl ToString) -> Result<bool> {
+        let issue_id = issue_id.to_string();
         let rows = self.conn.execute(
             "UPDATE sessions SET active_issue_id = ?1 WHERE id = ?2",
             params![issue_id, session_id],

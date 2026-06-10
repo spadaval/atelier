@@ -549,7 +549,7 @@ mod tests {
 
         // Should be able to create an issue
         let id = db.create_issue("Test issue", None, "medium").unwrap();
-        assert!(id > 0);
+        assert!(!id.is_empty());
     }
 
     #[test]

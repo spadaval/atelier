@@ -30,7 +30,7 @@ pub struct DependencySummary {
 #[derive(Debug, Clone, Serialize)]
 pub struct IssueObject {
     pub id: String,
-    pub canonical_id: i64,
+    pub canonical_id: String,
     pub title: String,
     pub description: Option<String>,
     pub acceptance_criteria: Option<String>,
@@ -53,7 +53,7 @@ pub struct IssueObject {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NoteObject {
-    pub id: i64,
+    pub id: String,
     pub author: Option<String>,
     pub kind: String,
     pub created_at: String,
@@ -116,14 +116,14 @@ pub fn print_error(command: &str, code: ErrorCode, message: &str, details: Value
     Ok(())
 }
 
-pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<i64> {
+pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
     db.resolve_issue_ref(issue_ref)?
-        .ok_or_else(|| anyhow!("Issue {issue_ref} was not found; use a numeric ID like #1"))
+        .ok_or_else(|| anyhow!("Issue {issue_ref} was not found"))
 }
 
 fn issue_id_for_agent(db: &Database, issue: &Issue) -> Result<String> {
     let _ = db;
-    Ok(format_issue_id(issue.id))
+    Ok(format_issue_id(&issue.id))
 }
 
 fn label_value(labels: &[String], prefix: &str) -> Option<String> {
@@ -164,7 +164,7 @@ fn note_object(comment: Comment) -> NoteObject {
         .and_then(|rest| rest.lines().next())
         .map(str::to_string);
     NoteObject {
-        id: comment.id,
+        id: comment.id.to_string(),
         author,
         kind: comment.kind,
         created_at: comment.created_at.to_rfc3339(),
@@ -184,7 +184,7 @@ fn comment_metadata_value(comments: &[Comment], key: &str) -> Option<String> {
     })
 }
 
-fn dependency_summary(db: &Database, id: i64) -> Result<DependencySummary> {
+fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
     let issue = db
         .get_issue(id)?
         .ok_or_else(|| anyhow!("Dependency issue {} was not found", format_issue_id(id)))?;
@@ -197,28 +197,28 @@ fn dependency_summary(db: &Database, id: i64) -> Result<DependencySummary> {
 }
 
 pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
-    let labels = db.get_labels(issue.id)?;
+    let labels = db.get_labels(&issue.id)?;
     let (description, acceptance_criteria) = split_acceptance(issue.description.as_deref());
-    let parent = match issue.parent_id {
+    let parent = match &issue.parent_id {
         Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
         None => None,
     };
 
     let mut dependencies = db
-        .get_blockers(issue.id)?
+        .get_blockers(&issue.id)?
         .into_iter()
-        .map(|id| dependency_summary(db, id))
+        .map(|id| dependency_summary(db, &id))
         .collect::<Result<Vec<_>>>()?;
     dependencies.sort_by(|a, b| a.id.cmp(&b.id));
 
     let mut dependents = db
-        .get_blocking(issue.id)?
+        .get_blocking(&issue.id)?
         .into_iter()
-        .map(|id| dependency_summary(db, id))
+        .map(|id| dependency_summary(db, &id))
         .collect::<Result<Vec<_>>>()?;
     dependents.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let raw_comments = db.get_comments(issue.id)?;
+    let raw_comments = db.get_comments(&issue.id)?;
     let imported_owner = comment_metadata_value(&raw_comments, "owner");
     let imported_assignee = comment_metadata_value(&raw_comments, "assignee");
     let close_reason = comment_metadata_value(&raw_comments, "Close reason")
@@ -227,7 +227,7 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
 
     Ok(IssueObject {
         id: issue_id_for_agent(db, &issue)?,
-        canonical_id: issue.id,
+        canonical_id: issue.id.clone(),
         title: issue.title,
         description,
         acceptance_criteria,
@@ -250,7 +250,7 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
 }
 
 fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
-    let labels = db.get_labels(issue.id)?;
+    let labels = db.get_labels(&issue.id)?;
     Ok(IssueSummary {
         id: issue_id_for_agent(db, &issue)?,
         title: issue.title,
@@ -260,14 +260,14 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
         labels,
         parent: issue
             .parent_id
-            .map(|id| dependency_summary(db, id).map(|summary| summary.id))
+            .map(|id| dependency_summary(db, &id).map(|summary| summary.id))
             .transpose()?,
     })
 }
 
 pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
-    let issue = db.require_issue(id)?;
+    let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
     if json_output {
         print_success("issue.show", serde_json::to_value(object)?)
@@ -282,8 +282,8 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
         if let Some(assignee) = &object.assignee {
             println!("Assignee: {assignee}");
         }
-        if let Some(parent_id) = db.require_issue(id)?.parent_id {
-            let numeric_parent = format_issue_id(parent_id);
+        if let Some(parent_id) = db.require_issue(&id)?.parent_id {
+            let numeric_parent = format_issue_id(&parent_id);
             if let Some(parent) = &object.parent {
                 if parent != &numeric_parent {
                     println!("Parent: {numeric_parent} ({parent})");
@@ -305,11 +305,11 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
         }
         println!(
             "\nBlocked by: {}",
-            names_or_none(&dependency_names_for_text(db, db.get_blockers(id)?)?)
+            names_or_none(&dependency_names_for_text(db, db.get_blockers(&id)?)?)
         );
         println!(
             "Blocking: {}",
-            names_or_none(&dependency_names_for_text(db, db.get_blocking(id)?)?)
+            names_or_none(&dependency_names_for_text(db, db.get_blocking(&id)?)?)
         );
         if !object.notes.is_empty() {
             println!("\nNotes:");
@@ -321,13 +321,13 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
                 );
             }
         }
-        let subissues = db.get_subissues(id)?;
+        let subissues = db.get_subissues(&id)?;
         if !subissues.is_empty() {
             println!("\nSubissues:");
             for subissue in subissues {
                 println!(
                     "  {} [{}] {} - {}",
-                    format_issue_id(subissue.id),
+                    format_issue_id(&subissue.id),
                     subissue.status,
                     subissue.priority,
                     subissue.title
@@ -341,11 +341,11 @@ pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
     }
 }
 
-fn dependency_names_for_text(db: &Database, ids: Vec<i64>) -> Result<Vec<String>> {
+fn dependency_names_for_text(db: &Database, ids: Vec<String>) -> Result<Vec<String>> {
     ids.into_iter()
         .map(|id| {
-            let issue = db.require_issue(id)?;
-            let numeric = format_issue_id(id);
+            let issue = db.require_issue(&id)?;
+            let numeric = format_issue_id(&id);
             let agent_id = issue_id_for_agent(db, &issue)?;
             if agent_id == numeric {
                 Ok(numeric)
@@ -482,7 +482,7 @@ pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Resul
         .transpose()?;
     let id = match parent_id {
         Some(parent_id) => db.create_subissue_with_type(
-            parent_id,
+            &parent_id,
             input.title,
             input.description,
             input.priority,
@@ -493,9 +493,9 @@ pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Resul
         }
     };
     for label in input.labels {
-        db.add_label(id, label)?;
+        db.add_label(&id, label)?;
     }
-    let issue = db.require_issue(id)?;
+    let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
     if json_output {
         print_success("issue.create", serde_json::to_value(object)?)
@@ -519,15 +519,15 @@ pub struct UpdateInput<'a> {
 
 pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Result<()> {
     let id = resolve_id(db, input.issue_ref)?;
-    let previous = db.require_issue(id)?;
-    let previous_assignee = label_value(&db.get_labels(id)?, "assignee:");
+    let previous = db.require_issue(&id)?;
+    let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
     let mut changed_fields = Vec::new();
 
     if input.title.is_some() || input.description.is_some() || input.priority.is_some() {
         if let Some(priority) = input.priority {
             validate_priority(priority)?;
         }
-        if db.update_issue(id, input.title, input.description, input.priority)? {
+        if db.update_issue(&id, input.title, input.description, input.priority)? {
             if input.title.is_some() {
                 changed_fields.push("title");
             }
@@ -543,15 +543,15 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
     if let Some(status) = input.status {
         match status {
             "open" => {
-                db.reopen_issue(id)?;
+                db.reopen_issue(&id)?;
                 changed_fields.push("status");
             }
             "closed" => {
-                db.close_issue(id)?;
+                db.close_issue(&id)?;
                 changed_fields.push("status");
             }
             "in_progress" => {
-                db.add_label(id, "status:in_progress")?;
+                db.add_label(&id, "status:in_progress")?;
                 changed_fields.push("status");
             }
             other => bail!("Invalid status '{other}'. Valid values: open, in_progress, closed"),
@@ -559,28 +559,28 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
     }
 
     for label in input.labels {
-        db.add_label(id, label)?;
+        db.add_label(&id, label)?;
         changed_fields.push("labels");
     }
 
     if let Some(parent) = input.parent {
         let parent_id = parent.map(|parent| resolve_id(db, parent)).transpose()?;
-        db.update_parent(id, parent_id)?;
+        db.update_parent(&id, parent_id.as_deref())?;
         changed_fields.push("parent");
     }
 
     if input.claim {
         let assignee = current_actor();
         if let Some(previous_assignee) = &previous_assignee {
-            db.remove_label(id, &format!("assignee:{previous_assignee}"))?;
+            db.remove_label(&id, &format!("assignee:{previous_assignee}"))?;
         }
-        db.add_label(id, &format!("assignee:{assignee}"))?;
-        db.add_comment(id, &format!("Claimed by {assignee}"), "handoff")?;
+        db.add_label(&id, &format!("assignee:{assignee}"))?;
+        db.add_comment(&id, &format!("Claimed by {assignee}"), "handoff")?;
         changed_fields.push("assignee");
     }
 
     if let Some(note) = input.append_notes {
-        db.add_comment(id, note, "handoff")?;
+        db.add_comment(&id, note, "handoff")?;
         changed_fields.push("notes");
     }
 
@@ -590,7 +590,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
     changed_fields.sort_unstable();
     changed_fields.dedup();
 
-    let issue = db.require_issue(id)?;
+    let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
     if json_output {
         print_success(
@@ -599,7 +599,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
                 "issue": object,
                 "previous_assignee": previous_assignee,
                 "assignee": object.assignee,
-                "changed": previous.updated_at != db.require_issue(id)?.updated_at || !changed_fields.is_empty(),
+                "changed": previous.updated_at != db.require_issue(&id)?.updated_at || !changed_fields.is_empty(),
                 "changed_fields": changed_fields
             }),
         )
@@ -621,9 +621,9 @@ pub fn close(
 ) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let open_blockers = db
-        .get_blockers(id)?
+        .get_blockers(&id)?
         .into_iter()
-        .filter_map(|blocker_id| db.get_issue(blocker_id).ok().flatten())
+        .filter_map(|blocker_id| db.get_issue(&blocker_id).ok().flatten())
         .filter(|issue| issue.status == "open")
         .collect::<Vec<_>>();
     if !open_blockers.is_empty() {
@@ -632,16 +632,16 @@ pub fn close(
             issue_ref,
             open_blockers
                 .iter()
-                .map(|issue| format_issue_id(issue.id))
+                .map(|issue| format_issue_id(&issue.id))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
     }
-    db.close_issue(id)?;
+    db.close_issue(&id)?;
     if let Some(reason) = reason {
-        db.add_comment(id, &format!("Close reason: {reason}"), "resolution")?;
+        db.add_comment(&id, &format!("Close reason: {reason}"), "resolution")?;
     }
-    let issue = db.require_issue(id)?;
+    let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
     if json_output {
         print_success("issue.close", serde_json::to_value(object)?)
@@ -657,8 +657,8 @@ pub fn close(
 
 pub fn reopen(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
-    db.reopen_issue(id)?;
-    let object = issue_object(db, db.require_issue(id)?)?;
+    db.reopen_issue(&id)?;
+    let object = issue_object(db, db.require_issue(&id)?)?;
     if json_output {
         print_success("issue.reopen", serde_json::to_value(object)?)
     } else {
@@ -675,13 +675,13 @@ pub fn dep_add(
 ) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = db.add_dependency(blocked_id, blocker_id)?;
+    let changed = db.add_dependency(&blocked_id, &blocker_id)?;
     dep_result(
         db,
         "dep.add",
         "add",
-        blocked_id,
-        blocker_id,
+        &blocked_id,
+        &blocker_id,
         changed,
         json_output,
     )
@@ -695,13 +695,13 @@ pub fn dep_remove(
 ) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = db.remove_dependency(blocked_id, blocker_id)?;
+    let changed = db.remove_dependency(&blocked_id, &blocker_id)?;
     dep_result(
         db,
         "dep.remove",
         "remove",
-        blocked_id,
-        blocker_id,
+        &blocked_id,
+        &blocker_id,
         changed,
         json_output,
     )
@@ -711,8 +711,8 @@ fn dep_result(
     db: &Database,
     command: &str,
     action: &str,
-    blocked_id: i64,
-    blocker_id: i64,
+    blocked_id: &str,
+    blocker_id: &str,
     changed: bool,
     json_output: bool,
 ) -> Result<()> {
@@ -755,13 +755,14 @@ fn dependency_state(action: &str, changed: bool) -> &'static str {
 pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result<()> {
     let mut edges = Vec::new();
     let issues = if let Some(issue_ref) = issue_ref {
-        vec![db.require_issue(resolve_id(db, issue_ref)?)?]
+        let id = resolve_id(db, issue_ref)?;
+        vec![db.require_issue(&id)?]
     } else {
         db.list_issues(Some("all"), None, None)?
     };
     for issue in issues {
-        for blocker_id in db.get_blockers(issue.id)? {
-            let blocker = db.require_issue(blocker_id)?;
+        for blocker_id in db.get_blockers(&issue.id)? {
+            let blocker = db.require_issue(&blocker_id)?;
             edges.push(json!({
                 "source": issue_id_for_agent(db, &blocker)?,
                 "target": issue_id_for_agent(db, &issue)?,
@@ -786,7 +787,8 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Re
 
 pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result<()> {
     let issues = if let Some(issue_ref) = issue_ref {
-        vec![db.require_issue(resolve_id(db, issue_ref)?)?]
+        let id = resolve_id(db, issue_ref)?;
+        vec![db.require_issue(&id)?]
     } else {
         db.list_issues(Some("all"), None, None)?
     };
@@ -806,12 +808,12 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
                 "message": format!("Issue type '{}' is not valid", issue.issue_type)
             }));
         }
-        for blocker_id in db.get_blockers(issue.id)? {
-            if db.get_issue(blocker_id)?.is_none() {
+        for blocker_id in db.get_blockers(&issue.id)? {
+            if db.get_issue(&blocker_id)?.is_none() {
                 findings.push(json!({
                     "id": issue_id_for_agent(db, &issue)?,
                     "code": "missing_blocker",
-                    "message": format!("Dependency references missing issue {}", format_issue_id(blocker_id))
+                    "message": format!("Dependency references missing issue {}", format_issue_id(&blocker_id))
                 }));
             }
         }

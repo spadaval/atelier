@@ -15,8 +15,9 @@ use rusqlite::Connection;
 use std::path::Path;
 
 use crate::models::Issue;
+use crate::record_id;
 
-const SCHEMA_VERSION: i32 = 14;
+const SCHEMA_VERSION: i32 = 15;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -181,13 +182,13 @@ impl Database {
                 r#"
                 -- Core issues table
                 CREATE TABLE IF NOT EXISTS issues (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT NOT NULL DEFAULT 'open',
                     issue_type TEXT NOT NULL DEFAULT 'task',
                     priority TEXT NOT NULL DEFAULT 'medium',
-                    parent_id INTEGER,
+                    parent_id TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     closed_at TEXT,
@@ -196,7 +197,7 @@ impl Database {
 
                 -- Labels (many-to-many)
                 CREATE TABLE IF NOT EXISTS labels (
-                    issue_id INTEGER NOT NULL,
+                    issue_id TEXT NOT NULL,
                     label TEXT NOT NULL,
                     PRIMARY KEY (issue_id, label),
                     FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
@@ -204,8 +205,8 @@ impl Database {
 
                 -- Dependencies (blocker blocks blocked)
                 CREATE TABLE IF NOT EXISTS dependencies (
-                    blocker_id INTEGER NOT NULL,
-                    blocked_id INTEGER NOT NULL,
+                    blocker_id TEXT NOT NULL,
+                    blocked_id TEXT NOT NULL,
                     PRIMARY KEY (blocker_id, blocked_id),
                     FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
                     FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
@@ -214,7 +215,7 @@ impl Database {
                 -- Comments
                 CREATE TABLE IF NOT EXISTS comments (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    issue_id INTEGER NOT NULL,
+                    issue_id TEXT NOT NULL,
                     content TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
@@ -225,7 +226,7 @@ impl Database {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     started_at TEXT NOT NULL,
                     ended_at TEXT,
-                    active_issue_id INTEGER,
+                    active_issue_id TEXT,
                     handoff_notes TEXT,
                     FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
                 );
@@ -233,7 +234,7 @@ impl Database {
                 -- Time tracking
                 CREATE TABLE IF NOT EXISTS time_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    issue_id INTEGER NOT NULL,
+                    issue_id TEXT NOT NULL,
                     started_at TEXT NOT NULL,
                     ended_at TEXT,
                     duration_seconds INTEGER,
@@ -242,8 +243,8 @@ impl Database {
 
                 -- Relations (related issues, bidirectional, typed)
                 CREATE TABLE IF NOT EXISTS relations (
-                    issue_id_1 INTEGER NOT NULL,
-                    issue_id_2 INTEGER NOT NULL,
+                    issue_id_1 TEXT NOT NULL,
+                    issue_id_2 TEXT NOT NULL,
                     relation_type TEXT NOT NULL DEFAULT 'related',
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
@@ -264,7 +265,7 @@ impl Database {
                 -- Milestone-Issue relationship (many-to-many)
                 CREATE TABLE IF NOT EXISTS milestone_issues (
                     milestone_id INTEGER NOT NULL,
-                    issue_id INTEGER NOT NULL,
+                    issue_id TEXT NOT NULL,
                     PRIMARY KEY (milestone_id, issue_id),
                     FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
                     FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
@@ -371,6 +372,10 @@ impl Database {
                 );
             }
 
+            if version < 15 {
+                self.migrate_issue_ids_to_text()?;
+            }
+
             self.conn
                 .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
         }
@@ -378,6 +383,227 @@ impl Database {
         // Enable foreign keys
         self.conn.execute("PRAGMA foreign_keys = ON", [])?;
 
+        Ok(())
+    }
+
+    fn migrate_issue_ids_to_text(&self) -> Result<()> {
+        let id_type: String = self
+            .conn
+            .query_row("PRAGMA table_info(issues)", [], |_| Ok(String::new()))
+            .unwrap_or_default();
+        let mut stmt = self.conn.prepare("PRAGMA table_info(issues)")?;
+        let columns = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if columns
+            .iter()
+            .any(|(name, column_type)| name == "id" && column_type.eq_ignore_ascii_case("TEXT"))
+        {
+            return Ok(());
+        }
+        drop(id_type);
+        drop(stmt);
+
+        let mut mappings = Vec::new();
+        let mut stmt = self.conn.prepare("SELECT id FROM issues ORDER BY id")?;
+        let ids = stmt
+            .query_map([], |row| row.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for id in ids {
+            mappings.push((id, record_id::legacy_issue_id(id)));
+        }
+        drop(stmt);
+
+        self.conn.execute_batch(
+            r#"
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE issues_v15 (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'open',
+                issue_type TEXT NOT NULL DEFAULT 'task',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                parent_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                closed_at TEXT,
+                FOREIGN KEY (parent_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE labels_v15 (
+                issue_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (issue_id, label),
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE dependencies_v15 (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                PRIMARY KEY (blocker_id, blocked_id),
+                FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE comments_v15 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                issue_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                kind TEXT DEFAULT 'note',
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE sessions_v15 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                active_issue_id TEXT,
+                handoff_notes TEXT,
+                last_action TEXT,
+                agent_id TEXT,
+                FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
+            );
+            CREATE TABLE time_entries_v15 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                issue_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                duration_seconds INTEGER,
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE relations_v15 (
+                issue_id_1 TEXT NOT NULL,
+                issue_id_2 TEXT NOT NULL,
+                relation_type TEXT NOT NULL DEFAULT 'related',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
+                FOREIGN KEY (issue_id_1) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE milestone_issues_v15 (
+                milestone_id INTEGER NOT NULL,
+                issue_id TEXT NOT NULL,
+                PRIMARY KEY (milestone_id, issue_id),
+                FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            "#,
+        )?;
+
+        for (old_id, new_id) in &mappings {
+            self.conn.execute(
+                "INSERT INTO issues_v15
+                 SELECT ?2, title, description, status, issue_type, priority, NULL, created_at, updated_at, closed_at
+                 FROM issues WHERE id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+        }
+        for (old_id, new_id) in &mappings {
+            let parent: Option<i64> = self
+                .conn
+                .query_row(
+                    "SELECT parent_id FROM issues WHERE id = ?1",
+                    rusqlite::params![old_id],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            if let Some(parent) = parent {
+                self.conn.execute(
+                    "UPDATE issues_v15 SET parent_id = ?1 WHERE id = ?2",
+                    rusqlite::params![record_id::legacy_issue_id(parent), new_id],
+                )?;
+            }
+        }
+        for (old_id, new_id) in &mappings {
+            self.conn.execute(
+                "INSERT INTO labels_v15 SELECT ?2, label FROM labels WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+            self.conn.execute(
+                "INSERT INTO comments_v15 SELECT id, ?2, content, created_at, kind FROM comments WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+            self.conn.execute(
+                "INSERT INTO time_entries_v15 SELECT id, ?2, started_at, ended_at, duration_seconds FROM time_entries WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+            self.conn.execute(
+                "INSERT INTO milestone_issues_v15 SELECT milestone_id, ?2 FROM milestone_issues WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+        }
+        self.conn.execute(
+            "INSERT INTO dependencies_v15
+             SELECT printf('atelier-%04s', lower(hex(blocker_id))), printf('atelier-%04s', lower(hex(blocked_id)))
+             FROM dependencies WHERE 0",
+            [],
+        )?;
+        for (old_blocker, new_blocker) in &mappings {
+            for (old_blocked, new_blocked) in &mappings {
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO dependencies_v15
+                     SELECT ?2, ?4 FROM dependencies WHERE blocker_id = ?1 AND blocked_id = ?3",
+                    rusqlite::params![old_blocker, new_blocker, old_blocked, new_blocked],
+                )?;
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO relations_v15
+                     SELECT ?2, ?4, relation_type, created_at FROM relations WHERE issue_id_1 = ?1 AND issue_id_2 = ?3",
+                    rusqlite::params![old_blocker, new_blocker, old_blocked, new_blocked],
+                )?;
+            }
+        }
+        for (old_id, new_id) in &mappings {
+            self.conn.execute(
+                "INSERT INTO sessions_v15
+                 SELECT id, started_at, ended_at, ?2, handoff_notes, last_action, agent_id
+                 FROM sessions WHERE active_issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+        }
+        self.conn.execute(
+            "INSERT INTO sessions_v15
+             SELECT id, started_at, ended_at, NULL, handoff_notes, last_action, agent_id
+             FROM sessions WHERE active_issue_id IS NULL",
+            [],
+        )?;
+
+        self.conn.execute_batch(
+            r#"
+            DROP TABLE labels;
+            DROP TABLE dependencies;
+            DROP TABLE comments;
+            DROP TABLE sessions;
+            DROP TABLE time_entries;
+            DROP TABLE relations;
+            DROP TABLE milestone_issues;
+            DROP TABLE issues;
+
+            ALTER TABLE issues_v15 RENAME TO issues;
+            ALTER TABLE labels_v15 RENAME TO labels;
+            ALTER TABLE dependencies_v15 RENAME TO dependencies;
+            ALTER TABLE comments_v15 RENAME TO comments;
+            ALTER TABLE sessions_v15 RENAME TO sessions;
+            ALTER TABLE time_entries_v15 RENAME TO time_entries;
+            ALTER TABLE relations_v15 RENAME TO relations;
+            ALTER TABLE milestone_issues_v15 RENAME TO milestone_issues;
+
+            CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+            CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
+            CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
+            CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_time_entries_issue ON time_entries(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
+            CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
+            CREATE INDEX IF NOT EXISTS idx_milestone_issues_i ON milestone_issues(issue_id);
+
+            PRAGMA foreign_keys = ON;
+            "#,
+        )?;
         Ok(())
     }
 }

@@ -65,7 +65,7 @@ pub fn status(atelier_dir: &Path) -> Result<()> {
                             "Locks: {}",
                             my_locks
                                 .iter()
-                                .map(|id| format_issue_id(*id))
+                                .map(|id| format_issue_id(id))
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         );
