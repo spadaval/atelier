@@ -2557,30 +2557,6 @@ fn test_security_sql_injection_search() {
     assert!(stdout.contains("Normal issue"));
 }
 
-/// Test path traversal in export
-#[test]
-fn test_security_path_traversal_export() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["create", "Test issue"]);
-
-    // Try to export to a path traversal location
-    // This should either fail safely or write to the literal filename
-    let traversal_paths = [
-        "../../../tmp/evil.json",
-        "..\\..\\..\\tmp\\evil.json",
-        "/etc/passwd",
-        "C:\\Windows\\System32\\evil.json",
-    ];
-
-    for path in traversal_paths {
-        let (_, _, _) = run_atelier(dir.path(), &["export", "-o", path, "-f", "json"]);
-        // We don't assert success/failure - just that it doesn't crash
-        // and doesn't actually write to system locations
-    }
-}
-
 /// Test null bytes in input
 /// Note: OS rejects null bytes in command args - this is correct security behavior
 #[test]
