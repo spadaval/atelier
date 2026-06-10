@@ -2,7 +2,8 @@
 acceptance: []
 blocks: []
 created_at: "2026-06-10T02:57:51.275067274+00:00"
-depends_on: []
+depends_on:
+- "atelier-a4ps"
 evidence_required: []
 id: "atelier-zd4d"
 issue_type: "task"

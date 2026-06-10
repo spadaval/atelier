@@ -1,0 +1,47 @@
+---
+acceptance: []
+blocks:
+- "atelier-a4ps"
+created_at: "2026-06-10T03:50:49.785782245+00:00"
+depends_on:
+- "atelier-3mpl"
+- "atelier-hdhk"
+- "atelier-po2n"
+- "atelier-z6sc"
+evidence_required: []
+id: "atelier-e2vh"
+issue_type: "task"
+labels:
+- "cli"
+- "markdown"
+- "migration"
+- "record-store"
+links: []
+parent: "atelier-zd4d"
+priority: "P1"
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Migrate issue mutations to Markdown-first writes"
+updated_at: "2026-06-10T03:50:49.785782245+00:00"
+---
+
+Move canonical issue mutations from SQLite-first plus export to Markdown-first writes.
+
+Scope:
+- Cover issue create, update, close/reopen, labels, dependencies, and typed links where they mutate canonical issue facts.
+- Write canonical Markdown through RecordStore before refreshing ProjectionIndex.
+- Preserve stable human and JSON output for Agent Factory workflows.
+- Keep compatibility commands working or classify each deferred path explicitly.
+- Do not change local-only sessions, timers, usage, or lock behavior except for record ID references required by the mutation path.
+
+Acceptance:
+A successful canonical issue mutation is durable in .atelier-state without requiring a later SQLite export; ProjectionIndex is refreshed or marked stale with an actionable repair path; export --check and rebuild remain valid after each mutation; tests or CLI transcripts cover create, update, close/reopen, label, dependency add/remove, and typed link mutation behavior.
+
+Validation:
+- cargo fmt -- --check
+- cargo test
+- scripted CLI mutation round trip in a temp repo
+- ./target/debug/atelier export --check
+- ./target/debug/atelier lint
+- ./target/debug/atelier doctor
