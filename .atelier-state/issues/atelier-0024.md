@@ -18,9 +18,9 @@ parent: "atelier-000j"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Markdown-only canonical state and record identity cutover"
-updated_at: "2026-06-10T00:34:46.403574285+00:00"
+updated_at: "2026-06-10T02:19:20.150279810+00:00"
 ---
 
 Cut over Atelier's at-rest model to Markdown record files as the canonical source, with project-scoped random record IDs and no generated aggregate source-of-truth files. This epic covers the hard ID migration plus removing manifest.json and graph.json from the canonical projection model.

@@ -18,9 +18,9 @@ parent: "atelier-0024"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate markdown-only canonical state cutover"
-updated_at: "2026-06-10T00:36:06.513070273+00:00"
+updated_at: "2026-06-10T02:19:09.851705843+00:00"
 ---
 
 Close out the markdown-only canonical state and record identity cutover. Prove that the repository no longer depends on manifest.json or graph.json as canonical source-of-truth files and that project-scoped random IDs work across commands, export/check, rebuild, lint, and fixtures.

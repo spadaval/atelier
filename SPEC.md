@@ -79,7 +79,6 @@ Atelier should implement this storage contract:
   cache/                # derived local-only data
 
 .atelier-state/
-  manifest.json
   issues/
     atelier-z1p8.md
   missions/
@@ -90,8 +89,7 @@ Atelier should implement this storage contract:
     atelier-p3v6.md
   evidence/
     atelier-n8da.md
-  graph.json
-  mission-control.json
+  mission-control.json  # derived projection, not rebuild source
 ```
 
 The exact layout can change, but the principles should not:
