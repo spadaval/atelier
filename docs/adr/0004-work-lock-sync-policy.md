@@ -1,0 +1,49 @@
+# ADR 0004: Work Association Replaces Default Lock Sync
+
+## Status
+
+Accepted.
+
+## Context
+
+Atelier inherits Chainlink lock and sync machinery. That machinery is useful for
+some local coordination, but the target product now has canonical Markdown
+records, rebuildable SQLite projection state, explicit work lifecycle commands,
+and Git worktree helpers.
+
+Normal agent workflow needs to know which issue is being worked, which branch or
+worktree is associated with it, whether durable state is current, and whether a
+transition is allowed. It does not need a remote lock-sync protocol as the
+default coordination mechanism.
+
+## Decision
+
+Normal tracked work uses explicit work association, not inherited lock sync.
+
+`atelier work start`, `atelier work finish`, `atelier work status`, and
+`atelier worktree for` own the default ergonomic path:
+
+- record the issue, branch, and worktree association in local runtime state;
+- keep Git as the source of truth for branches, commits, and worktrees;
+- reject dirty source worktrees where the workflow action depends on a clean
+  repository;
+- check canonical export freshness before finish;
+- never launch or supervise coding agents.
+
+Inherited lock and sync commands remain hidden compatibility and manual
+coordination tools. They are not the normal claim/work association path, and
+they do not define Milestone 3 behavior. Remote/shared lock sync is deferred
+until a later policy explicitly defines holder identity, expiry, conflict
+resolution, and Mission Control projection semantics.
+
+## Consequences
+
+- Work lifecycle behavior stays understandable as Git plus local runtime
+  association.
+- A fresh worktree can rebuild projection state from `.atelier-state/` and then
+  establish its own local work association.
+- Hidden lock commands can still serve advanced/manual coordination while the
+  new workflow stabilizes.
+- Mission Control can project branch/worktree association separately from locks.
+- Future lock redesign can build on the work association model without keeping
+  inherited Chainlink sync behavior as the default.

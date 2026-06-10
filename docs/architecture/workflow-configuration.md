@@ -181,7 +181,13 @@ Supported hook events for schema version 1 are:
   but before the tracker mutation is committed;
 - `after_transition`: runs after the canonical record write and projection
   refresh or stale-projection marking complete;
-- `worktree_setup`: runs when a future worktree helper prepares a worktree.
+- `worktree_setup`: runs when a worktree helper prepares a worktree.
+
+The staged `atelier worktree for` implementation executes hooks whose
+definition has `event: worktree_setup`. The hook command runs in the created or
+located worktree with `ATELIER_WORKTREE_PATH`, `ATELIER_WORK_ISSUE_ID`, and
+`ATELIER_WORK_BRANCH` set. Non-zero exit status blocks the helper and is
+reported in command output.
 
 `timeout_ms` is required unless `defaults.hook_timeout_ms` is set. Hook
 timeouts and non-zero exits produce machine-readable results. A hook with

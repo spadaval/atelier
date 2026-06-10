@@ -136,7 +136,13 @@ Issue front matter adds:
 
 Path: `.atelier-state/missions/<record-id>.md`
 
-Mission front matter adds `constraints`, `milestones`, `plans`,
+Current staged support writes mission records with common front matter fields
+(`schema`, `schema_version`, `id`, `title`, `status`, `created_at`,
+`updated_at`, `links`) plus a quoted JSON `data` field. The JSON object carries
+`constraints`, `risks`, `validation`, `milestones`, `plans`, `evidence`, and
+`work`. The body carries the mission summary or objective text.
+
+The target expanded front matter remains `constraints`, `milestones`, `plans`,
 `validation_expectations`, and `current_risks`. ID arrays are sorted lexically;
 text arrays preserve author order.
 
@@ -154,9 +160,13 @@ link to them as contributing work.
 
 Path: `.atelier-state/plans/<record-id>.md`
 
-Plan front matter adds `owner`, `applies_to`, `revision`, `supersedes`, and
-`drift_status`. `applies_to` and `supersedes` are sorted lexically. Plan body is
-the durable execution intent.
+Current staged support writes plan records with common front matter fields plus
+a quoted JSON `data` field containing `revision` and `revisions`. The body is
+the latest durable execution intent.
+
+The target expanded front matter remains `owner`, `applies_to`, `revision`,
+`supersedes`, and `drift_status`. `applies_to` and `supersedes` are sorted
+lexically. Plan body is the durable execution intent.
 
 ## Evidence
 
@@ -174,6 +184,12 @@ Evidence front matter adds:
 | `artifact` | string or null | Repo path or external reference. |
 
 Evidence body summarizes what was proven and any limits of the proof.
+
+Current staged support writes evidence records with common front matter fields
+plus a quoted JSON `data` field containing `kind`, `result`, `path`, `uri`,
+`producer`, and `captured_at`. The body carries the evidence summary. The
+expanded front matter above remains the target shape for a later Markdown-first
+RecordStore slice.
 
 ## Mission Control Projection
 
@@ -195,8 +211,9 @@ contract does not make `mission-control.json` a rebuild source.
 
 Rebuild proceeds in this order:
 
-1. Discover canonical Markdown records under `issues/`, `missions/`,
-   `milestones/`, `plans/`, and `evidence/`.
+1. Discover canonical Markdown records under `issues/`, `missions/`, `plans/`,
+   and `evidence/`. Milestone checkpoint records join this list when their
+   command slice lands.
 2. Validate each record's schema, schema version, ID, path, front matter shape,
    and body encoding.
 3. Validate that `parent`, `blocks`, `depends_on`, and `links` references point

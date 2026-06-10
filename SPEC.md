@@ -190,8 +190,11 @@ Evidence metadata should include:
 - Created time.
 - Producer or validator.
 
-Small artifacts may live in the repo. Large artifacts should use configurable
-external storage while preserving metadata in repo state.
+Small artifacts may live in the repo. Large artifacts should use external
+storage while preserving metadata in repo state. The first supported backend is
+metadata-only evidence records with optional repository-relative paths or
+external URIs; payload copying, hashing, upload, retention, and garbage
+collection are deferred until a dedicated artifact-backend contract lands.
 
 ### Run
 
@@ -347,6 +350,11 @@ Useful enforcement:
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
+Normal tracked work uses explicit work association rather than inherited
+Chainlink lock sync. Hidden lock/sync commands may remain for manual
+coordination, but the default workflow is Git branch/worktree state plus local
+Atelier runtime association and canonical export freshness checks.
+
 ## Validation And Workflow Validators
 
 Evidence should be a first-class condition for closing work. Workflow validators
@@ -467,6 +475,8 @@ Every command that agents call should support stable JSON output.
   while `.atelier-state/` is the committed rebuild source.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata?
-- What artifact storage backends should be supported first?
-- How much Chainlink lock sync should survive the redesign?
+- Which external artifact backend should be implemented after metadata-only
+  path/URI evidence records?
+- What shared or remote lock policy is needed after work association and
+  Mission Control projections stabilize?
 - What should the default workflow be for tiny tasks?

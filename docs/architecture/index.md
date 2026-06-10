@@ -39,6 +39,13 @@ See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
 consumer contract, projection degradation rules, navigation model, and fixture
 expectations.
 
+Accepted ADRs record cross-cutting product decisions:
+
+- [ADR 0001: Project-Scoped Random Record IDs](../adr/0001-project-scoped-random-record-ids.md)
+- [ADR 0002: Markdown-First Record Store](../adr/0002-markdown-first-record-store.md)
+- [ADR 0003: Evidence Artifact Storage](../adr/0003-evidence-artifact-storage.md)
+- [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
+
 ## Target Architecture
 
 [SPEC.md](../../SPEC.md) defines the target architecture, using the vocabulary in

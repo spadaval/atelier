@@ -296,6 +296,15 @@ Validation failure under dry run returns `ok: false`, exits non-zero, includes
 
 ## Apply Summary
 
+The staged `atelier plan apply` implementation accepts this v1 input contract
+and returns a compact summary. In JSON mode, mutating apply currently emits
+`applied`, `dry_run`, `validate_only`, `title`, optional `description`, grouped
+`records` containing `client_ref` to durable `id` mappings, and a numeric
+`links` count. Dry-run output uses the same shape with `applied: false` and
+record previews without reserved IDs. Validate-only output reports
+`validate_only: true` and does not allocate a preview. The richer target
+envelope below remains the contract for follow-up reporting work.
+
 A successful mutating apply returns:
 
 | Field | Type | Rule |

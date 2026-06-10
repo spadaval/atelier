@@ -63,6 +63,16 @@ An agent tasked with a mission should be able to:
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
 
+`atelier worktree for <issue-id>` creates or locates a Git worktree using the
+configured branch/path policy, rebuilds local SQLite state from
+`.atelier-state/`, runs `worktree_setup` hooks from `atelier.workflow.yaml`, and
+records the issue/branch/worktree association in local runtime state.
+`atelier worktree status --json` reports path, branch, dirty paths,
+ahead/behind when an upstream exists, unpushed commit count, associated work, and
+canonical export freshness when available. `atelier worktree merge` and
+`atelier worktree remove` are thin Git wrappers for merging an associated branch
+and cleaning up the associated worktree.
+
 ## Milestones And Validators
 
 Milestones own validation criteria. Workflows own validators.

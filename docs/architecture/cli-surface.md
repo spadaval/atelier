@@ -13,6 +13,13 @@ in normal Agent Factory workflows:
 - `atelier init`
 - `atelier issue ...`
 - `atelier dep add/remove/list`
+- `atelier mission create/show/list/update/view`
+- `atelier plan create/show/list/revise/link/apply`
+- `atelier evidence add/show/list`
+- `atelier link add/remove/list`
+- `atelier workflow validate`
+- `atelier work start/finish/status`
+- `atelier worktree for/status/merge/remove`
 - `atelier export` and `atelier export --check`
 - `atelier rebuild`
 - `atelier import-beads`
@@ -24,10 +31,21 @@ RecordStore followed by projection refresh. Projection-backed query commands
 such as list, ready, search, impact, lint, and Mission Control views may use
 SQLite after freshness checks.
 
-Future first-class record and workflow commands such as `mission`, `plan`,
-`link`, `work`, `evidence`, and workflow validation commands become core only
-when their owning issues define storage, JSON, projection refresh, and
-validation contracts.
+First-class mission, milestone, plan, evidence, typed-link, workflow validation,
+and work lifecycle commands are now core as a staged implementation. Mission,
+milestone, plan, and evidence mutations persist through SQLite and immediately
+refresh deterministic Markdown projection under `.atelier-state/`; rebuild
+restores those records from Markdown. `atelier plan apply` validates authored
+bulk-plan JSON, supports dry-run and validate-only previews, creates issue and
+record graphs atomically, normalizes issue dependency fields, writes typed
+links, and refreshes or checks canonical export according to the input's
+`apply.export` option. `atelier mission view` summarizes linked plans,
+milestones, evidence, and work grouped by ready, blocked, done, and backlog
+state. Work lifecycle commands store local work association in runtime state and
+enforce clean worktree plus current-export checks where they affect workflow
+transitions. Worktree helpers expose scan-friendly JSON status, create/remove
+associated Git worktrees, rebuild SQLite in new worktrees, and run
+`worktree_setup` hooks from `atelier.workflow.yaml`.
 
 ## Hidden Compatibility
 
@@ -38,13 +56,17 @@ should hide them:
 - Flat issue aliases: `create`, `show`, `list`, `ready`, `close`, `update`,
   `block`, `unblock`, `search`, `relate`, `related`, `tree`, and similar aliases
   for `atelier issue ...`.
-- `timer` and flat `start`/`stop`, pending a future run/session model.
+- `timer` and flat `start`/`stop`; normal tracked work should use
+  `atelier work start/finish/status`.
 - `archive`, because archive state is inherited issue lifecycle behavior rather
   than a target workflow primitive.
-- `milestone`, until it is migrated to create, mutate, export, rebuild, and
-  validate first-class milestone checkpoint records.
-- `session`, because durable run/session accounting is deferred.
-- `agent`, `locks`, and `sync`, until the claim/worktree/lock policy is decided.
+- Legacy `milestone`, because first-class checkpoint records are projected as
+  `records(kind = milestone)` and created through bulk-plan apply until a
+  dedicated visible checkpoint command is promoted.
+- `session`, because durable run/session accounting is deferred. Session state
+  may still be updated by `atelier work start` as local runtime context.
+- `agent`, `locks`, and `sync`, until the lock policy is promoted into workflow
+  configuration.
 - Backup `import` and `export --format json|markdown`, which are not canonical
   projection/rebuild.
 

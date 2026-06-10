@@ -100,6 +100,14 @@ without copying `.atelier/state.db`.
 
 ## Migration Plan
 
+Staged implementation note: missions, plans, evidence, workflow validator
+results, and cross-record links currently use first-class SQLite tables and
+deterministic Markdown export/rebuild support where they mutate durable records.
+That makes mission, plan, evidence, and link records durable and rebuildable,
+but their normal mutation path still uses SQLite followed by projection refresh.
+This is an accepted intermediate state until the `RecordStore` write path owns
+all record mutations directly.
+
 The migration should proceed in small slices:
 
 1. Introduce a `RecordStore` module that can load, validate, render, and write
