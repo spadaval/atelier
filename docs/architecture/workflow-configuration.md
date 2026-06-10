@@ -179,8 +179,8 @@ Supported hook events for schema version 1 are:
 
 - `before_transition`: runs after static transition checks and validators pass,
   but before the tracker mutation is committed;
-- `after_transition`: runs after the tracker mutation and export refresh
-  complete;
+- `after_transition`: runs after the canonical record write and projection
+  refresh or stale-projection marking complete;
 - `worktree_setup`: runs when a future worktree helper prepares a worktree.
 
 `timeout_ms` is required unless `defaults.hook_timeout_ms` is set. Hook
@@ -196,6 +196,10 @@ hooks are not allowed because the record mutation has already happened.
 Hook stdin receives the same context shape used by workflow validators plus the
 hook identifier and event. Hook stdout and stderr are captured, truncated for
 display, and available in JSON output.
+
+Schema version 1 examples still use `export_current` for compatibility with the
+existing Mission Control projection vocabulary. New schema work should prefer
+separate durable-record and projection-index freshness fields.
 
 ## Workflow Validators
 

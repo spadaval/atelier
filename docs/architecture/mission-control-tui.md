@@ -10,6 +10,8 @@ The TUI must not read `.atelier/state.db` directly and must not invent a state
 model separate from the Mission Control projection. Its input is either
 `.atelier-state/mission-control.json` or an equivalent Mission Control JSON
 command output with the same schema.
+Mission Control JSON is derived from canonical records plus ProjectionIndex
+queries; it is not an authoritative record source.
 
 ## Projection Contract
 

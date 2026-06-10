@@ -5,7 +5,7 @@
 - [CONTEXT.md](../CONTEXT.md): domain language and ambiguity decisions.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  canonical `.atelier-state` manifest, record, graph, and rebuild layout.
+  canonical `.atelier-state` record file and rebuild layout.
 - [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
   versioned JSON contract, validation diagnostics, dry-run preview shape, and
   fixtures for authored bulk graph plans.
@@ -16,6 +16,10 @@
 - [docs/adr/0001-project-scoped-random-record-ids.md](adr/0001-project-scoped-random-record-ids.md):
   accepted decision that canonical record IDs are project-scoped random IDs
   such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
+- [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
+  accepted decision that Markdown records are canonical, SQLite is a
+  rebuildable projection index plus local runtime state, and export is a
+  compatibility/repair path during migration.
 - [docs/architecture/index.md](architecture/index.md): architecture and
   ownership map.
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
@@ -29,6 +33,9 @@
 - [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
   repository-owned workflow policy path, schema, validators, hooks, reload
   behavior, and risk-scaled examples.
+- [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
+  RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
+  durable writes, rebuildable SQLite indexes, and local runtime data.
 - [docs/architecture/mission-control-tui.md](architecture/mission-control-tui.md):
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.

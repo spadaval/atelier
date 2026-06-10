@@ -6,6 +6,12 @@ not a full Beads compatibility promise. The bar is the smallest command,
 storage, JSON, and failure-mode surface that lets agents plan, claim, update,
 validate, and hand off work without private chat state.
 
+Current storage architecture is superseded by
+[ADR 0002: Markdown-First Record Store](../../adr/0002-markdown-first-record-store.md).
+Historical MVP language about SQLite-to-export freshness remains useful as
+cutover record, but future work should treat Markdown records as canonical and
+SQLite as ProjectionIndex plus RuntimeState.
+
 ## Cutover Rule
 
 Atelier is the live tracker for `/root/atelier` after `atelier-z1p.4` cutover.

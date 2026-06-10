@@ -10,16 +10,17 @@
 | `cargo test` | full Rust unit, integration, and smoke test suite |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |
-| `atelier export --check` | tracker export freshness |
+| `atelier export --check` | canonical record and derived projection freshness |
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker runtime and rebuild health |
 
 ## Scenario Proof
 
 - CLI behavior changes should include command-level tests or transcript evidence.
-- Persistence changes should include database round-trip or migration proof.
-- Export/rebuild changes should prove deterministic output and stale-export
-  detection.
+- Persistence changes should include RecordStore round-trip, projection rebuild,
+  or runtime-state migration proof as appropriate.
+- Export/rebuild changes should prove deterministic output and stale durable
+  state or stale projection detection.
 - Workflow, validator, evidence, mission, milestone, or plan changes should include
   machine-readable result examples when JSON output is involved.
 - Migration work should classify expected breakage and name reconnect or

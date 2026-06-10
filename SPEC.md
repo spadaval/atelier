@@ -10,17 +10,18 @@ mission-control features needed by agent-factory style orchestration.
 
 Atelier should use:
 
-- SQLite for state in motion.
-- Markdown and structured exports for state at rest.
+- Markdown records for canonical state at rest.
+- SQLite for rebuildable projection indexes and local runtime state.
 - Git for merge, review, and long-term audit.
 - Agent-facing commands as the primary interface.
 - Optional UI surfaces built on top of mechanical projections.
 
-The SQLite database is the fast local runtime store. It supports queries,
-locks, sessions, workflow checks, and Mission Control projections. The exported
-state is the durable, mergeable repo surface. A worktree should be able to
-rebuild its local SQLite database from committed exported state after checkout,
-pull, merge, or clone.
+Markdown records are the durable, mergeable repo surface. The SQLite database is
+the fast local projection and runtime store. It supports queries, locks,
+sessions, workflow checks, and Mission Control projections without making
+Markdown parsing the hot path for every command. A worktree should be able to
+rebuild its local SQLite projection from committed Markdown records after
+checkout, pull, merge, or clone.
 
 ## Starting Point
 
@@ -94,15 +95,17 @@ Atelier should implement this storage contract:
 
 The exact layout can change, but the principles should not:
 
-- Exported state must be deterministic.
-- Exported state must be sufficient to rebuild SQLite.
-- `export --check` must detect stale projections.
-- Mutating commands should update exports automatically by default.
-- Git merges should happen through exported files, not by merging SQLite files.
+- Canonical Markdown records must be deterministic.
+- Canonical Markdown records must be sufficient to rebuild SQLite projections.
+- `export --check` must detect stale canonical records and derived projections.
+- Mutating commands should write canonical Markdown records first, then refresh
+  or mark stale the SQLite projection.
+- Git merges should happen through Markdown record files, not by merging SQLite
+  files.
 - SQLite should be rebuildable after checkout, merge, pull, or clone.
 
 The existing Chainlink export/import system is backup-oriented. Atelier needs a
-canonical projection/rebuild system instead.
+Markdown-first canonical record store with rebuildable projections instead.
 
 ## Record Identity
 
@@ -275,7 +278,7 @@ Examples:
 - Required plan before implementation for large missions.
 - Warning when a summary is too long or too vague.
 - Warning when a milestone lacks validation criteria.
-- Error when exported state is stale.
+- Error when durable records or derived projections are stale.
 - Error when a workflow transition is invalid.
 - Warning when implementation starts on `main`.
 
@@ -338,7 +341,7 @@ Useful enforcement:
 - Warn or fail when implementation starts on `main`.
 - Refuse claim when the worktree is dirty unless overridden.
 - Record branch/worktree association.
-- Refuse `done` when exported state is stale.
+- Refuse `done` when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
 The worktree feature is a convenience layer over Git, not a replacement sync
@@ -425,7 +428,7 @@ Every command that agents call should support stable JSON output.
 - Export deterministic per-record files.
 - Add `export --check`.
 - Add `rebuild`.
-- Make SQLite rebuildable from exported state.
+- Make SQLite rebuildable from committed Markdown records.
 - Keep `.atelier/state.db` ignored as local runtime state; committed durable
   state lives under `.atelier-state/`.
 

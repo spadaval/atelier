@@ -36,14 +36,14 @@ Atelier is not a thin rename. The target architecture in [SPEC.md](../../SPEC.md
 keeps useful Chainlink runtime machinery while changing the durable product
 model:
 
-- SQLite remains the fast local runtime store for queries, locks, sessions,
-  workflow checks, and Mission Control projections.
-- `.atelier-state/` becomes the deterministic, mergeable repository projection
-  that can rebuild local SQLite state.
-- Mutating commands update canonical exports by default, and `export --check`
-  detects stale projections.
-- `rebuild` recreates local SQLite state from committed exported state after
-  checkout, pull, merge, or clone.
+- Markdown records under `.atelier-state/` become the deterministic, mergeable
+  repository record store that can rebuild local SQLite projections.
+- SQLite remains the fast local ProjectionIndex and RuntimeState store for
+  queries, locks, sessions, workflow checks, and Mission Control inputs.
+- Mutating commands are migrating toward Markdown-first writes, and
+  `export --check` detects stale canonical records and derived projections.
+- `rebuild` recreates local SQLite projection state from committed Markdown
+  records after checkout, pull, merge, or clone.
 - Missions, milestone checkpoint records, issues, plans, evidence, workflow
   validators, runs, typed links, and workflows become first-class Atelier
   concepts instead of only inherited issue-tracker fields.
@@ -82,7 +82,7 @@ them:
 - Moving local runtime state fully from inherited Chainlink conventions toward
   `.atelier/`.
 - Replacing backup-style export/import with canonical `.atelier-state/`
-  projection and rebuild.
+  Markdown records and rebuildable projections.
 - Adding first-class missions, plans, evidence, workflow validators, runs, typed
   links, and workflow configuration.
 - Reworking lock sync behavior beyond what the relevant migration or design bead

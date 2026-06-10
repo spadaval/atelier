@@ -219,12 +219,14 @@ create the local `.atelier/` runtime directory in a fresh checkout. Explicit
 backup exports remain available with `atelier export --format json` and
 `atelier export --format markdown`.
 
-Until mutating commands are wired to export automatically, commands that create,
-update, close, reopen, delete, label, relate, block, comment on, or otherwise
-change records must be followed by `atelier export` before committing state.
-Automation work that adds post-mutation export must reuse this canonical writer
-and preserve `export --check` semantics instead of duplicating serialization in
-individual command handlers.
+This is the transitional compatibility path for the SQLite-first inherited
+implementation. The target architecture is Markdown-first: mutating commands
+write canonical records through RecordStore and then refresh or mark stale the
+ProjectionIndex. During migration, commands that still create, update, close,
+reopen, delete, label, relate, block, comment on, or otherwise change canonical
+records through SQLite must be followed by `atelier export` before committing
+state. Automation work must preserve `export --check` semantics instead of
+duplicating serialization in individual command handlers.
 
 ## Deferred Or Future Paths
 

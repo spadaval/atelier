@@ -1,0 +1,132 @@
+# Markdown-First Record Store
+
+This document defines the target persistence architecture for Atelier after the
+Markdown-only canonical state cutover. It refines the storage contract in
+[Canonical Export And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md)
+by separating canonical record ownership from rebuildable query indexes and
+local-only runtime state.
+
+## Direction
+
+Atelier's durable project state lives in Markdown record files under
+`.atelier-state/`. SQLite remains valuable, but as a rebuildable projection and
+runtime store rather than a second canonical copy of the same facts.
+
+The target architecture has three explicit components:
+
+| Component | Owns | Does not own |
+| --- | --- | --- |
+| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, session locks, timers, or long-lived caches. |
+| `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: issue lists, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
+| `RuntimeState` | Local-only state under `.atelier/`: sessions, locks, timers, usage, local agent identity, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
+
+Successful canonical mutations must write Markdown first. A command may refresh
+the projection in the same operation, but durability must not depend on a later
+SQLite export. Query commands may use SQLite after a cheap freshness check and
+must either refresh the projection or fail with an actionable recovery message.
+
+## Write Path
+
+Known-ID mutations such as issue update, close, dependency edits, labels, typed
+links, and future mission/plan/evidence commands follow this order:
+
+1. Load and validate the target record from `RecordStore`.
+2. Apply the domain mutation to the in-memory record.
+3. Validate record-local invariants and affected graph references.
+4. Render deterministic Markdown and replace the record file atomically.
+5. Refresh the affected `ProjectionIndex` rows, or mark the projection stale
+   with enough metadata for the next query to repair it.
+
+New-record creation allocates a project-scoped random ID through `RecordStore`,
+checks for local file collisions across all record kinds, writes the Markdown
+record, and then indexes it. The allocator must not rely on a SQLite sequence as
+the source of canonical identity.
+
+`atelier export` remains a compatibility and repair command during migration.
+Its target role is to re-render canonical records, remove obsolete derived files,
+and check deterministic output, not to be the normal path that makes a mutation
+durable.
+
+## Query Path
+
+Query commands use `ProjectionIndex` when they need global state:
+
+- `issue list`, `issue ready`, search, dependency views, and graph traversal;
+- workflow validator lookup and transition checks;
+- Mission Control projections and terminal UI inputs;
+- lint rules that need reverse links or whole-project consistency.
+
+Before reading the projection, commands check source freshness using record path,
+size, modified time as a hint, and content hashes when needed. If stale records
+are found, a query command may perform a targeted reindex. If targeted reindex is
+not implemented for the affected record kind, it must recommend `atelier rebuild`
+or run the equivalent safe rebuild path itself when the command contract permits.
+
+Read-only commands must not silently answer from a stale projection when the
+result could affect orchestration, validation, or closeout decisions.
+
+## Rebuild And Freshness
+
+`atelier rebuild` recreates the canonical portion of `.atelier/state.db` from
+Markdown records discovered under `.atelier-state/`. It ignores local-only
+runtime state except where runtime tables must be recreated empty or migrated
+for schema compatibility.
+
+`atelier doctor` reports both canonical projection health and runtime-state
+health. A repository can be rebuild-ready even when optional runtime state is
+absent. A runtime-state failure should not imply canonical record loss unless
+Markdown validation also fails.
+
+`atelier export --check` verifies deterministic rendering of canonical Markdown
+and known derived projections. In the Markdown-first model, it should not depend
+on SQLite being the freshest source of record facts. During migration it may
+compare SQLite-derived rendering against Markdown, but any such comparison is a
+compatibility check, not the target ownership model.
+
+## Runtime State Boundary
+
+Runtime state remains useful for coordination and operator ergonomics:
+
+- current work/session association;
+- local locks and claim helpers;
+- timers, usage metrics, and command telemetry;
+- cached projection metadata;
+- UI state and terminal-view caches.
+
+Runtime state may reference canonical record IDs, but those references are local
+and disposable unless a future durable record explicitly captures them. A fresh
+checkout must be able to rebuild canonical query behavior from `.atelier-state/`
+without copying `.atelier/state.db`.
+
+## Migration Plan
+
+The migration should proceed in small slices:
+
+1. Introduce a `RecordStore` module that can load, validate, render, and write
+   issue Markdown records using the existing canonical layout.
+2. Extract `ProjectionIndex` responsibilities from rebuild and query commands,
+   keeping SQLite schema migrations and query code explicit.
+3. Add projection freshness metadata and command behavior for stale indexes.
+4. Move issue create/update/close/label/dependency/link mutations to
+   Markdown-first writes.
+5. Separate local runtime tables and health reporting from canonical projection
+   tables.
+6. Extend `RecordStore` and `ProjectionIndex` to first-class missions,
+   milestones, plans, evidence, and workflow validator records as those command
+   surfaces land.
+7. Retire the compatibility requirement that normal mutations write SQLite first
+   and then call export to become durable.
+
+Each slice must preserve `atelier rebuild`, `atelier export --check`,
+`atelier lint`, `atelier doctor`, and the agent-facing issue workflow, or state
+the temporary breakage and the reconnect item that owns it.
+
+## Non-Goals
+
+- Do not maintain a fully equivalent SQLite and Markdown live-state sync model
+  as the destination.
+- Do not introduce a daemon only to keep projections fresh; add one only after
+  an interactive workflow proves it needs a long-lived process.
+- Do not move workflow policy into `.atelier-state/`; repository-authored policy
+  remains separate from deterministic record projections.
+- Do not restore `manifest.json` or `graph.json` as canonical source files.

@@ -19,10 +19,15 @@ in normal Agent Factory workflows:
 - `atelier lint`
 - `atelier doctor`
 
+Issue mutation commands are migrating toward Markdown-direct writes through
+RecordStore followed by projection refresh. Projection-backed query commands
+such as list, ready, search, impact, lint, and Mission Control views may use
+SQLite after freshness checks.
+
 Future first-class record and workflow commands such as `mission`, `plan`,
 `link`, `work`, `evidence`, and workflow validation commands become core only
-when their owning issues define storage, JSON, export/rebuild, and validation
-contracts.
+when their owning issues define storage, JSON, projection refresh, and
+validation contracts.
 
 ## Hidden Compatibility
 
@@ -73,5 +78,8 @@ public workflow. Issue closure records close state, close time, and optional
 reason in tracker state; it does not mutate `CHANGELOG.md`.
 
 The inherited backup export/import path is preserved only as compatibility.
-Canonical state is `.atelier-state/`, checked with `atelier export --check` and
-rebuilt with `atelier rebuild`.
+Canonical state is Markdown under `.atelier-state/`, checked with
+`atelier export --check` and indexed into SQLite with `atelier rebuild`.
+`atelier export` remains a compatibility, repair, and deterministic rendering
+command during the Markdown-first migration; it is not the target step that
+makes an otherwise successful mutation durable.

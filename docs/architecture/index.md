@@ -32,6 +32,9 @@ integration command policy.
 See [Workflow Configuration Contract](workflow-configuration.md) for the
 repository-owned workflow policy path, schema, validators, hooks, reload
 behavior, and examples.
+See [Markdown-First Record Store](markdown-first-record-store.md) for the
+RecordStore, ProjectionIndex, and RuntimeState boundaries that govern durable
+Markdown writes, rebuildable SQLite indexes, and local-only runtime data.
 See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
 consumer contract, projection degradation rules, navigation model, and fixture
 expectations.
@@ -41,12 +44,13 @@ expectations.
 [SPEC.md](../../SPEC.md) defines the target architecture, using the vocabulary in
 [CONTEXT.md](../../CONTEXT.md):
 
-- SQLite is the fast local runtime store for queries, locks, sessions,
-  workflow checks, and Mission Control projections.
-- `.atelier-state/` is the deterministic, mergeable repo projection.
-- Mutating commands update canonical exports by default.
-- `export --check` detects stale projections.
-- `rebuild` recreates SQLite state from committed exported state.
+- `.atelier-state/` contains deterministic, mergeable Markdown records.
+- SQLite is the fast local ProjectionIndex and RuntimeState store for queries,
+  locks, sessions, workflow checks, and Mission Control inputs.
+- Mutating commands are migrating toward Markdown-first writes through
+  `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
+- `export --check` detects stale canonical records and derived projections.
+- `rebuild` recreates SQLite projection state from committed Markdown records.
 - First-class concepts include missions, milestone checkpoint records, issues,
   plans, evidence, runs, typed links, workflows, and workflow validators.
 - Repository-owned workflow policy lives in `atelier.workflow.yaml`, while
@@ -57,9 +61,11 @@ expectations.
 - CLI parsing should stay thin and delegate behavior to command and domain
   modules.
 - Database code owns schema migration, transaction boundaries, and persistence
-  invariants.
-- Export/rebuild code must own deterministic serialization and stale-projection
-  detection.
+  invariants for projection and runtime tables.
+- RecordStore code must own deterministic canonical Markdown serialization and
+  record-local validation.
+- ProjectionIndex code must own rebuild, reindex, query freshness, and
+  stale-projection detection.
 - Workflow validator evaluation should produce machine-readable results suitable
   for Mission Control.
 - Mission Control TUI code should consume only the documented projection fields

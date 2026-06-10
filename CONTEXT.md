@@ -12,6 +12,14 @@
   input format remains supported.
 - Canonical projection: deterministic repo-state files that can rebuild the
   local SQLite runtime database.
+- RecordStore: the target component that owns canonical Markdown record reads,
+  writes, validation, deterministic rendering, and ID allocation.
+- ProjectionIndex: the target rebuildable SQLite index derived from
+  RecordStore records for global queries, graph traversal, search, validation,
+  and Mission Control inputs.
+- RuntimeState: local-only `.atelier/` data such as sessions, locks, timers,
+  usage, agent identity, and caches. It can reference canonical IDs but is not
+  the durable project record source.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
@@ -41,6 +49,9 @@
   product design.
 - Export/import in the inherited code is backup-oriented. The target
   architecture needs canonical projection and rebuild semantics instead.
+- The canonical-state target is Markdown-first: successful durable mutations
+  should write record files through RecordStore, then refresh ProjectionIndex.
+  SQLite is not the destination source of truth for canonical records.
 - Dependencies should represent actual sequencing. Use typed links for other
   relationships such as related, validates, implements, or evidenced_by.
 - Missions, milestone checkpoint records, plans, evidence, and runs are target
