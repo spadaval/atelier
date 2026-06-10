@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, Write};
@@ -49,7 +48,7 @@ pub struct ExportData {
     pub issues: Vec<ExportedIssue>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {
     path: PathBuf,
     bytes: Vec<u8>,
@@ -149,16 +148,6 @@ fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
         });
     }
 
-    files.push(ProjectionFile {
-        path: PathBuf::from("graph.json"),
-        bytes: render_graph(db, &issues)?.into_bytes(),
-    });
-
-    let manifest = render_manifest(&files)?.into_bytes();
-    files.push(ProjectionFile {
-        path: PathBuf::from("manifest.json"),
-        bytes: manifest,
-    });
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(files)
 }
@@ -187,6 +176,12 @@ fn stale_projection_entries(state_dir: &Path, files: &[ProjectionFile]) -> Resul
         .iter()
         .map(|file| (file.path.clone(), file.bytes.as_slice()))
         .collect();
+
+    if state_dir.exists() {
+        if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
+            stale.push(format!("invalid: {error:#}"));
+        }
+    }
 
     for (relative_path, expected_bytes) in &expected {
         let actual_path = state_dir.join(relative_path);
@@ -259,8 +254,10 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     let labels = db.get_labels(issue.id)?;
     let mut blocks = issue_ids(db.get_blocking(issue.id)?);
     let mut depends_on = issue_ids(db.get_blockers(issue.id)?);
+    let mut links = issue_links(db, issue.id)?;
     blocks.sort();
     depends_on.sort();
+    links.sort();
 
     let mut output = String::new();
     output.push_str("---\n");
@@ -276,7 +273,7 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     write_yaml_scalar(&mut output, "id", Some(&issue_record_id(issue.id)))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
-    write_yaml_array(&mut output, "links", &[])?;
+    write_yaml_links(&mut output, "links", &links)?;
     let parent = issue.parent_id.map(issue_record_id);
     write_yaml_scalar(&mut output, "parent", parent.as_deref())?;
     write_yaml_scalar(
@@ -299,180 +296,25 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     Ok(output)
 }
 
-fn render_graph(db: &Database, issues: &[Issue]) -> Result<String> {
-    let mut nodes = Vec::new();
-    let mut edges = Vec::new();
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+struct IssueLink {
+    relation_type: String,
+    target_kind: String,
+    target_id: String,
+}
 
-    for issue in issues {
-        let source_id = issue_record_id(issue.id);
-        nodes.push(json_object([
-            ("id", serde_json::Value::String(source_id.clone())),
-            ("kind", serde_json::Value::String("issue".to_string())),
-            (
-                "schema",
-                serde_json::Value::String("atelier.issue".to_string()),
-            ),
-            ("schema_version", serde_json::Value::Number(1.into())),
-        ]));
-
-        if let Some(parent_id) = issue.parent_id {
-            edges.push(graph_edge(
-                &source_id,
-                "parent",
-                &issue_record_id(parent_id),
-                "front-matter",
-            ));
-        }
-
-        for blocked_id in db.get_blocking(issue.id)? {
-            edges.push(graph_edge(
-                &source_id,
-                "blocks",
-                &issue_record_id(blocked_id),
-                "front-matter",
-            ));
-        }
-
-        for relation in db.get_typed_relations(issue.id)? {
-            if relation.issue_id_1 == issue.id {
-                edges.push(graph_edge(
-                    &source_id,
-                    &relation.relation_type,
-                    &issue_record_id(relation.issue_id_2),
-                    "relation",
-                ));
-            }
+fn issue_links(db: &Database, issue_id: i64) -> Result<Vec<IssueLink>> {
+    let mut links = Vec::new();
+    for relation in db.get_typed_relations(issue_id)? {
+        if relation.issue_id_1 == issue_id {
+            links.push(IssueLink {
+                relation_type: relation.relation_type,
+                target_kind: "issue".to_string(),
+                target_id: issue_record_id(relation.issue_id_2),
+            });
         }
     }
-
-    nodes.sort_by_key(value_sort_key);
-    edges.sort_by_key(value_sort_key);
-
-    let graph = json_object([
-        ("edges", serde_json::Value::Array(edges)),
-        ("nodes", serde_json::Value::Array(nodes)),
-        (
-            "schema",
-            serde_json::Value::String("atelier.graph".to_string()),
-        ),
-        ("schema_version", serde_json::Value::Number(1.into())),
-    ]);
-    let mut json = serde_json::to_string_pretty(&graph)?;
-    json.push('\n');
-    Ok(json)
-}
-
-fn graph_edge(
-    source_id: &str,
-    relation_type: &str,
-    target_id: &str,
-    metadata_source: &str,
-) -> serde_json::Value {
-    json_object([
-        (
-            "metadata",
-            json_object([(
-                "source",
-                serde_json::Value::String(metadata_source.to_string()),
-            )]),
-        ),
-        (
-            "source_id",
-            serde_json::Value::String(source_id.to_string()),
-        ),
-        (
-            "source_kind",
-            serde_json::Value::String("issue".to_string()),
-        ),
-        (
-            "target_id",
-            serde_json::Value::String(target_id.to_string()),
-        ),
-        (
-            "target_kind",
-            serde_json::Value::String("issue".to_string()),
-        ),
-        ("type", serde_json::Value::String(relation_type.to_string())),
-    ])
-}
-
-fn render_manifest(files: &[ProjectionFile]) -> Result<String> {
-    let mut records = Vec::new();
-    for file in files
-        .iter()
-        .filter(|file| file.path != Path::new("manifest.json"))
-    {
-        let state_path = display_state_path(&file.path);
-        let (kind, id, schema) = if file.path == Path::new("graph.json") {
-            ("graph", serde_json::Value::Null, "atelier.graph")
-        } else {
-            let id = file
-                .path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .ok_or_else(|| {
-                    anyhow::anyhow!("Invalid projection path {}", file.path.display())
-                })?;
-            (
-                "issue",
-                serde_json::Value::String(id.to_string()),
-                "atelier.issue",
-            )
-        };
-
-        records.push(json_object([
-            ("id", id),
-            ("kind", serde_json::Value::String(kind.to_string())),
-            ("path", serde_json::Value::String(state_path)),
-            ("role", serde_json::Value::String("canonical".to_string())),
-            ("schema", serde_json::Value::String(schema.to_string())),
-            ("schema_version", serde_json::Value::Number(1.into())),
-            ("sha256", serde_json::Value::String(sha256_hex(&file.bytes))),
-        ]));
-    }
-    records.sort_by_key(value_sort_key);
-
-    let manifest = json_object([
-        ("format_version", serde_json::Value::Number(1.into())),
-        ("generated_at", serde_json::Value::Null),
-        (
-            "generator",
-            json_object([
-                ("name", serde_json::Value::String("atelier".to_string())),
-                (
-                    "version",
-                    serde_json::Value::String(env!("CARGO_PKG_VERSION").to_string()),
-                ),
-            ]),
-        ),
-        ("records", serde_json::Value::Array(records)),
-        (
-            "schema",
-            serde_json::Value::String("atelier.manifest".to_string()),
-        ),
-        ("schema_version", serde_json::Value::Number(1.into())),
-    ]);
-
-    let mut json = serde_json::to_string_pretty(&manifest)?;
-    json.push('\n');
-    Ok(json)
-}
-
-fn json_object<const N: usize>(entries: [(&str, serde_json::Value); N]) -> serde_json::Value {
-    let mut map = serde_json::Map::new();
-    for (key, value) in entries {
-        map.insert(key.to_string(), value);
-    }
-    serde_json::Value::Object(map)
-}
-
-fn value_sort_key(value: &serde_json::Value) -> String {
-    serde_json::to_string(value).unwrap_or_default()
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+    Ok(links)
 }
 
 fn issue_ids(ids: Vec<i64>) -> Vec<String> {
@@ -534,6 +376,27 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
     for value in values {
         output.push_str("- ");
         output.push_str(&serde_json::to_string(value)?);
+        output.push('\n');
+    }
+    Ok(())
+}
+
+fn write_yaml_links(output: &mut String, key: &str, links: &[IssueLink]) -> Result<()> {
+    output.push_str(key);
+    if links.is_empty() {
+        output.push_str(": []\n");
+        return Ok(());
+    }
+    output.push_str(":\n");
+    for link in links {
+        output.push_str("- target_id: ");
+        output.push_str(&serde_json::to_string(&link.target_id)?);
+        output.push('\n');
+        output.push_str("  target_kind: ");
+        output.push_str(&serde_json::to_string(&link.target_kind)?);
+        output.push('\n');
+        output.push_str("  type: ");
+        output.push_str(&serde_json::to_string(&link.relation_type)?);
         output.push('\n');
     }
     Ok(())
@@ -796,17 +659,16 @@ mod tests {
         let state_dir = dir.path().join(".atelier-state");
 
         run_canonical(&db, &state_dir, false).unwrap();
-        let first_manifest = fs::read_to_string(state_dir.join("manifest.json")).unwrap();
-        let first_graph = fs::read_to_string(state_dir.join("graph.json")).unwrap();
+        let first_files = canonical_files_under(&state_dir).unwrap();
 
         run_canonical(&db, &state_dir, false).unwrap();
-        let second_manifest = fs::read_to_string(state_dir.join("manifest.json")).unwrap();
-        let second_graph = fs::read_to_string(state_dir.join("graph.json")).unwrap();
+        let second_files = canonical_files_under(&state_dir).unwrap();
 
-        assert_eq!(first_manifest, second_manifest);
-        assert_eq!(first_graph, second_graph);
+        assert_eq!(first_files, second_files);
         assert!(run_canonical(&db, &state_dir, true).is_ok());
         assert!(!state_dir.join("issues").join("ISS-0001.md").exists());
+        assert!(!state_dir.join("manifest.json").exists());
+        assert!(!state_dir.join("graph.json").exists());
     }
 
     #[test]
@@ -875,16 +737,59 @@ mod tests {
         run_canonical(&db, &state_dir, false).unwrap();
         let issue_path = state_dir.join("issues").join("ISS-0001.md");
         assert!(issue_path.exists());
+        fs::write(state_dir.join("manifest.json"), "{}\n").unwrap();
+        fs::write(state_dir.join("graph.json"), "{}\n").unwrap();
 
         db.delete_issue(id).unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
 
         assert!(!issue_path.exists());
+        assert!(!state_dir.join("manifest.json").exists());
+        assert!(!state_dir.join("graph.json").exists());
         assert!(run_canonical(&db, &state_dir, true).is_ok());
     }
 
     #[test]
-    fn test_canonical_json_and_markdown_serialization_stability() {
+    fn test_canonical_check_reports_invalid_duplicate_id() {
+        let (db, dir) = setup_test_db();
+        db.create_issue("Original", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        run_canonical(&db, &state_dir, false).unwrap();
+        let copy_path = state_dir.join("issues/ISS-0002.md");
+        fs::copy(state_dir.join("issues/ISS-0001.md"), copy_path).unwrap();
+
+        let error = run_canonical(&db, &state_dir, true).unwrap_err();
+        assert!(error.to_string().contains("invalid:"));
+        assert!(error.to_string().contains("does not match canonical path"));
+    }
+
+    #[test]
+    fn test_canonical_check_reports_dangling_link() {
+        let (db, dir) = setup_test_db();
+        let id = db.create_issue("Source", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        run_canonical(&db, &state_dir, false).unwrap();
+        db.add_typed_relation(
+            id,
+            db.create_issue("Target", None, "medium").unwrap(),
+            "related",
+        )
+        .unwrap();
+        let path = state_dir.join("issues/ISS-0001.md");
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "links: []",
+            "links:\n- target_id: \"ISS-9999\"\n  target_kind: \"issue\"\n  type: \"related\"",
+        );
+        fs::write(path, text).unwrap();
+
+        let error = run_canonical(&db, &state_dir, true).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Issue ISS-0001 has related reference to missing issue ISS-9999"));
+    }
+
+    #[test]
+    fn test_canonical_markdown_serialization_stability() {
         let (db, _dir) = setup_test_db();
         let parent = db
             .create_issue("Parent", Some("Parent body\r\nline 2"), "high")
@@ -895,39 +800,29 @@ mod tests {
         db.add_label(child, "zeta").unwrap();
         db.add_label(child, "alpha").unwrap();
         db.add_dependency(child, parent).unwrap();
+        db.add_typed_relation(parent, child, "derived").unwrap();
 
         let first = build_canonical_projection(&db).unwrap();
         let second = build_canonical_projection(&db).unwrap();
-        let first_manifest = first
-            .iter()
-            .find(|file| file.path == Path::new("manifest.json"))
-            .unwrap();
-        let second_manifest = second
-            .iter()
-            .find(|file| file.path == Path::new("manifest.json"))
-            .unwrap();
         let issue = first
             .iter()
             .find(|file| file.path == Path::new("issues/ISS-0002.md"))
             .unwrap();
-        let graph = first
+        let parent_issue = first
             .iter()
-            .find(|file| file.path == Path::new("graph.json"))
+            .find(|file| file.path == Path::new("issues/ISS-0001.md"))
             .unwrap();
 
-        assert_eq!(first_manifest.bytes, second_manifest.bytes);
+        assert_eq!(first, second);
         let issue_text = String::from_utf8(issue.bytes.clone()).unwrap();
         assert!(issue_text.contains("labels:\n- \"alpha\"\n- \"zeta\"\n"));
         assert!(issue_text.contains("parent: \"ISS-0001\""));
         assert!(issue_text.ends_with("Child body\n"));
 
-        let graph_json: serde_json::Value = serde_json::from_slice(&graph.bytes).unwrap();
-        assert_eq!(graph_json["schema"], "atelier.graph");
-        assert!(graph_json["edges"].as_array().unwrap().iter().any(|edge| {
-            edge["source_id"] == "ISS-0001"
-                && edge["target_id"] == "ISS-0002"
-                && edge["type"] == "blocks"
-        }));
+        let parent_text = String::from_utf8(parent_issue.bytes.clone()).unwrap();
+        assert!(parent_text.contains(
+            "links:\n- target_id: \"ISS-0002\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
+        ));
     }
 
     proptest! {

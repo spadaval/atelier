@@ -299,7 +299,8 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(dir
         .path()
         .join(".atelier-state")
-        .join("manifest.json")
+        .join("issues")
+        .join("ISS-0001.md")
         .exists());
 
     let (_, list_out, _) = run_atelier(dir.path(), &["list", "--status", "all"]);

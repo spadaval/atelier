@@ -1,7 +1,7 @@
 ---
 acceptance:
 - Canonical layout is documented.
-- Manifest and graph examples exist.
+- Record-owned links are documented.
 blocks:
 - atelier-x2b4
 created_at: "2026-06-08T00:00:00Z"

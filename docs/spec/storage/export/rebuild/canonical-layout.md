@@ -16,7 +16,6 @@ database remains local runtime state.
 
 ```text
 .atelier-state/
-  manifest.json
   issues/
     atelier-z1p8.md
   missions/
@@ -27,7 +26,6 @@ database remains local runtime state.
     atelier-p3v6.md
   evidence/
     atelier-n8da.md
-  graph.json
   mission-control.json
 ```
 
@@ -37,8 +35,6 @@ Every exported file has a `schema` string and `schema_version` integer.
 
 - `schema` uses the form `atelier.<record-kind>`.
 - `schema_version` starts at `1` for the first canonical projection.
-- `format_version` in `manifest.json` identifies the projection format as a
-  whole and also starts at `1`.
 - Unknown future `schema_version` values are rebuild errors unless a migration
   explicitly supports them.
 - Missing `schema` or `schema_version` fields are rebuild errors.
@@ -79,39 +75,6 @@ global across record kinds in one projection. Record kind is metadata, not part
 of identity. Rebuild must preserve existing valid IDs and export must never
 renumber records.
 
-## Manifest
-
-Path: `.atelier-state/manifest.json`
-
-The manifest is the projection inventory. Rebuild reads it first, validates the
-projection format, then validates that listed record paths exist and match their
-content hashes.
-
-Required fields:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `schema` | string | Must be `atelier.manifest`. |
-| `schema_version` | integer | Manifest schema version. |
-| `format_version` | integer | Whole-projection format version. |
-| `generated_at` | string or null | UTC timestamp for normal export; `null` in deterministic fixtures. |
-| `generator` | object | Tool name and version metadata. |
-| `records` | array | Sorted inventory of canonical and derived files. |
-
-Each `records` entry contains:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `path` | string | Repository-relative path below `.atelier-state/`. |
-| `kind` | string | One of `issue`, `mission`, `milestone`, `plan`, `evidence`, `graph`, `mission-control`. |
-| `id` | string or null | Record ID for per-record files; `null` for aggregate files. |
-| `schema` | string | Expected schema string. |
-| `schema_version` | integer | Expected schema version. |
-| `role` | string | `canonical` or `derived`. |
-| `sha256` | string | Hex SHA-256 of the file bytes excluding `manifest.json`. |
-
-Manifest `records` are sorted by `path`.
-
 ## Markdown Record Layout
 
 Issues, missions, milestones, plans, and evidence are Markdown records with YAML
@@ -144,6 +107,14 @@ Common required front matter:
 
 The body is the canonical rich-text description. Rebuild stores it as the
 record body without front matter.
+
+`links` is the canonical typed graph metadata for semantic relationships owned
+by a record. Each entry contains `type`, `target_kind`, and `target_id`.
+Dependencies and issue hierarchy remain in the issue-specific `depends_on`,
+`blocks`, and `parent` fields because they have dedicated command semantics.
+Typed relation rows are rebuilt from `links`; `export --check` validates that
+link targets exist, link objects are not duplicated, and relation types are
+valid.
 
 ## Issues
 
@@ -204,35 +175,14 @@ Evidence front matter adds:
 
 Evidence body summarizes what was proven and any limits of the proof.
 
-## Graph
-
-Path: `.atelier-state/graph.json`
-
-`graph.json` is canonical. It stores typed relationships that do not belong to
-one record body and lets rebuild reconstruct graph indexes before derived
-projections are generated.
-
-Required fields:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `schema` | string | Must be `atelier.graph`. |
-| `schema_version` | integer | Graph schema version. |
-| `nodes` | array | Record references sorted by `kind`, then `id`. |
-| `edges` | array | Typed links sorted by `source_kind`, `source_id`, `type`, `target_kind`, `target_id`. |
-
-Each edge contains `source_kind`, `source_id`, `type`, `target_kind`,
-`target_id`, and `metadata`. `metadata` is a JSON object with lexical key order.
-
 ## Mission Control Projection
 
 Path: `.atelier-state/mission-control.json`
 
-`mission-control.json` is derived, not a rebuild source for Milestone 2. It is
-included in the manifest with `role: "derived"` when present so
-`export --check` can detect stale projection output. Rebuild must ignore it for
-canonical state reconstruction and regenerate it from canonical records when
-Mission Control projection work lands in Milestone 6.
+`mission-control.json` is derived, not a rebuild source for Milestone 2.
+`export --check` compares it only after Mission Control projection export lands.
+Rebuild must ignore it for canonical state reconstruction and regenerate it from
+canonical records when Mission Control projection work lands in Milestone 6.
 
 Until Milestone 6, the file may be absent. If present, it must carry
 `schema: "atelier.mission-control"` and `schema_version: 1`.
@@ -245,16 +195,19 @@ contract does not make `mission-control.json` a rebuild source.
 
 Rebuild proceeds in this order:
 
-1. Read and validate `manifest.json`.
-2. Read canonical Markdown records from `issues/`, `missions/`, `milestones/`,
-   `plans/`, and `evidence/` in manifest path order.
-3. Read `graph.json` and validate that all graph nodes and edges reference
-   records loaded in step 2.
+1. Discover canonical Markdown records under `issues/`, `missions/`,
+   `milestones/`, `plans/`, and `evidence/`.
+2. Validate each record's schema, schema version, ID, path, front matter shape,
+   and body encoding.
+3. Validate that `parent`, `blocks`, `depends_on`, and `links` references point
+   to discovered records and that duplicate IDs or duplicate links are rejected.
 4. Recreate SQLite tables inside a transaction.
 5. Regenerate derived projections such as `mission-control.json` when supported.
 
-If any canonical file exists under `.atelier-state/` but is absent from the
-manifest, `export --check` must report a stale or untracked projection error.
+If any unexpected canonical file exists under `.atelier-state/`, `export
+--check` must report a stale or untracked projection error. `manifest.json` and
+`graph.json` are not canonical source files and canonical export removes stale
+copies when it writes the projection.
 
 ## Mutating Command Rollout
 

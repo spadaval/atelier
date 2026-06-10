@@ -840,16 +840,15 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
 
 pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bool) -> Result<()> {
     let db_path = repo_root.join(".atelier").join("state.db");
-    let manifest_path = state_dir.join("manifest.json");
     let export_fresh = super::export::canonical_stale_entries(db, state_dir)
         .map(|stale| stale.is_empty())
         .unwrap_or(false);
+    let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
     let mut health = BTreeMap::new();
     health.insert("database", db_path.exists());
     health.insert("projection", state_dir.is_dir());
-    health.insert("manifest", manifest_path.exists());
     health.insert("export_fresh", export_fresh);
-    health.insert("rebuild_ready", manifest_path.exists());
+    health.insert("rebuild_ready", rebuild_ready);
     if json_output {
         print_success(
             "doctor",

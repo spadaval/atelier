@@ -1,33 +1,12 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::db::Database;
+use crate::db::{validate_relation_type, Database};
 use crate::models::Issue;
-
-#[derive(Debug, Deserialize)]
-struct Manifest {
-    schema: String,
-    schema_version: i64,
-    format_version: i64,
-    records: Vec<ManifestRecord>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ManifestRecord {
-    path: String,
-    kind: String,
-    id: Option<String>,
-    schema: String,
-    schema_version: i64,
-    role: String,
-    sha256: String,
-}
 
 #[derive(Debug)]
 struct CanonicalIssue {
@@ -35,6 +14,7 @@ struct CanonicalIssue {
     labels: Vec<String>,
     blocks: Vec<i64>,
     depends_on: Vec<i64>,
+    relations: Vec<(i64, i64, String)>,
 }
 
 #[derive(Debug)]
@@ -50,30 +30,30 @@ pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
-    let manifest_path = state_dir.join("manifest.json");
-    let manifest_bytes = fs::read(&manifest_path)
-        .with_context(|| format!("Missing canonical manifest {}", manifest_path.display()))?;
-    let manifest: Manifest = serde_json::from_slice(&manifest_bytes)
-        .with_context(|| format!("Invalid JSON in {}", manifest_path.display()))?;
-    validate_manifest(&manifest)?;
+pub(crate) fn validate_canonical_state(state_dir: &Path) -> Result<()> {
+    load_projection(state_dir).map(|_| ())
+}
 
-    let records = manifest_records_by_path(&manifest)?;
+fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     let mut issues = Vec::new();
     let mut issue_ids = BTreeSet::new();
+    let mut canonical_paths = BTreeSet::new();
 
-    for record in records.values().filter(|record| record.kind == "issue") {
-        validate_record_hash(state_dir, record)?;
-        let issue = load_issue_record(state_dir, record)?;
+    for relative in discover_issue_record_paths(state_dir)? {
+        canonical_paths.insert(relative.clone());
+        let issue = load_issue_record(state_dir, &relative)?;
         if !issue_ids.insert(issue.issue.id) {
             bail!(
                 "Duplicate issue ID in canonical projection: {}",
-                record.id()
+                issue_record_id(issue.issue.id)
             );
         }
         issues.push(issue);
     }
+    ensure_no_unsupported_canonical_files(state_dir, &canonical_paths)?;
 
+    let mut relations = Vec::new();
+    let mut relation_keys = BTreeSet::new();
     for issue in &issues {
         if let Some(parent_id) = issue.issue.parent_id {
             ensure_issue_exists(parent_id, &issue_ids, "parent", issue.issue.id)?;
@@ -84,121 +64,112 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
         for blocker_id in &issue.depends_on {
             ensure_issue_exists(*blocker_id, &issue_ids, "depends_on", issue.issue.id)?;
         }
-    }
 
-    let graph_record = records
-        .values()
-        .find(|record| record.kind == "graph" && record.role == "canonical")
-        .ok_or_else(|| anyhow!("manifest is missing canonical graph.json record"))?;
-    validate_record_hash(state_dir, graph_record)?;
-    let relations = load_graph_relations(state_dir, graph_record, &issue_ids)?;
+        for relation in &issue.relations {
+            ensure_issue_exists(relation.1, &issue_ids, &relation.2, issue.issue.id)?;
+            let key = (relation.0, relation.1, relation.2.clone());
+            if !relation_keys.insert(key.clone()) {
+                bail!(
+                    "Duplicate typed link {} -> {} ({})",
+                    issue_record_id(key.0),
+                    issue_record_id(key.1),
+                    key.2
+                );
+            }
+            relations.push(key);
+        }
+    }
 
     issues.sort_by_key(|issue| issue.issue.id);
     Ok(RebuildProjection { issues, relations })
 }
 
-fn validate_manifest(manifest: &Manifest) -> Result<()> {
-    if manifest.schema != "atelier.manifest" {
-        bail!(
-            "Unsupported manifest schema '{}'; expected atelier.manifest",
-            manifest.schema
-        );
+fn discover_issue_record_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
+    let issue_dir = state_dir.join("issues");
+    if !issue_dir.exists() {
+        return Ok(Vec::new());
     }
-    if manifest.schema_version != 1 {
-        bail!(
-            "Unsupported manifest schema_version {}; expected 1",
-            manifest.schema_version
-        );
-    }
-    if manifest.format_version != 1 {
-        bail!(
-            "Unsupported canonical export format_version {}; expected 1",
-            manifest.format_version
-        );
-    }
-    Ok(())
-}
 
-fn manifest_records_by_path(manifest: &Manifest) -> Result<BTreeMap<PathBuf, &ManifestRecord>> {
-    let mut records = BTreeMap::new();
-    for record in &manifest.records {
-        let relative = state_relative_path(&record.path)?;
-        if records.insert(relative.clone(), record).is_some() {
-            bail!(
-                "Duplicate manifest record path: {}",
-                display_state_path(&relative)
-            );
-        }
-        validate_manifest_record(record, &relative)?;
-    }
+    let mut records = Vec::new();
+    collect_issue_record_paths(state_dir, &issue_dir, &mut records)?;
+    records.sort();
     Ok(records)
 }
 
-fn validate_manifest_record(record: &ManifestRecord, relative: &Path) -> Result<()> {
-    if record.schema_version != 1 {
-        bail!(
-            "Unsupported schema_version {} for {}; expected 1",
-            record.schema_version,
-            display_state_path(relative)
-        );
-    }
-    match (
-        record.kind.as_str(),
-        record.schema.as_str(),
-        record.role.as_str(),
-    ) {
-        ("issue", "atelier.issue", "canonical") => {
-            let id = record.id();
-            let expected = PathBuf::from("issues").join(format!("{id}.md"));
-            if relative != expected {
+fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_issue_record_paths(root, &path, records)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize canonical issue path")?
+                .to_path_buf();
+            if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
                 bail!(
-                    "Manifest path {} does not match issue id {}",
-                    display_state_path(relative),
-                    id
+                    "Unsupported canonical issue file {}; expected Markdown .md record",
+                    display_state_path(&relative)
                 );
             }
+            records.push(relative);
         }
-        ("graph", "atelier.graph", "canonical") if relative == Path::new("graph.json") => {}
-        ("mission-control", "atelier.mission-control", "derived") => {}
-        _ if record.role == "derived" => {}
-        _ => bail!(
-            "Unsupported manifest record {} with kind '{}', schema '{}', role '{}'",
-            display_state_path(relative),
-            record.kind,
-            record.schema,
-            record.role
-        ),
     }
+    Ok(())
+}
 
-    if record.role == "canonical" && record.sha256.len() != 64 {
+fn ensure_no_unsupported_canonical_files(
+    state_dir: &Path,
+    expected: &BTreeSet<PathBuf>,
+) -> Result<()> {
+    if !state_dir.exists() {
+        return Ok(());
+    }
+    for relative in canonical_files_under(state_dir)? {
+        if relative == Path::new("manifest.json") || relative == Path::new("graph.json") {
+            continue;
+        }
+        if relative.starts_with("issues") && expected.contains(&relative) {
+            continue;
+        }
+        if relative == Path::new("mission-control.json") {
+            continue;
+        }
         bail!(
-            "Invalid sha256 for {}; expected 64 lowercase hex characters",
-            display_state_path(relative)
+            "Unsupported canonical projection file {}",
+            display_state_path(&relative)
         );
     }
     Ok(())
 }
 
-fn validate_record_hash(state_dir: &Path, record: &ManifestRecord) -> Result<Vec<u8>> {
-    let relative = state_relative_path(&record.path)?;
-    let path = state_dir.join(&relative);
-    let bytes = fs::read(&path)
-        .with_context(|| format!("Missing projection file {}", display_state_path(&relative)))?;
-    let actual = sha256_hex(&bytes);
-    if actual != record.sha256 {
-        bail!(
-            "Content hash mismatch for {}: expected {}, got {}",
-            display_state_path(&relative),
-            record.sha256,
-            actual
-        );
-    }
-    Ok(bytes)
+fn canonical_files_under(state_dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_canonical_files(state_dir, state_dir, &mut files)?;
+    files.sort();
+    Ok(files)
 }
 
-fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<CanonicalIssue> {
-    let relative = state_relative_path(&record.path)?;
-    let bytes = validate_record_hash(state_dir, record)?;
+fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_canonical_files(root, &path, files)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize canonical projection path")?;
+            files.push(relative.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
+fn load_issue_record(state_dir: &Path, relative: &Path) -> Result<CanonicalIssue> {
+    let bytes = fs::read(state_dir.join(relative))
+        .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
     let text = String::from_utf8(bytes).with_context(|| {
         format!(
             "Projection file {} is not UTF-8",
@@ -228,14 +199,6 @@ fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<Canoni
     }
 
     let canonical_id = require_scalar(&front_matter, "id", &relative)?;
-    if Some(canonical_id.as_str()) != record.id.as_deref() {
-        bail!(
-            "Issue id {} in {} does not match manifest id {:?}",
-            canonical_id,
-            display_state_path(&relative),
-            record.id
-        );
-    }
     let id = parse_issue_id(&canonical_id).with_context(|| {
         format!(
             "Invalid issue id {} in {}",
@@ -243,10 +206,20 @@ fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<Canoni
             display_state_path(&relative)
         )
     })?;
+    let expected = issue_record_path(id);
+    if relative != expected {
+        bail!(
+            "Issue id {} in {} does not match canonical path {}",
+            canonical_id,
+            display_state_path(relative),
+            display_state_path(&expected)
+        );
+    }
 
     let parent_id = optional_issue_id(&front_matter, "parent", &relative)?;
     let blocks = issue_id_array(&front_matter, "blocks", &relative)?;
     let depends_on = issue_id_array(&front_matter, "depends_on", &relative)?;
+    let relations = typed_links(&front_matter, "links", id, &relative)?;
     let status = require_scalar(&front_matter, "status", &relative)?;
     let issue_type = require_scalar(&front_matter, "issue_type", &relative)?;
     crate::db::validate_issue_type(&issue_type)
@@ -277,111 +250,8 @@ fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<Canoni
         labels: string_array(&front_matter, "labels", &relative)?,
         blocks,
         depends_on,
+        relations,
     })
-}
-
-fn load_graph_relations(
-    state_dir: &Path,
-    record: &ManifestRecord,
-    issue_ids: &BTreeSet<i64>,
-) -> Result<Vec<(i64, i64, String)>> {
-    let relative = state_relative_path(&record.path)?;
-    let bytes = validate_record_hash(state_dir, record)?;
-    let graph: Value = serde_json::from_slice(&bytes)
-        .with_context(|| format!("Invalid JSON in {}", display_state_path(&relative)))?;
-    if graph.get("schema").and_then(Value::as_str) != Some("atelier.graph") {
-        bail!(
-            "Unsupported graph schema in {}; expected atelier.graph",
-            display_state_path(&relative)
-        );
-    }
-    if graph.get("schema_version").and_then(Value::as_i64) != Some(1) {
-        bail!(
-            "Unsupported graph schema_version in {}; expected 1",
-            display_state_path(&relative)
-        );
-    }
-
-    for node in graph
-        .get("nodes")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("graph nodes must be an array"))?
-    {
-        let kind = node.get("kind").and_then(Value::as_str).unwrap_or("");
-        let id = node.get("id").and_then(Value::as_str).unwrap_or("");
-        if kind != "issue" {
-            bail!(
-                "Unsupported graph node kind '{}' in {}",
-                kind,
-                display_state_path(&relative)
-            );
-        }
-        let issue_id = parse_issue_id(id).with_context(|| {
-            format!(
-                "Invalid graph node id '{}' in {}",
-                id,
-                display_state_path(&relative)
-            )
-        })?;
-        if !issue_ids.contains(&issue_id) {
-            bail!("Graph node {} references a missing issue record", id);
-        }
-    }
-
-    let mut relations = Vec::new();
-    for edge in graph
-        .get("edges")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("graph edges must be an array"))?
-    {
-        for field in ["source_kind", "target_kind"] {
-            if edge.get(field).and_then(Value::as_str) != Some("issue") {
-                bail!(
-                    "Graph edge has unsupported {} in {}",
-                    field,
-                    display_state_path(&relative)
-                );
-            }
-        }
-        let source = graph_edge_issue_id(edge, "source_id", issue_ids, &relative)?;
-        let target = graph_edge_issue_id(edge, "target_id", issue_ids, &relative)?;
-        let relation_type = edge.get("type").and_then(Value::as_str).ok_or_else(|| {
-            anyhow!(
-                "Graph edge is missing type in {}",
-                display_state_path(&relative)
-            )
-        })?;
-        let metadata_source = edge
-            .get("metadata")
-            .and_then(|metadata| metadata.get("source"))
-            .and_then(Value::as_str);
-        if metadata_source == Some("relation") {
-            relations.push((source, target, relation_type.to_string()));
-        }
-    }
-
-    Ok(relations)
-}
-
-fn graph_edge_issue_id(
-    edge: &Value,
-    field: &str,
-    issue_ids: &BTreeSet<i64>,
-    relative: &Path,
-) -> Result<i64> {
-    let id = edge.get(field).and_then(Value::as_str).unwrap_or("");
-    let issue_id = parse_issue_id(id).with_context(|| {
-        format!(
-            "Invalid graph edge {} '{}' in {}",
-            field,
-            id,
-            display_state_path(relative)
-        )
-    })?;
-    if !issue_ids.contains(&issue_id) {
-        bail!("Graph edge {} references a missing issue record", id);
-    }
-    Ok(issue_id)
 }
 
 fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result<()> {
@@ -492,7 +362,20 @@ fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, V
                     break;
                 }
                 let item = lines.next().unwrap().trim_start_matches("- ");
-                array.push(parse_yaml_value(item, relative)?);
+                if item.contains(": ") {
+                    let mut object = serde_json::Map::new();
+                    parse_yaml_object_field(item, &mut object, relative)?;
+                    while let Some(next) = lines.peek() {
+                        if !next.starts_with("  ") {
+                            break;
+                        }
+                        let nested = lines.next().unwrap().trim_start();
+                        parse_yaml_object_field(nested, &mut object, relative)?;
+                    }
+                    array.push(Value::Object(object));
+                } else {
+                    array.push(parse_yaml_value(item, relative)?);
+                }
             }
             values.insert(key, Value::Array(array));
         } else {
@@ -500,6 +383,31 @@ fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, V
         }
     }
     Ok(values)
+}
+
+fn parse_yaml_object_field(
+    field: &str,
+    object: &mut serde_json::Map<String, Value>,
+    relative: &Path,
+) -> Result<()> {
+    let (key, value) = field.split_once(": ").ok_or_else(|| {
+        anyhow!(
+            "Invalid object front matter field in {}: {}",
+            display_state_path(relative),
+            field
+        )
+    })?;
+    if object
+        .insert(key.to_string(), parse_yaml_value(value, relative)?)
+        .is_some()
+    {
+        bail!(
+            "Duplicate object front matter key '{}' in {}",
+            key,
+            display_state_path(relative)
+        );
+    }
+    Ok(())
 }
 
 fn parse_yaml_value(value: &str, relative: &Path) -> Result<Value> {
@@ -614,6 +522,88 @@ fn issue_id_array(
         .collect()
 }
 
+fn typed_links(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    source_id: i64,
+    relative: &Path,
+) -> Result<Vec<(i64, i64, String)>> {
+    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
+        anyhow!(
+            "Missing array front matter key '{}' in {}",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+
+    let mut links = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in values {
+        let object = value.as_object().ok_or_else(|| {
+            anyhow!(
+                "Array '{}' in {} must contain link objects",
+                key,
+                display_state_path(relative)
+            )
+        })?;
+        let target_kind = object
+            .get("target_kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Link in {} is missing target_kind",
+                    display_state_path(relative)
+                )
+            })?;
+        if target_kind != "issue" {
+            bail!(
+                "Link in {} has unsupported target_kind '{}'; expected issue",
+                display_state_path(relative),
+                target_kind
+            );
+        }
+        let target = object
+            .get("target_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Link in {} is missing target_id",
+                    display_state_path(relative)
+                )
+            })?;
+        let target_id = parse_issue_id(target).with_context(|| {
+            format!(
+                "Invalid link target_id '{}' in {}",
+                target,
+                display_state_path(relative)
+            )
+        })?;
+        let relation_type = object
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("Link in {} is missing type", display_state_path(relative)))?;
+        validate_relation_type(relation_type).with_context(|| {
+            format!(
+                "Invalid link relation type '{}' in {}",
+                relation_type,
+                display_state_path(relative)
+            )
+        })?;
+        let link = (source_id, target_id, relation_type.to_string());
+        if !seen.insert(link.clone()) {
+            bail!(
+                "Duplicate link {} -> {} ({}) in {}",
+                issue_record_id(source_id),
+                issue_record_id(target_id),
+                relation_type,
+                display_state_path(relative)
+            );
+        }
+        links.push(link);
+    }
+    Ok(links)
+}
+
 fn optional_issue_id(
     values: &BTreeMap<String, Value>,
     key: &str,
@@ -667,6 +657,14 @@ fn parse_issue_id(id: &str) -> Result<i64> {
     Ok(number)
 }
 
+fn issue_record_id(id: i64) -> String {
+    format!("ISS-{id:04}")
+}
+
+fn issue_record_path(id: i64) -> PathBuf {
+    PathBuf::from("issues").join(format!("{}.md", issue_record_id(id)))
+}
+
 fn db_priority(priority: &str) -> Result<String> {
     match priority {
         "P0" => Ok("critical".to_string()),
@@ -678,44 +676,11 @@ fn db_priority(priority: &str) -> Result<String> {
     }
 }
 
-fn state_relative_path(path: &str) -> Result<PathBuf> {
-    let relative = path
-        .strip_prefix(".atelier-state/")
-        .ok_or_else(|| anyhow!("Manifest path '{}' must start with .atelier-state/", path))?;
-    let path = PathBuf::from(relative);
-    if path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
-    {
-        bail!(
-            "Manifest path '{}' must stay within .atelier-state/",
-            path.display()
-        );
-    }
-    Ok(path)
-}
-
 fn display_state_path(relative_path: &Path) -> String {
     format!(
         ".atelier-state/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-trait ManifestRecordExt {
-    fn id(&self) -> String;
-}
-
-impl ManifestRecordExt for ManifestRecord {
-    fn id(&self) -> String {
-        self.id.clone().unwrap_or_else(|| "<none>".to_string())
-    }
 }
 
 #[cfg(test)]
@@ -769,10 +734,8 @@ mod tests {
             fs::read_to_string(state_dir.join("issues/ISS-0002.md")).unwrap(),
             fs::read_to_string(rebuilt_state_dir.join("issues/ISS-0002.md")).unwrap()
         );
-        assert_eq!(
-            fs::read_to_string(state_dir.join("graph.json")).unwrap(),
-            fs::read_to_string(rebuilt_state_dir.join("graph.json")).unwrap()
-        );
+        assert!(!rebuilt_state_dir.join("graph.json").exists());
+        assert_eq!(rebuilt.get_typed_relations(parent).unwrap().len(), 1);
     }
 
     #[test]
@@ -796,52 +759,114 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_reports_missing_manifest_record_file() {
+    fn rebuild_succeeds_without_manifest_or_graph() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Missing", None, "medium").unwrap();
+        db.create_issue("Standalone", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        fs::remove_file(state_dir.join("issues/ISS-0001.md")).unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Missing projection file .atelier-state/issues/ISS-0001.md"));
+        assert!(!state_dir.join("manifest.json").exists());
+        assert!(!state_dir.join("graph.json").exists());
+        run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap();
     }
 
     #[test]
-    fn rebuild_reports_hash_mismatch() {
+    fn rebuild_reports_path_id_mismatch() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Corrupt", None, "medium").unwrap();
+        db.create_issue("Mismatch", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        fs::write(
+        fs::rename(
             state_dir.join("issues/ISS-0001.md"),
-            "not the bytes in manifest\n",
+            state_dir.join("issues/ISS-0002.md"),
         )
         .unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Content hash mismatch for .atelier-state/issues/ISS-0001.md"));
+            .contains("does not match canonical path .atelier-state/issues/ISS-0001.md"));
     }
 
     #[test]
-    fn rebuild_rejects_future_manifest_format() {
+    fn rebuild_reports_malformed_front_matter() {
         let (db, dir) = setup_test_db();
-        db.create_issue("Future", None, "medium").unwrap();
+        db.create_issue("Malformed", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier-state");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        let manifest_path = state_dir.join("manifest.json");
-        let manifest = fs::read_to_string(&manifest_path)
-            .unwrap()
-            .replace("\"format_version\": 1", "\"format_version\": 99");
-        fs::write(manifest_path, manifest).unwrap();
+        fs::write(state_dir.join("issues/ISS-0001.md"), "not front matter\n").unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error
             .to_string()
-            .contains("Unsupported canonical export format_version 99"));
+            .contains("Missing YAML front matter in .atelier-state/issues/ISS-0001.md"));
+    }
+
+    #[test]
+    fn rebuild_reports_schema_mismatch() {
+        let (db, dir) = setup_test_db();
+        db.create_issue("Wrong schema", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        let path = state_dir.join("issues/ISS-0001.md");
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("schema: \"atelier.issue\"", "schema: \"atelier.graph\"");
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Unsupported schema 'atelier.graph'"));
+    }
+
+    #[test]
+    fn rebuild_reports_dangling_dependency_and_duplicate_link() {
+        let (db, dir) = setup_test_db();
+        db.create_issue("Source", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let path = state_dir.join("issues/ISS-0001.md");
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("depends_on: []", "depends_on:\n- \"ISS-9999\"");
+        fs::write(&path, text).unwrap();
+        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Issue ISS-0001 has depends_on reference to missing issue ISS-9999"));
+
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("depends_on:\n- \"ISS-9999\"", "depends_on: []")
+            .replace(
+                "links: []",
+                "links:\n- target_id: \"ISS-0001\"\n  target_kind: \"issue\"\n  type: \"related\"\n- target_id: \"ISS-0001\"\n  target_kind: \"issue\"\n  type: \"related\"",
+            );
+        fs::write(&path, text).unwrap();
+        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Duplicate link ISS-0001 -> ISS-0001 (related)"));
+    }
+
+    #[test]
+    fn rebuild_reports_invalid_relation_type() {
+        let (db, dir) = setup_test_db();
+        let first = db.create_issue("First", None, "medium").unwrap();
+        let second = db.create_issue("Second", None, "medium").unwrap();
+        db.add_typed_relation(first, second, "related").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let path = state_dir.join("issues/ISS-0001.md");
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("type: \"related\"", "type: \"\"");
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        assert!(error.to_string().contains("Invalid link relation type ''"));
     }
 }

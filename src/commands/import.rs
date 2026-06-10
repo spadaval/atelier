@@ -709,8 +709,8 @@ mod tests {
 
         run_beads_jsonl(&db, &import_path, &state_dir, true).unwrap();
 
-        assert!(state_dir.join("manifest.json").exists());
-        assert!(state_dir.join("graph.json").exists());
+        assert!(!state_dir.join("manifest.json").exists());
+        assert!(!state_dir.join("graph.json").exists());
         assert!(state_dir.join("issues").join("ISS-0001.md").exists());
     }
 
