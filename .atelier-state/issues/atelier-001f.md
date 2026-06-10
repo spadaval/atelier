@@ -15,6 +15,7 @@ evidence_required: []
 id: "atelier-001f"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "beads:type:validation"
 - "cli"
 - "validation"
@@ -23,9 +24,9 @@ parent: "atelier-001a"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate streamlined CLI surface"
-updated_at: "2026-06-09T17:32:21.543651222+00:00"
+updated_at: "2026-06-10T02:51:27.254204467+00:00"
 ---
 
 Validate the streamlined public CLI surface after cleanup implementation lands.

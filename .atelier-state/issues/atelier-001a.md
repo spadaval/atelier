@@ -22,9 +22,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "CLI surface realignment and legacy command pruning"
-updated_at: "2026-06-09T17:30:35.503542240+00:00"
+updated_at: "2026-06-10T02:51:33.228149103+00:00"
 ---
 
 Align the public Atelier CLI with the agent-native product thesis before adding more commands. This epic prunes inherited or low-fit Chainlink surface area and establishes a clear tiering policy for core commands, compatibility aliases, integrations, and removed behavior.
