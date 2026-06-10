@@ -12,6 +12,7 @@ id: "atelier-3mpl"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "markdown"
 - "record-store"
 - "storage"
@@ -20,9 +21,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Introduce RecordStore for canonical issue Markdown"
-updated_at: "2026-06-10T03:50:32.442728503+00:00"
+updated_at: "2026-06-10T18:59:54.262718968+00:00"
 ---
 
 Build the first RecordStore slice for canonical Markdown records.

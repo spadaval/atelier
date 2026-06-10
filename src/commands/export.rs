@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue};
+use crate::record_store::{self, CanonicalIssueRecord, FIRST_CLASS_RECORD_KINDS};
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportedIssue {
@@ -147,10 +148,10 @@ fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<Pro
             bytes: render_issue_record(db, issue)?.into_bytes(),
         });
     }
-    for kind in ["mission", "milestone", "plan", "evidence"] {
-        for record in db.list_records(kind, None)? {
+    for spec in FIRST_CLASS_RECORD_KINDS {
+        for record in db.list_records(spec.kind, None)? {
             files.push(ProjectionFile {
-                path: record_path(kind, &record.id),
+                path: record_store::canonical_record_path(spec, &record.id)?,
                 bytes: render_domain_record(db, &record)?.into_bytes(),
             });
         }
@@ -312,41 +313,15 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     depends_on.sort();
     links.sort();
 
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_array(&mut output, "acceptance", &[])?;
-    write_yaml_array(&mut output, "blocks", &blocks)?;
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&issue.created_at.to_rfc3339()),
-    )?;
-    write_yaml_array(&mut output, "depends_on", &depends_on)?;
-    write_yaml_array(&mut output, "evidence_required", &[])?;
-    write_yaml_scalar(&mut output, "id", Some(&issue.id))?;
-    write_yaml_scalar(&mut output, "issue_type", Some(&issue.issue_type))?;
-    write_yaml_array(&mut output, "labels", &labels)?;
-    write_yaml_links(&mut output, "links", &links)?;
-    let parent = issue.parent_id.clone();
-    write_yaml_scalar(&mut output, "parent", parent.as_deref())?;
-    write_yaml_scalar(
-        &mut output,
-        "priority",
-        Some(&canonical_priority(&issue.priority)),
-    )?;
-    write_yaml_scalar(&mut output, "schema", Some("atelier.issue"))?;
-    output.push_str("schema_version: 1\n");
-    write_yaml_scalar(&mut output, "status", Some(&issue.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&issue.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&issue.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&normalize_body(issue.description.as_deref().unwrap_or("")));
-    output.push('\n');
-    Ok(output)
+    record_store::render_issue_record(&CanonicalIssueRecord {
+        issue: issue.clone(),
+        labels,
+        blocks,
+        depends_on,
+        acceptance: Vec::new(),
+        evidence_required: Vec::new(),
+        links,
+    })
 }
 
 fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> {
@@ -382,9 +357,12 @@ fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> 
     write_yaml_scalar(
         &mut output,
         "schema",
-        Some(&format!("atelier.{}", record.kind)),
+        Some(record_store::canonical_record_kind(&record.kind)?.schema),
     )?;
-    output.push_str("schema_version: 1\n");
+    output.push_str(&format!(
+        "schema_version: {}\n",
+        record_store::canonical_record_kind(&record.kind)?.schema_version
+    ));
     write_yaml_scalar(&mut output, "status", Some(&record.status))?;
     write_yaml_scalar(&mut output, "title", Some(&record.title))?;
     write_yaml_scalar(
@@ -398,18 +376,11 @@ fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> 
     Ok(output)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-struct IssueLink {
-    relation_type: String,
-    target_kind: String,
-    target_id: String,
-}
-
-fn issue_links(db: &Database, issue_id: &str) -> Result<Vec<IssueLink>> {
+fn issue_links(db: &Database, issue_id: &str) -> Result<Vec<record_store::IssueLink>> {
     let mut links = Vec::new();
     for relation in db.get_typed_relations(issue_id)? {
         if relation.issue_id_1 == issue_id {
-            links.push(IssueLink {
+            links.push(record_store::IssueLink {
                 relation_type: relation.relation_type,
                 target_kind: "issue".to_string(),
                 target_id: relation.issue_id_2,
@@ -424,18 +395,7 @@ fn issue_ids(ids: Vec<String>) -> Vec<String> {
 }
 
 fn issue_record_path(id: &str) -> PathBuf {
-    PathBuf::from("issues").join(format!("{}.md", id))
-}
-
-fn record_path(kind: &str, id: &str) -> PathBuf {
-    let dir = match kind {
-        "mission" => "missions",
-        "milestone" => "milestones",
-        "plan" => "plans",
-        "evidence" => "evidence",
-        _ => kind,
-    };
-    PathBuf::from(dir).join(format!("{}.md", id))
+    record_store::issue_record_path(id)
 }
 
 fn display_state_path(relative_path: &Path) -> String {
@@ -443,16 +403,6 @@ fn display_state_path(relative_path: &Path) -> String {
         ".atelier-state/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
-}
-
-fn canonical_priority(priority: &str) -> String {
-    match priority {
-        "critical" => "P0".to_string(),
-        "high" => "P1".to_string(),
-        "medium" => "P2".to_string(),
-        "low" => "P3".to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn normalize_body(body: &str) -> String {
@@ -471,42 +421,6 @@ fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Res
             output.push_str(key);
             output.push_str(": null\n");
         }
-    }
-    Ok(())
-}
-
-fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result<()> {
-    output.push_str(key);
-    if values.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for value in values {
-        output.push_str("- ");
-        output.push_str(&serde_json::to_string(value)?);
-        output.push('\n');
-    }
-    Ok(())
-}
-
-fn write_yaml_links(output: &mut String, key: &str, links: &[IssueLink]) -> Result<()> {
-    output.push_str(key);
-    if links.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for link in links {
-        output.push_str("- target_id: ");
-        output.push_str(&serde_json::to_string(&link.target_id)?);
-        output.push('\n');
-        output.push_str("  target_kind: ");
-        output.push_str(&serde_json::to_string(&link.target_kind)?);
-        output.push('\n');
-        output.push_str("  type: ");
-        output.push_str(&serde_json::to_string(&link.relation_type)?);
-        output.push('\n');
     }
     Ok(())
 }

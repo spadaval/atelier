@@ -126,7 +126,7 @@ Issue front matter adds:
 | --- | --- | --- |
 | `priority` | string | Stable priority value, such as `P1`. |
 | `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, `spike`, or `decision`. |
-| `parent` | string or null | Parent mission, milestone, or issue ID. |
+| `parent` | string or null | Parent issue ID in the current canonical issue schema. Typed mission and milestone parent targets are reserved for the expanded record graph. |
 | `blocks` | array | Issue IDs this issue blocks, sorted lexically. |
 | `depends_on` | array | Issue IDs this issue depends on, sorted lexically. |
 | `acceptance` | array | Acceptance criteria strings in user-defined order. |
@@ -225,6 +225,13 @@ If any unexpected canonical file exists under `.atelier-state/`, `export
 --check` must report a stale or untracked projection error. `manifest.json` and
 `graph.json` are not canonical source files and canonical export removes stale
 copies when it writes the projection.
+
+The staged implementation uses a registered first-class record contract for
+non-issue records. Each canonical kind declares its record kind, schema,
+schema version, and directory once, and export/rebuild consume that contract for
+path mapping and schema validation. `workflow_validator` is a registered future
+record kind but remains non-canonical until a validator-result record slice
+defines its durable layout.
 
 ## Mutating Command Rollout
 

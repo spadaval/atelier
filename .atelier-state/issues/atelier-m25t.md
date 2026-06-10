@@ -9,6 +9,7 @@ evidence_required: []
 id: "atelier-m25t"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "domain-model"
 - "evidence"
 - "mission"
@@ -19,9 +20,9 @@ parent: "atelier-zd4d"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Extend Markdown-first storage to first-class records"
-updated_at: "2026-06-10T03:51:07.274706851+00:00"
+updated_at: "2026-06-10T18:59:58.882617064+00:00"
 ---
 
 Prepare the Markdown-first storage boundary for first-class missions, milestones, plans, evidence, and workflow validator records.

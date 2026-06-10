@@ -18,6 +18,7 @@ use std::path::Path;
 
 use crate::models::Issue;
 use crate::record_id;
+use crate::record_store;
 
 const SCHEMA_VERSION: i32 = 16;
 
@@ -28,15 +29,6 @@ pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &[
     "assumption", // "shares underlying assumption" — concept clustering
     "falsifies",  // "this evidence falsifies that assumption"
     "derived",    // "this conclusion was derived from that assumption"
-];
-
-pub const VALID_RECORD_KINDS: &[&str] = &[
-    "issue",
-    "mission",
-    "milestone",
-    "plan",
-    "evidence",
-    "workflow_validator",
 ];
 
 pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
@@ -134,15 +126,7 @@ pub fn validate_relation_type(relation_type: &str) -> Result<()> {
 }
 
 pub fn validate_record_kind(kind: &str) -> Result<()> {
-    if VALID_RECORD_KINDS.contains(&kind) {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "Invalid record kind '{}'. Valid values: {}",
-            kind,
-            VALID_RECORD_KINDS.join(", ")
-        )
-    }
+    record_store::validate_record_kind(kind)
 }
 
 pub fn validate_link_type(relation_type: &str) -> Result<()> {

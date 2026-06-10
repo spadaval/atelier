@@ -3356,6 +3356,17 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed: {stderr}");
 
+    let mission_path = dir
+        .path()
+        .join(".atelier-state")
+        .join("missions")
+        .join(format!("{mission_id}.md"));
+    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
+    assert!(mission_markdown.contains("schema: \"atelier.mission\""));
+    assert!(mission_markdown.contains("schema_version: 1"));
+    assert!(mission_markdown.contains("data: "));
+    assert!(mission_markdown.contains("links:"));
+
     std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
@@ -3387,6 +3398,39 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert_eq!(view["plans"].as_array().unwrap().len(), 1);
     assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn test_first_class_record_rebuild_rejects_schema_drift() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["--json", "mission", "create", "Guard schema"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission = json_value(&mission_out);
+    let mission_id = mission["id"].as_str().unwrap();
+    let mission_path = dir
+        .path()
+        .join(".atelier-state")
+        .join("missions")
+        .join(format!("{mission_id}.md"));
+
+    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
+    std::fs::write(
+        &mission_path,
+        mission_markdown.replace("schema: \"atelier.mission\"", "schema: \"atelier.issue\""),
+    )
+    .unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(!success, "rebuild should reject mission schema drift");
+    assert!(
+        stderr.contains("Unsupported schema 'atelier.issue'")
+            && stderr.contains("expected atelier.mission"),
+        "unexpected rebuild error: {stderr}"
+    );
 }
 
 #[test]

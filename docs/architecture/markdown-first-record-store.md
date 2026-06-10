@@ -42,6 +42,22 @@ checks for local file collisions across all record kinds, writes the Markdown
 record, and then indexes it. The allocator must not rely on a SQLite sequence as
 the source of canonical identity.
 
+During the staged migration, first-class non-issue record kinds are registered
+centrally in code with their canonical directory, schema, and schema version.
+Export, rebuild, and link validation must consume that registry instead of
+carrying command-local record kind lists. The registered canonical kinds are
+missions, milestone checkpoint records, plans, and evidence; workflow validator
+records are recognized as a future kind but do not yet have a canonical
+`.atelier-state/` directory.
+
+The first issue-focused `RecordStore` slice is implemented as a testable file
+API for `.atelier-state/issues/*.md`. It owns issue record discovery, canonical
+path validation, schema and front matter parsing, deterministic rendering, ID
+collision checks across canonical directories, and atomic issue file replacement.
+During the remaining migration, existing commands may still mutate SQLite first,
+but canonical issue export and rebuild should route issue Markdown rendering and
+loading through `RecordStore`.
+
 `atelier export` remains a compatibility and repair command during migration.
 Its target role is to re-render canonical records, remove obsolete derived files,
 and check deterministic output, not to be the normal path that makes a mutation

@@ -5,6 +5,7 @@ use rusqlite::params;
 use super::{parse_datetime, validate_link_type, validate_record_kind, Database};
 use crate::models::{DomainRecord, RecordLink};
 use crate::record_id;
+use crate::record_store;
 
 impl Database {
     pub fn create_record(
@@ -15,7 +16,7 @@ impl Database {
         body: Option<&str>,
         data_json: &str,
     ) -> Result<String> {
-        validate_record_kind(kind)?;
+        record_store::validate_canonical_record_kind(kind)?;
         let _: serde_json::Value = serde_json::from_str(data_json)?;
         let id = record_id::allocate_issue_id(|candidate| Ok(self.record_exists(candidate)?))?;
         let now = Utc::now().to_rfc3339();
@@ -28,7 +29,7 @@ impl Database {
     }
 
     pub fn insert_record_rebuild(&self, record: &DomainRecord) -> Result<()> {
-        validate_record_kind(&record.kind)?;
+        record_store::validate_canonical_record_kind(&record.kind)?;
         let _: serde_json::Value = serde_json::from_str(&record.data_json)?;
         self.conn.execute(
             "INSERT INTO records (id, kind, title, status, body, data_json, created_at, updated_at)
@@ -56,7 +57,7 @@ impl Database {
         body: Option<&str>,
         data_json: Option<&str>,
     ) -> Result<bool> {
-        validate_record_kind(kind)?;
+        record_store::validate_canonical_record_kind(kind)?;
         if let Some(data_json) = data_json {
             let _: serde_json::Value = serde_json::from_str(data_json)?;
         }

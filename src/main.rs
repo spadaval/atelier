@@ -7,6 +7,7 @@ mod lock_check;
 mod locks;
 mod models;
 mod record_id;
+mod record_store;
 mod sync;
 mod token_usage;
 mod utils;

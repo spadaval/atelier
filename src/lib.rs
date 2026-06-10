@@ -9,6 +9,7 @@ pub mod lock_check;
 pub mod locks;
 pub mod models;
 pub mod record_id;
+pub mod record_store;
 pub mod sync;
 pub mod token_usage;
 pub mod utils;
