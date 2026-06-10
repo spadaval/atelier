@@ -75,7 +75,7 @@ impl Database {
     pub fn list_blocked_issues(&self) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             JOIN dependencies d ON i.id = d.blocked_id
             JOIN issues blocker ON d.blocker_id = blocker.id
@@ -94,7 +94,7 @@ impl Database {
     pub fn list_ready_issues(&self) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             WHERE i.status = 'open'
             AND NOT EXISTS (

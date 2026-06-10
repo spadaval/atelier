@@ -181,9 +181,6 @@ fn import_beads_jsonl(db: &Database, input_path: &Path) -> Result<BeadsImportRep
 
             let issue = imported_issue(record, id, &mut lossy_fields)?;
             db.insert_issue_import(&issue)?;
-            if let Some(issue_type) = &record.issue_type {
-                db.add_label(id, issue_type)?;
-            }
             for label in record.labels.as_deref().unwrap_or_default() {
                 db.add_label(id, label)?;
             }
@@ -291,6 +288,10 @@ fn imported_issue(
         title: record.title.clone(),
         description: Some(imported_description(record)),
         status,
+        issue_type: record
+            .issue_type
+            .clone()
+            .unwrap_or_else(|| "task".to_string()),
         priority: import_priority(record.priority, &record.id, lossy_fields),
         parent_id: None,
         created_at,
@@ -454,14 +455,20 @@ fn lossy(source_id: &str, field: impl Into<String>, handling: impl Into<String>)
 
 fn import_issue(db: &Database, issue: &ExportedIssue, parent_id: Option<i64>) -> Result<i64> {
     let id = if let Some(pid) = parent_id {
-        db.create_subissue(
+        db.create_subissue_with_type(
             pid,
             &issue.title,
             issue.description.as_deref(),
             &issue.priority,
+            &issue.issue_type,
         )?
     } else {
-        db.create_issue(&issue.title, issue.description.as_deref(), &issue.priority)?
+        db.create_issue_with_type(
+            &issue.title,
+            issue.description.as_deref(),
+            &issue.priority,
+            &issue.issue_type,
+        )?
     };
 
     // Add labels
@@ -517,6 +524,7 @@ mod tests {
             title: title.to_string(),
             description: None,
             status: status.to_string(),
+            issue_type: "task".to_string(),
             priority: "medium".to_string(),
             parent_id,
             labels: vec![],
@@ -576,6 +584,24 @@ mod tests {
         let issues = db.list_issues(Some("all"), None, None).unwrap();
         let labels = db.get_labels(issues[0].id).unwrap();
         assert!(labels.contains(&"bug".to_string()));
+        assert_eq!(issues[0].issue_type, "task");
+    }
+
+    #[test]
+    fn test_import_preserves_issue_type_separate_from_labels() {
+        let (db, dir) = setup_test_db();
+        let mut issue = make_issue(1, "Typed", None, "open");
+        issue.issue_type = "validation".to_string();
+        issue.labels = vec!["epic".to_string()];
+        let json = create_test_export(vec![issue]);
+        let import_path = dir.path().join("import.json");
+        fs::write(&import_path, json).unwrap();
+
+        run_json(&db, &import_path).unwrap();
+
+        let issue = db.get_issue(1).unwrap().unwrap();
+        assert_eq!(issue.issue_type, "validation");
+        assert_eq!(db.get_labels(issue.id).unwrap(), vec!["epic".to_string()]);
     }
 
     #[test]
@@ -632,8 +658,11 @@ mod tests {
         assert_eq!(db.get_blockers(3).unwrap(), vec![2]);
         assert_eq!(db.get_blocking(2).unwrap(), vec![3]);
 
+        assert_eq!(db.get_issue(1).unwrap().unwrap().issue_type, "epic");
+        assert_eq!(db.get_issue(2).unwrap().unwrap().issue_type, "feature");
+        assert_eq!(db.get_issue(3).unwrap().unwrap().issue_type, "task");
         let labels = db.get_labels(3).unwrap();
-        assert!(labels.contains(&"task".to_string()));
+        assert!(!labels.contains(&"task".to_string()));
         assert!(!labels.iter().any(|label| label.starts_with("beads:")));
         assert!(!db
             .get_issue(3)

@@ -60,7 +60,7 @@ impl Database {
     pub fn get_related_issues(&self, issue_id: i64) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             WHERE i.id IN (
                 SELECT issue_id_2 FROM relations WHERE issue_id_1 = ?1
@@ -111,7 +111,7 @@ impl Database {
     ) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             WHERE i.id IN (
                 SELECT issue_id_2 FROM relations WHERE issue_id_1 = ?1 AND relation_type = ?2

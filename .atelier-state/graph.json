@@ -124,6 +124,16 @@
       "metadata": {
         "source": "front-matter"
       },
+      "source_id": "ISS-0005",
+      "source_kind": "issue",
+      "target_id": "ISS-0074",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
       "source_id": "ISS-0006",
       "source_kind": "issue",
       "target_id": "ISS-0003",
@@ -1499,6 +1509,156 @@
       "target_id": "ISS-0060",
       "target_kind": "issue",
       "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0074",
+      "source_kind": "issue",
+      "target_id": "ISS-0019",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0005",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0030",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0059",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0066",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0076",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0075",
+      "source_kind": "issue",
+      "target_id": "ISS-0079",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0076",
+      "source_kind": "issue",
+      "target_id": "ISS-0019",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0077",
+      "source_kind": "issue",
+      "target_id": "ISS-0075",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0077",
+      "source_kind": "issue",
+      "target_id": "ISS-0076",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0078",
+      "source_kind": "issue",
+      "target_id": "ISS-0075",
+      "target_kind": "issue",
+      "type": "blocks"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0078",
+      "source_kind": "issue",
+      "target_id": "ISS-0076",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0079",
+      "source_kind": "issue",
+      "target_id": "ISS-0076",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0080",
+      "source_kind": "issue",
+      "target_id": "ISS-0076",
+      "target_kind": "issue",
+      "type": "parent"
+    },
+    {
+      "metadata": {
+        "source": "front-matter"
+      },
+      "source_id": "ISS-0080",
+      "source_kind": "issue",
+      "target_id": "ISS-0079",
+      "target_kind": "issue",
+      "type": "blocks"
     }
   ],
   "nodes": [
@@ -1918,6 +2078,48 @@
     },
     {
       "id": "ISS-0070",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0074",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0075",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0076",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0077",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0078",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0079",
+      "kind": "issue",
+      "schema": "atelier.issue",
+      "schema_version": 1
+    },
+    {
+      "id": "ISS-0080",
       "kind": "issue",
       "schema": "atelier.issue",
       "schema_version": 1

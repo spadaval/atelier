@@ -13,16 +13,16 @@
       "role": "canonical",
       "schema": "atelier.graph",
       "schema_version": 1,
-      "sha256": "ff81e1c34090dd81eb2cb5ce27e0dd7e0eb1f04fd2d3597f338c22670cebf6bc"
+      "sha256": "5a1c8d17da21530fab66500ed30cceea1d58e2a1a1c0205206efbb92e7eb8b33"
     },
     {
-      "id": "ISS-0001",
+      "id": "atelier-z1p8",
       "kind": "issue",
-      "path": ".atelier-state/issues/ISS-0001.md",
+      "path": ".atelier-state/issues/atelier-z1p8.md",
       "role": "canonical",
       "schema": "atelier.issue",
       "schema_version": 1,
-      "sha256": "c3f32cafd4fb1650553b65fa28a17959e4a9e315b38e78b5df33a6be04b0ede6"
+      "sha256": "68ae73fe6d836b66c742663a4e298834b04f7adb0da492f665f17dd60498392d"
     }
   ],
   "schema": "atelier.manifest",

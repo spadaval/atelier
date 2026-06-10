@@ -3,21 +3,21 @@ acceptance:
 - Canonical layout is documented.
 - Manifest and graph examples exist.
 blocks:
-- ISS-0002
+- atelier-x2b4
 created_at: "2026-06-08T00:00:00Z"
 depends_on: []
 evidence_required:
 - Markdown diff whitespace check passes.
-id: ISS-0001
+id: atelier-z1p8
 issue_type: task
 labels:
 - projection
 - storage
 links:
-- target_id: EV-0001
+- target_id: atelier-n8da
   target_kind: evidence
   type: evidenced_by
-parent: MIS-0001
+parent: atelier-k7mq
 priority: P1
 schema: atelier.issue
 schema_version: 1

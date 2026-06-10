@@ -248,6 +248,9 @@ fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<Canoni
     let blocks = issue_id_array(&front_matter, "blocks", &relative)?;
     let depends_on = issue_id_array(&front_matter, "depends_on", &relative)?;
     let status = require_scalar(&front_matter, "status", &relative)?;
+    let issue_type = require_scalar(&front_matter, "issue_type", &relative)?;
+    crate::db::validate_issue_type(&issue_type)
+        .with_context(|| format!("Invalid issue_type in {}", display_state_path(&relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", &relative)?;
     let description = if body.is_empty() {
         None
@@ -261,6 +264,7 @@ fn load_issue_record(state_dir: &Path, record: &ManifestRecord) -> Result<Canoni
             title: require_scalar(&front_matter, "title", &relative)?,
             description,
             status: status.clone(),
+            issue_type,
             priority: db_priority(&require_scalar(&front_matter, "priority", &relative)?)
                 .with_context(|| {
                     format!("Invalid priority in {}", display_state_path(&relative))

@@ -15,6 +15,8 @@ pub struct ExportedIssue {
     pub title: String,
     pub description: Option<String>,
     pub status: String,
+    #[serde(default = "default_issue_type")]
+    pub issue_type: String,
     pub priority: String,
     pub parent_id: Option<i64>,
     pub labels: Vec<String>,
@@ -34,6 +36,10 @@ pub struct ExportedComment {
 
 fn default_comment_kind() -> String {
     "note".to_string()
+}
+
+fn default_issue_type() -> String {
+    "task".to_string()
 }
 
 #[derive(Serialize, Deserialize)]
@@ -58,6 +64,7 @@ fn export_issue(db: &Database, issue: &Issue) -> Result<ExportedIssue> {
         title: issue.title.clone(),
         description: issue.description.clone(),
         status: issue.status.clone(),
+        issue_type: issue.issue_type.clone(),
         priority: issue.priority.clone(),
         parent_id: issue.parent_id,
         labels,
@@ -267,7 +274,7 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     write_yaml_array(&mut output, "depends_on", &depends_on)?;
     write_yaml_array(&mut output, "evidence_required", &[])?;
     write_yaml_scalar(&mut output, "id", Some(&issue_record_id(issue.id)))?;
-    write_yaml_scalar(&mut output, "issue_type", Some("task"))?;
+    write_yaml_scalar(&mut output, "issue_type", Some(&issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     write_yaml_array(&mut output, "links", &[])?;
     let parent = issue.parent_id.map(issue_record_id);
@@ -763,6 +770,7 @@ mod tests {
                 title: "Test".to_string(),
                 description: Some("Desc".to_string()),
                 status: "open".to_string(),
+                issue_type: "task".to_string(),
                 priority: "medium".to_string(),
                 parent_id: None,
                 labels: vec!["bug".to_string()],
@@ -823,6 +831,23 @@ mod tests {
         assert_ne!(first_issue, second_issue);
         assert!(second_issue.contains("title: \"Changed title\""));
         assert!(second_issue.ends_with("Changed body\n"));
+    }
+
+    #[test]
+    fn test_canonical_issue_type_is_explicit_not_label_derived() {
+        let (db, _dir) = setup_test_db();
+        let id = db
+            .create_issue_with_type("Validate taxonomy", None, "medium", "validation")
+            .unwrap();
+        db.add_label(id, "epic").unwrap();
+        let issue = db.get_issue(id).unwrap().unwrap();
+
+        let exported = export_issue(&db, &issue).unwrap();
+        let issue_text = render_issue_record(&db, &issue).unwrap();
+
+        assert_eq!(exported.issue_type, "validation");
+        assert!(issue_text.contains("issue_type: \"validation\"\n"));
+        assert!(issue_text.contains("labels:\n- \"epic\"\n"));
     }
 
     #[test]

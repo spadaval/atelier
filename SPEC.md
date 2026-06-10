@@ -81,15 +81,15 @@ Atelier should implement this storage contract:
 .atelier-state/
   manifest.json
   issues/
-    ISS-0001.md
+    atelier-z1p8.md
   missions/
-    MIS-0001.md
+    atelier-k7mq.md
   milestones/
-    MS-0001.md
+    atelier-4x9t.md
   plans/
-    PLAN-0001.md
+    atelier-p3v6.md
   evidence/
-    EV-0001.md
+    atelier-n8da.md
   graph.json
   mission-control.json
 ```
@@ -105,6 +105,24 @@ The exact layout can change, but the principles should not:
 
 The existing Chainlink export/import system is backup-oriented. Atelier needs a
 canonical projection/rebuild system instead.
+
+## Record Identity
+
+Atelier uses one canonical, human-facing ID for every durable record:
+
+```text
+<project-slug>-<random-base36>
+```
+
+For this repository, examples are `atelier-z1p8`, `atelier-k7mq`, and
+`atelier-4x9t`. Record kind is metadata, not part of identity, so issues,
+missions, milestones, plans, and evidence share the same ID shape. Titles are
+mutable text and must never be identity.
+
+This replaces typed numeric target IDs such as `ISS-0001` or `MIS-0001` and
+separate shorthand IDs such as `#53`. The cutover should migrate existing
+records to the new ID form directly; Atelier should not maintain a legacy
+dual-ID implementation.
 
 ## Domain Model
 
@@ -295,9 +313,9 @@ Desired commands:
 
 ```text
 atelier agent init <name>
-atelier work start ISS-123
-atelier worktree for ISS-123
-atelier work finish ISS-123
+atelier work start atelier-z1p8
+atelier worktree for atelier-z1p8
+atelier work finish atelier-z1p8
 atelier worktree merge
 ```
 
@@ -307,10 +325,10 @@ The default branch model should be opinionated but configurable:
 main
   integration branch
 
-work/ISS-123-short-slug
+work/atelier-z1p8-short-slug
   normal issue implementation branch
 
-mission/MIS-001-short-slug
+mission/atelier-k7mq-short-slug
   optional coordinated mission branch
 
 agent/<agent-id>
@@ -375,7 +393,7 @@ Representative commands:
 atelier init
 atelier next
 atelier ready
-atelier show ISS-123
+atelier show atelier-z1p8
 atelier issue create
 atelier mission create
 atelier milestone create

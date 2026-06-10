@@ -77,7 +77,7 @@ Issue JSON must include these fields for Agent Factory parity:
 
 | Field | Rule |
 | --- | --- |
-| `id` | Stable string ID. Imported Beads IDs may be preserved as aliases if Atelier canonical IDs differ. |
+| `id` | Stable project-scoped random string ID such as `atelier-z1p8`. There is no second primary identity or legacy numeric alias after cutover. |
 | `title` | Non-empty human title. |
 | `description` | String or `null`; maps Beads description. |
 | `acceptance_criteria` | String or array preserving imported acceptance text. |
@@ -174,10 +174,11 @@ used by workers and orchestrators:
 | `bd lint [id]` | `atelier lint [id]` |
 | `bd doctor` / `bd ping` | `atelier doctor` |
 
-Imported Beads IDs such as `atelier-z1p.3` are accepted anywhere this mapping
-uses `<id>`. If no imported source ID exists, Atelier numeric IDs such as `#1`
-or `1` remain valid. Required commands accept `--json` and use the MVP response
-envelope.
+After identity cutover, every command in this mapping uses the single
+project-scoped random Atelier ID such as `atelier-z1p8`. Numeric IDs such as
+`#1` or `1`, typed-prefix IDs such as `ISS-0001`, and imported predecessor IDs
+are not maintained as alternate command references. Required commands accept
+`--json` and use the MVP response envelope.
 
 ## Cutover Status
 

@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use super::{issue_from_row, validate_priority, validate_status, Database};
+use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
 use crate::models::Issue;
 
@@ -10,6 +10,7 @@ impl Database {
     pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
         validate_priority(&issue.priority)?;
         validate_status(&issue.status)?;
+        validate_issue_type(&issue.issue_type)?;
         if issue.title.len() > MAX_TITLE_LEN {
             anyhow::bail!(
                 "Title exceeds maximum length of {} characters",
@@ -26,13 +27,14 @@ impl Database {
         }
 
         self.conn.execute(
-            "INSERT INTO issues (id, title, description, status, priority, parent_id, created_at, updated_at, closed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO issues (id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 issue.id,
                 issue.title,
                 issue.description,
                 issue.status,
+                issue.issue_type,
                 issue.priority,
                 issue.parent_id,
                 issue.created_at.to_rfc3339(),
@@ -58,7 +60,7 @@ impl Database {
         description: Option<&str>,
         priority: &str,
     ) -> Result<i64> {
-        self.create_issue_with_parent(title, description, priority, None)
+        self.create_issue_with_parent(title, description, priority, "task", None)
     }
 
     pub fn create_subissue(
@@ -68,7 +70,28 @@ impl Database {
         description: Option<&str>,
         priority: &str,
     ) -> Result<i64> {
-        self.create_issue_with_parent(title, description, priority, Some(parent_id))
+        self.create_issue_with_parent(title, description, priority, "task", Some(parent_id))
+    }
+
+    pub fn create_issue_with_type(
+        &self,
+        title: &str,
+        description: Option<&str>,
+        priority: &str,
+        issue_type: &str,
+    ) -> Result<i64> {
+        self.create_issue_with_parent(title, description, priority, issue_type, None)
+    }
+
+    pub fn create_subissue_with_type(
+        &self,
+        parent_id: i64,
+        title: &str,
+        description: Option<&str>,
+        priority: &str,
+        issue_type: &str,
+    ) -> Result<i64> {
+        self.create_issue_with_parent(title, description, priority, issue_type, Some(parent_id))
     }
 
     fn create_issue_with_parent(
@@ -76,9 +99,11 @@ impl Database {
         title: &str,
         description: Option<&str>,
         priority: &str,
+        issue_type: &str,
         parent_id: Option<i64>,
     ) -> Result<i64> {
         validate_priority(priority)?;
+        validate_issue_type(issue_type)?;
         if title.len() > MAX_TITLE_LEN {
             anyhow::bail!(
                 "Title exceeds maximum length of {} characters",
@@ -95,15 +120,15 @@ impl Database {
         }
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO issues (title, description, priority, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'open', ?5, ?5)",
-            params![title, description, priority, parent_id, now],
+            "INSERT INTO issues (title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 'open', ?6, ?6)",
+            params![title, description, priority, issue_type, parent_id, now],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
 
     pub fn get_subissues(&self, parent_id: i64) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
+            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
         )?;
 
         let issues = stmt
@@ -115,7 +140,7 @@ impl Database {
 
     pub fn get_issue(&self, id: i64) -> Result<Option<Issue>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
+            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
         )?;
 
         let issue = stmt.query_row([id], issue_from_row).ok();
@@ -151,7 +176,7 @@ impl Database {
         priority_filter: Option<&str>,
     ) -> Result<Vec<Issue>> {
         let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
+            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
         );
         let mut conditions = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -308,7 +333,7 @@ impl Database {
         let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             LEFT JOIN comments c ON i.id = c.issue_id
             WHERE i.title LIKE ?1 ESCAPE '\' COLLATE NOCASE

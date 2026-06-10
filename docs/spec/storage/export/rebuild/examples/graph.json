@@ -4,9 +4,9 @@
       "metadata": {
         "source": "front-matter"
       },
-      "source_id": "ISS-0001",
+      "source_id": "atelier-z1p8",
       "source_kind": "issue",
-      "target_id": "MIS-0001",
+      "target_id": "atelier-k7mq",
       "target_kind": "mission",
       "type": "belongs_to"
     },
@@ -14,28 +14,28 @@
       "metadata": {
         "source": "front-matter"
       },
-      "source_id": "ISS-0001",
+      "source_id": "atelier-z1p8",
       "source_kind": "issue",
-      "target_id": "EV-0001",
+      "target_id": "atelier-n8da",
       "target_kind": "evidence",
       "type": "evidenced_by"
     }
   ],
   "nodes": [
     {
-      "id": "EV-0001",
+      "id": "atelier-n8da",
       "kind": "evidence",
       "schema": "atelier.evidence",
       "schema_version": 1
     },
     {
-      "id": "ISS-0001",
+      "id": "atelier-z1p8",
       "kind": "issue",
       "schema": "atelier.issue",
       "schema_version": 1
     },
     {
-      "id": "MIS-0001",
+      "id": "atelier-k7mq",
       "kind": "mission",
       "schema": "atelier.mission",
       "schema_version": 1

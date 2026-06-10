@@ -16,7 +16,7 @@ use std::path::Path;
 
 use crate::models::Issue;
 
-const SCHEMA_VERSION: i32 = 13;
+const SCHEMA_VERSION: i32 = 14;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -32,6 +32,18 @@ pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
 
 /// Valid values for issue status.
 pub const VALID_STATUSES: &[&str] = &["open", "closed", "archived"];
+
+/// Valid values for canonical issue type.
+pub const VALID_ISSUE_TYPES: &[&str] = &[
+    "bug",
+    "closeout",
+    "decision",
+    "epic",
+    "feature",
+    "spike",
+    "task",
+    "validation",
+];
 
 /// Maximum lengths for string inputs.
 pub const MAX_TITLE_LEN: usize = 512;
@@ -61,6 +73,19 @@ pub fn validate_priority(priority: &str) -> Result<()> {
             "Invalid priority '{}'. Valid values: {}",
             priority,
             VALID_PRIORITIES.join(", ")
+        )
+    }
+}
+
+/// Validate that an issue type value is known, returning an error if not.
+pub fn validate_issue_type(issue_type: &str) -> Result<()> {
+    if VALID_ISSUE_TYPES.contains(&issue_type) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid issue_type '{}'. Valid values: {}",
+            issue_type,
+            VALID_ISSUE_TYPES.join(", ")
         )
     }
 }
@@ -160,6 +185,7 @@ impl Database {
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT NOT NULL DEFAULT 'open',
+                    issue_type TEXT NOT NULL DEFAULT 'task',
                     priority TEXT NOT NULL DEFAULT 'medium',
                     parent_id INTEGER,
                     created_at TEXT NOT NULL,
@@ -338,6 +364,13 @@ impl Database {
                 );
             }
 
+            // Migration v14: Add explicit canonical issue_type to issues.
+            if version < 14 {
+                self.migrate(
+                    "ALTER TABLE issues ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'task'",
+                );
+            }
+
             self.conn
                 .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
         }
@@ -356,18 +389,19 @@ pub(crate) fn parse_datetime(s: String) -> DateTime<Utc> {
 }
 
 /// Maps a database row to an Issue struct.
-/// Expects columns in order: id, title, description, status, priority, parent_id, created_at, updated_at, closed_at
+/// Expects columns in order: id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at
 pub(crate) fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
     Ok(Issue {
         id: row.get(0)?,
         title: row.get(1)?,
         description: row.get(2)?,
         status: row.get(3)?,
-        priority: row.get(4)?,
-        parent_id: row.get(5)?,
-        created_at: parse_datetime(row.get::<_, String>(6)?),
-        updated_at: parse_datetime(row.get::<_, String>(7)?),
-        closed_at: row.get::<_, Option<String>>(8)?.map(parse_datetime),
+        issue_type: row.get(4)?,
+        priority: row.get(5)?,
+        parent_id: row.get(6)?,
+        created_at: parse_datetime(row.get::<_, String>(7)?),
+        updated_at: parse_datetime(row.get::<_, String>(8)?),
+        closed_at: row.get::<_, Option<String>>(9)?.map(parse_datetime),
     })
 }
 

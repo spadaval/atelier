@@ -256,7 +256,7 @@ Validators receive a deterministic input context:
   },
   "record": {
     "kind": "issue",
-    "id": "ISS-0028",
+    "id": "atelier-z1p8",
     "status": "validation"
   },
   "linked_records": [],
@@ -292,10 +292,10 @@ Validator results are machine-readable and use a pass/fail shape:
   "transition": "close",
   "record": {
     "kind": "issue",
-    "id": "ISS-0028"
+    "id": "atelier-z1p8"
   },
   "result": "fail",
-  "message": "Attach at least 1 evidence record before closing ISS-0028.",
+  "message": "Attach at least 1 evidence record before closing atelier-z1p8.",
   "actions": [
     "Run the required validation command.",
     "Record the result with atelier evidence add.",

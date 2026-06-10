@@ -21,8 +21,9 @@ A first-class milestone record must model these fields:
 
 The canonical export shape follows the storage contract in
 [Canonical Export/Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md):
-milestone records live under `.atelier-state/milestones/<MS-ID>.md`, ID arrays
-are sorted lexically, and text arrays preserve author order.
+milestone records live under `.atelier-state/milestones/<record-id>.md`, IDs
+use the project-scoped random record ID format, ID arrays are sorted lexically,
+and text arrays preserve author order.
 
 ## Relationships
 

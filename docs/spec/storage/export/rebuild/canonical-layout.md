@@ -18,15 +18,15 @@ database remains local runtime state.
 .atelier-state/
   manifest.json
   issues/
-    ISS-0001.md
+    atelier-z1p8.md
   missions/
-    MIS-0001.md
+    atelier-k7mq.md
   milestones/
-    MS-0001.md
+    atelier-4x9t.md
   plans/
-    PLAN-0001.md
+    atelier-p3v6.md
   evidence/
-    EV-0001.md
+    atelier-n8da.md
   graph.json
   mission-control.json
 ```
@@ -65,15 +65,19 @@ The canonical file path is derived from the record ID:
 
 | Record kind | ID format | Path |
 | --- | --- | --- |
-| Issue | `ISS-0001` | `.atelier-state/issues/ISS-0001.md` |
-| Mission | `MIS-0001` | `.atelier-state/missions/MIS-0001.md` |
-| Milestone | `MS-0001` | `.atelier-state/milestones/MS-0001.md` |
-| Plan | `PLAN-0001` | `.atelier-state/plans/PLAN-0001.md` |
-| Evidence | `EV-0001` | `.atelier-state/evidence/EV-0001.md` |
+| Issue | `atelier-z1p8` | `.atelier-state/issues/atelier-z1p8.md` |
+| Mission | `atelier-k7mq` | `.atelier-state/missions/atelier-k7mq.md` |
+| Milestone | `atelier-4x9t` | `.atelier-state/milestones/atelier-4x9t.md` |
+| Plan | `atelier-p3v6` | `.atelier-state/plans/atelier-p3v6.md` |
+| Evidence | `atelier-n8da` | `.atelier-state/evidence/atelier-n8da.md` |
 
-Numeric suffixes are zero-padded to four digits for examples and initial
-allocation. Rebuild must preserve any valid existing ID with the matching prefix
-and a positive decimal suffix; export must not renumber records.
+IDs use `<project-slug>-<random-base36>`. The project slug is lowercase ASCII
+and normally matches the repository or workspace slug. The random suffix is
+lowercase base36 and defaults to four characters; allocators must retry on local
+collisions and may support longer suffixes through repository policy. IDs are
+global across record kinds in one projection. Record kind is metadata, not part
+of identity. Rebuild must preserve existing valid IDs and export must never
+renumber records.
 
 ## Manifest
 
@@ -115,7 +119,7 @@ front matter followed by the human-readable body.
 
 ```markdown
 ---
-id: ISS-0001
+id: atelier-z1p8
 schema: atelier.issue
 schema_version: 1
 ...
@@ -143,7 +147,7 @@ record body without front matter.
 
 ## Issues
 
-Path: `.atelier-state/issues/<ISS-ID>.md`
+Path: `.atelier-state/issues/<record-id>.md`
 
 Issue front matter adds:
 
@@ -159,7 +163,7 @@ Issue front matter adds:
 
 ## Missions
 
-Path: `.atelier-state/missions/<MIS-ID>.md`
+Path: `.atelier-state/missions/<record-id>.md`
 
 Mission front matter adds `constraints`, `milestones`, `plans`,
 `validation_expectations`, and `current_risks`. ID arrays are sorted lexically;
@@ -167,7 +171,7 @@ text arrays preserve author order.
 
 ## Milestones
 
-Path: `.atelier-state/milestones/<MS-ID>.md`
+Path: `.atelier-state/milestones/<record-id>.md`
 
 Milestone front matter adds `desired_state`, `scope`,
 `validation_criteria`, `accepted_evidence`, `completion_state`, `missions`, and
@@ -177,7 +181,7 @@ link to them as contributing work.
 
 ## Plans
 
-Path: `.atelier-state/plans/<PLAN-ID>.md`
+Path: `.atelier-state/plans/<record-id>.md`
 
 Plan front matter adds `owner`, `applies_to`, `revision`, `supersedes`, and
 `drift_status`. `applies_to` and `supersedes` are sorted lexically. Plan body is
@@ -185,7 +189,7 @@ the durable execution intent.
 
 ## Evidence
 
-Path: `.atelier-state/evidence/<EV-ID>.md`
+Path: `.atelier-state/evidence/<record-id>.md`
 
 Evidence front matter adds:
 

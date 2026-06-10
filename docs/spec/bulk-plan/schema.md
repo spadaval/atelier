@@ -78,7 +78,7 @@ Reference values use one of these object shapes:
 ```
 
 ```json
-{ "id": "ISS-0064" }
+{ "id": "atelier-z1p8" }
 ```
 
 `client_ref` references must resolve to a record in the same file. `id`

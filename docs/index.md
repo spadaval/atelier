@@ -13,6 +13,9 @@
   minimum command, JSON, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
 - `docs/adr/`: durable architecture and process decisions.
+- [docs/adr/0001-project-scoped-random-record-ids.md](adr/0001-project-scoped-random-record-ids.md):
+  accepted decision that canonical record IDs are project-scoped random IDs
+  such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
 - [docs/architecture/index.md](architecture/index.md): architecture and
   ownership map.
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink

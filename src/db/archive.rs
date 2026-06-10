@@ -26,7 +26,7 @@ impl Database {
 
     pub fn list_archived_issues(&self) -> Result<Vec<Issue>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE status = 'archived' ORDER BY id DESC",
+            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE status = 'archived' ORDER BY id DESC",
         )?;
 
         let issues = stmt

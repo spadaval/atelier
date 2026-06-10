@@ -126,17 +126,6 @@ fn issue_id_for_agent(db: &Database, issue: &Issue) -> Result<String> {
     Ok(format_issue_id(issue.id))
 }
 
-fn issue_type(labels: &[String]) -> String {
-    labels
-        .iter()
-        .find_map(|label| match label.as_str() {
-            "epic" | "task" | "feature" | "bug" | "validation" | "closeout" | "spike"
-            | "decision" => Some(label.clone()),
-            _ => None,
-        })
-        .unwrap_or_else(|| "task".to_string())
-}
-
 fn label_value(labels: &[String], prefix: &str) -> Option<String> {
     labels
         .iter()
@@ -243,7 +232,7 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
         description,
         acceptance_criteria,
         status: issue.status,
-        issue_type: issue_type(&labels),
+        issue_type: issue.issue_type,
         priority: issue.priority,
         parent,
         dependencies,
@@ -266,7 +255,7 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
         id: issue_id_for_agent(db, &issue)?,
         title: issue.title,
         status: issue.status,
-        issue_type: issue_type(&labels),
+        issue_type: issue.issue_type,
         priority: issue.priority,
         labels,
         parent: issue
@@ -485,19 +474,24 @@ pub struct CreateInput<'a> {
 
 pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Result<()> {
     validate_priority(input.priority)?;
+    let issue_type = input.issue_type.unwrap_or("task");
+    crate::db::validate_issue_type(issue_type)?;
     let parent_id = input
         .parent
         .map(|parent| resolve_id(db, parent))
         .transpose()?;
     let id = match parent_id {
-        Some(parent_id) => {
-            db.create_subissue(parent_id, input.title, input.description, input.priority)?
+        Some(parent_id) => db.create_subissue_with_type(
+            parent_id,
+            input.title,
+            input.description,
+            input.priority,
+            issue_type,
+        )?,
+        None => {
+            db.create_issue_with_type(input.title, input.description, input.priority, issue_type)?
         }
-        None => db.create_issue(input.title, input.description, input.priority)?,
     };
-    if let Some(issue_type) = input.issue_type {
-        db.add_label(id, issue_type)?;
-    }
     for label in input.labels {
         db.add_label(id, label)?;
     }
@@ -803,6 +797,13 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
                 "id": issue_id_for_agent(db, &issue)?,
                 "code": "missing_title",
                 "message": "Issue title must not be empty"
+            }));
+        }
+        if !crate::db::VALID_ISSUE_TYPES.contains(&issue.issue_type.as_str()) {
+            findings.push(json!({
+                "id": issue_id_for_agent(db, &issue)?,
+                "code": "invalid_issue_type",
+                "message": format!("Issue type '{}' is not valid", issue.issue_type)
             }));
         }
         for blocker_id in db.get_blockers(issue.id)? {

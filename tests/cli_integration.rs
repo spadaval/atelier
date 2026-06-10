@@ -2661,6 +2661,53 @@ fn test_agent_factory_json_command_subset() {
 }
 
 #[test]
+fn test_issue_type_is_canonical_not_label_derived() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "issue",
+            "create",
+            "Typed issue",
+            "--issue-type",
+            "validation",
+            "--label",
+            "epic",
+        ],
+    );
+    assert!(success, "create failed: {stderr}");
+    let created = json_value(&stdout);
+    assert_eq!(created["data"]["issue_type"], "validation");
+    assert_eq!(created["data"]["labels"][0], "epic");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "1"]);
+    assert!(success, "show failed: {stderr}");
+    let shown = json_value(&stdout);
+    assert_eq!(shown["data"]["issue_type"], "validation");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "list", "--status", "all"]);
+    assert!(success, "list failed: {stderr}");
+    let listed = json_value(&stdout);
+    assert_eq!(listed["data"]["items"][0]["issue_type"], "validation");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "ready"]);
+    assert!(success, "ready failed: {stderr}");
+    let ready = json_value(&stdout);
+    assert_eq!(ready["data"]["items"][0]["issue_type"], "validation");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+    let issue_record =
+        std::fs::read_to_string(dir.path().join(".atelier-state/issues/ISS-0001.md")).unwrap();
+    assert!(issue_record.contains("issue_type: \"validation\"\n"));
+    assert!(issue_record.contains("labels:\n- \"epic\"\n"));
+}
+
+#[test]
 fn test_import_beads_reports_mapping_without_tracker_provenance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
