@@ -10,8 +10,9 @@ lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is documented in
 Atelier currently starts from the Chainlink Rust CLI:
 
 - `src/main.rs`: Clap command routing and global CLI options.
-- `src/commands/`: command handlers for issues, sessions, milestones, locks,
-  sync, export, import, and related operational flows.
+- `src/commands/`: command handlers for the documented core CLI surface:
+  issues, missions, plans, evidence, links, workflow validation, work/worktrees,
+  canonical export/rebuild, import-beads, lint, and doctor.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
 - `resources/atelier/`: bundled rules, hook configuration, and integration
@@ -25,8 +26,7 @@ preservation expectations, and deferred migration areas.
 See [Work Model](work-model.md) for mission, milestone, epic, issue, workflow
 validator, and evidence relationships.
 See [Milestone Records](milestone-records.md) for the first-class checkpoint
-record contract, validation model, and inherited `atelier milestone`
-compatibility boundary.
+record contract and validation model.
 See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
 integration command policy.
 See [Workflow Configuration Contract](workflow-configuration.md) for the

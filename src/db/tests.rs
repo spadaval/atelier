@@ -424,22 +424,6 @@ fn test_start_and_get_session() {
 }
 
 #[test]
-fn test_end_session() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.start_session().unwrap();
-    db.end_session(id, Some("Handoff notes")).unwrap();
-
-    let current = db.get_current_session().unwrap();
-    assert!(current.is_none());
-
-    let last = db.get_last_session().unwrap().unwrap();
-    assert_eq!(last.id, id);
-    assert!(last.ended_at.is_some());
-    assert_eq!(last.handoff_notes, Some("Handoff notes".to_string()));
-}
-
-#[test]
 fn test_set_session_issue() {
     let (db, _dir) = setup_test_db();
 
@@ -450,40 +434,6 @@ fn test_set_session_issue() {
 
     let session = db.get_current_session().unwrap().unwrap();
     assert_eq!(session.active_issue_id, Some(issue_id));
-}
-
-// ==================== Time Tracking Tests ====================
-
-#[test]
-fn test_start_and_stop_timer() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_issue("Test issue", None, "medium").unwrap();
-
-    let timer_id = db.start_timer(&id).unwrap();
-    assert!(timer_id > 0);
-
-    let active = db.get_active_timer().unwrap();
-    assert!(active.is_some());
-    assert_eq!(active.unwrap().0, id);
-
-    std::thread::sleep(std::time::Duration::from_millis(100));
-
-    db.stop_timer(id).unwrap();
-
-    let active = db.get_active_timer().unwrap();
-    assert!(active.is_none());
-}
-
-#[test]
-fn test_get_total_time() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_issue("Test issue", None, "medium").unwrap();
-
-    // No time tracked yet
-    let total = db.get_total_time(id).unwrap();
-    assert_eq!(total, 0);
 }
 
 // ==================== Search Tests ====================
@@ -574,120 +524,6 @@ fn test_remove_relation() {
 
     let related = db.get_related_issues(&id1).unwrap();
     assert!(related.is_empty());
-}
-
-// ==================== Milestones Tests ====================
-
-#[test]
-fn test_create_and_get_milestone() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_milestone("v1.0", Some("First release")).unwrap();
-    assert!(id > 0);
-
-    let milestone = db.get_milestone(id).unwrap().unwrap();
-    assert_eq!(milestone.name, "v1.0");
-    assert_eq!(milestone.description, Some("First release".to_string()));
-    assert_eq!(milestone.status, "open");
-}
-
-#[test]
-fn test_list_milestones() {
-    let (db, _dir) = setup_test_db();
-
-    db.create_milestone("v1.0", None).unwrap();
-    db.create_milestone("v2.0", None).unwrap();
-
-    let milestones = db.list_milestones(None).unwrap();
-    assert_eq!(milestones.len(), 2);
-}
-
-#[test]
-fn test_add_issue_to_milestone() {
-    let (db, _dir) = setup_test_db();
-
-    let milestone_id = db.create_milestone("v1.0", None).unwrap();
-    let issue_id = db.create_issue("Feature", None, "medium").unwrap();
-
-    db.add_issue_to_milestone(milestone_id, &issue_id).unwrap();
-
-    let issues = db.get_milestone_issues(milestone_id).unwrap();
-    assert_eq!(issues.len(), 1);
-    assert_eq!(issues[0].id, issue_id);
-
-    let milestone = db.get_issue_milestone(issue_id).unwrap().unwrap();
-    assert_eq!(milestone.id, milestone_id);
-}
-
-#[test]
-fn test_close_milestone() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_milestone("v1.0", None).unwrap();
-    db.close_milestone(id).unwrap();
-
-    let milestone = db.get_milestone(id).unwrap().unwrap();
-    assert_eq!(milestone.status, "closed");
-    assert!(milestone.closed_at.is_some());
-}
-
-// ==================== Archive Tests ====================
-
-#[test]
-fn test_archive_closed_issue() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_issue("Test", None, "medium").unwrap();
-    db.close_issue(&id).unwrap();
-
-    let archived = db.archive_issue(&id).unwrap();
-    assert!(archived);
-
-    let issue = db.get_issue(&id).unwrap().unwrap();
-    assert_eq!(issue.status, "archived");
-}
-
-#[test]
-fn test_archive_open_issue_fails() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_issue("Test", None, "medium").unwrap();
-
-    let archived = db.archive_issue(&id).unwrap();
-    assert!(!archived);
-
-    let issue = db.get_issue(&id).unwrap().unwrap();
-    assert_eq!(issue.status, "open");
-}
-
-#[test]
-fn test_unarchive_issue() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.create_issue("Test", None, "medium").unwrap();
-    db.close_issue(&id).unwrap();
-    db.archive_issue(&id).unwrap();
-
-    let unarchived = db.unarchive_issue(&id).unwrap();
-    assert!(unarchived);
-
-    let issue = db.get_issue(&id).unwrap().unwrap();
-    assert_eq!(issue.status, "closed");
-}
-
-#[test]
-fn test_list_archived_issues() {
-    let (db, _dir) = setup_test_db();
-
-    let id1 = db.create_issue("Archived", None, "medium").unwrap();
-    let _id2 = db.create_issue("Open", None, "medium").unwrap();
-
-    db.close_issue(&id1).unwrap();
-    db.archive_issue(&id1).unwrap();
-
-    let archived = db.list_archived_issues().unwrap();
-    assert_eq!(archived.len(), 1);
-    assert_eq!(archived[0].id, id1);
 }
 
 // ==================== Security Tests ====================

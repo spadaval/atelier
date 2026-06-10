@@ -31,8 +31,8 @@ Atelier will use a Markdown-first persistence architecture:
 - `ProjectionIndex` owns rebuildable SQLite indexes derived from `RecordStore`
   records for global queries, graph traversal, search, validation, and Mission
   Control inputs.
-- `RuntimeState` owns local-only `.atelier/` state such as sessions, locks,
-  timers, usage, agent identity, and caches.
+- `RuntimeState` owns local-only `.atelier/` state such as current
+  work/session association, local agent identity, and caches.
 
 Successful canonical mutations write Markdown records first, then refresh or
 mark stale the projection index. Normal durability must not depend on a later

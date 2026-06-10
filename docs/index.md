@@ -29,7 +29,7 @@
   milestone, epic, issue, workflow validator, and evidence relationships.
 - [docs/architecture/milestone-records.md](architecture/milestone-records.md):
   first-class checkpoint record fields, validation model, evidence links, and
-  inherited milestone compatibility boundary.
+  command-surface ownership.
 - [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
   repository-owned workflow policy path, schema, validators, hooks, reload
   behavior, and risk-scaled examples.
@@ -41,7 +41,8 @@
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.
 - [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
-  tiers, hidden compatibility commands, and inherited utility disposition.
+  core command surface, removed compatibility commands, and inherited utility
+  disposition.
 - `docs/architecture/quality/index.md`: quality documentation index.
 - `docs/architecture/quality/architecture-quality.md`: vocabulary for
   architecture review.

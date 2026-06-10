@@ -85,14 +85,10 @@ Closed contributing work does not automatically complete a milestone without
 accepted evidence for the validation criteria and successful workflow
 validation.
 
-## Compatibility
+## Command Surface
 
-The inherited `atelier milestone` command is compatibility behavior until a
-dedicated migration updates it to create, mutate, export, rebuild, and validate
-this first-class record contract. It may remain callable for existing scripts or
-imported habits, but it must not define the target milestone model.
-
-Until migration lands, issue labels, parent links, and SQLite-backed milestone
-rows may describe current implementation behavior only. Target-state docs and
-new workflow design should use the first-class milestone record semantics in
-this document.
+Milestones are first-class checkpoint records, not an inherited issue lifecycle
+subsystem. They are created today through `atelier plan apply` bulk-plan input
+and rendered under `.atelier-state/milestones/`. A future dedicated checkpoint
+command must target this record contract directly rather than restoring the
+deleted legacy `milestone` command group.

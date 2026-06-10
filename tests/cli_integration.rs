@@ -14,10 +14,21 @@ fn json_value(stdout: &str) -> serde_json::Value {
 
 /// Helper to run atelier commands in a temp directory
 fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
-    let translated_args = translate_issue_refs(dir, args);
+    let canonical_args = canonicalize_legacy_test_args(args);
+    let translated_args = translate_issue_refs_owned(dir, &canonical_args);
+    run_atelier_raw(
+        dir,
+        &translated_args
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn run_atelier_raw(dir: &Path, args: &[&str]) -> (bool, String, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
-        .args(&translated_args)
+        .args(args)
         .output()
         .expect("Failed to execute atelier");
 
@@ -30,6 +41,48 @@ fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
     }
 
     (output.status.success(), stdout, stderr)
+}
+
+fn canonicalize_legacy_test_args(args: &[&str]) -> Vec<String> {
+    let offset = command_offset(args);
+    let mut translated = args
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect::<Vec<_>>();
+    let Some(command) = args.get(offset) else {
+        return translated;
+    };
+    let issue_commands = [
+        "create",
+        "quick",
+        "subissue",
+        "list",
+        "search",
+        "show",
+        "update",
+        "close",
+        "close-all",
+        "reopen",
+        "delete",
+        "comment",
+        "label",
+        "unlabel",
+        "block",
+        "unblock",
+        "blocked",
+        "ready",
+        "relate",
+        "unrelate",
+        "related",
+        "impact",
+        "next",
+        "tree",
+        "tested",
+    ];
+    if issue_commands.contains(command) {
+        translated.insert(offset, "issue".to_string());
+    }
+    translated
 }
 
 /// Initialize atelier in a temp directory
@@ -152,14 +205,14 @@ fn is_record_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
-fn translate_issue_refs(dir: &Path, args: &[&str]) -> Vec<String> {
+fn translate_issue_refs_owned(dir: &Path, args: &[String]) -> Vec<String> {
     args.iter()
         .enumerate()
         .map(|(index, arg)| {
             if issue_ref_position(args, index) {
-                translate_issue_ref(dir, arg)
+                translate_issue_ref(dir, arg.as_str())
             } else {
-                (*arg).to_string()
+                arg.to_string()
             }
         })
         .collect()
@@ -173,19 +226,25 @@ fn translate_issue_ref(dir: &Path, value: &str) -> String {
     }
 }
 
-fn command_offset(args: &[&str]) -> usize {
+fn command_offset<T: AsRef<str>>(args: &[T]) -> usize {
     args.iter()
-        .position(|arg| !arg.starts_with('-'))
+        .position(|arg| !arg.as_ref().starts_with('-'))
         .unwrap_or(args.len())
 }
 
-fn issue_ref_position(args: &[&str], index: usize) -> bool {
+fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
     let offset = command_offset(args);
     if index <= offset {
         return false;
     }
 
-    match args.get(offset..).unwrap_or_default() {
+    let rest = args
+        .get(offset..)
+        .unwrap_or_default()
+        .iter()
+        .map(|arg| arg.as_ref())
+        .collect::<Vec<_>>();
+    match rest.as_slice() {
         ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
             index == offset + 1
         }
@@ -197,9 +256,14 @@ fn issue_ref_position(args: &[&str], index: usize) -> bool {
         ["session", "work", ..] => index == offset + 2,
         ["archive", "add" | "remove", ..] => index == offset + 2,
         ["milestone", "add" | "remove", ..] => index > offset + 2,
-        ["issue", "show" | "update" | "impact", ..] => index == offset + 2,
+        ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
+            index == offset + 2
+        }
+        ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
+        ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
+            index == offset + 2 || index == offset + 3
+        }
         ["issue", "subissue", ..] => index == offset + 2,
-        ["issue", "relate", ..] => index == offset + 2 || index == offset + 3,
         ["dep", "list", ..] => index == offset + 2,
         ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
         _ => false,
@@ -228,6 +292,85 @@ fn test_init_twice_warns() {
 
     assert!(success);
     assert!(stdout.contains("Already") || stdout.contains("already") || stdout.contains("exists"));
+}
+
+#[test]
+fn test_top_level_help_only_shows_core_commands() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
+    assert!(success, "help failed: {stderr}");
+
+    for command in [
+        "init",
+        "issue",
+        "dep",
+        "mission",
+        "plan",
+        "evidence",
+        "link",
+        "workflow",
+        "work",
+        "worktree",
+        "export",
+        "rebuild",
+        "import-beads",
+        "lint",
+        "doctor",
+    ] {
+        assert!(stdout.contains(command), "missing core command {command}");
+    }
+
+    for removed in [
+        "archive",
+        "timer",
+        "milestone",
+        "session",
+        "daemon",
+        "cpitd",
+        "usage",
+        "agent",
+        "locks",
+        "sync",
+        "history",
+    ] {
+        assert!(
+            !stdout
+                .lines()
+                .any(|line| line.starts_with(&format!("  {removed}"))),
+            "removed command {removed} is still visible in help:\n{stdout}"
+        );
+    }
+}
+
+#[test]
+fn test_mission_help_uses_show_not_view() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "--help"]);
+    assert!(success, "mission help failed: {stderr}");
+
+    assert!(stdout.contains("show"));
+    assert!(!stdout.contains("view"));
+}
+
+#[test]
+fn test_removed_aliases_fail_as_unknown_commands() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for args in [
+        vec!["show"],
+        vec!["ready"],
+        vec!["start"],
+        vec!["sync"],
+        vec!["mission", "view"],
+    ] {
+        let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(!success, "{args:?} unexpectedly succeeded");
+        assert!(
+            stderr.contains("unrecognized subcommand") || stderr.contains("unexpected argument"),
+            "{args:?} did not fail as an unknown command:\n{stderr}"
+        );
+    }
 }
 
 // ==================== Issue Creation Tests ====================
@@ -493,6 +636,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_history_reads_activity_sidecars_with_filters_and_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -557,6 +701,7 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_history_empty_and_invalid_limit() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -571,6 +716,7 @@ fn test_history_empty_and_invalid_limit() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_evidence_issue_link_creates_history_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1014,6 +1160,7 @@ fn test_ready_issues() {
 // ==================== Session Tests ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1025,6 +1172,7 @@ fn test_session_start() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1037,6 +1185,7 @@ fn test_session_status() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1050,6 +1199,7 @@ fn test_session_work() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_end() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1172,6 +1322,7 @@ fn test_unicode_in_cli() {
 // ==================== Archive Tests ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_closed_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1185,6 +1336,7 @@ fn test_archive_closed_issue() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_open_issue_fails() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1203,6 +1355,7 @@ fn test_archive_open_issue_fails() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1219,6 +1372,7 @@ fn test_archive_list() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_unarchive_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1244,6 +1398,7 @@ fn test_unarchive_issue() {
 // ==================== Milestone Tests ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_create() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1258,6 +1413,7 @@ fn test_milestone_create() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1273,6 +1429,7 @@ fn test_milestone_list() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_show() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1290,6 +1447,7 @@ fn test_milestone_show() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_add_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1308,6 +1466,7 @@ fn test_milestone_add_issues() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_close() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1320,6 +1479,7 @@ fn test_milestone_close() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_delete() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1337,6 +1497,7 @@ fn test_milestone_delete() {
 // ==================== Timer Tests ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1349,6 +1510,7 @@ fn test_timer_start() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_stop() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1362,6 +1524,7 @@ fn test_timer_stop() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1378,6 +1541,7 @@ fn test_timer_status() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_status_no_timer() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1591,6 +1755,7 @@ fn test_next_no_issues() {
 // ==================== Export/Import Tests ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_export_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1614,6 +1779,7 @@ fn test_export_json() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_export_markdown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1644,6 +1810,7 @@ fn test_export_markdown() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_import_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1786,6 +1953,7 @@ fn test_delete_with_subissues() {
 // ==================== Additional Session Edge Cases ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_work_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1798,6 +1966,7 @@ fn test_session_work_nonexistent_issue() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_end_without_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1812,6 +1981,7 @@ fn test_session_end_without_start() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_status_without_session() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1827,6 +1997,7 @@ fn test_session_status_without_session() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_multiple_starts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1886,6 +2057,7 @@ fn test_next_all_closed() {
 // ==================== Additional Archive Edge Cases ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_older_days() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1900,6 +2072,7 @@ fn test_archive_older_days() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_already_archived() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1923,6 +2096,7 @@ fn test_archive_already_archived() {
 // ==================== Additional Milestone Edge Cases ====================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_remove_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1940,6 +2114,7 @@ fn test_milestone_remove_issue() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_show_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1950,6 +2125,7 @@ fn test_milestone_show_nonexistent() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_list_closed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2294,6 +2470,7 @@ fn test_next_only_subissues_ready() {
 
 // --- import.rs: Import with parent relationships ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_import_with_parent_relationships() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2328,6 +2505,7 @@ fn test_import_with_parent_relationships() {
 
 // --- import.rs: Import issues with labels and comments ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_import_with_labels_and_comments() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2365,6 +2543,7 @@ fn test_import_with_labels_and_comments() {
 
 // --- session.rs: Session with handoff notes from previous session ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_start_shows_handoff_notes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2390,6 +2569,7 @@ fn test_session_start_shows_handoff_notes() {
 
 // --- session.rs: Session status with active issue ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_status_with_active_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2502,6 +2682,7 @@ fn test_multiple_labels() {
 
 // --- Export markdown format test ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_export_markdown_format() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2540,6 +2721,7 @@ fn test_export_markdown_format() {
 
 // --- Archive older days test ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_archive_older_no_matches() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2767,6 +2949,7 @@ fn test_block_nonexistent_issue() {
 
 // --- session.rs: Session status deleted issue ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_status_deleted_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2801,6 +2984,7 @@ fn test_show_with_related_issues() {
 
 // --- milestone.rs: Edge cases ---
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_add_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2820,6 +3004,7 @@ fn test_milestone_add_nonexistent_issue() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_delete_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3092,6 +3277,7 @@ fn test_stress_rapid_operations() {
 
 /// Test export/import round-trip preserves data
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_integrity_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3392,12 +3578,20 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(results.iter().all(|result| result["passed"] == true));
 
     let (success, view_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "view", mission_id]);
-    assert!(success, "mission view failed: {stderr}");
+        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    assert!(success, "mission show failed: {stderr}");
     let view = json_value(&view_out);
     assert_eq!(view["plans"].as_array().unwrap().len(), 1);
     assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
     assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+
+    let (success, show_out, stderr) =
+        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    assert!(success, "mission show failed: {stderr}");
+    let show = json_value(&show_out);
+    assert_eq!(show["plans"].as_array().unwrap().len(), 1);
+    assert_eq!(show["evidence"].as_array().unwrap().len(), 1);
+    assert_eq!(show["work"]["ready"].as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -3430,6 +3624,183 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
         stderr.contains("Unsupported schema 'atelier.issue'")
             && stderr.contains("expected atelier.mission"),
         "unexpected rebuild error: {stderr}"
+    );
+}
+
+#[test]
+fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Indexed title"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue = json_value(&issue_out);
+    let issue_id = issue["data"]["id"].as_str().unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    assert!(success, "fresh ready failed: {stderr}");
+    assert!(ready_out.contains("Indexed title"));
+
+    let issue_path = dir
+        .path()
+        .join(".atelier-state/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace("Indexed title", "Markdown title"),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    assert!(!success, "stale ready should fail, stdout: {stdout}");
+    assert!(
+        stderr.contains("Projection index is stale")
+            && stderr.contains("run `atelier rebuild`")
+            && stderr.contains("issues/"),
+        "unexpected stale-query error: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    assert!(success, "repaired ready failed: {stderr}");
+    assert!(ready_out.contains("Markdown title"));
+}
+
+#[test]
+fn test_projection_index_rejects_missing_and_unindexed_sources() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, first_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "issue", "create", "First indexed issue"],
+    );
+    assert!(success, "first create failed: {stderr}");
+    let first = json_value(&first_out);
+    let first_id = first["data"]["id"].as_str().unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let first_path = dir
+        .path()
+        .join(".atelier-state/issues")
+        .join(format!("{first_id}.md"));
+    let first_markdown = std::fs::read_to_string(&first_path).unwrap();
+    std::fs::remove_file(&first_path).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(
+        !success,
+        "missing source list should fail, stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("indexed source is missing"),
+        "unexpected missing-source error: {stderr}"
+    );
+
+    std::fs::write(&first_path, first_markdown).unwrap();
+    let unindexed_path = dir.path().join(".atelier-state/issues/atelier-zzzz.md");
+    std::fs::write(
+        &unindexed_path,
+        r#"---
+acceptance: []
+blocks: []
+created_at: "2026-06-10T12:00:00+00:00"
+depends_on: []
+evidence_required: []
+id: "atelier-zzzz"
+issue_type: "task"
+labels: []
+links: []
+parent: null
+priority: "P2"
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Unindexed issue"
+updated_at: "2026-06-10T12:00:00+00:00"
+---
+
+Body
+"#,
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "search", "Unindexed"]);
+    assert!(!success, "unindexed search should fail, stdout: {stdout}");
+    assert!(
+        stderr.contains("canonical source is not indexed"),
+        "unexpected unindexed-source error: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+    let (success, search_out, stderr) = run_atelier(dir.path(), &["issue", "search", "Unindexed"]);
+    assert!(success, "repaired search failed: {stderr}");
+    assert!(search_out.contains("Unindexed issue"));
+}
+
+#[test]
+fn test_projection_index_guards_dep_list_and_lint_but_ignores_derived_files() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, first_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "issue", "create", "Projection root"],
+    );
+    assert!(success, "first create failed: {stderr}");
+    let first = json_value(&first_out);
+    let first_id = first["data"]["id"].as_str().unwrap();
+    let (success, second_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "issue", "create", "Projection leaf"],
+    );
+    assert!(success, "second create failed: {stderr}");
+    let second = json_value(&second_out);
+    let second_id = second["data"]["id"].as_str().unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", second_id, first_id]);
+    assert!(success, "dep add failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    std::fs::write(dir.path().join(".atelier-state/manifest.json"), "{}\n").unwrap();
+    std::fs::write(dir.path().join(".atelier-state/graph.json"), "{}\n").unwrap();
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    assert!(
+        success,
+        "derived files should not stale issue ready: {stderr}"
+    );
+    assert!(ready_out.contains("Projection root"));
+
+    let issue_path = dir
+        .path()
+        .join(".atelier-state/issues")
+        .join(format!("{first_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace("Projection root", "Projection root changed"),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list"]);
+    assert!(!success, "stale dep list should fail, stdout: {stdout}");
+    assert!(
+        stderr.contains("Projection index is stale"),
+        "unexpected dep list stale error: {stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(!success, "stale lint should fail, stdout: {stdout}");
+    assert!(
+        stderr.contains("Projection index is stale"),
+        "unexpected lint stale error: {stderr}"
     );
 }
 
@@ -3541,8 +3912,8 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     assert!(success, "rebuild after bulk apply failed: {stderr}");
 
     let (success, view_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "view", mission_id]);
-    assert!(success, "mission view after bulk apply failed: {stderr}");
+        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    assert!(success, "mission show after bulk apply failed: {stderr}");
     let view = json_value(&view_out);
     assert_eq!(view["plans"].as_array().unwrap().len(), 1);
     assert_eq!(view["milestones"].as_array().unwrap().len(), 1);
@@ -3924,6 +4295,7 @@ fn test_unicode_in_dependencies() {
 
 /// Test export/import preserves Unicode
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_unicode_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

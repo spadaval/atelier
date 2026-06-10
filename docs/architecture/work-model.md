@@ -23,6 +23,20 @@ proof. These concepts should not collapse into one issue hierarchy.
   can validate an issue, epic, mission, or a specific milestone validation
   criterion.
 
+## Mission Sizing
+
+Missions are goal records, not task records. A mission should describe the
+desired end state and the durable context needed to coordinate work toward that
+state: intent, constraints, risks, checkpoint milestones, plans, validation
+expectations, and evidence.
+
+A mission is large enough to require at least one epic. If the work can be
+planned, claimed, implemented, validated, and closed as a single accountable
+unit, it should remain an issue. If the work needs coordinated implementation,
+review, validation, documentation, or closeout slices under a shared objective,
+the shared objective should be a mission and the executable slices should live
+under one or more epics or issues linked to that mission.
+
 ## Relationships
 
 Use hierarchy for ownership and typed links for contribution, validation, and
@@ -83,7 +97,7 @@ A milestone may say:
 desired_state: "CLI surface is agent-native"
 validation_criteria:
   - "Primary help only shows core commands"
-  - "Legacy commands remain callable as hidden compatibility paths"
+  - "Legacy commands fail as unknown commands"
   - "Full test suite passes"
   - "CLI surface policy is documented"
 ```
@@ -103,14 +117,10 @@ The validator does not define the milestone's meaning. It only enforces whether
 the transition is allowed.
 
 See [Milestone Records](milestone-records.md) for the detailed field contract,
-evidence relationship, completion-state semantics, and compatibility boundary
-for the inherited `atelier milestone` command.
+evidence relationship, and completion-state semantics.
 
-## Current Compatibility
+## Current Representation
 
-Today, most missions, milestones, and epics are represented as issues with
-labels and parent/blocking links. The inherited `atelier milestone` command is a
-SQLite-backed compatibility surface and should not define the target milestone
-model. First-class mission and milestone records should preserve existing issue
-compatibility while making objective, checkpoint, work, workflow, and evidence
-relationships explicit.
+First-class mission and milestone records make objective, checkpoint, work,
+workflow, and evidence relationships explicit. Epics and tasks remain
+issue-shaped accountability records linked into that graph.

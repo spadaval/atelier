@@ -13,6 +13,7 @@ id: "atelier-po2n"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "freshness"
 - "projection"
 - "sqlite"
@@ -21,9 +22,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Extract ProjectionIndex freshness and reindex semantics"
-updated_at: "2026-06-10T03:50:40.571741313+00:00"
+updated_at: "2026-06-10T20:14:20.047794054+00:00"
 ---
 
 Define and implement the first ProjectionIndex boundary for rebuildable SQLite query indexes.

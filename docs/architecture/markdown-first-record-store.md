@@ -16,9 +16,9 @@ The target architecture has three explicit components:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, session locks, timers, or long-lived caches. |
+| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, local work/session association, or long-lived caches. |
 | `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: issue lists, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
-| `RuntimeState` | Local-only state under `.atelier/`: sessions, locks, timers, usage, local agent identity, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
+| `RuntimeState` | Local-only state under `.atelier/`: current work association, sessions used by that association, local agent identity, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
 
 Successful canonical mutations must write Markdown first. A command may refresh
 the projection in the same operation, but durability must not depend on a later
@@ -81,6 +81,28 @@ or run the equivalent safe rebuild path itself when the command contract permits
 Read-only commands must not silently answer from a stale projection when the
 result could affect orchestration, validation, or closeout decisions.
 
+The first `ProjectionIndex` slice stores canonical record-source provenance in
+local SQLite table `projection_index_sources`. Each entry records the relative
+`.atelier-state/` path, file size, modified-time hint, SHA-256 content hash, and
+index timestamp for files under canonical record directories such as `issues/`,
+`missions/`, `milestones/`, `plans/`, and `evidence/`. Content hash is
+authoritative; size and mtime exist only as cheap diagnostics and future
+optimization hints. The table is runtime projection metadata, not canonical
+state, and is recreated by `atelier rebuild`. Root-level derived compatibility
+files such as `manifest.json` and `graph.json` are not query-projection sources.
+Issue activity sidecars are not indexed in this table because recent activity
+previews read those canonical files directly; rebuild still validates sidecar
+schema and subject references.
+
+During the staged migration, `atelier export` also refreshes this metadata after
+it writes canonical Markdown from SQLite so compatibility workflows remain
+queryable. Issue query surfaces (`issue list`, `issue ready`, `issue search`,
+`issue show`, `issue blocked`, `issue related`, `issue impact`, `issue next`,
+and `issue tree`) check the metadata before reading SQLite whenever
+`.atelier-state/` exists. If a canonical source changed, disappeared, appeared
+without being indexed, or lacks metadata, the command fails with actionable
+`atelier rebuild` guidance instead of returning stale projection results.
+
 ## Rebuild And Freshness
 
 `atelier rebuild` recreates the canonical portion of `.atelier/state.db` from
@@ -113,12 +135,6 @@ Evidence remains a rich first-class record under `.atelier-state/evidence/`;
 issue activity records only lightweight `evidence_attached` references such as
 `evidence_id` and `result` so operators can follow up with
 `atelier evidence show`.
-
-`atelier history` reads activity sidecars directly. It defaults to newest-first
-global issue activity with `--limit 50` and supports `--issue`, `--type`,
-`--since`, `--until`, `--limit`, and global `--json`. Human output includes the
-timestamp, event type, issue, actor, summary, and body. JSON output returns the
-same filtered item stream for agents and validation.
 
 `atelier issue show` uses the same sidecars for its bounded recent activity
 preview when they exist, and falls back to legacy SQLite notes/comments when a
@@ -153,8 +169,7 @@ compatibility check, not the target ownership model.
 Runtime state remains useful for coordination and operator ergonomics:
 
 - current work/session association;
-- local locks and claim helpers;
-- timers, usage metrics, and command telemetry;
+- local claim helper state used by core workflows;
 - cached projection metadata;
 - UI state and terminal-view caches.
 

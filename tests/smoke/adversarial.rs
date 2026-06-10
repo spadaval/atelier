@@ -377,7 +377,7 @@ fn test_concurrent_creates_5() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["create", &format!("Concurrent issue {}", i)])
+                    .args(["issue", "create", &format!("Concurrent issue {}", i)])
                     .output()
                     .expect("failed to execute atelier");
                 output.status.success()

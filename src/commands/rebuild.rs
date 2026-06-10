@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::activity::IssueActivity;
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue};
+use crate::projection_index;
 use crate::record_id;
 use crate::record_store::{self, FIRST_CLASS_RECORD_KINDS};
 
@@ -36,7 +37,7 @@ struct CanonicalRecord {
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(db_path, &rebuild)?;
+    write_rebuilt_database(state_dir, db_path, &rebuild)?;
     eprintln!("Rebuilt {} from {}", db_path.display(), state_dir.display());
     Ok(())
 }
@@ -388,7 +389,11 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
     Ok(())
 }
 
-fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result<()> {
+fn write_rebuilt_database(
+    state_dir: &Path,
+    db_path: &Path,
+    rebuild: &RebuildProjection,
+) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
         anyhow!(
             "Cannot determine parent directory for {}",
@@ -450,6 +455,7 @@ fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result
             }
             Ok(())
         })?;
+        projection_index::refresh(&db, state_dir)?;
     }
 
     if db_path.exists() {

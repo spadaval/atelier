@@ -17,9 +17,9 @@
 - ProjectionIndex: the target rebuildable SQLite index derived from
   RecordStore records for global queries, graph traversal, search, validation,
   and Mission Control inputs.
-- RuntimeState: local-only `.atelier/` data such as sessions, locks, timers,
-  usage, agent identity, and caches. It can reference canonical IDs but is not
-  the durable project record source.
+- RuntimeState: local-only `.atelier/` data such as current work association,
+  sessions used by that association, agent identity, and caches. It can
+  reference canonical IDs but is not the durable project record source.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.

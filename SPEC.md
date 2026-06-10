@@ -38,7 +38,7 @@ Chainlink provides useful foundations:
 - Sessions and handoff notes.
 - Agent identity.
 - Lock and sync concepts.
-- Token usage tracking.
+- Agent identity and local runtime concepts.
 - Hooks, rules, and context-provider direction.
 - JSON output.
 
@@ -136,6 +136,12 @@ A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain intent, constraints,
 active milestones, linked plans, status, validation expectations, and current
 health.
+
+Missions should be focused on the goal or end state, not on a specific task.
+They are the right shape when the objective is large enough to require at least
+one epic of accountable work beneath it. Smaller work should stay as an issue,
+while mission execution should be split into epics, tasks, validation, review,
+documentation, or closeout issues linked back to the mission.
 
 ### Milestone
 
@@ -351,9 +357,8 @@ The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
 Normal tracked work uses explicit work association rather than inherited
-Chainlink lock sync. Hidden lock/sync commands may remain for manual
-coordination, but the default workflow is Git branch/worktree state plus local
-Atelier runtime association and canonical export freshness checks.
+Chainlink lock sync. The default workflow is Git branch/worktree state plus
+local Atelier runtime association and canonical export freshness checks.
 
 ## Validation And Workflow Validators
 

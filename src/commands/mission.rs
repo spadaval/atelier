@@ -31,8 +31,7 @@ pub fn create(
 }
 
 pub fn show(db: &Database, id: &str, json_output: bool) -> Result<()> {
-    let record = db.require_record(KIND, id)?;
-    print_record(db, &record, json_output)
+    view(db, id, json_output)
 }
 
 pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
@@ -108,6 +107,12 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
 
     println!("Mission {}: {}", mission.id, mission.title);
     println!("Status: {}", mission.status);
+    if let Some(body) = &mission.body {
+        if !body.is_empty() {
+            println!("\n{}", body);
+        }
+    }
+    println!();
     println!(
         "Plans: {}  Milestones: {}  Evidence: {}",
         plans.len(),

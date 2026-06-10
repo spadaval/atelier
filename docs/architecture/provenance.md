@@ -10,17 +10,18 @@ is defined by [CONTEXT.md](../../CONTEXT.md).
 The Chainlink codebase supplies the working Rust CLI and local runtime machinery
 that Atelier is evolving:
 
-- `src/main.rs` and `src/commands/`: Clap-based command routing and command
-  handlers for issue CRUD, list/search/show/update flows, dependencies,
-  relations, comments, labels, milestones, archive, sessions, locks, sync,
-  import/export, token usage, status, timers, and agent identity workflows.
+- Original `src/main.rs` and `src/commands/`: Clap-based command routing and
+  command handlers for issue CRUD, list/search/show/update flows,
+  dependencies, relations, comments, labels, milestones, archive, sessions,
+  locks, sync, import/export, token usage, status, timers, and agent identity
+  workflows.
 - `src/db/`: SQLite schema management, migrations, and persistence operations
   for issues, comments, labels, dependencies, relations, milestones, sessions,
   archive records, time entries, and token usage.
 - `src/models.rs`, `src/identity.rs`, `src/locks.rs`, `src/lock_check.rs`,
-  `src/sync.rs`, `src/token_usage.rs`, and `src/utils.rs`: shared data types and
-  operational helpers around identity, locks, sync, token accounting, and CLI
-  support behavior.
+  `src/sync.rs`, and `src/utils.rs`: shared data types and operational helpers
+  around identity, locks, sync, and CLI support behavior. Token accounting
+  helpers were removed with the legacy usage command surface.
 - `resources/atelier/` and `resources/claude/`: renamed resource, rule, hook,
   MCP, and integration assets that descend from Chainlink resource content.
 - `tests/` and `fuzz/`: inherited CLI integration, smoke, property, and fuzz
@@ -56,12 +57,12 @@ documenting target product behavior or new architecture decisions.
 
 ## Preservation Expectations
 
-Inherited behavior should be preserved until an assigned bead or ADR explicitly
-changes it:
+Inherited behavior should be preserved until assigned tracker work or an ADR
+explicitly changes it:
 
-- Preserve useful CLI behavior, SQLite persistence invariants, sessions, locks,
-  hooks, token usage accounting, JSON output, and practical test coverage while
-  rename and migration work is underway.
+- Preserve useful CLI behavior, SQLite persistence invariants, sessions used by
+  current work association, hooks, JSON output, and practical test coverage
+  while rename and migration work is underway.
 - Do not replace working inherited modules with compatibility shims whose only
   purpose is hiding current names before target behavior exists.
 - Do not treat backup-oriented Chainlink export/import as the target canonical
@@ -69,8 +70,8 @@ changes it:
 - When replacing inherited behavior, update target-state docs or ADRs so the
   new design does not rely only on historical prose.
 - If inherited tests or resources no longer apply, retire them only through the
-  bead that owns that migration and record the reason in the relevant docs or
-  tracker handoff.
+  tracker work that owns that migration and record the reason in the relevant
+  docs or tracker handoff.
 
 ## Deferred Migration Areas
 
@@ -85,5 +86,9 @@ them:
   Markdown records and rebuildable projections.
 - Adding first-class missions, plans, evidence, workflow validators, runs, typed
   links, and workflow configuration.
-- Reworking lock sync behavior beyond what the relevant migration or design bead
-  decides.
+- Reworking lock sync behavior beyond what the relevant migration or design
+  issue decides.
+
+Legacy command preservation has been superseded by the command-surface
+simplification mission: non-core aliases and inherited utility groups should be
+deleted rather than hidden behind compatibility shims.

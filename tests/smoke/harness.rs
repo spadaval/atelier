@@ -63,7 +63,8 @@ impl SmokeHarness {
 
     /// Run an Atelier CLI command and return the full result.
     pub fn run(&self, args: &[&str]) -> CmdResult {
-        let translated_args = self.translate_issue_refs(args);
+        let canonical_args = canonicalize_legacy_test_args(args);
+        let translated_args = self.translate_issue_refs_owned(&canonical_args);
         let output = Command::new(&self.atelier_bin)
             .current_dir(self.temp_dir.path())
             .args(&translated_args)
@@ -118,13 +119,22 @@ impl SmokeHarness {
     }
 
     fn translate_issue_refs(&self, args: &[&str]) -> Vec<String> {
+        self.translate_issue_refs_owned(
+            &args
+                .iter()
+                .map(|arg| (*arg).to_string())
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn translate_issue_refs_owned(&self, args: &[String]) -> Vec<String> {
         args.iter()
             .enumerate()
             .map(|(index, arg)| {
                 if issue_ref_position(args, index) {
-                    self.translate_issue_ref(arg)
+                    self.translate_issue_ref(arg.as_str())
                 } else {
-                    (*arg).to_string()
+                    arg.to_string()
                 }
             })
             .collect()
@@ -188,6 +198,48 @@ impl SmokeHarness {
     }
 }
 
+fn canonicalize_legacy_test_args(args: &[&str]) -> Vec<String> {
+    let offset = command_offset(args);
+    let mut translated = args
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect::<Vec<_>>();
+    let Some(command) = args.get(offset) else {
+        return translated;
+    };
+    let issue_commands = [
+        "create",
+        "quick",
+        "subissue",
+        "list",
+        "search",
+        "show",
+        "update",
+        "close",
+        "close-all",
+        "reopen",
+        "delete",
+        "comment",
+        "label",
+        "unlabel",
+        "block",
+        "unblock",
+        "blocked",
+        "ready",
+        "relate",
+        "unrelate",
+        "related",
+        "impact",
+        "next",
+        "tree",
+        "tested",
+    ];
+    if issue_commands.contains(command) {
+        translated.insert(offset, "issue".to_string());
+    }
+    translated
+}
+
 fn is_record_id(value: &str) -> bool {
     let Some((slug, suffix)) = value.rsplit_once('-') else {
         return false;
@@ -202,19 +254,25 @@ fn is_record_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
 }
 
-fn command_offset(args: &[&str]) -> usize {
+fn command_offset<T: AsRef<str>>(args: &[T]) -> usize {
     args.iter()
-        .position(|arg| !arg.starts_with('-'))
+        .position(|arg| !arg.as_ref().starts_with('-'))
         .unwrap_or(args.len())
 }
 
-fn issue_ref_position(args: &[&str], index: usize) -> bool {
+fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
     let offset = command_offset(args);
     if index <= offset {
         return false;
     }
 
-    match args.get(offset..).unwrap_or_default() {
+    let rest = args
+        .get(offset..)
+        .unwrap_or_default()
+        .iter()
+        .map(|arg| arg.as_ref())
+        .collect::<Vec<_>>();
+    match rest.as_slice() {
         ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
             index == offset + 1
         }
@@ -226,9 +284,14 @@ fn issue_ref_position(args: &[&str], index: usize) -> bool {
         ["session", "work", ..] => index == offset + 2,
         ["archive", "add" | "remove", ..] => index == offset + 2,
         ["milestone", "add" | "remove", ..] => index > offset + 2,
-        ["issue", "show" | "update" | "impact", ..] => index == offset + 2,
+        ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
+            index == offset + 2
+        }
+        ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
+        ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
+            index == offset + 2 || index == offset + 3
+        }
         ["issue", "subissue", ..] => index == offset + 2,
-        ["issue", "relate", ..] => index == offset + 2 || index == offset + 3,
         ["dep", "list", ..] => index == offset + 2,
         ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
         _ => false,

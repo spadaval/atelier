@@ -44,39 +44,11 @@ pub struct Session {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TokenUsage {
-    pub id: i64,
-    pub agent_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<i64>,
-    pub timestamp: DateTime<Utc>,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_read_tokens: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_creation_tokens: Option<i64>,
-    pub model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cost_estimate: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Relation {
     pub issue_id_1: IssueId,
     pub issue_id_2: IssueId,
     pub relation_type: String,
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Milestone {
-    pub id: i64,
-    pub name: String,
-    pub description: Option<String>,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub closed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -290,47 +262,6 @@ mod tests {
         assert_eq!(deserialized.handoff_notes, Some("Final notes".to_string()));
     }
 
-    // ==================== Milestone Tests ====================
-
-    #[test]
-    fn test_milestone_serialization() {
-        let milestone = Milestone {
-            id: 1,
-            name: "v1.0".to_string(),
-            description: Some("First release".to_string()),
-            status: "open".to_string(),
-            created_at: Utc::now(),
-            closed_at: None,
-        };
-
-        let json = serde_json::to_string(&milestone).unwrap();
-        let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(milestone.id, deserialized.id);
-        assert_eq!(milestone.name, deserialized.name);
-        assert_eq!(milestone.description, deserialized.description);
-        assert_eq!(milestone.status, deserialized.status);
-    }
-
-    #[test]
-    fn test_milestone_closed() {
-        let now = Utc::now();
-        let milestone = Milestone {
-            id: 1,
-            name: "v1.0".to_string(),
-            description: None,
-            status: "closed".to_string(),
-            created_at: now,
-            closed_at: Some(now),
-        };
-
-        let json = serde_json::to_string(&milestone).unwrap();
-        let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(deserialized.closed_at, Some(now));
-        assert_eq!(deserialized.status, "closed");
-    }
-
     // ==================== Property-Based Tests ====================
 
     proptest! {
@@ -410,29 +341,6 @@ mod tests {
                 active_issue_id.map(|id| format!("atelier-{id:04}"))
             );
             prop_assert_eq!(deserialized.handoff_notes, handoff_notes);
-        }
-
-        #[test]
-        fn prop_milestone_json_roundtrip(
-            id in 1i64..10000,
-            name in "[a-zA-Z0-9.]{1,50}",
-            status in "open|closed"
-        ) {
-            let milestone = Milestone {
-                id,
-                name: name.clone(),
-                description: None,
-                status: status.clone(),
-                created_at: Utc::now(),
-                closed_at: None,
-            };
-
-            let json = serde_json::to_string(&milestone).unwrap();
-            let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-            prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(deserialized.name, name);
-            prop_assert_eq!(deserialized.status, status);
         }
 
         #[test]

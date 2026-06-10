@@ -1,14 +1,10 @@
-mod archive;
 mod comments;
 mod dependencies;
 mod issues;
 mod labels;
-mod milestones;
 mod records;
 mod relations;
 mod sessions;
-mod time_entries;
-mod token_usage_db;
 mod work;
 
 use anyhow::{Context, Result};
@@ -20,7 +16,7 @@ use crate::models::Issue;
 use crate::record_id;
 use crate::record_store;
 
-const SCHEMA_VERSION: i32 = 16;
+const SCHEMA_VERSION: i32 = 17;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -268,16 +264,6 @@ impl Database {
                     FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
                 );
 
-                -- Time tracking
-                CREATE TABLE IF NOT EXISTS time_entries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    issue_id TEXT NOT NULL,
-                    started_at TEXT NOT NULL,
-                    ended_at TEXT,
-                    duration_seconds INTEGER,
-                    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
                 -- Relations (related issues, bidirectional, typed)
                 CREATE TABLE IF NOT EXISTS relations (
                     issue_id_1 TEXT NOT NULL,
@@ -289,25 +275,6 @@ impl Database {
                     FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
                 );
 
-                -- Milestones
-                CREATE TABLE IF NOT EXISTS milestones (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    status TEXT NOT NULL DEFAULT 'open',
-                    created_at TEXT NOT NULL,
-                    closed_at TEXT
-                );
-
-                -- Milestone-Issue relationship (many-to-many)
-                CREATE TABLE IF NOT EXISTS milestone_issues (
-                    milestone_id INTEGER NOT NULL,
-                    issue_id TEXT NOT NULL,
-                    PRIMARY KEY (milestone_id, issue_id),
-                    FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
-                    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
                 -- Indexes
                 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
                 CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
@@ -316,11 +283,8 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
                 CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
                 CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
-                CREATE INDEX IF NOT EXISTS idx_time_entries_issue ON time_entries(issue_id);
                 CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
                 CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
-                CREATE INDEX IF NOT EXISTS idx_milestone_issues_m ON milestone_issues(milestone_id);
-                CREATE INDEX IF NOT EXISTS idx_milestone_issues_i ON milestone_issues(issue_id);
                 "#,
             )?;
 
@@ -368,26 +332,7 @@ impl Database {
 
             // Migration v11: Token usage tracking table
             if version < 11 {
-                self.migrate_batch(
-                    r#"
-                    CREATE TABLE IF NOT EXISTS token_usage (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        agent_id TEXT NOT NULL,
-                        session_id INTEGER,
-                        timestamp TEXT NOT NULL,
-                        input_tokens INTEGER NOT NULL DEFAULT 0,
-                        output_tokens INTEGER NOT NULL DEFAULT 0,
-                        cache_read_tokens INTEGER,
-                        cache_creation_tokens INTEGER,
-                        model TEXT NOT NULL DEFAULT 'unknown',
-                        cost_estimate REAL,
-                        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_token_usage_agent ON token_usage(agent_id);
-                    CREATE INDEX IF NOT EXISTS idx_token_usage_session ON token_usage(session_id);
-                    CREATE INDEX IF NOT EXISTS idx_token_usage_timestamp ON token_usage(timestamp);
-                    "#,
-                );
+                // Token usage tracking was removed from the command surface.
             }
 
             // Migration v12: Add agent_id column to sessions for multi-agent tracking
@@ -455,12 +400,32 @@ impl Database {
                 );
             }
 
+            // Migration v17: remove inherited runtime/storage tables whose CLI
+            // surfaces were deleted.
+            if version < 17 {
+                self.migrate_batch(
+                    r#"
+                    DROP INDEX IF EXISTS idx_token_usage_agent;
+                    DROP INDEX IF EXISTS idx_token_usage_session;
+                    DROP INDEX IF EXISTS idx_token_usage_timestamp;
+                    DROP TABLE IF EXISTS token_usage;
+                    DROP INDEX IF EXISTS idx_time_entries_issue;
+                    DROP TABLE IF EXISTS time_entries;
+                    DROP INDEX IF EXISTS idx_milestone_issues_m;
+                    DROP INDEX IF EXISTS idx_milestone_issues_i;
+                    DROP TABLE IF EXISTS milestone_issues;
+                    DROP TABLE IF EXISTS milestones;
+                    "#,
+                );
+            }
+
             self.conn
                 .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
         }
 
         // Enable foreign keys
         self.conn.execute("PRAGMA foreign_keys = ON", [])?;
+        self.init_projection_index_schema()?;
 
         Ok(())
     }

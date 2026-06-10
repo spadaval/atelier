@@ -5,6 +5,7 @@ use super::harness::SmokeHarness;
 // ===========================================================================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_roundtrip() {
     let h = SmokeHarness::new();
 
@@ -60,6 +61,7 @@ fn test_timer_roundtrip() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_start_already_running() {
     let h = SmokeHarness::new();
     h.run_ok(&["create", "Double-start issue"]);
@@ -80,6 +82,7 @@ fn test_timer_start_already_running() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_timer_stop_not_running() {
     let h = SmokeHarness::new();
 
@@ -102,6 +105,7 @@ fn test_timer_stop_not_running() {
 // ===========================================================================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_full_lifecycle() {
     let h = SmokeHarness::new();
 
@@ -165,6 +169,7 @@ fn test_session_full_lifecycle() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_status_no_session() {
     let h = SmokeHarness::new();
 
@@ -183,6 +188,7 @@ fn test_session_status_no_session() {
 }
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_session_end_without_start() {
     let h = SmokeHarness::new();
 
@@ -304,6 +310,7 @@ fn test_circular_dependency_prevented() {
 // ===========================================================================
 
 #[test]
+#[ignore = "legacy command surface removed"]
 fn test_milestone_full_lifecycle() {
     let h = SmokeHarness::new();
 

@@ -239,9 +239,17 @@ Milestone 2 introduces `atelier export` as the deterministic writer for
 `.atelier-state/` and `atelier export --check` as the durable-state freshness
 check.
 `atelier rebuild` recreates `.atelier/state.db` from `.atelier-state/` and may
-create the local `.atelier/` runtime directory in a fresh checkout. Explicit
-backup exports remain available with `atelier export --format json` and
-`atelier export --format markdown`.
+create the local `.atelier/` runtime directory in a fresh checkout. Backup
+export formats are no longer command surfaces; predecessor imports use
+`atelier import-beads`.
+
+Rebuild also recreates local `ProjectionIndex` source metadata in SQLite. The
+metadata records canonical file paths, size and modified-time hints, and content
+hashes so query commands can detect stale projections before reading SQLite.
+This metadata is intentionally not exported into `.atelier-state/` and can be
+discarded with `.atelier/state.db`. Issue activity sidecars are canonical files
+but are read directly by history/show commands, so they are validated by rebuild
+rather than tracked as query-projection sources.
 
 This is the transitional compatibility path for the SQLite-first inherited
 implementation. The target architecture is Markdown-first: mutating commands

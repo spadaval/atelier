@@ -17,7 +17,7 @@ fn test_concurrent_creates_10() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["create", &format!("Concurrent issue {}", i)])
+                    .args(["issue", "create", &format!("Concurrent issue {}", i)])
                     .output()
                     .expect("failed to execute atelier");
                 output.status.success()
@@ -63,7 +63,7 @@ fn test_concurrent_reads() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["list", "-s", "all"])
+                    .args(["issue", "list", "-s", "all"])
                     .output()
                     .expect("failed to execute atelier");
                 output.status.success()
@@ -101,7 +101,7 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["create", &format!("Concurrent write {}", i)])
+                .args(["issue", "create", &format!("Concurrent write {}", i)])
                 .output()
                 .expect("failed to execute atelier");
             output.status.success()
@@ -115,7 +115,7 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["list", "-s", "all"])
+                .args(["issue", "list", "-s", "all"])
                 .output()
                 .expect("failed to execute atelier");
             output.status.success()

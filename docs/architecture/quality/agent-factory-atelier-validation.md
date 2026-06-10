@@ -22,8 +22,9 @@ and skill bindings were updated.
   removed the edge; a follow-up `show` displayed no blockers.
 - Close workflow: `atelier issue close 44 --reason ...` closed the dependency
   fixture task; `atelier issue close 43 --reason ...` closed the docs task.
-- Health and sync: `atelier lint atelier-z1p.6`, `atelier export --check`,
-  `atelier doctor`, and `atelier sync` passed.
+- Health checks: `atelier lint atelier-z1p.6`, `atelier export --check`, and
+  `atelier doctor` passed. The historical `atelier sync` proof is superseded by
+  Git plus canonical export/rebuild checks.
 - Clean rebuild: `/tmp/atelier-rebuild-check` was populated with
   `.atelier-state` and an empty `.atelier`; from that directory, `atelier
   rebuild --input .atelier-state` rebuilt `/tmp/atelier-rebuild-check/.atelier/state.db`,

@@ -1082,10 +1082,14 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bo
         .map(|stale| stale.is_empty())
         .unwrap_or(false);
     let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
+    let projection_fresh = crate::projection_index::check(db, state_dir)
+        .map(|report| report.is_fresh())
+        .unwrap_or(false);
     let mut health = BTreeMap::new();
     health.insert("database", db_path.exists());
     health.insert("projection", state_dir.is_dir());
     health.insert("export_fresh", export_fresh);
+    health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
     if json_output {
         print_success(

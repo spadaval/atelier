@@ -30,11 +30,11 @@ Normal tracked work uses explicit work association, not inherited lock sync.
 - check canonical export freshness before finish;
 - never launch or supervise coding agents.
 
-Inherited lock and sync commands remain hidden compatibility and manual
-coordination tools. They are not the normal claim/work association path, and
-they do not define Milestone 3 behavior. Remote/shared lock sync is deferred
-until a later policy explicitly defines holder identity, expiry, conflict
-resolution, and Mission Control projection semantics.
+Inherited lock and sync commands are removed from the CLI surface. Internal
+lock-checking helpers may remain only where core workflow code still needs
+them. Remote/shared lock sync is deferred until a later policy explicitly
+defines holder identity, expiry, conflict resolution, and Mission Control
+projection semantics.
 
 ## Consequences
 
@@ -42,8 +42,8 @@ resolution, and Mission Control projection semantics.
   association.
 - A fresh worktree can rebuild projection state from `.atelier-state/` and then
   establish its own local work association.
-- Hidden lock commands can still serve advanced/manual coordination while the
-  new workflow stabilizes.
+- Advanced/manual coordination needs a new explicit core proposal rather than a
+  hidden inherited command.
 - Mission Control can project branch/worktree association separately from locks.
 - Future lock redesign can build on the work association model without keeping
   inherited Chainlink sync behavior as the default.

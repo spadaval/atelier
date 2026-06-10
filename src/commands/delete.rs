@@ -170,49 +170,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_archived_issue() {
-        let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Archived issue", None, "medium").unwrap();
-        db.close_issue(issue_id.as_str()).unwrap();
-        db.archive_issue(issue_id.as_str()).unwrap();
-
-        let result = run_force(&db, issue_id.as_str());
-        assert!(result.is_ok());
-
-        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
-    }
-
-    #[test]
-    fn test_delete_issue_with_timer() {
-        let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Timed issue", None, "medium").unwrap();
-        db.start_timer(&issue_id).unwrap();
-
-        let result = run_force(&db, issue_id.as_str());
-        assert!(result.is_ok());
-
-        assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
-    }
-
-    #[test]
-    fn test_delete_issue_in_milestone() {
-        let (db, _dir) = setup_test_db();
-        let issue_id = db.create_issue("Milestone issue", None, "medium").unwrap();
-        let milestone_id = db.create_milestone("v1.0", None).unwrap();
-        db.add_issue_to_milestone(milestone_id, issue_id.as_str())
-            .unwrap();
-
-        let result = run_force(&db, issue_id.as_str());
-        assert!(result.is_ok());
-
-        // Milestone should still exist
-        assert!(db.get_milestone(milestone_id).unwrap().is_some());
-        // But issue should be removed from it
-        let issues = db.get_milestone_issues(milestone_id).unwrap();
-        assert!(issues.is_empty());
-    }
-
-    #[test]
     fn test_delete_multiple_issues() {
         let (db, _dir) = setup_test_db();
         let id1 = db.create_issue("Issue 1", None, "medium").unwrap();
