@@ -4,10 +4,12 @@ mod dependencies;
 mod issues;
 mod labels;
 mod milestones;
+mod records;
 mod relations;
 mod sessions;
 mod time_entries;
 mod token_usage_db;
+mod work;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -17,7 +19,7 @@ use std::path::Path;
 use crate::models::Issue;
 use crate::record_id;
 
-const SCHEMA_VERSION: i32 = 15;
+const SCHEMA_VERSION: i32 = 16;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -26,6 +28,30 @@ pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &[
     "assumption", // "shares underlying assumption" — concept clustering
     "falsifies",  // "this evidence falsifies that assumption"
     "derived",    // "this conclusion was derived from that assumption"
+];
+
+pub const VALID_RECORD_KINDS: &[&str] = &[
+    "issue",
+    "mission",
+    "milestone",
+    "plan",
+    "evidence",
+    "workflow_validator",
+];
+
+pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
+    "advances",
+    "has_checkpoint",
+    "contributes_to",
+    "planned_by",
+    "validates",
+    "evidenced_by",
+    "implements",
+    "part_of",
+    "supersedes",
+    "derived_from",
+    "duplicates",
+    "related",
 ];
 
 /// Valid values for issue priority.
@@ -105,6 +131,33 @@ pub fn validate_relation_type(relation_type: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub fn validate_record_kind(kind: &str) -> Result<()> {
+    if VALID_RECORD_KINDS.contains(&kind) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid record kind '{}'. Valid values: {}",
+            kind,
+            VALID_RECORD_KINDS.join(", ")
+        )
+    }
+}
+
+pub fn validate_link_type(relation_type: &str) -> Result<()> {
+    if relation_type.is_empty() {
+        anyhow::bail!("Link type cannot be empty");
+    }
+    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid link type '{}'. Valid values: {}",
+            relation_type,
+            WELL_KNOWN_LINK_TYPES.join(", ")
+        )
+    }
 }
 
 pub struct Database {
@@ -374,6 +427,48 @@ impl Database {
 
             if version < 15 {
                 self.migrate_issue_ids_to_text()?;
+            }
+
+            if version < 16 {
+                self.migrate_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS records (
+                        id TEXT PRIMARY KEY,
+                        kind TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'open',
+                        body TEXT,
+                        data_json TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
+                    CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+
+                    CREATE TABLE IF NOT EXISTS record_links (
+                        source_kind TEXT NOT NULL,
+                        source_id TEXT NOT NULL,
+                        target_kind TEXT NOT NULL,
+                        target_id TEXT NOT NULL,
+                        relation_type TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        PRIMARY KEY (source_kind, source_id, target_kind, target_id, relation_type)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
+                    CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
+
+                    CREATE TABLE IF NOT EXISTS work_associations (
+                        issue_id TEXT PRIMARY KEY,
+                        status TEXT NOT NULL,
+                        branch TEXT,
+                        worktree_path TEXT,
+                        started_at TEXT NOT NULL,
+                        finished_at TEXT,
+                        FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_work_associations_status ON work_associations(status);
+                    "#,
+                );
             }
 
             self.conn

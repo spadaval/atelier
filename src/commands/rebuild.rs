@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::{validate_relation_type, Database};
-use crate::models::Issue;
+use crate::models::{DomainRecord, Issue};
 use crate::record_id;
 
 #[derive(Debug)]
@@ -21,7 +21,15 @@ struct CanonicalIssue {
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
+    records: Vec<CanonicalRecord>,
     relations: Vec<(String, String, String)>,
+    record_links: Vec<(String, String, String, String, String)>,
+}
+
+#[derive(Debug)]
+struct CanonicalRecord {
+    record: DomainRecord,
+    links: Vec<(String, String, String, String, String)>,
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -37,7 +45,9 @@ pub(crate) fn validate_canonical_state(state_dir: &Path) -> Result<()> {
 
 fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     let mut issues = Vec::new();
+    let mut records = Vec::new();
     let mut issue_ids = BTreeSet::new();
+    let mut record_refs = BTreeSet::new();
     let mut canonical_paths = BTreeSet::new();
 
     for relative in discover_issue_record_paths(state_dir)? {
@@ -50,6 +60,20 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
             );
         }
         issues.push(issue);
+    }
+    for kind in ["mission", "milestone", "plan", "evidence"] {
+        for relative in discover_record_paths(state_dir, kind)? {
+            canonical_paths.insert(relative.clone());
+            let record = load_domain_record(state_dir, &relative, kind)?;
+            if !record_refs.insert((record.record.kind.clone(), record.record.id.clone())) {
+                bail!(
+                    "Duplicate {} ID in canonical projection: {}",
+                    record.record.kind,
+                    record.record.id
+                );
+            }
+            records.push(record);
+        }
     }
     ensure_no_unsupported_canonical_files(state_dir, &canonical_paths)?;
 
@@ -76,8 +100,46 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
         }
     }
 
+    let mut record_links = Vec::new();
+    let mut record_link_keys = BTreeSet::new();
+    for record in &records {
+        for link in &record.links {
+            let target_exists = if link.2 == "issue" {
+                issue_ids.contains(&link.3)
+            } else {
+                record_refs.contains(&(link.2.clone(), link.3.clone()))
+            };
+            if !target_exists {
+                bail!(
+                    "Unknown {} link target {} from {} {}",
+                    link.2,
+                    link.3,
+                    record.record.kind,
+                    record.record.id
+                );
+            }
+            if !record_link_keys.insert(link.clone()) {
+                bail!(
+                    "Duplicate typed link {} {} -> {} {} ({})",
+                    link.0,
+                    link.1,
+                    link.2,
+                    link.3,
+                    link.4
+                );
+            }
+            record_links.push(link.clone());
+        }
+    }
+
     issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
-    Ok(RebuildProjection { issues, relations })
+    records.sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
+    Ok(RebuildProjection {
+        issues,
+        records,
+        relations,
+        record_links,
+    })
 }
 
 fn discover_issue_record_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -115,6 +177,18 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
     Ok(())
 }
 
+fn discover_record_paths(state_dir: &Path, kind: &str) -> Result<Vec<PathBuf>> {
+    let dir_name = record_dir(kind);
+    let record_dir = state_dir.join(dir_name);
+    if !record_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut records = Vec::new();
+    collect_issue_record_paths(state_dir, &record_dir, &mut records)?;
+    records.sort();
+    Ok(records)
+}
+
 fn ensure_no_unsupported_canonical_files(
     state_dir: &Path,
     expected: &BTreeSet<PathBuf>,
@@ -126,7 +200,13 @@ fn ensure_no_unsupported_canonical_files(
         if relative == Path::new("manifest.json") || relative == Path::new("graph.json") {
             continue;
         }
-        if relative.starts_with("issues") && expected.contains(&relative) {
+        if (relative.starts_with("issues")
+            || relative.starts_with("missions")
+            || relative.starts_with("milestones")
+            || relative.starts_with("plans")
+            || relative.starts_with("evidence"))
+            && expected.contains(&relative)
+        {
             continue;
         }
         if relative == Path::new("mission-control.json") {
@@ -138,6 +218,79 @@ fn ensure_no_unsupported_canonical_files(
         );
     }
     Ok(())
+}
+
+fn load_domain_record(state_dir: &Path, relative: &Path, kind: &str) -> Result<CanonicalRecord> {
+    let bytes = fs::read(state_dir.join(relative))
+        .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
+    let text = String::from_utf8(bytes).with_context(|| {
+        format!(
+            "Projection file {} is not UTF-8",
+            display_state_path(relative)
+        )
+    })?;
+    let (front_matter, body) = split_front_matter(&text, relative)?;
+
+    let expected_schema = format!("atelier.{kind}");
+    let schema = require_scalar(&front_matter, "schema", relative)?;
+    if schema != expected_schema {
+        bail!(
+            "Unsupported schema '{}' in {}; expected {}",
+            schema,
+            display_state_path(relative),
+            expected_schema
+        );
+    }
+    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
+    if schema_version != 1 {
+        bail!(
+            "Unsupported schema_version {} in {}; expected 1",
+            schema_version,
+            display_state_path(relative)
+        );
+    }
+
+    let id = require_scalar(&front_matter, "id", relative)?;
+    record_id::validate_record_id(&id).with_context(|| {
+        format!(
+            "Invalid {} id {} in {}",
+            kind,
+            id,
+            display_state_path(relative)
+        )
+    })?;
+    let expected = record_path(kind, &id);
+    if relative != expected {
+        bail!(
+            "{} id {} in {} does not match canonical path {}",
+            kind,
+            id,
+            display_state_path(relative),
+            display_state_path(&expected)
+        );
+    }
+    let data_json = require_scalar(&front_matter, "data", relative)?;
+    let _: Value = serde_json::from_str(&data_json)
+        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
+    let links = record_links(&front_matter, "links", kind, &id, relative)?;
+    let body = if body.is_empty() {
+        None
+    } else {
+        Some(body.to_string())
+    };
+    Ok(CanonicalRecord {
+        record: DomainRecord {
+            id,
+            kind: kind.to_string(),
+            title: require_scalar(&front_matter, "title", relative)?,
+            status: require_scalar(&front_matter, "status", relative)?,
+            body,
+            data_json,
+            created_at: require_datetime(&front_matter, "created_at", relative)?,
+            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
+        },
+        links,
+    })
 }
 
 fn canonical_files_under(state_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -296,6 +449,20 @@ fn write_rebuilt_database(db_path: &Path, rebuild: &RebuildProjection) -> Result
             }
             for (source, target, relation_type) in &rebuild.relations {
                 db.add_typed_relation(&source, &target, relation_type)?;
+            }
+            for record in &rebuild.records {
+                db.insert_record_rebuild(&record.record)?;
+            }
+            for (source_kind, source_id, target_kind, target_id, relation_type) in
+                &rebuild.record_links
+            {
+                db.add_record_link(
+                    source_kind,
+                    source_id,
+                    target_kind,
+                    target_id,
+                    relation_type,
+                )?;
             }
             Ok(())
         })?;
@@ -605,6 +772,93 @@ fn typed_links(
         links.push(link);
     }
     Ok(links)
+}
+
+fn record_links(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    source_kind: &str,
+    source_id: &str,
+    relative: &Path,
+) -> Result<Vec<(String, String, String, String, String)>> {
+    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
+        anyhow!(
+            "Missing array front matter key '{}' in {}",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+
+    let mut links = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in values {
+        let object = value.as_object().ok_or_else(|| {
+            anyhow!(
+                "Array '{}' in {} must contain link objects",
+                key,
+                display_state_path(relative)
+            )
+        })?;
+        let target_kind = object
+            .get("target_kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Link in {} is missing target_kind",
+                    display_state_path(relative)
+                )
+            })?;
+        crate::db::validate_record_kind(target_kind)?;
+        let target_id = object
+            .get("target_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Link in {} is missing target_id",
+                    display_state_path(relative)
+                )
+            })?;
+        record_id::validate_record_id(target_id)?;
+        let relation_type = object
+            .get("type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("Link in {} is missing type", display_state_path(relative)))?;
+        crate::db::validate_link_type(relation_type)?;
+        let link = (
+            source_kind.to_string(),
+            source_id.to_string(),
+            target_kind.to_string(),
+            target_id.to_string(),
+            relation_type.to_string(),
+        );
+        if !seen.insert(link.clone()) {
+            bail!(
+                "Duplicate link {} {} -> {} {} ({}) in {}",
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                relation_type,
+                display_state_path(relative)
+            );
+        }
+        links.push(link);
+    }
+    Ok(links)
+}
+
+fn record_dir(kind: &str) -> &str {
+    match kind {
+        "mission" => "missions",
+        "milestone" => "milestones",
+        "plan" => "plans",
+        "evidence" => "evidence",
+        _ => kind,
+    }
+}
+
+fn record_path(kind: &str, id: &str) -> PathBuf {
+    PathBuf::from(record_dir(kind)).join(format!("{id}.md"))
 }
 
 fn optional_issue_id(

@@ -2828,6 +2828,380 @@ fn test_agent_factory_json_command_subset() {
 }
 
 #[test]
+fn test_first_class_records_export_rebuild_and_validate() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "mission",
+            "create",
+            "Ship records",
+            "--body",
+            "Mission body",
+            "--constraint",
+            "Keep issues accountable",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission = json_value(&mission_out);
+    let mission_id = mission["id"].as_str().unwrap();
+
+    let (success, plan_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "plan",
+            "create",
+            "Execution plan",
+            "--body",
+            "Do the thing",
+        ],
+    );
+    assert!(success, "plan create failed: {stderr}");
+    let plan = json_value(&plan_out);
+    let plan_id = plan["id"].as_str().unwrap();
+
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "evidence",
+            "add",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "cargo test passed",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    let evidence = json_value(&evidence_out);
+    let evidence_id = evidence["id"].as_str().unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "link",
+            "add",
+            "mission",
+            mission_id,
+            "plan",
+            plan_id,
+            "--type",
+            "planned_by",
+        ],
+    );
+    assert!(success, "mission-plan link failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "link",
+            "add",
+            "evidence",
+            evidence_id,
+            "mission",
+            mission_id,
+            "--type",
+            "validates",
+        ],
+    );
+    assert!(success, "evidence link failed: {stderr}");
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "issue",
+            "create",
+            "Wire mission work",
+            "--issue-type",
+            "task",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue = json_value(&issue_out);
+    let issue_id = issue["data"]["id"].as_str().unwrap();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json", "link", "add", "mission", mission_id, "issue", issue_id, "--type", "advances",
+        ],
+    );
+    assert!(success, "mission-work link failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, validate_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "workflow",
+            "validate",
+            "mission",
+            mission_id,
+            "--validator",
+            "durable_state_current",
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "workflow validate failed: {stderr}");
+    let validation = json_value(&validate_out);
+    let results = validation["data"].as_array().unwrap();
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|result| result["passed"] == true));
+
+    let (success, view_out, stderr) =
+        run_atelier(dir.path(), &["--json", "mission", "view", mission_id]);
+    assert!(success, "mission view failed: {stderr}");
+    let view = json_value(&view_out);
+    assert_eq!(view["plans"].as_array().unwrap().len(), 1);
+    assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
+    assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn test_bulk_plan_apply_records_links_export_and_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bulk_path = dir.path().join("bulk-plan.json");
+    std::fs::write(
+        &bulk_path,
+        r#"{
+  "schema": "atelier.bulk-plan",
+  "schema_version": 1,
+  "title": "Bulk apply smoke",
+  "apply": { "export": "auto" },
+  "records": {
+    "issues": [
+      {
+        "client_ref": "issue.blocker",
+        "title": "Complete prerequisite",
+        "issue_type": "task",
+        "priority": "medium",
+        "status": "closed",
+        "labels": ["bulk"]
+      },
+      {
+        "client_ref": "issue.work",
+        "title": "Implement bulk output",
+        "issue_type": "feature",
+        "priority": "high",
+        "depends_on": [{ "client_ref": "issue.blocker" }],
+        "acceptance": ["summary maps client refs"],
+        "evidence_required": ["export check passes"]
+      }
+    ],
+    "missions": [
+      {
+        "client_ref": "mission.bulk",
+        "title": "Bulk mission",
+        "body": "Mission from bulk plan",
+        "plans": [{ "client_ref": "plan.bulk" }],
+        "milestones": [{ "client_ref": "milestone.bulk" }]
+      }
+    ],
+    "milestones": [
+      {
+        "client_ref": "milestone.bulk",
+        "title": "Bulk checkpoint",
+        "desired_state": "Records are durable",
+        "scope": ["records"],
+        "validation_criteria": ["rebuild preserves links"],
+        "missions": [{ "client_ref": "mission.bulk" }],
+        "contributing_work": [{ "client_ref": "issue.work" }]
+      }
+    ],
+    "plans": [
+      {
+        "client_ref": "plan.bulk",
+        "title": "Bulk plan",
+        "body": "Apply the graph.",
+        "applies_to": [{ "client_ref": "mission.bulk" }]
+      }
+    ],
+    "evidence": [
+      {
+        "client_ref": "evidence.bulk",
+        "title": "Bulk evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "body": "The apply smoke test passed.",
+        "validates": [{ "client_ref": "mission.bulk" }]
+      }
+    ]
+  },
+  "links": [
+    {
+      "source": { "client_ref": "mission.bulk" },
+      "type": "advances",
+      "target": { "client_ref": "issue.work" }
+    }
+  ]
+}"#,
+    )
+    .unwrap();
+    let bulk_arg = bulk_path.to_str().unwrap();
+
+    let (success, dry_run_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "plan", "apply", bulk_arg, "--dry-run"],
+    );
+    assert!(success, "bulk dry-run failed: {stderr}");
+    let dry_run = json_value(&dry_run_out);
+    assert_eq!(dry_run["applied"], false);
+    assert_eq!(dry_run["records"]["missions"].as_array().unwrap().len(), 1);
+
+    let (success, apply_out, stderr) =
+        run_atelier(dir.path(), &["--json", "plan", "apply", bulk_arg]);
+    assert!(success, "bulk apply failed: {stderr}");
+    let applied = json_value(&apply_out);
+    assert_eq!(applied["applied"], true);
+    let mission_id = applied["records"]["missions"][0]["id"].as_str().unwrap();
+    assert!(mission_id.starts_with("atelier-"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check after bulk apply failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after bulk apply failed: {stderr}");
+
+    let (success, view_out, stderr) =
+        run_atelier(dir.path(), &["--json", "mission", "view", mission_id]);
+    assert!(success, "mission view after bulk apply failed: {stderr}");
+    let view = json_value(&view_out);
+    assert_eq!(view["plans"].as_array().unwrap().len(), 1);
+    assert_eq!(view["milestones"].as_array().unwrap().len(), 1);
+    assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
+    assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn test_work_lifecycle_json_and_guards() {
+    let dir = tempdir().unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["config", "user.email", "test@example.com"])
+        .status()
+        .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["config", "user.name", "Test"])
+        .status()
+        .unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Work item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = stdout
+        .split_whitespace()
+        .find(|part| part.starts_with("atelier-"))
+        .unwrap()
+        .to_string();
+
+    let (success, _, _) = run_atelier(dir.path(), &["work", "start", &issue_id]);
+    assert!(!success, "dirty worktree should reject work start");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+    std::fs::write(
+        dir.path().join("atelier.workflow.yaml"),
+        r#"schema: atelier.workflow_config
+schema_version: 1
+record_types: {}
+workflows: {}
+validators: {}
+hooks:
+  write_setup_marker:
+    event: worktree_setup
+    command:
+      argv: [sh, -c, "printf setup > .atelier/setup-marker"]
+      env: {}
+"#,
+    )
+    .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["add", "."])
+        .status()
+        .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["commit", "-q", "-m", "init"])
+        .status()
+        .unwrap();
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["--json", "work", "start", &issue_id]);
+    assert!(success, "work start failed: {stderr}");
+    let started = json_value(&start_out);
+    assert_eq!(started["agent_launched"], false);
+    assert_eq!(started["issue"]["id"], issue_id);
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["--json", "work", "status"]);
+    assert!(success, "work status failed: {stderr}");
+    assert_eq!(json_value(&status_out)["active"]["issue_id"], issue_id);
+
+    let (success, finish_out, stderr) =
+        run_atelier(dir.path(), &["--json", "work", "finish", &issue_id]);
+    assert!(success, "work finish failed: {stderr}");
+    assert_eq!(json_value(&finish_out)["finished"], true);
+
+    let worktree_path = dir.path().join(".atelier-worktrees").join(&issue_id);
+    let worktree_arg = worktree_path.to_string_lossy().to_string();
+    let (success, worktree_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "worktree",
+            "for",
+            &issue_id,
+            "--path",
+            &worktree_arg,
+        ],
+    );
+    assert!(success, "worktree for failed: {stderr}");
+    assert_eq!(
+        json_value(&worktree_out)["worktree_path"],
+        serde_json::Value::String(worktree_arg.clone())
+    );
+    assert!(worktree_path.join(".atelier/state.db").exists());
+    assert!(worktree_path.join(".atelier/setup-marker").exists());
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["--json", "worktree", "status"]);
+    assert!(success, "worktree status failed: {stderr}");
+    let status = json_value(&status_out);
+    let worktrees = status["data"].as_array().unwrap();
+    assert!(worktrees.iter().any(|entry| entry["path"]
+        == serde_json::Value::String(worktree_arg.clone())
+        && entry["associated_work"][0]["issue_id"] == issue_id));
+
+    let (success, remove_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "worktree", "remove", &issue_id, "--force"],
+    );
+    assert!(success, "worktree remove failed: {stderr}");
+    assert_eq!(json_value(&remove_out)["removed"], true);
+    assert!(!worktree_path.exists());
+}
+
+#[test]
 fn test_issue_type_is_canonical_not_label_derived() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

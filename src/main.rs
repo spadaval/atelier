@@ -111,6 +111,48 @@ enum Commands {
         action: DepCommands,
     },
 
+    /// First-class mission records
+    Mission {
+        #[command(subcommand)]
+        action: MissionCommands,
+    },
+
+    /// First-class durable plan records
+    Plan {
+        #[command(subcommand)]
+        action: PlanCommands,
+    },
+
+    /// Typed links across records
+    Link {
+        #[command(subcommand)]
+        action: LinkCommands,
+    },
+
+    /// First-class evidence records
+    Evidence {
+        #[command(subcommand)]
+        action: EvidenceCommands,
+    },
+
+    /// Workflow policy and validator helpers
+    Workflow {
+        #[command(subcommand)]
+        action: WorkflowCommands,
+    },
+
+    /// Work lifecycle and worktree helpers
+    Work {
+        #[command(subcommand)]
+        action: WorkCommands,
+    },
+
+    /// Git worktree helpers for tracked work
+    Worktree {
+        #[command(subcommand)]
+        action: WorktreeCommands,
+    },
+
     /// Validate tracker records
     Lint {
         /// Optional issue ID or imported source ID
@@ -942,6 +984,186 @@ enum DepCommands {
 }
 
 #[derive(Subcommand)]
+enum MissionCommands {
+    /// Create a mission
+    Create {
+        title: String,
+        #[arg(short, long)]
+        body: Option<String>,
+        #[arg(long)]
+        constraint: Vec<String>,
+        #[arg(long)]
+        risk: Vec<String>,
+        #[arg(long)]
+        validation: Vec<String>,
+    },
+    /// Show a mission
+    Show { id: String },
+    /// Show linked plans, work, blockers, and evidence for a mission
+    View { id: String },
+    /// List missions
+    List {
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+    /// Update mission fields
+    Update {
+        id: String,
+        #[arg(short, long)]
+        title: Option<String>,
+        #[arg(short, long)]
+        status: Option<String>,
+        #[arg(short, long)]
+        body: Option<String>,
+        #[arg(long)]
+        constraint: Vec<String>,
+        #[arg(long)]
+        risk: Vec<String>,
+        #[arg(long)]
+        validation: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PlanCommands {
+    /// Create a durable plan
+    Create {
+        title: String,
+        #[arg(short, long)]
+        body: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Show a plan
+    Show { id: String },
+    /// Apply an authored bulk plan JSON file
+    Apply {
+        input: String,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        validate_only: bool,
+    },
+    /// List plans
+    List {
+        #[arg(short, long)]
+        status: Option<String>,
+    },
+    /// Add a new plan revision
+    Revise {
+        id: String,
+        body: String,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Link a plan to a target record
+    Link {
+        id: String,
+        target_kind: String,
+        target_id: String,
+        #[arg(short = 't', long = "type", default_value = "planned_by")]
+        relation_type: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LinkCommands {
+    /// Add a typed link
+    Add {
+        source_kind: String,
+        source_id: String,
+        target_kind: String,
+        target_id: String,
+        #[arg(short = 't', long = "type", default_value = "related")]
+        relation_type: String,
+    },
+    /// Remove a typed link
+    Remove {
+        source_kind: String,
+        source_id: String,
+        target_kind: String,
+        target_id: String,
+        #[arg(short = 't', long = "type", default_value = "related")]
+        relation_type: String,
+    },
+    /// List typed links for a record
+    List { kind: String, id: String },
+}
+
+#[derive(Subcommand)]
+enum EvidenceCommands {
+    /// Add validation evidence
+    Add {
+        #[arg(long = "kind")]
+        evidence_kind: String,
+        #[arg(long)]
+        result: String,
+        summary: String,
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long)]
+        uri: Option<String>,
+        #[arg(long)]
+        producer: Option<String>,
+    },
+    /// Show an evidence record
+    Show { id: String },
+    /// List evidence records
+    List {
+        #[arg(long)]
+        result: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommands {
+    /// Evaluate workflow validators without mutating record state
+    Validate {
+        target_kind: String,
+        target_id: String,
+        #[arg(long, default_value = "close")]
+        transition: String,
+        #[arg(long)]
+        validator: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkCommands {
+    /// Start tracked work on an issue
+    Start { id: String },
+    /// Finish tracked work on an issue
+    Finish { id: String },
+    /// Show current work association
+    Status,
+    /// Create or locate a worktree for an issue
+    Worktree {
+        #[command(subcommand)]
+        action: WorktreeCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorktreeCommands {
+    /// Create or locate a worktree for an issue
+    For {
+        id: String,
+        #[arg(long)]
+        path: Option<String>,
+    },
+    /// Show scan-friendly worktree status
+    Status,
+    /// Merge the associated work branch into the current branch
+    Merge { id: String },
+    /// Remove the associated worktree
+    Remove {
+        id: String,
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum LocksCommands {
     /// List all active locks
     List,
@@ -1025,6 +1247,11 @@ fn get_db() -> Result<Database> {
     let atelier_dir = find_atelier_dir()?;
     let db_path = atelier_dir.join("state.db");
     Database::open(&db_path).context("Failed to open database")
+}
+
+fn export_current_state(db: &Database) -> Result<()> {
+    let root = find_repo_root_for_rebuild()?;
+    commands::export::run_canonical(db, &root.join(".atelier-state"), false)
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -1645,6 +1872,218 @@ fn run() -> Result<()> {
                 }
                 DepCommands::List { issue } => {
                     commands::agent_factory::dep_list(&db, issue.as_deref(), json)
+                }
+            }
+        }
+
+        Commands::Mission { action } => {
+            let db = get_db()?;
+            match action {
+                MissionCommands::Create {
+                    title,
+                    body,
+                    constraint,
+                    risk,
+                    validation,
+                } => {
+                    commands::mission::create(
+                        &db,
+                        &title,
+                        body.as_deref(),
+                        constraint,
+                        risk,
+                        validation,
+                        json,
+                    )?;
+                    export_current_state(&db)
+                }
+                MissionCommands::Show { id } => commands::mission::show(&db, &id, json),
+                MissionCommands::View { id } => commands::mission::view(&db, &id, json),
+                MissionCommands::List { status } => {
+                    commands::mission::list(&db, status.as_deref(), json)
+                }
+                MissionCommands::Update {
+                    id,
+                    title,
+                    status,
+                    body,
+                    constraint,
+                    risk,
+                    validation,
+                } => {
+                    commands::mission::update(
+                        &db,
+                        &id,
+                        title.as_deref(),
+                        status.as_deref(),
+                        body.as_deref(),
+                        constraint,
+                        risk,
+                        validation,
+                        json,
+                    )?;
+                    export_current_state(&db)
+                }
+            }
+        }
+
+        Commands::Plan { action } => {
+            let db = get_db()?;
+            match action {
+                PlanCommands::Create {
+                    title,
+                    body,
+                    reason,
+                } => {
+                    commands::plan::create(&db, &title, body.as_deref(), reason.as_deref(), json)?;
+                    export_current_state(&db)
+                }
+                PlanCommands::Show { id } => commands::plan::show(&db, &id, json),
+                PlanCommands::Apply {
+                    input,
+                    dry_run,
+                    validate_only,
+                } => commands::plan::apply(&db, &input, dry_run, validate_only, json),
+                PlanCommands::List { status } => commands::plan::list(&db, status.as_deref(), json),
+                PlanCommands::Revise { id, body, reason } => {
+                    commands::plan::revise(&db, &id, &body, reason.as_deref(), json)?;
+                    export_current_state(&db)
+                }
+                PlanCommands::Link {
+                    id,
+                    target_kind,
+                    target_id,
+                    relation_type,
+                } => {
+                    commands::plan::link(&db, &id, &target_kind, &target_id, &relation_type, json)?;
+                    export_current_state(&db)
+                }
+            }
+        }
+
+        Commands::Link { action } => {
+            let db = get_db()?;
+            match action {
+                LinkCommands::Add {
+                    source_kind,
+                    source_id,
+                    target_kind,
+                    target_id,
+                    relation_type,
+                } => {
+                    commands::link::add(
+                        &db,
+                        &source_kind,
+                        &source_id,
+                        &target_kind,
+                        &target_id,
+                        &relation_type,
+                        json,
+                    )?;
+                    export_current_state(&db)
+                }
+                LinkCommands::Remove {
+                    source_kind,
+                    source_id,
+                    target_kind,
+                    target_id,
+                    relation_type,
+                } => {
+                    commands::link::remove(
+                        &db,
+                        &source_kind,
+                        &source_id,
+                        &target_kind,
+                        &target_id,
+                        &relation_type,
+                        json,
+                    )?;
+                    export_current_state(&db)
+                }
+                LinkCommands::List { kind, id } => commands::link::list(&db, &kind, &id, json),
+            }
+        }
+
+        Commands::Evidence { action } => {
+            let db = get_db()?;
+            match action {
+                EvidenceCommands::Add {
+                    evidence_kind,
+                    result,
+                    summary,
+                    path,
+                    uri,
+                    producer,
+                } => {
+                    commands::evidence::add(
+                        &db,
+                        &evidence_kind,
+                        &result,
+                        &summary,
+                        path.as_deref(),
+                        uri.as_deref(),
+                        producer.as_deref(),
+                        json,
+                    )?;
+                    export_current_state(&db)
+                }
+                EvidenceCommands::Show { id } => commands::evidence::show(&db, &id, json),
+                EvidenceCommands::List { result } => {
+                    commands::evidence::list(&db, result.as_deref(), json)
+                }
+            }
+        }
+
+        Commands::Workflow { action } => {
+            let db = get_db()?;
+            match action {
+                WorkflowCommands::Validate {
+                    target_kind,
+                    target_id,
+                    transition,
+                    validator,
+                } => commands::workflow::validate(
+                    &db,
+                    &target_kind,
+                    &target_id,
+                    &transition,
+                    validator,
+                    json,
+                ),
+            }
+        }
+
+        Commands::Work { action } => {
+            let db = get_db()?;
+            match action {
+                WorkCommands::Start { id } => commands::work::start(&db, &id, json),
+                WorkCommands::Finish { id } => commands::work::finish(&db, &id, json),
+                WorkCommands::Status => commands::work::status(&db, json),
+                WorkCommands::Worktree { action } => match action {
+                    WorktreeCommands::For { id, path } => {
+                        commands::work::worktree_for(&db, &id, path.as_deref(), json)
+                    }
+                    WorktreeCommands::Status => commands::work::worktree_status(&db, json),
+                    WorktreeCommands::Merge { id } => {
+                        commands::work::worktree_merge(&db, &id, json)
+                    }
+                    WorktreeCommands::Remove { id, force } => {
+                        commands::work::worktree_remove(&db, &id, force, json)
+                    }
+                },
+            }
+        }
+
+        Commands::Worktree { action } => {
+            let db = get_db()?;
+            match action {
+                WorktreeCommands::For { id, path } => {
+                    commands::work::worktree_for(&db, &id, path.as_deref(), json)
+                }
+                WorktreeCommands::Status => commands::work::worktree_status(&db, json),
+                WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id, json),
+                WorktreeCommands::Remove { id, force } => {
+                    commands::work::worktree_remove(&db, &id, force, json)
                 }
             }
         }

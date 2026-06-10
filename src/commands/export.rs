@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::db::Database;
-use crate::models::Issue;
+use crate::models::{DomainRecord, Issue};
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportedIssue {
@@ -146,6 +146,14 @@ fn build_canonical_projection(db: &Database) -> Result<Vec<ProjectionFile>> {
             path: issue_record_path(&issue.id),
             bytes: render_issue_record(db, issue)?.into_bytes(),
         });
+    }
+    for kind in ["mission", "milestone", "plan", "evidence"] {
+        for record in db.list_records(kind, None)? {
+            files.push(ProjectionFile {
+                path: record_path(kind, &record.id),
+                bytes: render_domain_record(db, &record)?.into_bytes(),
+            });
+        }
     }
 
     files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -296,6 +304,55 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     Ok(output)
 }
 
+fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> {
+    let mut links = db
+        .list_record_links(&record.kind, &record.id)?
+        .into_iter()
+        .filter(|link| link.source_kind == record.kind && link.source_id == record.id)
+        .collect::<Vec<_>>();
+    links.sort_by(|a, b| {
+        (
+            &a.target_kind,
+            &a.target_id,
+            &a.relation_type,
+            &a.created_at,
+        )
+            .cmp(&(
+                &b.target_kind,
+                &b.target_id,
+                &b.relation_type,
+                &b.created_at,
+            ))
+    });
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.id))?;
+    write_json_scalar(&mut output, "data", &record.data_json)?;
+    write_record_links(&mut output, "links", &links)?;
+    write_yaml_scalar(
+        &mut output,
+        "schema",
+        Some(&format!("atelier.{}", record.kind)),
+    )?;
+    output.push_str("schema_version: 1\n");
+    write_yaml_scalar(&mut output, "status", Some(&record.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n\n");
+    output.push_str(&normalize_body(record.body.as_deref().unwrap_or("")));
+    output.push('\n');
+    Ok(output)
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 struct IssueLink {
     relation_type: String,
@@ -323,6 +380,17 @@ fn issue_ids(ids: Vec<String>) -> Vec<String> {
 
 fn issue_record_path(id: &str) -> PathBuf {
     PathBuf::from("issues").join(format!("{}.md", id))
+}
+
+fn record_path(kind: &str, id: &str) -> PathBuf {
+    let dir = match kind {
+        "mission" => "missions",
+        "milestone" => "milestones",
+        "plan" => "plans",
+        "evidence" => "evidence",
+        _ => kind,
+    };
+    PathBuf::from(dir).join(format!("{}.md", id))
 }
 
 fn display_state_path(relative_path: &Path) -> String {
@@ -395,6 +463,40 @@ fn write_yaml_links(output: &mut String, key: &str, links: &[IssueLink]) -> Resu
         output.push_str(&serde_json::to_string(&link.relation_type)?);
         output.push('\n');
     }
+    Ok(())
+}
+
+fn write_record_links(
+    output: &mut String,
+    key: &str,
+    links: &[crate::models::RecordLink],
+) -> Result<()> {
+    output.push_str(key);
+    if links.is_empty() {
+        output.push_str(": []\n");
+        return Ok(());
+    }
+    output.push_str(":\n");
+    for link in links {
+        output.push_str("- target_id: ");
+        output.push_str(&serde_json::to_string(&link.target_id)?);
+        output.push('\n');
+        output.push_str("  target_kind: ");
+        output.push_str(&serde_json::to_string(&link.target_kind)?);
+        output.push('\n');
+        output.push_str("  type: ");
+        output.push_str(&serde_json::to_string(&link.relation_type)?);
+        output.push('\n');
+    }
+    Ok(())
+}
+
+fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> {
+    let _: serde_json::Value = serde_json::from_str(value)?;
+    output.push_str(key);
+    output.push_str(": ");
+    output.push_str(&serde_json::to_string(value)?);
+    output.push('\n');
     Ok(())
 }
 
