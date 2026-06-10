@@ -150,71 +150,6 @@ pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn cascade(db: &Database, issue_id: &str) -> Result<()> {
-    impact(db, issue_id)
-}
-
-/// Mark an issue as falsified: label it, close it, and show the cascade.
-pub fn falsify(db: &Database, issue_id: &str) -> Result<()> {
-    db.require_issue(issue_id)?;
-
-    // Add "falsified" label
-    db.add_label(&issue_id, "falsified")?;
-
-    // Close the issue
-    db.close_issue(&issue_id)?;
-
-    let issue = db
-        .get_issue(issue_id)?
-        .ok_or_else(|| anyhow::anyhow!("Issue {} not found", issue_id))?;
-    println!("Falsified {}: {}", format_issue_id(issue_id), issue.title);
-
-    // Add audit comment
-    db.add_comment(
-        issue_id,
-        "Marked as falsified. Running cascade to identify affected downstream issues.",
-        "falsification",
-    )?;
-
-    // Show cascade
-    let affected = db.downstream_impact(issue_id)?;
-
-    if affected.is_empty() {
-        println!("No downstream issues affected.");
-    } else {
-        println!(
-            "\n⚠ {} downstream issue(s) should be reassessed:\n",
-            affected.len()
-        );
-
-        for issue in &affected {
-            let status_marker = if issue.status == "closed" { "✓" } else { " " };
-            println!(
-                "  {:<5} [{}] {:8} {}",
-                format_issue_id(&issue.id),
-                status_marker,
-                issue.priority,
-                issue.title
-            );
-
-            // Add a comment on each affected issue
-            db.add_comment(
-                &issue.id,
-                &format!(
-                    "⚠ Upstream assumption {} was falsified. This issue may need reassessment.",
-                    format_issue_id(issue_id)
-                ),
-                "falsification",
-            )?;
-
-            // Label affected issues
-            db.add_label(&issue.id, "needs-reassessment")?;
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -482,26 +417,5 @@ mod tests {
 
         assert!(affected_ids.contains(&a2));
         assert!(!affected_ids.contains(&a3));
-    }
-
-    #[test]
-    fn test_falsify_command() {
-        let (db, _dir) = setup_test_db();
-        let root = db.create_issue("Bad assumption", None, "high").unwrap();
-        let child = db
-            .create_subissue(&root, "Built on bad assumption", None, "medium")
-            .unwrap();
-
-        falsify(&db, &root).unwrap();
-
-        // Root should be closed and labeled
-        let root_issue = db.get_issue(&root).unwrap().unwrap();
-        assert_eq!(root_issue.status, "closed");
-        let labels = db.get_labels(&root).unwrap();
-        assert!(labels.contains(&"falsified".to_string()));
-
-        // Child should be labeled for reassessment
-        let child_labels = db.get_labels(&child).unwrap();
-        assert!(child_labels.contains(&"needs-reassessment".to_string()));
     }
 }

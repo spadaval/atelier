@@ -1032,6 +1032,39 @@ fn test_issue_help_shows_impact_and_hides_legacy_assumption_commands() {
 }
 
 #[test]
+fn test_cascade_commands_are_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
+
+    let (top_success, _, top_stderr) = run_atelier(dir.path(), &["cascade", "1"]);
+    assert!(!top_success);
+    assert!(top_stderr.contains("unrecognized subcommand"));
+
+    let (issue_success, _, issue_stderr) = run_atelier(dir.path(), &["issue", "cascade", "1"]);
+    assert!(!issue_success);
+    assert!(issue_stderr.contains("unrecognized subcommand"));
+}
+
+#[test]
+fn test_falsify_commands_are_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+
+    let (top_success, _, top_stderr) = run_atelier(dir.path(), &["falsify", "1"]);
+    assert!(!top_success);
+    assert!(top_stderr.contains("unrecognized subcommand"));
+
+    let (issue_success, _, issue_stderr) = run_atelier(dir.path(), &["issue", "falsify", "1"]);
+    assert!(!issue_success);
+    assert!(issue_stderr.contains("unrecognized subcommand"));
+}
+
+#[test]
 fn test_issue_impact_reports_downstream_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

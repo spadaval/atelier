@@ -438,20 +438,6 @@ enum Commands {
         id: String,
     },
 
-    /// Show downstream issue impact from hierarchy and impact-bearing links
-    #[command(hide = true)]
-    Cascade {
-        /// Issue ID to check impact from
-        id: String,
-    },
-
-    /// Mark an assumption as falsified and propagate to downstream issues
-    #[command(hide = true)]
-    Falsify {
-        /// Issue ID of the falsified assumption
-        id: String,
-    },
-
     /// Suggest next issue (shortcut for `issue next`)
     #[command(hide = true)]
     Next,
@@ -723,20 +709,6 @@ enum IssueCommands {
     /// Show downstream issue impact from hierarchy and impact-bearing links
     Impact {
         /// Issue ID to check impact from
-        id: String,
-    },
-
-    /// Show falsification cascade - compatibility alias for `issue impact`
-    #[command(hide = true)]
-    Cascade {
-        /// Issue ID to check cascade from
-        id: String,
-    },
-
-    /// Mark an assumption as falsified and propagate to downstream issues
-    #[command(hide = true)]
-    Falsify {
-        /// Issue ID of the falsified assumption
         id: String,
     },
 
@@ -1337,14 +1309,9 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             commands::relate::list(&db, &id)
         }
 
-        IssueCommands::Impact { id } | IssueCommands::Cascade { id } => {
+        IssueCommands::Impact { id } => {
             let db = get_db()?;
             commands::relate::impact(&db, &id)
-        }
-
-        IssueCommands::Falsify { id } => {
-            let db = get_db()?;
-            commands::relate::falsify(&db, &id)
         }
 
         IssueCommands::Next => {
@@ -1587,10 +1554,6 @@ fn run() -> Result<()> {
         ),
 
         Commands::Related { id } => dispatch_issue(IssueCommands::Related { id }, quiet, json),
-
-        Commands::Cascade { id } => dispatch_issue(IssueCommands::Impact { id }, quiet, json),
-
-        Commands::Falsify { id } => dispatch_issue(IssueCommands::Falsify { id }, quiet, json),
 
         Commands::Next => dispatch_issue(IssueCommands::Next, quiet, json),
 

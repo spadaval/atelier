@@ -3,7 +3,6 @@ acceptance: []
 blocks:
 - "atelier-0006"
 - "atelier-000h"
-- "atelier-001d"
 - "atelier-001n"
 - "atelier-001t"
 - "atelier-0022"

@@ -190,9 +190,4 @@ impl Database {
 
         Ok(affected)
     }
-
-    /// Compatibility alias for the hidden falsification-oriented command path.
-    pub fn falsification_cascade(&self, falsified_id: impl ToString) -> Result<Vec<Issue>> {
-        self.downstream_impact(falsified_id)
-    }
 }

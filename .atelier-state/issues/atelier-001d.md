@@ -4,12 +4,12 @@ blocks:
 - "atelier-001f"
 created_at: "2026-06-09T17:30:35.641914916+00:00"
 depends_on:
-- "atelier-0005"
 - "atelier-001b"
 evidence_required: []
 id: "atelier-001d"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "beads:type:feature"
 - "cli"
 - "domain-model"
@@ -19,9 +19,9 @@ parent: "atelier-001a"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Replace assumption-specific relation commands with generic link impact"
-updated_at: "2026-06-09T17:32:21.512339242+00:00"
+updated_at: "2026-06-10T02:44:12.362979445+00:00"
 ---
 
 Replace assumption-specific relation commands with generic typed-link impact concepts. `cascade` and `falsify` should be removed, hidden, or superseded by typed-link impact commands once `atelier link` exists.

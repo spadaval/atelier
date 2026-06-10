@@ -61,10 +61,10 @@ Generic replacements should use domain language. `atelier issue impact <id>` is
 the visible relation-impact command. Until first-class `atelier link` commands
 define directed typed-link semantics, impact follows hierarchy plus the
 impact-bearing relation types `derived`, `caused-by`, and `falsifies`
-transitively, and `assumption` one hop from the source. `cascade` is a hidden
-compatibility alias for `impact`; `falsify` remains a hidden mutating legacy
-command that labels and closes the source issue and should be removed or
-reworked when typed-link workflow policy replaces assumption-specific behavior.
+transitively, and `assumption` one hop from the source. The inherited `cascade`
+and `falsify` commands are removed so reassessment stays an explicit operator
+decision through `issue impact`, `issue label`, `issue comment`, or `issue close`
+instead of an assumption-specific command path.
 
 ## Removed Or Deferred Behavior
 
