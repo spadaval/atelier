@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Move public durable mutations onto RecordStore"
-updated_at: "2026-06-11T16:14:26.191466697+00:00"
+updated_at: "2026-06-11T18:23:25.686942626+00:00"
 ---
 
 Normal durable mutation commands are recoverable because they write .atelier-state through the compatibility export path, but most public mutations still use SQLite as the mutation engine. Move issue lifecycle, labels/dependencies, typed links, missions, plans, and evidence onto RecordStore-owned Markdown writes before projection refresh; retire export-as-normal-writer once covered.
