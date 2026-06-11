@@ -19,9 +19,13 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Local diagnostics and telemetry"
-updated_at: "2026-06-11T00:06:58.557537388+00:00"
+updated_at: "2026-06-11T19:54:27.791432915+00:00"
 ---
 
-Add local-only command telemetry and diagnostics so operators can identify slow commands and performance issues without committing runtime logs into durable project state.
+Superseded by mission atelier-n8ag, Autonomous mission operations.
+
+Original intent preserved: add local-only command telemetry and diagnostics so operators can identify slow commands and performance issues without committing runtime logs into durable project state.
+
+The completed diagnostics foundation work is now linked directly to atelier-n8ag as supporting done work.

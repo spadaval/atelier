@@ -20,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "[CLOSEOUT] Validate Milestone 5 workflow system"
-updated_at: "2026-06-09T19:42:25.856416390+00:00"
+updated_at: "2026-06-11T21:18:40.832966369+00:00"
 ---
 
 Close out workflows and rules by proving risk-scaled process, validator-backed closure, severities, waivers, and action-aware guidance.

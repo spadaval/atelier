@@ -40,6 +40,272 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
     view(db, id)
 }
 
+pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
+    let db = Database::open(db_path)?;
+    let mission = db.require_record(KIND, id)?;
+    let open_missions = db.list_records(KIND, Some("open"))?;
+    let active = open_missions
+        .iter()
+        .filter(|record| is_active_mission(record))
+        .collect::<Vec<_>>();
+    let other_active = active
+        .iter()
+        .find(|record| record.id != mission.id)
+        .map(|record| record.id.clone());
+    if let Some(other_active) = other_active {
+        if !switch_active {
+            bail!(
+                "Mission {} is already active. Use `atelier mission start {} --switch` to change focus.",
+                other_active,
+                mission.id
+            );
+        }
+    }
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    let mut changed = false;
+    for record in open_missions {
+        let mut canonical = store.load_domain_record_by_id(KIND, &record.id)?;
+        let should_be_active = canonical.record.id == mission.id;
+        if set_active_flag(&mut canonical.record, should_be_active)? {
+            canonical.record.updated_at = Utc::now();
+            store.write_domain_record_atomic(&canonical)?;
+            changed = true;
+        }
+    }
+    if changed {
+        refresh_projection(state_dir, db_path)?;
+    }
+    println!("Active mission: {} - {}", mission.id, mission.title);
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier mission status {}", mission.id);
+    println!("  atelier issue list --ready");
+    Ok(())
+}
+
+pub fn status(db: &Database, state_dir: &Path, id: Option<&str>, quiet: bool) -> Result<()> {
+    match id {
+        Some(id) => status_one(db, state_dir, id, quiet),
+        None => match active_mission(db)? {
+            Some(record) => status_one(db, state_dir, &record.id, quiet),
+            None => status_dashboard(db, state_dir, quiet),
+        },
+    }
+}
+
+fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
+    let records = db.list_records(KIND, Some("open"))?;
+    let mut rows = records
+        .into_iter()
+        .map(|record| {
+            Ok(MissionListRow {
+                summary: mission_list_summary(db, &record.id)?,
+                record,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    rows.sort_by(compare_mission_list_rows);
+    let tracker = tracker_health(db, state_dir);
+
+    if quiet {
+        println!(
+            "missions={} blocked={} closeout_needed={} tracker={}",
+            rows.len(),
+            rows.iter()
+                .filter(|row| row.summary.open_blockers > 0 || row.summary.total_work().blocked > 0)
+                .count(),
+            rows.iter()
+                .filter(|row| row.summary.closeout_needed())
+                .count(),
+            tracker.status_token()
+        );
+        for row in &rows {
+            println!(
+                "{} ready={} blocked={} done={} backlog={}",
+                row.record.id,
+                row.summary.total_work().ready,
+                row.summary.total_work().blocked,
+                row.summary.total_work().done,
+                row.summary.total_work().backlog
+            );
+        }
+        return Ok(());
+    }
+
+    println!("Mission Status");
+    println!("==============");
+    println!(
+        "{} | tracker {}",
+        mission_list_summary_line(&rows),
+        tracker.status_text()
+    );
+    if rows.is_empty() {
+        println!("(none)");
+    } else {
+        for row in &rows {
+            let work = row.summary.total_work();
+            let health = mission_health(&row.summary);
+            println!(
+                "  {} [{}] {} - {} | {} | evidence gaps {} | closeout {}",
+                row.record.id,
+                health,
+                mission_focus_label(&row.record),
+                row.record.title,
+                work.to_compact_text(),
+                row.summary.evidence_gap_count(),
+                if row.summary.closeout_needed() {
+                    "needed"
+                } else {
+                    "not ready"
+                }
+            );
+        }
+    }
+    print_mission_heading("Next Commands");
+    if let Some(row) = rows.first() {
+        println!("  atelier mission status {}", row.record.id);
+    }
+    println!("  atelier mission list");
+    println!("  atelier issue list --ready");
+    println!("  atelier doctor");
+    Ok(())
+}
+
+fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<()> {
+    let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
+    let summary = mission_list_summary(db, &mission.id)?;
+    let tracker = tracker_health(db, state_dir);
+    let active_work = active_work_for_mission(db, &mission.id)?;
+    let validator_failures = tracker.validator_failure_count();
+
+    if quiet {
+        let work = summary.total_work();
+        println!(
+            "{} health={} ready={} blocked={} done={} backlog={} blockers={} evidence_gaps={} validator_failures={} tracker={} closeout_needed={}",
+            mission.id,
+            mission_health_for(&mission, &summary),
+            work.ready,
+            work.blocked,
+            work.done,
+            work.backlog,
+            summary.open_blockers,
+            summary.evidence_gap_count(),
+            validator_failures,
+            tracker.status_token(),
+            if mission_closeout_needed(&mission, &summary) {
+                "yes"
+            } else {
+                "no"
+            }
+        );
+        return Ok(());
+    }
+
+    let identity = format!(
+        "Mission Status {} [{}] - {}",
+        mission.id,
+        mission_focus_label(&mission),
+        mission.title
+    );
+    println!("{identity}");
+    println!("{}", "=".repeat(identity.len()));
+    println!("Health:   {}", mission_health_for(&mission, &summary));
+    println!("Tracker:  {}", tracker.status_text());
+    println!(
+        "Closeout: {}",
+        if mission.status == "closed" {
+            "complete"
+        } else if summary.closeout_needed() {
+            "needed"
+        } else {
+            "not ready"
+        }
+    );
+
+    print_mission_heading("Work");
+    println!("Total: {}", summary.total_work().to_compact_text());
+    if summary.epics.is_empty() {
+        println!("Epics: none");
+    } else {
+        for epic in &summary.epics {
+            println!(
+                "  [epic] {} [{}] {} - {} | {}",
+                epic.issue.id,
+                epic.issue.status,
+                epic.issue.priority,
+                epic.issue.title,
+                epic.work.to_compact_text()
+            );
+        }
+    }
+    if !summary.other_work.is_empty() {
+        println!("Other: {}", summary.other_work.to_compact_text());
+    }
+
+    print_mission_heading("Blockers");
+    if summary.open_blockers == 0 && summary.total_work().blocked == 0 {
+        println!("(none)");
+    } else {
+        println!(
+            "Mission blockers: {}",
+            count_label(summary.open_blockers, "open")
+        );
+        println!(
+            "Blocked work: {}",
+            count_label(summary.total_work().blocked, "blocked")
+        );
+    }
+
+    print_mission_heading("Evidence");
+    if summary.evidence_count == 0 {
+        println!("Gap: no evidence records are linked to this mission.");
+    } else {
+        println!("Linked evidence: {}", summary.evidence_count);
+    }
+
+    print_mission_heading("Validators");
+    if validator_failures == 0 {
+        println!("No validator failures detected by mission status.");
+    } else {
+        println!(
+            "{} validator failure detected. Run `atelier export --check` for stale paths.",
+            validator_failures
+        );
+    }
+
+    print_mission_heading("Active Work");
+    if active_work.is_empty() {
+        println!("(none)");
+    } else {
+        for work in active_work {
+            println!(
+                "  {} [{}] branch={} worktree={}",
+                work.issue_id,
+                work.status,
+                work.branch.as_deref().unwrap_or("(none)"),
+                work.worktree_path.as_deref().unwrap_or("(none)")
+            );
+        }
+    }
+
+    print_mission_heading("Next Commands");
+    println!("  atelier mission show {}", mission.id);
+    println!("  atelier workflow validate mission {}", mission.id);
+    if summary.total_work().ready > 0 {
+        println!("  atelier issue list --ready");
+    }
+    if summary.evidence_gap_count() > 0 {
+        println!("  atelier evidence add --kind validation --result pass \"...\"");
+    }
+    if mission_closeout_needed(&mission, &summary) {
+        println!("  atelier mission update {} --status closed", mission.id);
+    }
+    println!("  atelier doctor");
+    Ok(())
+}
+
 pub fn view(db: &Database, id: &str) -> Result<()> {
     let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
     let links = db.list_record_links(KIND, id)?;
@@ -115,6 +381,29 @@ fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>>
     Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
 }
 
+pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
+    let active = db
+        .list_records(KIND, Some("open"))?
+        .into_iter()
+        .filter(is_active_mission)
+        .collect::<Vec<_>>();
+    if active.len() > 1 {
+        bail!(
+            "Multiple active missions found: {}. Run `atelier lint` and switch one mission focus.",
+            active
+                .iter()
+                .map(|record| record.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    Ok(active.into_iter().next())
+}
+
+pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
+    Ok(mission_issue_ids(db, mission_id)?.contains(issue_id))
+}
+
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
     let mut current = std::env::current_dir()?;
     loop {
@@ -182,6 +471,11 @@ pub fn update(
     }
     if let Some(status) = status {
         current.record.status = status.to_string();
+        if status == "closed" {
+            if let Some(object) = data.as_object_mut() {
+                object.remove("active");
+            }
+        }
     }
     if let Some(body) = body {
         current.record.body = Some(body.to_string());
@@ -253,6 +547,7 @@ struct MissionListSummary {
     other_work: WorkCounts,
     epics: Vec<MissionListEpic>,
     open_blockers: usize,
+    evidence_count: usize,
 }
 
 struct MissionListEpic {
@@ -294,6 +589,9 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
                 let issue = db.require_issue(linked_id)?;
                 linked_work.push(issue);
             }
+            "evidence" => {
+                summary.evidence_count += 1;
+            }
             _ => {}
         }
     }
@@ -318,6 +616,30 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
 
     summary.epics.sort_by(compare_mission_list_epics);
     Ok(summary)
+}
+
+impl MissionListSummary {
+    fn total_work(&self) -> WorkCounts {
+        let mut counts = self.work;
+        for epic in &self.epics {
+            counts.add_counts(epic.work);
+        }
+        counts
+    }
+
+    fn evidence_gap_count(&self) -> usize {
+        usize::from(self.evidence_count == 0)
+    }
+
+    fn closeout_needed(&self) -> bool {
+        let work = self.total_work();
+        work.done > 0
+            && work.ready == 0
+            && work.blocked == 0
+            && work.backlog == 0
+            && self.open_blockers == 0
+            && self.evidence_count > 0
+    }
 }
 
 fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
@@ -366,7 +688,7 @@ fn mission_list_summary_line(rows: &[MissionListRow]) -> String {
     let mut blocked_missions = 0;
     for row in rows {
         *statuses.entry(row.record.status.clone()).or_default() += 1;
-        if row.summary.open_blockers > 0 || row.summary.work.blocked > 0 {
+        if row.summary.open_blockers > 0 || row.summary.total_work().blocked > 0 {
             blocked_missions += 1;
         }
     }
@@ -396,8 +718,10 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
 fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
     print_mission_heading("Next Commands");
     if let Some(row) = first_actionable {
+        println!("  atelier mission status {}", row.record.id);
         println!("  atelier mission show {}", row.record.id);
     }
+    println!("  atelier mission status");
     println!("  atelier mission create \"...\"");
 }
 
@@ -486,6 +810,12 @@ fn print_mission_list_open_work(row: &MissionListRow) {
             count_label(row.summary.open_blockers, "open")
         );
     }
+    if row.summary.evidence_gap_count() > 0 {
+        println!("    Evidence gaps: {}", row.summary.evidence_gap_count());
+    }
+    if row.summary.closeout_needed() {
+        println!("    Closeout: needed");
+    }
 }
 
 fn epic_work_counts(db: &Database, epic_id: &str) -> Result<WorkCounts> {
@@ -542,6 +872,13 @@ impl WorkCounts {
         }
     }
 
+    fn add_counts(&mut self, other: WorkCounts) {
+        self.ready += other.ready;
+        self.blocked += other.blocked;
+        self.done += other.done;
+        self.backlog += other.backlog;
+    }
+
     fn is_empty(self) -> bool {
         self.ready == 0 && self.blocked == 0 && self.done == 0 && self.backlog == 0
     }
@@ -573,6 +910,134 @@ impl WorkCounts {
             parts.join(", ")
         }
     }
+}
+
+struct TrackerHealth {
+    stale_entries: Vec<String>,
+}
+
+impl TrackerHealth {
+    fn status_token(&self) -> &'static str {
+        if self.stale_entries.is_empty() {
+            "ok"
+        } else {
+            "stale"
+        }
+    }
+
+    fn status_text(&self) -> String {
+        if self.stale_entries.is_empty() {
+            "ok".to_string()
+        } else {
+            format!("stale ({} findings)", self.stale_entries.len())
+        }
+    }
+
+    fn validator_failure_count(&self) -> usize {
+        usize::from(!self.stale_entries.is_empty())
+    }
+}
+
+fn tracker_health(db: &Database, state_dir: &Path) -> TrackerHealth {
+    let stale_entries = super::export::canonical_stale_entries(db, state_dir)
+        .unwrap_or_else(|error| vec![format!("tracker health check failed: {error:#}")]);
+    TrackerHealth { stale_entries }
+}
+
+fn mission_health(summary: &MissionListSummary) -> &'static str {
+    let work = summary.total_work();
+    if summary.open_blockers > 0 || work.blocked > 0 {
+        "blocked"
+    } else if summary.closeout_needed() {
+        "closeout"
+    } else if work.ready > 0 {
+        "ready"
+    } else if summary.evidence_gap_count() > 0 {
+        "needs-evidence"
+    } else {
+        "steady"
+    }
+}
+
+fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &'static str {
+    if mission.status == "closed" {
+        "closed"
+    } else {
+        mission_health(summary)
+    }
+}
+
+fn mission_closeout_needed(mission: &DomainRecord, summary: &MissionListSummary) -> bool {
+    mission.status != "closed" && summary.closeout_needed()
+}
+
+fn active_work_for_mission(
+    db: &Database,
+    mission_id: &str,
+) -> Result<Vec<crate::models::WorkAssociation>> {
+    let issue_ids = mission_issue_ids(db, mission_id)?;
+    Ok(db
+        .list_work_associations()?
+        .into_iter()
+        .filter(|work| work.status == "active" && issue_ids.contains(&work.issue_id))
+        .collect())
+}
+
+fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for link in db.list_record_links(KIND, mission_id)? {
+        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
+            continue;
+        };
+        if kind == "issue" && link.relation_type != "blocked_by" {
+            collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
+        }
+    }
+    Ok(issue_ids)
+}
+
+fn is_active_mission(record: &DomainRecord) -> bool {
+    serde_json::from_str::<Value>(&record.data_json)
+        .ok()
+        .and_then(|data| data.get("active").and_then(Value::as_bool))
+        .unwrap_or(false)
+}
+
+fn set_active_flag(record: &mut DomainRecord, active: bool) -> Result<bool> {
+    let mut data: Value = serde_json::from_str(&record.data_json)?;
+    let current = data.get("active").and_then(Value::as_bool).unwrap_or(false);
+    if current == active {
+        return Ok(false);
+    }
+    if active {
+        data["active"] = Value::Bool(true);
+    } else if let Some(object) = data.as_object_mut() {
+        object.remove("active");
+    }
+    record.data_json = serde_json::to_string(&data)?;
+    Ok(true)
+}
+
+fn mission_focus_label(record: &DomainRecord) -> String {
+    if is_active_mission(record) {
+        format!("{}/active", record.status)
+    } else {
+        record.status.clone()
+    }
+}
+
+fn collect_issue_and_descendants(
+    db: &Database,
+    issue_id: &str,
+    issue_ids: &mut BTreeSet<String>,
+) -> Result<()> {
+    if !issue_ids.insert(issue_id.to_string()) {
+        return Ok(());
+    }
+    for child in db.get_subissues(issue_id)? {
+        collect_issue_and_descendants(db, &child.id, issue_ids)?;
+    }
+    Ok(())
 }
 
 fn count_label(count: usize, label: &str) -> String {
@@ -727,6 +1192,7 @@ fn print_evidence_gaps(evidence: &[Value]) {
 
 fn print_mission_next_commands(mission: &DomainRecord) {
     print_mission_heading("Next Commands");
+    println!("  atelier mission status {}", mission.id);
     println!("  atelier mission show {}", mission.id);
     if mission.status == "closed" {
         println!("  atelier mission update {} --status open", mission.id);

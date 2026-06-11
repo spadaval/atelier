@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate TUI fixtures and terminal ergonomics"
-updated_at: "2026-06-09T19:47:39.925172189+00:00"
+updated_at: "2026-06-11T19:54:15.536904694+00:00"
 ---
 
 Validate the terminal UI against representative projection fixtures and terminal sizes.

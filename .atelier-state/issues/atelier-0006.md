@@ -16,23 +16,34 @@ relationships:
   blocks:
   - kind: "issue"
     id: "atelier-0003"
-  - kind: "issue"
-    id: "atelier-001o"
-  - kind: "issue"
-    id: "atelier-001x"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
-title: "Implement Mission Control JSON projection"
-updated_at: "2026-06-09T20:45:16.086072579+00:00"
+status: "closed"
+title: "Implement atelier mission status CLI"
+updated_at: "2026-06-11T21:18:41.584015646+00:00"
 ---
 
-Generate mission-control.json or equivalent command JSON that summarizes active missions, milestone checkpoint progress, blockers, workflow/config health, branches, worktrees, stale durable-state projections, required evidence, workflow validator failures, plan drift, recent decisions, and review/validation queues.
+Add `atelier mission status [<mission-id>]` as the v1 mission-control surface.
+With a mission ID, show mission health, ready/blocked/done/backlog work, open
+blockers, evidence gaps, workflow validator failures, stale tracker/projection
+state, active work/worktree context when available, and concrete action options.
+Without a mission ID, use the active mission when one exists; otherwise show a
+compact dashboard for open missions.
 
-Mission Control should consume the same first-class mission records and typed links used by the mission progress view. It must not infer missions from issue labels or parent trees except through documented compatibility migration behavior. Mission rows and details should make objective health legible: done work, ready work, blocked work, backlog, checkpoint progress, active plans, evidence gaps, validator failures, risks, and suggested next CLI actions.
+Status output should not prescribe a single "correct" next step. It should
+present a bounded set of work options with context: what each ready issue/epic
+would advance, what it would unblock, which validation/evidence gaps it helps
+close, and why blocked or closeout options cannot proceed. Epic detail/status
+surfaces should use the same option vocabulary where available so orchestrators
+can choose work from either mission or epic context.
 
-Acceptance:
-Projection schema is documented. Output is deterministic and stable for agents. Tests or fixtures cover missions, milestone progress, linked plans, done/ready/blocked/backlog work, blockers, workflow/config health, branches/worktrees, stale durable-state projections, evidence, validator failures, plan drift, recent decisions, and ready-for-review/validation queues. Projection is integrated with export/rebuild if .atelier-state/mission-control.json is canonical. Docs explicitly state that live agent-run tracking is not required for this milestone.
+Quiet mode returns only essential IDs/counts suitable for shell composition. Do
+not add command-result JSON.
+
+Acceptance: CLI integration tests cover open mission status, active-mission
+defaulting, option-oriented work selection context, evidence gaps, validator
+failure or warning state, all-work-done-but-missing-closeout state, no-ID
+dashboard mode, and quiet output.

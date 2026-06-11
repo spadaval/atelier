@@ -19,9 +19,13 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Workflow policy and validators"
-updated_at: "2026-06-11T00:06:58.494243072+00:00"
+updated_at: "2026-06-11T19:54:26.488136007+00:00"
 ---
 
-Deliver risk-scaled workflow policy for Atelier: configurable workflows, validator-backed transitions, lint severities, waivers, action-aware guidance, and closeout validation for strict and lightweight flows.
+Superseded by mission atelier-n8ag, Autonomous mission operations.
+
+Original intent preserved: deliver risk-scaled workflow policy for Atelier: configurable workflows, validator-backed transitions, lint severities, waivers, action-aware guidance, and closeout validation for strict and lightweight flows.
+
+The executable workflow-policy work is now linked directly to atelier-n8ag so agents have one durable mission authority for autonomy-core work.

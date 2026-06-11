@@ -167,9 +167,9 @@ their need:
   noninteractive health checks for stale records, invalid tracker state, and
   broken runtime setup.
 - Use focused drill-down commands for targeted state. Prefer commands such as
-  `atelier issue show <id>`, `atelier mission show <id>`, `atelier issue list --ready`,
-  `atelier issue blocked`, `atelier issue children <id>`, and `atelier dep
-  add/remove` over scraping broad human reports.
+  `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
+  `atelier issue list --ready`, `atelier issue blocked`, `atelier issue children <id>`,
+  and `atelier dep add/remove` over scraping broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bulk-plan input JSON or a
   future Mission Control projection.

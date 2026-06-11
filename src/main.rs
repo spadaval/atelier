@@ -34,7 +34,7 @@ Issues:
   dep           Manage issue blockers with add, remove, and list
 
 Missions and planning:
-  mission       Create, list, show, and update durable missions
+  mission       Create, list, show, status, and update durable missions
   plan          Create, apply, revise, list, and link durable plans
 
 Records:
@@ -62,6 +62,7 @@ Common commands:
   atelier issue update <id> --claim
   atelier mission list
   atelier mission show <id>
+  atelier mission status
   atelier work status
   atelier doctor
   atelier help <command>
@@ -480,6 +481,15 @@ enum MissionCommands {
     },
     /// Show a mission with linked plans, work, blockers, and evidence
     Show { id: String },
+    /// Focus a mission as the active orchestration context
+    Start {
+        id: String,
+        /// Replace any currently active mission focus
+        #[arg(long = "switch")]
+        switch_active: bool,
+    },
+    /// Show mission-control status for one mission or all open missions
+    Status { id: Option<String> },
     /// List missions
     List {
         /// Filter missions by status (default: open; use all to include closed/history)
@@ -1233,6 +1243,14 @@ fn run() -> Result<()> {
                     let db = get_db()?;
                     commands::mission::show(&db, &id)
                 }
+                MissionCommands::Start { id, switch_active } => {
+                    let id = resolve_record_arg(&get_db()?, "mission", &id)?;
+                    commands::mission::start(&state_dir, &db_path, &id, switch_active)
+                }
+                MissionCommands::Status { id } => {
+                    let db = get_db()?;
+                    commands::mission::status(&db, &state_dir, id.as_deref(), quiet)
+                }
                 MissionCommands::List { status } => {
                     let db = get_db()?;
                     commands::mission::list(&db, status.as_deref())
@@ -1535,6 +1553,8 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Mission { action } => match action {
             MissionCommands::Create { .. } => "mission create",
             MissionCommands::Show { .. } => "mission show",
+            MissionCommands::Start { .. } => "mission start",
+            MissionCommands::Status { .. } => "mission status",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
             MissionCommands::AddWork { .. } => "mission add-work",

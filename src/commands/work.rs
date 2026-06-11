@@ -44,6 +44,7 @@ struct HookCommand {
 
 pub fn start(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
+    print_active_mission_context(db, id)?;
     ensure_clean_worktree()?;
     let branch = current_branch().ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
@@ -168,7 +169,19 @@ pub fn worktree_status(db: &Database) -> Result<()> {
             println!("  (none)");
         }
         for work in status.associated_work {
+            let mission = active_mission_context(db, &work.issue_id)?;
             println!("  {} [{}]", work.issue_id, work.status);
+            if let Some((mission_id, advances)) = mission {
+                println!(
+                    "    Mission:  {} ({})",
+                    mission_id,
+                    if advances {
+                        "advances"
+                    } else {
+                        "outside focus"
+                    }
+                );
+            }
             println!(
                 "    Branch:   {}",
                 work.branch.as_deref().unwrap_or("(none)")
@@ -199,8 +212,31 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
+fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
+    let Some((mission_id, advances)) = active_mission_context(db, issue_id)? else {
+        return Ok(());
+    };
+    if advances {
+        println!("Mission: {mission_id} (active)");
+    } else {
+        println!(
+            "Warning: {issue_id} is outside active mission {mission_id}; non-mission work remains allowed."
+        );
+    }
+    Ok(())
+}
+
+fn active_mission_context(db: &Database, issue_id: &str) -> Result<Option<(String, bool)>> {
+    let Some(mission) = crate::commands::mission::active_mission(db)? else {
+        return Ok(None);
+    };
+    let advances = crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)?;
+    Ok(Some((mission.id, advances)))
+}
+
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let issue = db.require_issue(id)?;
+    print_active_mission_context(db, id)?;
     let root = repo_root()?;
     let branch = format!("codex/{}", id);
     let worktree_path = path

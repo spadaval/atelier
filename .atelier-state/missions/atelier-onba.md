@@ -21,9 +21,13 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Mission Control projection and UI"
-updated_at: "2026-06-11T00:06:58.518089056+00:00"
+updated_at: "2026-06-11T19:54:27.193778212+00:00"
 ---
 
-Expose durable Atelier state through deterministic Mission Control projections and an optional read-only terminal UI that consumes those projections instead of inventing a separate state model.
+Superseded by mission atelier-n8ag, Autonomous mission operations.
+
+Original intent preserved: expose durable Atelier state through mission-control surfaces. The scope is narrowed for now: Mission Control means CLI mission status/control, not a separate JSON projection or TUI.
+
+The executable status/control work is now linked directly to atelier-n8ag so agents have one durable mission authority for autonomy-core work.

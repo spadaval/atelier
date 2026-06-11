@@ -18,12 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
-title: "[CLOSEOUT] Validate Milestone 6 projections"
-updated_at: "2026-06-09T19:42:25.843146923+00:00"
+status: "closed"
+title: "Validate mission status CLI surfaces"
+updated_at: "2026-06-11T21:18:42.241144611+00:00"
 ---
 
-Close out Mission Control projection by proving that the JSON contains the state needed for a future dashboard or local UI.
-
-Acceptance Criteria:
-Classify each Milestone 6 criterion from SPEC.md; include fixture or command evidence for active missions, blockers, stale durable-state projections, workflow validator failures, evidence, branches/worktrees, and plan drift; defer rich UI explicitly.
+Closeout validation for the mission status and CLI control surfaces epic. Scope: prove `atelier mission status [<id>]`, `mission list`, and `mission show` give agents enough mission health, blocker, evidence-gap, validator-freshness, closeout-readiness, and next-action context without command-result JSON. Acceptance: focused CLI integration tests and real repository command output cover dashboard mode, per-mission mode, quiet output, blocked missions, evidence gaps, stale tracker/validator failure state, and closeout-needed state; docs and Agent Factory binding point agents to `atelier mission status <id>`.

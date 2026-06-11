@@ -1,0 +1,25 @@
+---
+acceptance: []
+created_at: "2026-06-11T20:10:57.980157137+00:00"
+evidence_required: []
+id: "atelier-g9fd"
+issue_type: "validation"
+labels:
+- "cache"
+- "recovery"
+priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-gye2"
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Prove recovery when state.db is missing or stale"
+updated_at: "2026-06-11T20:10:57.980157137+00:00"
+---
+
+Delete state.db, modify Markdown, and simulate checkout-like clean state. Acceptance: commands rebuild the ProjectionIndex when safe or fail clearly when canonical Markdown is invalid.

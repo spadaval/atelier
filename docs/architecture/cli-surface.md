@@ -13,7 +13,7 @@ in normal Agent Factory workflows:
 - `atelier init`
 - `atelier issue ...`
 - `atelier dep add/remove/list`
-- `atelier mission create/show/list/update`
+- `atelier mission create/show/list/status/update`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence add/show/list/attach`
@@ -39,9 +39,12 @@ restores those records from Markdown. `atelier plan apply` validates authored
 bulk-plan JSON, supports dry-run and validate-only previews, creates issue and
 record graphs in canonical Markdown, normalizes issue dependency fields, writes
 canonical relationship buckets, and refreshes the projection after successful
-canonical writes. `atelier mission show` is the single rich mission read:
+canonical writes. `atelier mission show` is the rich mission detail read:
 it summarizes linked plans, milestones, evidence, and work grouped by ready,
-blocked, done, and backlog state.
+blocked, done, and backlog state. `atelier mission status [<id>]` is the
+mission-control CLI surface for active mission health, evidence gaps, blockers,
+validator freshness, closeout readiness, and next actions before any separate
+projection or UI is required.
 Work lifecycle commands store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow
 transitions. Worktree helpers expose scan-friendly JSON status, create/remove

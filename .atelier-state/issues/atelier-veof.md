@@ -1,0 +1,26 @@
+---
+acceptance: []
+created_at: "2026-06-11T20:10:51.238390497+00:00"
+evidence_required: []
+id: "atelier-veof"
+issue_type: "task"
+labels:
+- "docs"
+- "lint"
+- "markdown"
+priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-33lr"
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Define deterministic direct-edit Markdown record rules"
+updated_at: "2026-06-11T20:10:51.238390497+00:00"
+---
+
+Specify required front matter, deterministic ordering, relationship buckets, schema/version fields, examples, and hand-edit flow: edit Markdown, run atelier lint, then run normal commands. Acceptance: future lint and parser work can implement directly from this contract.

@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add Mission Control terminal UI"
-updated_at: "2026-06-09T19:46:52.922852758+00:00"
+updated_at: "2026-06-11T19:54:14.390172050+00:00"
 ---
 
 Add an optional terminal UI for browsing Atelier state after Mission Control projection data is stable. The UI should consume existing command/projection APIs instead of owning a separate state model.

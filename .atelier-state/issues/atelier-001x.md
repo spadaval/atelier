@@ -11,17 +11,15 @@ labels:
 - "ui"
 priority: "P3"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "atelier-001y"
+  blocks: []
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement read-only Mission Control TUI views"
-updated_at: "2026-06-09T19:47:39.911679674+00:00"
+updated_at: "2026-06-11T19:54:14.931558766+00:00"
 ---
 
 Implement the first read-only terminal UI that consumes Mission Control projection output and provides mission, plan, backlog, blocker, validation, evidence, and detail views.

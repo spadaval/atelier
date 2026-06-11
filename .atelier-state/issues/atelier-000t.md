@@ -29,11 +29,22 @@ Resolve the SPEC.md open question about Chainlink lock/sync behavior. Decide wha
 
 ## Decision
 
-TODO: choose which inherited lock/sync concepts survive into Atelier.
+Retire almost all inherited Chainlink lock/sync functionality from Atelier's
+public product surface. Normal tracked work uses Git branch/worktree state,
+issue claim/work association, local runtime association, and canonical export
+freshness checks. Legacy `locks` and `sync` command groups are not core Atelier
+commands.
+
+Internal helper code may remain temporarily only where a core workflow still
+depends on it during migration. It should not define the user-facing workflow,
+durable coordination model, or Agent Factory guidance.
 
 ## Rationale
 
 Worktree helpers, agent claims, branch association, and Mission Control all need coherent coordination semantics. Inherited lock sync may be useful, redundant, or misleading after canonical repo-state export exists.
+The settled product direction is that Git moves committed Markdown state, while
+Atelier records work association and validates freshness. Maintaining a parallel
+lock/sync mental model would obscure the simpler repo-state workflow.
 
 ## Alternatives Considered
 

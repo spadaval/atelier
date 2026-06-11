@@ -26,14 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
-title: "Milestone 6: Mission Control projection"
-updated_at: "2026-06-11T14:41:58.428447610+00:00"
+status: "closed"
+title: "Mission status and CLI control surfaces"
+updated_at: "2026-06-11T21:18:57.261718121+00:00"
 ---
 
-Expose enough mechanical state through deterministic JSON projections to support a future dashboard or local UI before building any rich interface. The projection depends on worktree/branch state, first-class records, typed links, workflow policy, workflow validators, and evidence.
-
-Direct live agent-run rows, retry queues, and session metrics are deferred; the initial projection focuses on durable work state, workflow/config health, evidence, validator failures, branches, worktrees, and plan drift.
-
-Acceptance:
-JSON projections cover active missions, milestone checkpoint progress, blockers, workflow/config health, branches/worktrees, stale durable-state projections, evidence, workflow validator failures, plan drift, recent decisions, and review/validation queues. Projection schema is documented and deterministic. Rich UI remains explicitly deferred until projections are useful. Live run management is out of scope for the first projection milestone.
+Expose enough mission-control functionality through existing CLI workflows before building any separate projection or UI. Scope: mission status/control commands, mission list/show status signals, workflow/config health summaries, blockers, evidence gaps, validator failures, closeout-needed states, and concrete next CLI actions. Out of scope for this mission: a full Mission Control JSON projection, read-only TUI, live agent-run tracking, retry queues, or session metrics. Acceptance: CLI surfaces make active mission health legible for agents and orchestrators without command-result JSON; mission status covers ready/blocked/done/backlog work, evidence gaps, validator failures, tracker freshness, active work/worktree context where available, and closeout-needed states; tests cover representative mission states and quiet output.

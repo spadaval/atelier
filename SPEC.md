@@ -395,7 +395,11 @@ Mission Control should be able to show:
 - Recent decisions.
 - Items ready for review or validation.
 
-The CLI should expose this through JSON projections before any UI is built.
+The first Mission Control slice should be CLI-native: `atelier mission status
+[<id>]` should summarize mission health, blockers, evidence gaps, validator
+failures, closeout readiness, and next actions for agents and orchestrators.
+Deterministic JSON projections and richer UI surfaces can follow once the CLI
+status contract proves the needed state model.
 
 ## Command Philosophy
 
@@ -410,6 +414,7 @@ atelier issue list --ready
 atelier issue show atelier-z1p8
 atelier issue create
 atelier mission create
+atelier mission status
 atelier milestone create
 atelier plan create
 atelier mission add-work
