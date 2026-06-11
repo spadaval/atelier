@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
 use crate::models::DomainRecord;
+use crate::record_store::RecordStore;
 
 const KIND: &str = "plan";
 
@@ -25,7 +26,7 @@ pub fn create(db: &Database, title: &str, body: Option<&str>, reason: Option<&st
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
-    let record = db.require_record(KIND, id)?;
+    let record = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
     print_record(db, &record)
 }
 
@@ -1006,6 +1007,30 @@ fn created_key(kind: &str) -> &str {
 fn find_state_dir() -> Result<PathBuf> {
     let root = find_repo_root(&std::env::current_dir()?)?;
     Ok(root.join(".atelier-state"))
+}
+
+fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+}
+
+fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
+    let mut current = std::env::current_dir()?;
+    loop {
+        let state_dir = current.join(".atelier-state");
+        if state_dir.is_dir() {
+            return Ok(Some(state_dir));
+        }
+        if current.join(".atelier").is_dir() {
+            return Ok(None);
+        }
+        if !current.pop() {
+            return Ok(None);
+        }
+    }
 }
 
 fn find_repo_root(start: &Path) -> Result<PathBuf> {

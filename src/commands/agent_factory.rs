@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
+use crate::record_store::{CanonicalIssueRecord, RecordStore};
 use crate::utils::format_issue_id;
 
 #[derive(Debug, Clone)]
@@ -125,6 +126,21 @@ fn split_acceptance(description: Option<&str>) -> (Option<String>, Option<String
     }
 }
 
+fn front_matter_acceptance(criteria: &[String]) -> Option<String> {
+    if criteria.is_empty() {
+        return None;
+    }
+    let mut output = String::new();
+    for item in criteria {
+        if !output.is_empty() {
+            output.push('\n');
+        }
+        output.push_str("- ");
+        output.push_str(item);
+    }
+    Some(output)
+}
+
 fn note_object(comment: Comment) -> NoteObject {
     NoteObject {
         kind: comment.kind,
@@ -226,7 +242,30 @@ fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
 
 pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
     let labels = db.get_labels(&issue.id)?;
+    issue_object_from_parts(db, issue, labels, None)
+}
+
+fn issue_object_from_canonical(
+    db: &Database,
+    projection_issue: Issue,
+    record: CanonicalIssueRecord,
+) -> Result<IssueObject> {
+    let mut issue = record.issue;
+    issue.parent_id = projection_issue.parent_id;
+    issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
+    issue_object_from_parts(db, issue, record.labels, Some(record.acceptance))
+}
+
+fn issue_object_from_parts(
+    db: &Database,
+    issue: Issue,
+    labels: Vec<String>,
+    canonical_acceptance: Option<Vec<String>>,
+) -> Result<IssueObject> {
     let (description, acceptance_criteria) = split_acceptance(issue.description.as_deref());
+    let acceptance_criteria = canonical_acceptance
+        .and_then(|criteria| front_matter_acceptance(&criteria))
+        .or(acceptance_criteria);
     let parent = match &issue.parent_id {
         Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
         None => None,
@@ -266,6 +305,14 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
     })
 }
 
+fn canonical_issue_detail(issue_id: &str) -> Result<Option<CanonicalIssueRecord>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(Some(store.load_issue_by_id(issue_id)?))
+}
+
 fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
     Ok(IssueSummary {
         id: issue_id_for_agent(db, &issue)?,
@@ -283,7 +330,10 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
 pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
-    let object = issue_object(db, issue)?;
+    let object = match canonical_issue_detail(&id)? {
+        Some(record) => issue_object_from_canonical(db, issue, record)?,
+        None => issue_object(db, issue)?,
+    };
     render_issue_show_human(db, &id, &object)
 }
 
@@ -595,16 +645,8 @@ pub fn list(
 pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
     let lowercase = query.to_lowercase();
     let mut items = Vec::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let haystack = format!(
-            "{}\n{}",
-            issue.title,
-            issue.description.as_deref().unwrap_or_default()
-        )
-        .to_lowercase();
-        if haystack.contains(&lowercase) {
-            items.push(issue_summary(db, issue)?);
-        }
+    for issue in search_candidate_issues(db, &lowercase)? {
+        items.push(issue_summary(db, issue)?);
     }
     if items.is_empty() {
         println!("No issues found matching '{query}'.");
@@ -619,6 +661,67 @@ pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
             .collect::<Result<Vec<_>>>()?;
         render_issue_queue_human(db, &format!("Search Results: {query}"), rows, true)
     }
+}
+
+fn search_candidate_issues(db: &Database, lowercase_query: &str) -> Result<Vec<Issue>> {
+    let projection_issues = db.list_issues(Some("all"), None, None)?;
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        let matched = projection_issues
+            .into_iter()
+            .filter(|issue| projection_issue_matches(issue, lowercase_query))
+            .collect::<Vec<_>>();
+        return Ok(matched);
+    };
+
+    let store = RecordStore::new(&state_dir);
+    let mut canonical = store
+        .load_issues()?
+        .into_iter()
+        .map(|record| (record.issue.id.clone(), record))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut matched = Vec::new();
+    for projection_issue in projection_issues {
+        let Some(record) = canonical.remove(&projection_issue.id) else {
+            bail!(
+                "Projection issue {} has no canonical Markdown record",
+                projection_issue.id
+            );
+        };
+        let activity_matches = list_issue_activities(&state_dir, &projection_issue.id)?
+            .into_iter()
+            .any(|activity| {
+                activity.summary.to_lowercase().contains(lowercase_query)
+                    || activity.body.to_lowercase().contains(lowercase_query)
+            });
+        if canonical_issue_matches(&record, lowercase_query) || activity_matches {
+            let mut issue = record.issue;
+            issue.parent_id = projection_issue.parent_id;
+            issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
+            matched.push(issue);
+        }
+    }
+    Ok(matched)
+}
+
+fn projection_issue_matches(issue: &Issue, lowercase_query: &str) -> bool {
+    let haystack = format!(
+        "{}\n{}",
+        issue.title,
+        issue.description.as_deref().unwrap_or_default()
+    )
+    .to_lowercase();
+    haystack.contains(lowercase_query)
+}
+
+fn canonical_issue_matches(record: &CanonicalIssueRecord, lowercase_query: &str) -> bool {
+    let haystack = format!(
+        "{}\n{}",
+        record.issue.title,
+        record.issue.description.as_deref().unwrap_or_default()
+    )
+    .to_lowercase();
+    haystack.contains(lowercase_query)
 }
 
 fn render_issue_ids_quiet(items: Vec<IssueSummary>) {

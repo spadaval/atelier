@@ -1,8 +1,10 @@
 use anyhow::Result;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
 use crate::db::Database;
 use crate::models::DomainRecord;
+use crate::record_store::RecordStore;
 
 const KIND: &str = "evidence";
 
@@ -29,7 +31,7 @@ pub fn add(
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
-    let record = db.require_record(KIND, id)?;
+    let record = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
     print_record(&record)
 }
 
@@ -121,4 +123,28 @@ fn print_heading(title: &str) {
 
 fn evidence_data(record: &DomainRecord) -> Result<Value> {
     Ok(serde_json::from_str::<Value>(&record.data_json)?)
+}
+
+fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+}
+
+fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
+    let mut current = std::env::current_dir()?;
+    loop {
+        let state_dir = current.join(".atelier-state");
+        if state_dir.is_dir() {
+            return Ok(Some(state_dir));
+        }
+        if current.join(".atelier").is_dir() {
+            return Ok(None);
+        }
+        if !current.pop() {
+            return Ok(None);
+        }
+    }
 }

@@ -1,16 +1,13 @@
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{DateTime, Utc};
-use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::activity::IssueActivity;
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue};
+use crate::models::Issue;
 use crate::projection_index;
-use crate::record_id;
-use crate::record_store::{self, Relationships, FIRST_CLASS_RECORD_KINDS};
+use crate::record_store::{self, CanonicalDomainRecord, Relationships, FIRST_CLASS_RECORD_KINDS};
 
 #[derive(Debug)]
 struct CanonicalIssue {
@@ -22,17 +19,11 @@ struct CanonicalIssue {
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
-    records: Vec<CanonicalRecord>,
+    records: Vec<CanonicalDomainRecord>,
     child_edges: Vec<(String, String)>,
     dependency_edges: Vec<(String, String)>,
     relations: Vec<(String, String, String)>,
     record_links: Vec<(String, String, String, String, String)>,
-}
-
-#[derive(Debug)]
-struct CanonicalRecord {
-    record: DomainRecord,
-    relationships: Relationships,
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -87,7 +78,7 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     for spec in FIRST_CLASS_RECORD_KINDS {
         for relative in discover_record_paths(state_dir, spec)? {
             canonical_paths.insert(relative.clone());
-            let record = load_domain_record(state_dir, &relative, spec)?;
+            let record = store.load_domain_record(&relative, spec)?;
             if !global_ids.insert(record.record.id.clone()) {
                 bail!(
                     "Duplicate record ID in canonical projection: {}",
@@ -321,82 +312,6 @@ fn ensure_no_unsupported_canonical_files(
     Ok(())
 }
 
-fn load_domain_record(
-    state_dir: &Path,
-    relative: &Path,
-    spec: &record_store::RecordKindSpec,
-) -> Result<CanonicalRecord> {
-    let bytes = fs::read(state_dir.join(relative))
-        .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
-    let text = String::from_utf8(bytes).with_context(|| {
-        format!(
-            "Projection file {} is not UTF-8",
-            display_state_path(relative)
-        )
-    })?;
-    let (front_matter, body) = split_front_matter(&text, relative)?;
-
-    let schema = require_scalar(&front_matter, "schema", relative)?;
-    if schema != spec.schema {
-        bail!(
-            "Unsupported schema '{}' in {}; expected {}",
-            schema,
-            display_state_path(relative),
-            spec.schema
-        );
-    }
-    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
-    if schema_version != spec.schema_version {
-        bail!(
-            "Unsupported schema_version {} in {}; expected 1",
-            schema_version,
-            display_state_path(relative)
-        );
-    }
-
-    let id = require_scalar(&front_matter, "id", relative)?;
-    record_id::validate_record_id(&id).with_context(|| {
-        format!(
-            "Invalid {} id {} in {}",
-            spec.kind,
-            id,
-            display_state_path(relative)
-        )
-    })?;
-    let expected = record_store::canonical_record_path(spec, &id)?;
-    if relative != expected {
-        bail!(
-            "{} id {} in {} does not match canonical path {}",
-            spec.kind,
-            id,
-            display_state_path(relative),
-            display_state_path(&expected)
-        );
-    }
-    let data_json = require_scalar(&front_matter, "data", relative)?;
-    let _: Value = serde_json::from_str(&data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    let relationships = record_store::parse_relationships(&front_matter, relative)?;
-    let body = if body.is_empty() {
-        None
-    } else {
-        Some(body.to_string())
-    };
-    Ok(CanonicalRecord {
-        record: DomainRecord {
-            id,
-            kind: spec.kind.to_string(),
-            title: require_scalar(&front_matter, "title", relative)?,
-            status: require_scalar(&front_matter, "status", relative)?,
-            body,
-            data_json,
-            created_at: require_datetime(&front_matter, "created_at", relative)?,
-            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
-        },
-        relationships,
-    })
-}
-
 fn canonical_files_under(state_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     collect_canonical_files(state_dir, state_dir, &mut files)?;
@@ -498,78 +413,6 @@ fn write_rebuilt_database(
         )
     })?;
     Ok(())
-}
-
-fn split_front_matter<'a>(
-    text: &'a str,
-    relative: &Path,
-) -> Result<(BTreeMap<String, Value>, &'a str)> {
-    let rest = text.strip_prefix("---\n").ok_or_else(|| {
-        anyhow!(
-            "Missing YAML front matter in {}",
-            display_state_path(relative)
-        )
-    })?;
-    let (front, body) = rest.split_once("\n---\n").ok_or_else(|| {
-        anyhow!(
-            "Unterminated YAML front matter in {}",
-            display_state_path(relative)
-        )
-    })?;
-    let body = body.strip_prefix('\n').unwrap_or(body);
-    let body = body.strip_suffix('\n').unwrap_or(body);
-    Ok((parse_front_matter(front, relative)?, body))
-}
-
-fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
-    serde_yaml::from_str(front).with_context(|| {
-        format!(
-            "Invalid YAML front matter in {}",
-            display_state_path(relative)
-        )
-    })
-}
-
-fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {
-    values
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| {
-            anyhow!(
-                "Missing string front matter key '{}' in {}",
-                key,
-                display_state_path(relative)
-            )
-        })
-}
-
-fn require_i64(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<i64> {
-    values.get(key).and_then(Value::as_i64).ok_or_else(|| {
-        anyhow!(
-            "Missing integer front matter key '{}' in {}",
-            key,
-            display_state_path(relative)
-        )
-    })
-}
-
-fn require_datetime(
-    values: &BTreeMap<String, Value>,
-    key: &str,
-    relative: &Path,
-) -> Result<DateTime<Utc>> {
-    let value = require_scalar(values, key, relative)?;
-    DateTime::parse_from_rfc3339(&value)
-        .map(|dt| dt.with_timezone(&Utc))
-        .with_context(|| {
-            format!(
-                "Invalid timestamp '{}' for key '{}' in {}",
-                value,
-                key,
-                display_state_path(relative)
-            )
-        })
 }
 
 fn collect_record_relationship_links(

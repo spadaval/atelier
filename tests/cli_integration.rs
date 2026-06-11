@@ -1069,6 +1069,192 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
 }
 
 #[test]
+fn test_issue_show_reads_detail_body_from_record_store() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Canonical detail issue",
+            "-d",
+            "Canonical Markdown body",
+        ],
+    );
+    let issue_id = issue_id_by_title(dir.path(), "Canonical detail issue");
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "UPDATE issues SET description = 'SQLite shadow body' WHERE id = ?1",
+        [&issue_id],
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
+
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("Canonical Markdown body"));
+    assert!(!stdout.contains("SQLite shadow body"));
+}
+
+#[test]
+fn test_first_class_detail_views_read_payloads_from_record_store() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "create",
+            "Canonical mission",
+            "--body",
+            "Canonical mission body",
+            "--constraint",
+            "Canonical constraint",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Canonical mission");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "plan",
+            "create",
+            "Canonical plan",
+            "--body",
+            "Canonical plan body",
+        ],
+    );
+    assert!(success, "plan create failed: {stderr}");
+    let plan_id = record_id_by_title(dir.path(), "plans", "Canonical plan");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Canonical evidence summary",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "Canonical evidence summary");
+
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "UPDATE records SET body = 'SQLite mission body', data_json = ?1 WHERE id = ?2",
+        [
+            r#"{"constraints":["SQLite constraint"],"risks":[],"validation":[],"milestones":[],"plans":[],"evidence":[],"work":[]}"#,
+            mission_id.as_str(),
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE records SET body = 'SQLite plan body', data_json = ?1 WHERE id = ?2",
+        [
+            r#"{"revision":99,"revisions":[{"revision":99,"reason":"sqlite","body":"SQLite plan body"}]}"#,
+            plan_id.as_str(),
+        ],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE records SET body = 'SQLite evidence summary', data_json = ?1 WHERE id = ?2",
+        [
+            r#"{"kind":"sqlite","result":"fail","path":null,"uri":null,"producer":null,"captured_at":"2000-01-01T00:00:00Z"}"#,
+            evidence_id.as_str(),
+        ],
+    )
+    .unwrap();
+
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    assert!(success, "mission show failed: {stderr}");
+    assert!(mission_out.contains("Canonical mission body"));
+    assert!(mission_out.contains("Canonical constraint"));
+    assert!(!mission_out.contains("SQLite mission body"));
+    assert!(!mission_out.contains("SQLite constraint"));
+
+    let (success, plan_out, stderr) = run_atelier(dir.path(), &["plan", "show", &plan_id]);
+    assert!(success, "plan show failed: {stderr}");
+    assert!(plan_out.contains("Canonical plan body"));
+    assert!(plan_out.contains("Revision: 1"));
+    assert!(!plan_out.contains("SQLite plan body"));
+    assert!(!plan_out.contains("Revision: 99"));
+
+    let (success, evidence_out, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(evidence_out.contains("Canonical evidence summary"));
+    assert!(evidence_out.contains("Result:      pass"));
+    assert!(evidence_out.contains("Kind:        test"));
+    assert!(!evidence_out.contains("SQLite evidence summary"));
+    assert!(!evidence_out.contains("Kind:        sqlite"));
+}
+
+#[test]
+fn test_issue_search_reads_payloads_from_record_store_and_activity() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Canonical search issue",
+            "-d",
+            "canonical body needle",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Canonical search issue");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "comment", &issue_id, "canonical activity needle"],
+    );
+    assert!(success, "issue comment failed: {stderr}");
+
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "UPDATE issues SET description = 'sqlite body needle' WHERE id = ?1",
+        [&issue_id],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE comments SET content = 'sqlite comment needle' WHERE issue_id = ?1",
+        [&issue_id],
+    )
+    .unwrap();
+
+    let (success, body_out, stderr) =
+        run_atelier(dir.path(), &["issue", "search", "canonical body needle"]);
+    assert!(success, "canonical body search failed: {stderr}");
+    assert!(body_out.contains("Canonical search issue"));
+
+    let (success, activity_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "search", "canonical activity needle"],
+    );
+    assert!(success, "canonical activity search failed: {stderr}");
+    assert!(activity_out.contains("Canonical search issue"));
+
+    let (success, shadow_body_out, stderr) =
+        run_atelier(dir.path(), &["issue", "search", "sqlite body needle"]);
+    assert!(success, "sqlite shadow body search failed: {stderr}");
+    assert!(shadow_body_out.contains("No issues found"));
+
+    let (success, shadow_comment_out, stderr) =
+        run_atelier(dir.path(), &["issue", "search", "sqlite comment needle"]);
+    assert!(success, "sqlite shadow comment search failed: {stderr}");
+    assert!(shadow_comment_out.contains("No issues found"));
+}
+
+#[test]
 fn test_show_closed_issue_includes_close_reason() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1338,6 +1524,34 @@ fn test_close_issue() {
 }
 
 #[test]
+fn test_close_all_is_durable_without_manual_export() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all one"]);
+    assert!(success, "first create failed: {stderr}");
+    let first_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all two"]);
+    assert!(success, "second create failed: {stderr}");
+    let second_id = issue_ref(dir.path(), 2);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "close-all"]);
+    assert!(success, "close-all failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed after close-all: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    for issue_id in [first_id, second_id] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+        assert!(success, "show failed for {issue_id}: {stderr}");
+        assert!(stdout.contains("Status:   closed"), "{stdout}");
+    }
+}
+
+#[test]
 fn test_reopen_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1430,6 +1644,29 @@ fn test_delete_issue() {
 
     let (_, list_out, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(!list_out.contains("To delete"));
+}
+
+#[test]
+fn test_delete_issue_is_durable_without_manual_export() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Durable delete"]);
+    assert!(success, "create failed: {stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "delete", &issue_id, "-f"]);
+    assert!(success, "delete failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed after delete: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(!success, "deleted issue still exists after rebuild");
+    assert!(stderr.contains("was not found"), "{stderr}");
 }
 
 // ==================== Labels Tests ====================
@@ -1789,6 +2026,47 @@ fn test_unblock_issue() {
 
     let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
     assert!(!blocked_out.contains("Blocked issue"));
+}
+
+#[test]
+fn test_dep_alias_mutations_are_durable_without_manual_export() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Alias blocked"]);
+    assert!(success, "blocked create failed: {stderr}");
+    let blocked_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Alias blocker"]);
+    assert!(success, "blocker create failed: {stderr}");
+    let blocker_id = issue_ref(dir.path(), 2);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &blocked_id, &blocker_id]);
+    assert!(success, "dep add failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed after dep add: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after dep add failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
+    assert!(success, "dep list after dep add failed: {stderr}");
+    assert!(stdout.contains(&blocker_id), "{stdout}");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["dep", "remove", &blocked_id, &blocker_id]);
+    assert!(success, "dep remove failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed after dep remove: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after dep remove failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
+    assert!(success, "dep list after dep remove failed: {stderr}");
+    assert!(
+        stdout.contains("No dependencies found."),
+        "dependency should be removed after rebuild: {stdout}"
+    );
 }
 
 #[test]
@@ -4860,7 +5138,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
 }
 
 #[test]
-fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
+fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -4887,24 +5165,20 @@ fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(!success, "stale ready should fail, stdout: {stdout}");
-    assert!(
-        stderr.contains("Projection index is stale")
-            && stderr.contains("run `atelier rebuild`")
-            && stderr.contains("issues/"),
-        "unexpected stale-query error: {stderr}"
-    );
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(success, "repaired ready failed: {stderr}");
+    assert!(
+        success,
+        "stale ready should transparently rebuild: {stderr}"
+    );
     assert!(ready_out.contains("Markdown title"));
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic rebuild diagnostic: {stderr}"
+    );
 }
 
 #[test]
-fn test_projection_index_rejects_missing_and_unindexed_sources() {
+fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -4913,6 +5187,10 @@ fn test_projection_index_rejects_missing_and_unindexed_sources() {
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
     let first_id = issue_id_by_title(dir.path(), "First indexed issue");
+    let (success, second_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Second indexed issue"]);
+    assert!(success, "second create failed: {stderr}");
+    assert!(second_out.contains("Created issue atelier-"));
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
@@ -4923,14 +5201,16 @@ fn test_projection_index_rejects_missing_and_unindexed_sources() {
     let first_markdown = std::fs::read_to_string(&first_path).unwrap();
     std::fs::remove_file(&first_path).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(
-        !success,
-        "missing source list should fail, stdout: {stdout}"
+        success,
+        "deleted source list should transparently rebuild: {stderr}"
     );
+    assert!(!list_out.contains("First indexed issue"));
+    assert!(list_out.contains("Second indexed issue"));
     assert!(
-        stderr.contains("indexed source is missing"),
-        "unexpected missing-source error: {stderr}"
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic rebuild diagnostic: {stderr}"
     );
 
     std::fs::write(&first_path, first_markdown).unwrap();
@@ -4962,22 +5242,20 @@ Body
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "search", "Unindexed"]);
-    assert!(!success, "unindexed search should fail, stdout: {stdout}");
-    assert!(
-        stderr.contains("canonical source is not indexed"),
-        "unexpected unindexed-source error: {stderr}"
-    );
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
     let (success, search_out, stderr) = run_atelier(dir.path(), &["issue", "search", "Unindexed"]);
-    assert!(success, "repaired search failed: {stderr}");
+    assert!(
+        success,
+        "unindexed search should transparently rebuild: {stderr}"
+    );
     assert!(search_out.contains("Unindexed issue"));
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic rebuild diagnostic: {stderr}"
+    );
 }
 
 #[test]
-fn test_projection_index_guards_dep_list_and_lint_but_ignores_derived_files() {
+fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -5016,19 +5294,71 @@ fn test_projection_index_guards_dep_list_and_lint_but_ignores_derived_files() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list"]);
-    assert!(!success, "stale dep list should fail, stdout: {stdout}");
+    let (success, dep_out, stderr) = run_atelier(dir.path(), &["dep", "list"]);
     assert!(
-        stderr.contains("Projection index is stale"),
-        "unexpected dep list stale error: {stderr}"
+        success,
+        "stale dep list should transparently rebuild: {stderr}"
+    );
+    assert!(dep_out.contains("Projection root changed"));
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic rebuild diagnostic: {stderr}"
     );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
-    assert!(!success, "stale lint should fail, stdout: {stdout}");
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(success, "lint should run after automatic rebuild: {stderr}");
+    assert!(lint_out.contains("Lint passed."));
+}
+
+#[test]
+fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Invalid Markdown source"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Invalid Markdown source");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let issue_path = dir
+        .path()
+        .join(".atelier-state/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace(
+            "title: \"Invalid Markdown source\"",
+            "title: [Invalid Markdown source",
+        ),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(
-        stderr.contains("Projection index is stale"),
-        "unexpected lint stale error: {stderr}"
+        !success,
+        "invalid canonical Markdown should fail, stdout: {stdout}"
     );
+    assert!(
+        stderr.contains("canonical state is not rebuild-ready")
+            && stderr.contains("Invalid YAML front matter"),
+        "unexpected invalid Markdown error: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "invalid Markdown must not be silently repaired: {stderr}"
+    );
+
+    std::fs::write(&issue_path, markdown).unwrap();
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(
+        success,
+        "restored canonical Markdown should query: {stderr}"
+    );
+    assert!(show_out.contains("Invalid Markdown source"));
 }
 
 #[test]

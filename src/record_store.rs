@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::models::Issue;
+use crate::models::{DomainRecord, Issue};
 use crate::record_id;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -159,6 +159,12 @@ pub struct CanonicalIssueRecord {
     pub relationships: Relationships,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanonicalDomainRecord {
+    pub record: DomainRecord,
+    pub relationships: Relationships,
+}
+
 pub struct RecordStore {
     state_dir: PathBuf,
 }
@@ -192,6 +198,33 @@ impl RecordStore {
             )
         })?;
         parse_issue_record(&text, relative)
+    }
+
+    pub fn load_issue_by_id(&self, id: &str) -> Result<CanonicalIssueRecord> {
+        record_id::validate_record_id(id)?;
+        self.load_issue(&issue_record_path(id))
+    }
+
+    pub fn load_domain_record_by_id(&self, kind: &str, id: &str) -> Result<CanonicalDomainRecord> {
+        record_id::validate_record_id(id)?;
+        let spec = canonical_record_kind(kind)?;
+        self.load_domain_record(&canonical_record_path(spec, id)?, spec)
+    }
+
+    pub fn load_domain_record(
+        &self,
+        relative: &Path,
+        spec: &RecordKindSpec,
+    ) -> Result<CanonicalDomainRecord> {
+        let bytes = fs::read(self.state_dir.join(relative))
+            .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
+        let text = String::from_utf8(bytes).with_context(|| {
+            format!(
+                "Projection file {} is not UTF-8",
+                display_state_path(relative)
+            )
+        })?;
+        parse_domain_record(&text, relative, spec)
     }
 
     pub fn load_issues(&self) -> Result<Vec<CanonicalIssueRecord>> {
@@ -371,6 +404,75 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         labels: string_array(&front_matter, "labels", relative)?,
         acceptance,
         evidence_required,
+        relationships,
+    })
+}
+
+pub fn parse_domain_record(
+    text: &str,
+    relative: &Path,
+    spec: &RecordKindSpec,
+) -> Result<CanonicalDomainRecord> {
+    let (front_matter, body) = split_front_matter(text, relative)?;
+
+    let schema = require_scalar(&front_matter, "schema", relative)?;
+    if schema != spec.schema {
+        bail!(
+            "Unsupported schema '{}' in {}; expected {}",
+            schema,
+            display_state_path(relative),
+            spec.schema
+        );
+    }
+    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
+    if schema_version != spec.schema_version {
+        bail!(
+            "Unsupported schema_version {} in {}; expected {}",
+            schema_version,
+            display_state_path(relative),
+            spec.schema_version
+        );
+    }
+
+    let id = require_scalar(&front_matter, "id", relative)?;
+    record_id::validate_record_id(&id).with_context(|| {
+        format!(
+            "Invalid {} id {} in {}",
+            spec.kind,
+            id,
+            display_state_path(relative)
+        )
+    })?;
+    let expected = canonical_record_path(spec, &id)?;
+    if relative != expected {
+        bail!(
+            "{} id {} in {} does not match canonical path {}",
+            spec.kind,
+            id,
+            display_state_path(relative),
+            display_state_path(&expected)
+        );
+    }
+    let data_json = require_scalar(&front_matter, "data", relative)?;
+    let _: Value = serde_json::from_str(&data_json)
+        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
+    let relationships = parse_relationships(&front_matter, relative)?;
+    let body = if body.is_empty() {
+        None
+    } else {
+        Some(body.to_string())
+    };
+    Ok(CanonicalDomainRecord {
+        record: DomainRecord {
+            id,
+            kind: spec.kind.to_string(),
+            title: require_scalar(&front_matter, "title", relative)?,
+            status: require_scalar(&front_matter, "status", relative)?,
+            body,
+            data_json,
+            created_at: require_datetime(&front_matter, "created_at", relative)?,
+            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
+        },
         relationships,
     })
 }

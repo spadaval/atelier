@@ -2,9 +2,11 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
+use crate::record_store::RecordStore;
 
 const KIND: &str = "mission";
 
@@ -35,7 +37,7 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 }
 
 pub fn view(db: &Database, id: &str) -> Result<()> {
-    let mission = db.require_record(KIND, id)?;
+    let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
     let links = db.list_record_links(KIND, id)?;
     let mut plans = Vec::new();
     let mut evidence = Vec::new();
@@ -99,6 +101,30 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
         &mission_blockers,
     )?;
     Ok(())
+}
+
+fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+}
+
+fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
+    let mut current = std::env::current_dir()?;
+    loop {
+        let state_dir = current.join(".atelier-state");
+        if state_dir.is_dir() {
+            return Ok(Some(state_dir));
+        }
+        if current.join(".atelier").is_dir() {
+            return Ok(None);
+        }
+        if !current.pop() {
+            return Ok(None);
+        }
+    }
 }
 
 pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
