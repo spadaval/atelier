@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Audit remaining projection payload fields after layout migration"
-updated_at: "2026-06-11T20:10:55.175508151+00:00"
+updated_at: "2026-06-11T23:58:45.303708996+00:00"
 ---
 
 After the single-tree migration, audit SQLite rows again for body/payload remnants and classify each field as metadata, search snippet/index, runtime state, compatibility residue, or removal candidate. Acceptance: follow-up removals are tracked or closed as unnecessary.
