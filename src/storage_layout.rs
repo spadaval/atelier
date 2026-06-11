@@ -51,12 +51,7 @@ impl StorageLayout {
     }
 
     pub fn canonical_dir(&self) -> PathBuf {
-        let atelier_dir = self.atelier_dir();
-        if has_canonical_records(&atelier_dir) {
-            atelier_dir
-        } else {
-            self.legacy_canonical_dir()
-        }
+        self.atelier_dir()
     }
 
     pub fn runtime_db_path(&self) -> PathBuf {
@@ -126,4 +121,25 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || relative_path == Path::new("agent.json")
         || relative_path == Path::new("hook-config.json")
         || relative_path == Path::new("hook-config.local.json")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn canonical_dir_does_not_fall_back_to_legacy_state() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join(".atelier-state/issues")).unwrap();
+
+        let layout = StorageLayout::new(dir.path());
+
+        assert_eq!(layout.canonical_dir(), dir.path().join(".atelier"));
+        assert_eq!(
+            layout.legacy_canonical_dir(),
+            dir.path().join(".atelier-state")
+        );
+    }
 }
