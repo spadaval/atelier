@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -6019,6 +6020,81 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
         "restored canonical Markdown should query: {stderr}"
     );
     assert!(show_out.contains("Invalid Markdown source"));
+}
+
+#[test]
+fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Lint canonical source"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+
+    let issue_path = dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let invalid_markdown = markdown.replace(
+        "title: \"Lint canonical source\"",
+        "title: [Lint canonical source",
+    );
+    std::fs::write(&issue_path, invalid_markdown.as_bytes()).unwrap();
+
+    let metadata = std::fs::metadata(&issue_path).unwrap();
+    let mut hasher = Sha256::new();
+    hasher.update(invalid_markdown.as_bytes());
+    let invalid_hash = format!("{:x}", hasher.finalize());
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "UPDATE projection_index_sources
+         SET size_bytes = ?1, sha256 = ?2
+         WHERE path = ?3",
+        rusqlite::params![
+            i64::try_from(metadata.len()).unwrap(),
+            invalid_hash,
+            format!("issues/{issue_id}.md")
+        ],
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(
+        !success,
+        "lint must reject malformed canonical Markdown, stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("Canonical tracker Markdown is invalid")
+            && stderr.contains("Invalid YAML front matter"),
+        "unexpected lint error: {stderr}"
+    );
+    assert!(
+        !stdout.contains("Lint passed."),
+        "lint must not pass from stale SQLite rows: {stdout}"
+    );
+}
+
+#[test]
+fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Lint without state db"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(success, "lint should rebuild missing state.db: {stderr}");
+    assert!(stdout.contains("Lint passed."));
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing rebuild diagnostic: {stderr}"
+    );
 }
 
 #[test]

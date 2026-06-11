@@ -713,6 +713,20 @@ fn get_fresh_projection_db() -> Result<Database> {
     Ok(db)
 }
 
+fn get_lint_db() -> Result<Database> {
+    let layout = storage_layout::StorageLayout::discover()?;
+    let state_dir = layout.canonical_dir();
+    if state_dir.is_dir() {
+        commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
+            format!(
+                "Canonical tracker Markdown is invalid in {}; fix canonical records before linting.",
+                state_dir.display()
+            )
+        })?;
+    }
+    get_fresh_projection_db()
+}
+
 fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
     let layout = storage_layout::StorageLayout::discover()?;
     Ok((layout.canonical_dir(), layout.runtime_db_path()))
@@ -1456,7 +1470,7 @@ fn run() -> Result<()> {
         },
 
         Commands::Lint { id } => {
-            let db = get_fresh_projection_db()?;
+            let db = get_lint_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
         }
 
