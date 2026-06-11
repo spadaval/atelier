@@ -5,14 +5,14 @@ data: "{\"captured_at\":\"2026-06-11T23:06:55.606484283+00:00\",\"kind\":\"valid
 relationships:
   blocks: []
   children: []
-  attachments:
+  attachments: []
+  relates:
   - kind: "issue"
     id: "atelier-81q1"
-    role: "validates"
+    type: "validates"
   - kind: "issue"
     id: "atelier-lcgi"
-    role: "validates"
-  relates: []
+    type: "validates"
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

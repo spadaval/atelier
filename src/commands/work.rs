@@ -62,8 +62,10 @@ pub fn start(db: &Database, id: &str) -> Result<()> {
 pub fn finish(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
     ensure_clean_worktree()?;
-    let export_stale =
-        crate::commands::export::canonical_stale_entries(db, &repo_root()?.join(".atelier-state"))?;
+    let export_stale = crate::commands::export::canonical_stale_entries(
+        db,
+        &crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir(),
+    )?;
     if !export_stale.is_empty() {
         bail!("Canonical export is stale:\n{}", export_stale.join("\n"));
     }
@@ -257,7 +259,7 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
             );
         }
     }
-    let state_dir = worktree_path.join(".atelier-state");
+    let state_dir = crate::storage_layout::StorageLayout::new(&worktree_path).canonical_dir();
     if state_dir.is_dir() {
         let exe = env::current_exe().context("failed to locate current atelier executable")?;
         let _ = Command::new(exe)
@@ -373,7 +375,8 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
         let dirty_paths = dirty_paths(&worktree.path)?;
         let (ahead, behind) = ahead_behind(&worktree.path).unwrap_or((None, None));
         let export_errors = export_errors(&worktree.path);
-        let export_fresh = if worktree.path.join(".atelier-state").is_dir() {
+        let state_dir = crate::storage_layout::StorageLayout::new(&worktree.path).canonical_dir();
+        let export_fresh = if state_dir.is_dir() {
             Some(export_errors.is_empty())
         } else {
             None

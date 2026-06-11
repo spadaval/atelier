@@ -26,7 +26,10 @@ relationships:
     id: "atelier-q5lk"
   - kind: "issue"
     id: "atelier-veof"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-35xf"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

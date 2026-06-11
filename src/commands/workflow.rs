@@ -118,7 +118,7 @@ fn evaluate_builtin(
 ) -> Result<(bool, String)> {
     match validator {
         "durable_state_current" => {
-            let state_dir = repo_root()?.join(".atelier-state");
+            let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
             let stale = crate::commands::export::canonical_stale_entries(db, &state_dir)?;
             if stale.is_empty() {
                 Ok((true, "canonical export is current".to_string()))

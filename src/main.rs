@@ -8,6 +8,7 @@ mod models;
 mod projection_index;
 mod record_id;
 mod record_store;
+mod storage_layout;
 mod sync;
 mod telemetry;
 mod utils;
@@ -46,8 +47,8 @@ Work:
   workflow      Validate workflow policy for records
 
 State management:
-  export        Write or check canonical .atelier-state projection
-  rebuild       Rebuild local SQLite state from .atelier-state
+  export        Write or check canonical tracker records
+  rebuild       Rebuild local SQLite state from canonical tracker records
   import-beads  Import an external Beads JSONL backup
 
 Maintenance:
@@ -110,12 +111,12 @@ enum Commands {
         /// State directory for canonical export
         #[arg(short, long)]
         output: Option<String>,
-        /// Check whether the canonical .atelier-state projection is current
+        /// Check whether canonical tracker records are current
         #[arg(long)]
         check: bool,
     },
 
-    /// Rebuild local SQLite runtime state from canonical .atelier-state files
+    /// Rebuild local SQLite runtime state from canonical tracker records
     Rebuild {
         /// Canonical state directory to rebuild from
         #[arg(short, long)]
@@ -659,57 +660,29 @@ enum DiagnosticsCommands {
 // ============================================================================
 
 fn find_atelier_dir() -> Result<PathBuf> {
-    let mut current = env::current_dir()?;
-
-    loop {
-        let candidate = current.join(".atelier");
-        if candidate.is_dir() {
-            return Ok(candidate);
-        }
-
-        if !current.pop() {
-            bail!("Not an Atelier repository (or any parent). Run 'atelier init' first.");
-        }
-    }
-}
-
-fn find_repo_root_for_rebuild() -> Result<PathBuf> {
-    let mut current = env::current_dir()?;
-
-    loop {
-        if current.join(".atelier-state").is_dir() || current.join(".atelier").is_dir() {
-            return Ok(current);
-        }
-
-        if !current.pop() {
-            bail!(
-                "Not an Atelier repository (or any parent). Run from a checkout with .atelier-state/."
-            );
-        }
-    }
+    storage_layout::find_atelier_dir()
 }
 
 fn get_db() -> Result<Database> {
-    let atelier_dir = find_atelier_dir()?;
-    let db_path = atelier_dir.join("state.db");
+    let db_path = storage_layout::StorageLayout::discover()?.runtime_db_path();
     Database::open(&db_path).context("Failed to open database")
 }
 
 fn get_fresh_projection_db() -> Result<Database> {
     let db = get_db()?;
-    let repo_root = find_repo_root_for_rebuild()?;
-    let state_dir = repo_root.join(".atelier-state");
+    let layout = storage_layout::StorageLayout::discover()?;
+    let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
         let report = projection_index::check(&db, &state_dir)?;
         if !report.is_fresh() {
             commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
                 format!(
                     "Projection index is stale and canonical state is not rebuild-ready; \
-                     fix .atelier-state/ before querying.\n{}",
+                     fix canonical tracker records before querying.\n{}",
                     report.problem_messages().join("\n")
                 )
             })?;
-            let db_path = repo_root.join(".atelier").join("state.db");
+            let db_path = layout.runtime_db_path();
             drop(db);
             commands::rebuild::run(&state_dir, &db_path).with_context(|| {
                 format!(
@@ -728,11 +701,8 @@ fn get_fresh_projection_db() -> Result<Database> {
 }
 
 fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
-    let root = find_repo_root_for_rebuild()?;
-    Ok((
-        root.join(".atelier-state"),
-        root.join(".atelier").join("state.db"),
-    ))
+    let layout = storage_layout::StorageLayout::discover()?;
+    Ok((layout.canonical_dir(), layout.runtime_db_path()))
 }
 
 fn issue_create_parts(
@@ -1159,37 +1129,31 @@ fn run() -> Result<()> {
 
         Commands::Export { output, check } => {
             let db = get_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            let repo_root = atelier_dir
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
+            let layout = storage_layout::StorageLayout::discover()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| repo_root.join(".atelier-state"));
+                .unwrap_or_else(|| layout.canonical_dir());
             commands::agent_factory::export_canonical(&db, &state_dir, check)
         }
 
         Commands::Rebuild { input } => {
-            let repo_root = find_repo_root_for_rebuild()?;
+            let layout = storage_layout::StorageLayout::discover()?;
             let state_dir = input
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| repo_root.join(".atelier-state"));
-            let db_path = repo_root.join(".atelier").join("state.db");
+                .unwrap_or_else(|| layout.canonical_dir());
+            let db_path = layout.runtime_db_path();
             commands::agent_factory::rebuild(&state_dir, &db_path)
         }
 
         Commands::ImportBeads { input, output } => {
             let db = get_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            let repo_root = atelier_dir
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
+            let layout = storage_layout::StorageLayout::discover()?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| repo_root.join(".atelier-state"));
+                .unwrap_or_else(|| layout.canonical_dir());
             commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir)
         }
 
@@ -1217,12 +1181,9 @@ fn run() -> Result<()> {
         },
 
         Commands::Mission { action } => {
-            let atelier_dir = find_atelier_dir()?;
-            let db_path = atelier_dir.join("state.db");
-            let repo_root = atelier_dir
-                .parent()
-                .context("Atelier directory has no repository root")?;
-            let state_dir = repo_root.join(".atelier-state");
+            let layout = storage_layout::StorageLayout::discover()?;
+            let db_path = layout.runtime_db_path();
+            let state_dir = layout.canonical_dir();
             match action {
                 MissionCommands::Create {
                     title,
@@ -1290,12 +1251,9 @@ fn run() -> Result<()> {
         }
 
         Commands::Plan { action } => {
-            let atelier_dir = find_atelier_dir()?;
-            let db_path = atelier_dir.join("state.db");
-            let repo_root = atelier_dir
-                .parent()
-                .context("Atelier directory has no repository root")?;
-            let state_dir = repo_root.join(".atelier-state");
+            let layout = storage_layout::StorageLayout::discover()?;
+            let db_path = layout.runtime_db_path();
+            let state_dir = layout.canonical_dir();
             match action {
                 PlanCommands::Create {
                     title,
@@ -1349,12 +1307,9 @@ fn run() -> Result<()> {
         }
 
         Commands::Evidence { action } => {
-            let atelier_dir = find_atelier_dir()?;
-            let db_path = atelier_dir.join("state.db");
-            let repo_root = atelier_dir
-                .parent()
-                .context("Atelier directory has no repository root")?;
-            let state_dir = repo_root.join(".atelier-state");
+            let layout = storage_layout::StorageLayout::discover()?;
+            let db_path = layout.runtime_db_path();
+            let state_dir = layout.canonical_dir();
             match action {
                 EvidenceCommands::Add {
                     evidence_kind,
@@ -1487,12 +1442,9 @@ fn run() -> Result<()> {
 
         Commands::Doctor => {
             let db = get_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            let repo_root = atelier_dir
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
-            let state_dir = repo_root.join(".atelier-state");
-            commands::agent_factory::doctor(&db, repo_root, &state_dir)
+            let layout = storage_layout::StorageLayout::discover()?;
+            let state_dir = layout.canonical_dir();
+            commands::agent_factory::doctor(&db, layout.repo_root(), &state_dir)
         }
     };
 

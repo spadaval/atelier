@@ -4,17 +4,17 @@ id: "atelier-2g51"
 data: "{\"constraints\":[\"Mission closeout requires all linked work closed, evidence attached, workflow validators passing, and a clean Git worktree.\",\"Keep mission close out of v1; status=closed is the single enforced transition path.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[],\"validation\":[\"workflow validate fails nonzero on validator failure\",\"mission update --status closed rejects dirty worktree and other closeout blockers\",\"mission status reports concrete closeout blockers\",\"final closeout records cargo fmt, cargo nextest, export --check, lint, doctor, and clean git status\"],\"work\":[]}"
 relationships:
   blocks: []
-  children: []
-  attachments:
+  children:
   - kind: "issue"
     id: "atelier-1e24"
-    role: "advances"
   - kind: "issue"
     id: "atelier-3gki"
-    role: "advances"
   - kind: "issue"
     id: "atelier-481n"
-    role: "advances"
+  attachments:
+  - kind: "evidence"
+    id: "atelier-2yxv"
+    role: "validates"
   relates: []
 schema: "atelier.mission"
 schema_version: 1

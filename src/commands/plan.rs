@@ -1173,19 +1173,7 @@ fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>>
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    let mut current = std::env::current_dir()?;
-    loop {
-        let state_dir = current.join(".atelier-state");
-        if state_dir.is_dir() {
-            return Ok(Some(state_dir));
-        }
-        if current.join(".atelier").is_dir() {
-            return Ok(None);
-        }
-        if !current.pop() {
-            return Ok(None);
-        }
-    }
+    crate::storage_layout::find_canonical_dir_from_cwd()
 }
 
 fn default_on_conflict() -> String {

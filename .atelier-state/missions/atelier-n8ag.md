@@ -31,7 +31,13 @@ relationships:
     id: "atelier-001r"
   - kind: "issue"
     id: "atelier-zh61"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-kpp5"
+    role: "validates"
+  - kind: "evidence"
+    id: "atelier-rodj"
+    role: "validates"
   relates: []
 schema: "atelier.mission"
 schema_version: 1

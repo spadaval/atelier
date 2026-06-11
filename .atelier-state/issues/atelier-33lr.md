@@ -12,7 +12,10 @@ priority: "P2"
 relationships:
   blocks: []
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-fi6l"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

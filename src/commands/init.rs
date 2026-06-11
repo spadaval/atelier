@@ -87,7 +87,8 @@ fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
 }
 
 pub fn run(path: &Path, force: bool) -> Result<()> {
-    let atelier_dir = path.join(".atelier");
+    let layout = crate::storage_layout::StorageLayout::new(path);
+    let atelier_dir = layout.atelier_dir();
     let claude_dir = path.join(".claude");
     let hooks_dir = claude_dir.join("hooks");
 
@@ -107,7 +108,7 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
     if !atelier_exists {
         fs::create_dir_all(&atelier_dir).context("Failed to create .atelier directory")?;
 
-        let db_path = atelier_dir.join("state.db");
+        let db_path = layout.runtime_db_path();
         Database::open(&db_path)?;
         println!("Created {}", atelier_dir.display());
     }

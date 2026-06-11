@@ -102,10 +102,13 @@ pub fn status(atelier_dir: &Path) -> Result<()> {
 
 pub fn run_daemon(atelier_dir: &Path) -> Result<()> {
     // Validate that this is a legitimate atelier directory
-    let db_path = atelier_dir.join("state.db");
+    let repo_root = atelier_dir
+        .parent()
+        .context("Atelier directory has no repository root")?;
+    let db_path = crate::storage_layout::StorageLayout::new(repo_root).runtime_db_path();
     if !db_path.exists() {
         anyhow::bail!(
-            "Invalid atelier directory: {} does not contain state.db",
+            "Invalid atelier directory: {} does not contain runtime database",
             atelier_dir.display()
         );
     }

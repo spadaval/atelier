@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-nwlx"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "config"
 - "gitignore"
 priority: "P1"
@@ -19,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Track Atelier project config and ignore only runtime files"
-updated_at: "2026-06-11T18:54:40.116960501+00:00"
+updated_at: "2026-06-11T23:22:30.776797854+00:00"
 ---
 
 Replace the current repo-level ignore of all .atelier/ with precise tracked/ignored boundaries.

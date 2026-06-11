@@ -596,19 +596,7 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    let mut current = std::env::current_dir()?;
-    loop {
-        let state_dir = current.join(".atelier-state");
-        if state_dir.is_dir() {
-            return Ok(Some(state_dir));
-        }
-        if current.join(".atelier").is_dir() {
-            return Ok(None);
-        }
-        if !current.pop() {
-            return Ok(None);
-        }
-    }
+    crate::storage_layout::find_canonical_dir_from_cwd()
 }
 
 pub fn list(
@@ -1957,8 +1945,9 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
 }
 
 pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
-    let atelier_dir = repo_root.join(".atelier");
-    let db_path = repo_root.join(".atelier").join("state.db");
+    let layout = crate::storage_layout::StorageLayout::new(repo_root);
+    let atelier_dir = layout.atelier_dir();
+    let db_path = layout.runtime_db_path();
     let export_fresh = super::export::canonical_stale_entries(db, state_dir)
         .map(|stale| stale.is_empty())
         .unwrap_or(false);

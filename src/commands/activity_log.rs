@@ -113,7 +113,7 @@ fn record(issue_id: &str, event_type: ActivityEventType, summary: &str, body: &s
 }
 
 fn current_state_dir_for_issue(issue_id: &str) -> Option<PathBuf> {
-    let state_dir = std::env::current_dir().ok()?.join(".atelier-state");
+    let state_dir = crate::storage_layout::find_canonical_dir_from_cwd().ok()??;
     let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
     issue_file.is_file().then_some(state_dir)
 }
