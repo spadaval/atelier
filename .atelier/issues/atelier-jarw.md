@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-jarw"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "lint"
 - "markdown"
 priority: "P1"
@@ -23,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate canonical .atelier Markdown directly in atelier lint"
-updated_at: "2026-06-11T20:10:55.605429835+00:00"
+updated_at: "2026-06-11T23:41:24.065772739+00:00"
 ---
 
 Make lint parse committed .atelier/ records directly rather than trusting SQLite projection state. Acceptance: deleting state.db does not prevent canonical lint from validating committed records.

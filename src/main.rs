@@ -96,7 +96,7 @@ struct Cli {
 enum Commands {
     /// Initialize atelier in the current directory
     Init {
-        /// Force update hooks even if already initialized
+        /// Reconcile core tracker state even if already initialized
         #[arg(short, long)]
         force: bool,
     },
@@ -782,6 +782,20 @@ fn runtime_db() -> Result<Database> {
 
 fn projection_query_db() -> Result<Database> {
     Ok(command_storage(CommandStorageAccess::ProjectionQuery)?.into_db())
+}
+
+fn lint_db() -> Result<Database> {
+    let layout = storage_layout::StorageLayout::discover()?;
+    let state_dir = layout.canonical_dir();
+    if state_dir.is_dir() {
+        commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
+            format!(
+                "Canonical tracker Markdown is invalid in {}; fix canonical records before linting.",
+                state_dir.display()
+            )
+        })?;
+    }
+    projection_query_db()
 }
 
 fn canonical_mutation_db() -> Result<Database> {
@@ -1561,7 +1575,7 @@ fn run() -> Result<()> {
         },
 
         Commands::Lint { id } => {
-            let db = projection_query_db()?;
+            let db = lint_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
         }
 

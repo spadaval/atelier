@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-xcy9"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "config"
 - "init"
 priority: "P2"
@@ -19,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Simplify atelier init to create core tracker state only"
-updated_at: "2026-06-11T18:54:48.877278641+00:00"
+updated_at: "2026-06-11T23:42:13.850110047+00:00"
 ---
 
 Make atelier init initialize only core Atelier tracker state, not copied agent-rule bundles or Claude integration files.
