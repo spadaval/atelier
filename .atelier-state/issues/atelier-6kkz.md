@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-krhk"
 created_at: "2026-06-10T16:00:59.309465327+00:00"
-depends_on:
-- "atelier-qxvj"
 evidence_required: []
 id: "atelier-6kkz"
 issue_type: "task"
@@ -13,9 +9,14 @@ labels:
 - "export"
 - "projection"
 - "rebuild"
-links: []
-parent: "atelier-r4cf"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-krhk"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

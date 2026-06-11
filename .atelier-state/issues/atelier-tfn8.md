@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-a4ps"
 created_at: "2026-06-10T03:50:58.751960931+00:00"
-depends_on:
-- "atelier-po2n"
 evidence_required: []
 id: "atelier-tfn8"
 issue_type: "task"
@@ -13,9 +9,14 @@ labels:
 - "doctor"
 - "runtime-state"
 - "sqlite"
-links: []
-parent: "atelier-zd4d"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-a4ps"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

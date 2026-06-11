@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0007"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-000l"
 evidence_required: []
 id: "atelier-0008"
 issue_type: "task"
@@ -13,9 +9,14 @@ labels:
 - "lint"
 - "spec"
 - "workflow"
-links: []
-parent: "atelier-000r"
 priority: "P3"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0007"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

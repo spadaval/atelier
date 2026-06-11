@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000u"
 created_at: "2026-06-09T19:41:08.140632616+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-001l"
 issue_type: "task"
@@ -13,9 +10,14 @@ labels:
 - "milestone"
 - "task"
 - "workflow"
-links: []
-parent: "atelier-000u"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000u"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0015"
 created_at: "2026-06-08T19:39:56+00:00"
-depends_on:
-- "atelier-0012"
-- "atelier-0013"
 evidence_required: []
 id: "atelier-0014"
 issue_type: "task"
@@ -18,9 +13,14 @@ labels:
 - "skill"
 - "task"
 - "tracker"
-links: []
-parent: "atelier-000z"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0015"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,14 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T16:00:59.368552201+00:00"
-depends_on:
-- "atelier-1z0u"
-- "atelier-6kkz"
-- "atelier-8o8v"
-- "atelier-t79u"
-- "atelier-ujm4"
-- "atelier-yvk6"
 evidence_required: []
 id: "atelier-krhk"
 issue_type: "validation"
@@ -16,9 +8,12 @@ labels:
 - "activity"
 - "closeout"
 - "validation"
-links: []
-parent: "atelier-r4cf"
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

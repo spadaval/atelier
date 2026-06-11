@@ -1,15 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-1z0u"
-- "atelier-6kkz"
-- "atelier-8o8v"
-- "atelier-nwug"
-- "atelier-t79u"
-- "atelier-ujm4"
-- "atelier-yvk6"
 created_at: "2026-06-10T16:00:59.223312574+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-qxvj"
 issue_type: "task"
@@ -19,9 +10,26 @@ labels:
 - "markdown"
 - "record-store"
 - "storage"
-links: []
-parent: "atelier-r4cf"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-1z0u"
+  - kind: "issue"
+    id: "atelier-6kkz"
+  - kind: "issue"
+    id: "atelier-8o8v"
+  - kind: "issue"
+    id: "atelier-nwug"
+  - kind: "issue"
+    id: "atelier-t79u"
+  - kind: "issue"
+    id: "atelier-ujm4"
+  - kind: "issue"
+    id: "atelier-yvk6"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

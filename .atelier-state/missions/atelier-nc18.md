@@ -2,22 +2,21 @@
 created_at: "2026-06-11T00:06:58.557537388+00:00"
 id: "atelier-nc18"
 data: "{\"constraints\":[\"Diagnostics data stays outside .atelier-state by default, supports disable/override controls, and documents redaction and retention behavior.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[\"Telemetry can leak sensitive command context or create nondeterministic tracker state if storage and redaction boundaries are not explicit.\"],\"validation\":[\"Linked issues prove storage/redaction policy, command instrumentation, disabled telemetry behavior, failed-command telemetry, and stable slow-command query output.\"],\"work\":[]}"
-links:
-- target_id: "atelier-000i"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-001m"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-001p"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-001q"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-001r"
-  target_kind: "issue"
-  type: "advances"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-000i"
+  - kind: "issue"
+    id: "atelier-001m"
+  - kind: "issue"
+    id: "atelier-001p"
+  - kind: "issue"
+    id: "atelier-001q"
+  - kind: "issue"
+    id: "atelier-001r"
+  attachments: []
+  relates: []
 schema: "atelier.mission"
 schema_version: 1
 status: "open"

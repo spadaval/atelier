@@ -1,18 +1,20 @@
 ---
 acceptance: []
-blocks:
-- "atelier-2q9p"
-- "atelier-iv68"
 created_at: "2026-06-11T02:45:00.234954408+00:00"
-depends_on:
-- "atelier-0se4"
 evidence_required: []
 id: "atelier-fspm"
 issue_type: "decision"
 labels: []
-links: []
-parent: "atelier-esh8"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-2q9p"
+  - kind: "issue"
+    id: "atelier-iv68"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

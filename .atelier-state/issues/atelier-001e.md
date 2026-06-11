@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-001f"
 created_at: "2026-06-09T17:30:35.664345209+00:00"
-depends_on:
-- "atelier-001b"
 evidence_required: []
 id: "atelier-001e"
 issue_type: "task"
@@ -13,9 +9,14 @@ labels:
 - "cleanup"
 - "cli"
 - "issue"
-links: []
-parent: "atelier-001a"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-001f"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

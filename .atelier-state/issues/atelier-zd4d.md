@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T02:57:51.275067274+00:00"
-depends_on:
-- "atelier-a4ps"
 evidence_required: []
 id: "atelier-zd4d"
 issue_type: "epic"
@@ -14,9 +11,30 @@ labels:
 - "projection"
 - "sqlite"
 - "storage"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-3mpl"
+  - kind: "issue"
+    id: "atelier-a4ps"
+  - kind: "issue"
+    id: "atelier-e2vh"
+  - kind: "issue"
+    id: "atelier-hdhk"
+  - kind: "issue"
+    id: "atelier-m25t"
+  - kind: "issue"
+    id: "atelier-po2n"
+  - kind: "issue"
+    id: "atelier-r4cf"
+  - kind: "issue"
+    id: "atelier-tfn8"
+  - kind: "issue"
+    id: "atelier-z6sc"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

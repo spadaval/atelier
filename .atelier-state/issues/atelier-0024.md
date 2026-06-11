@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T00:33:49.477953835+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-0024"
 issue_type: "epic"
@@ -13,9 +11,22 @@ labels:
 - "markdown"
 - "migration"
 - "storage"
-links: []
-parent: "atelier-000j"
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-0023"
+  - kind: "issue"
+    id: "atelier-0025"
+  - kind: "issue"
+    id: "atelier-0026"
+  - kind: "issue"
+    id: "atelier-0027"
+  - kind: "issue"
+    id: "atelier-0028"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

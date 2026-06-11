@@ -1,13 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-a4ps"
-- "atelier-e2vh"
-- "atelier-hdhk"
-- "atelier-tfn8"
 created_at: "2026-06-10T03:50:40.571741313+00:00"
-depends_on:
-- "atelier-3mpl"
 evidence_required: []
 id: "atelier-po2n"
 issue_type: "task"
@@ -17,9 +10,20 @@ labels:
 - "freshness"
 - "projection"
 - "sqlite"
-links: []
-parent: "atelier-zd4d"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-a4ps"
+  - kind: "issue"
+    id: "atelier-e2vh"
+  - kind: "issue"
+    id: "atelier-hdhk"
+  - kind: "issue"
+    id: "atelier-tfn8"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

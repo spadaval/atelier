@@ -1,19 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0005"
-- "atelier-0006"
-- "atelier-000l"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-0004"
-- "atelier-000p"
-- "atelier-001h"
-- "atelier-001i"
-- "atelier-001j"
-- "atelier-001k"
-- "atelier-001l"
-- "atelier-0023"
 evidence_required: []
 id: "atelier-000u"
 issue_type: "task"
@@ -21,9 +8,28 @@ labels:
 - "domain-model"
 - "feature"
 - "spec"
-links: []
-parent: "atelier-000j"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0005"
+  - kind: "issue"
+    id: "atelier-0006"
+  - kind: "issue"
+    id: "atelier-000l"
+  children:
+  - kind: "issue"
+    id: "atelier-001h"
+  - kind: "issue"
+    id: "atelier-001i"
+  - kind: "issue"
+    id: "atelier-001j"
+  - kind: "issue"
+    id: "atelier-001k"
+  - kind: "issue"
+    id: "atelier-001l"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

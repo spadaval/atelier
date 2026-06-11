@@ -1,15 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0005"
-- "atelier-000u"
-- "atelier-001n"
-- "atelier-001u"
-- "atelier-0027"
 created_at: "2026-06-10T00:22:41.105938194+00:00"
-depends_on:
-- "atelier-0025"
-- "atelier-0026"
 evidence_required: []
 id: "atelier-0023"
 issue_type: "task"
@@ -19,9 +10,22 @@ labels:
 - "migration"
 - "storage"
 - "task"
-links: []
-parent: "atelier-0024"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0005"
+  - kind: "issue"
+    id: "atelier-000u"
+  - kind: "issue"
+    id: "atelier-001n"
+  - kind: "issue"
+    id: "atelier-001u"
+  - kind: "issue"
+    id: "atelier-0027"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

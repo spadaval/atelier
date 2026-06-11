@@ -1,16 +1,16 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-11T02:45:42.540521209+00:00"
-depends_on:
-- "atelier-fspm"
 evidence_required: []
 id: "atelier-2q9p"
 issue_type: "task"
 labels: []
-links: []
-parent: "atelier-vvlj"
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

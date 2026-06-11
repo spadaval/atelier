@@ -1,19 +1,23 @@
 ---
 acceptance: []
-blocks:
-- "atelier-bia4"
-- "atelier-j75o"
-- "atelier-xajk"
 created_at: "2026-06-11T02:45:01.650254825+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-vhxa"
 issue_type: "spike"
 labels:
 - "assignee:root"
-links: []
-parent: "atelier-y571"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-bia4"
+  - kind: "issue"
+    id: "atelier-j75o"
+  - kind: "issue"
+    id: "atelier-xajk"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

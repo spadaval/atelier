@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-11T02:28:52.991144170+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-vh7o"
 issue_type: "task"
 labels:
 - "assignee:root"
 - "cli-output"
-links: []
-parent: null
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

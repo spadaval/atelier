@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000u"
-- "atelier-001n"
-- "atelier-001t"
 created_at: "2026-06-09T17:30:35.841097873+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-001i"
 issue_type: "task"
@@ -15,9 +10,18 @@ labels:
 - "cli"
 - "domain-model"
 - "plan"
-links: []
-parent: "atelier-000u"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000u"
+  - kind: "issue"
+    id: "atelier-001n"
+  - kind: "issue"
+    id: "atelier-001t"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

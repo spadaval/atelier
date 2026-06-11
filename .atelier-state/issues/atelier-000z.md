@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-08T19:39:14+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-000z"
 issue_type: "epic"
@@ -12,9 +10,26 @@ labels:
 - "migration"
 - "mission"
 - "tracker"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-0010"
+  - kind: "issue"
+    id: "atelier-0011"
+  - kind: "issue"
+    id: "atelier-0012"
+  - kind: "issue"
+    id: "atelier-0013"
+  - kind: "issue"
+    id: "atelier-0014"
+  - kind: "issue"
+    id: "atelier-0015"
+  - kind: "issue"
+    id: "atelier-0016"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,18 +1,21 @@
 ---
 acceptance: []
-blocks:
-- "atelier-fspm"
-- "atelier-ky3z"
 created_at: "2026-06-11T02:44:59.867335157+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-0se4"
 issue_type: "spike"
 labels:
 - "assignee:root"
-links: []
-parent: "atelier-esh8"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-fspm"
+  - kind: "issue"
+    id: "atelier-ky3z"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-a4ps"
 created_at: "2026-06-10T03:51:07.274706851+00:00"
-depends_on:
-- "atelier-3mpl"
 evidence_required: []
 id: "atelier-m25t"
 issue_type: "task"
@@ -15,9 +11,14 @@ labels:
 - "mission"
 - "plan"
 - "record-store"
-links: []
-parent: "atelier-zd4d"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-a4ps"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

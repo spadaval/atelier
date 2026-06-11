@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000n"
-- "atelier-000q"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-000f"
-- "atelier-000g"
 evidence_required: []
 id: "atelier-000v"
 issue_type: "task"
@@ -15,9 +9,16 @@ labels:
 - "git"
 - "spec"
 - "worktree"
-links: []
-parent: "atelier-000m"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000n"
+  - kind: "issue"
+    id: "atelier-000q"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

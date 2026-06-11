@@ -2,22 +2,21 @@
 created_at: "2026-06-11T00:06:58.494243072+00:00"
 id: "atelier-ny4e"
 data: "{\"constraints\":[\"Tiny tasks remain lightweight by default while higher-risk workflows can require evidence, validators, and explicit waivers.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[\"Over-strict workflow policy could make ordinary agent work feel like red tape, while under-specified policy could let closeout quality drift.\"],\"validation\":[\"Linked issues prove configurable workflows, transition validation, lint severities, waivers, and Milestone 5 closeout validation.\"],\"work\":[]}"
-links:
-- target_id: "atelier-0001"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-0007"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-0008"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-000l"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-000r"
-  target_kind: "issue"
-  type: "advances"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-0001"
+  - kind: "issue"
+    id: "atelier-0007"
+  - kind: "issue"
+    id: "atelier-0008"
+  - kind: "issue"
+    id: "atelier-000l"
+  - kind: "issue"
+    id: "atelier-000r"
+  attachments: []
+  relates: []
 schema: "atelier.mission"
 schema_version: 1
 status: "open"

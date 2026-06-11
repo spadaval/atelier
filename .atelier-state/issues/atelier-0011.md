@@ -1,14 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0012"
-- "atelier-0013"
 created_at: "2026-06-08T19:39:30+00:00"
-depends_on:
-- "atelier-000g"
-- "atelier-000w"
-- "atelier-000y"
-- "atelier-0010"
 evidence_required: []
 id: "atelier-0011"
 issue_type: "task"
@@ -20,9 +12,16 @@ labels:
 - "mission"
 - "storage"
 - "tracker"
-links: []
-parent: "atelier-000z"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0012"
+  - kind: "issue"
+    id: "atelier-0013"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,15 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0006"
-- "atelier-000h"
-- "atelier-001n"
-- "atelier-001t"
-- "atelier-0022"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-000u"
-- "atelier-0023"
 evidence_required: []
 id: "atelier-0005"
 issue_type: "task"
@@ -18,9 +9,22 @@ labels:
 - "feature"
 - "links"
 - "spec"
-links: []
-parent: "atelier-000j"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0006"
+  - kind: "issue"
+    id: "atelier-000h"
+  - kind: "issue"
+    id: "atelier-001n"
+  - kind: "issue"
+    id: "atelier-001t"
+  - kind: "issue"
+    id: "atelier-0022"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

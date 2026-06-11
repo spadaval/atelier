@@ -1,17 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0003"
-- "atelier-001o"
-- "atelier-001x"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-0005"
-- "atelier-0007"
-- "atelier-000f"
-- "atelier-000l"
-- "atelier-000n"
-- "atelier-000u"
 evidence_required: []
 id: "atelier-0006"
 issue_type: "task"
@@ -22,9 +11,18 @@ labels:
 - "mission-control"
 - "spec"
 - "validator"
-links: []
-parent: "atelier-000c"
 priority: "P3"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0003"
+  - kind: "issue"
+    id: "atelier-001o"
+  - kind: "issue"
+    id: "atelier-001x"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

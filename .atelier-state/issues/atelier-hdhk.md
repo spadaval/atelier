@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-a4ps"
-- "atelier-e2vh"
 created_at: "2026-06-10T03:52:35.662499167+00:00"
-depends_on:
-- "atelier-3mpl"
-- "atelier-po2n"
 evidence_required: []
 id: "atelier-hdhk"
 issue_type: "task"
@@ -15,9 +9,16 @@ labels:
 - "migration"
 - "projection"
 - "rebuild"
-links: []
-parent: "atelier-zd4d"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-a4ps"
+  - kind: "issue"
+    id: "atelier-e2vh"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

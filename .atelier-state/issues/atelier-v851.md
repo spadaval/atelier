@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-11T02:01:40.641719276+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-v851"
 issue_type: "validation"
 labels:
 - "assignee:root"
 - "cli-output"
-links: []
-parent: null
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

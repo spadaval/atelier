@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-1z0u"
-- "atelier-krhk"
 created_at: "2026-06-10T16:00:59.269185814+00:00"
-depends_on:
-- "atelier-qxvj"
 evidence_required: []
 id: "atelier-ujm4"
 issue_type: "task"
@@ -14,9 +9,16 @@ labels:
 - "evidence"
 - "links"
 - "record-store"
-links: []
-parent: "atelier-r4cf"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-1z0u"
+  - kind: "issue"
+    id: "atelier-krhk"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

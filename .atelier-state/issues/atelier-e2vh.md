@@ -1,13 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-a4ps"
 created_at: "2026-06-10T03:50:49.785782245+00:00"
-depends_on:
-- "atelier-3mpl"
-- "atelier-hdhk"
-- "atelier-po2n"
-- "atelier-z6sc"
 evidence_required: []
 id: "atelier-e2vh"
 issue_type: "task"
@@ -16,9 +9,14 @@ labels:
 - "markdown"
 - "migration"
 - "record-store"
-links: []
-parent: "atelier-zd4d"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-a4ps"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

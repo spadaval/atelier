@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000c"
-- "atelier-000j"
-- "atelier-000m"
-- "atelier-000r"
 created_at: "2026-06-09T17:29:00.549237358+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-001a"
 issue_type: "task"
@@ -17,9 +11,32 @@ labels:
 - "cli"
 - "legacy-drag"
 - "spec"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000c"
+  - kind: "issue"
+    id: "atelier-000j"
+  - kind: "issue"
+    id: "atelier-000m"
+  - kind: "issue"
+    id: "atelier-000r"
+  children:
+  - kind: "issue"
+    id: "atelier-001b"
+  - kind: "issue"
+    id: "atelier-001c"
+  - kind: "issue"
+    id: "atelier-001d"
+  - kind: "issue"
+    id: "atelier-001e"
+  - kind: "issue"
+    id: "atelier-001f"
+  - kind: "issue"
+    id: "atelier-001g"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

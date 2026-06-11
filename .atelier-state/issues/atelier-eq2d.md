@@ -1,18 +1,22 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-11T02:44:01.331346422+00:00"
-depends_on:
-- "atelier-vvlj"
-- "atelier-y571"
-- "atelier-zjb5"
 evidence_required: []
 id: "atelier-eq2d"
 issue_type: "epic"
 labels: []
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-2h0d"
+  - kind: "issue"
+    id: "atelier-sspj"
+  - kind: "issue"
+    id: "atelier-vqsb"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

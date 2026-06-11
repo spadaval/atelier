@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-0006"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-0008"
 evidence_required: []
 id: "atelier-0007"
 issue_type: "task"
@@ -14,9 +10,14 @@ labels:
 - "task"
 - "validation"
 - "validator"
-links: []
-parent: "atelier-000r"
 priority: "P3"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-0006"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

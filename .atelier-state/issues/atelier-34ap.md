@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T20:37:17.129465245+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-34ap"
 issue_type: "epic"
@@ -10,9 +8,12 @@ labels:
 - "cleanup"
 - "cli"
 - "command-surface"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

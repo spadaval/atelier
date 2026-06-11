@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-11T02:01:39.746628354+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-wnf1"
 issue_type: "task"
 labels:
 - "assignee:root"
 - "cli-output"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

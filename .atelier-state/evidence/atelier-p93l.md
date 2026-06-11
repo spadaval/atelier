@@ -2,10 +2,14 @@
 created_at: "2026-06-11T03:52:16.655425603+00:00"
 id: "atelier-p93l"
 data: "{\"captured_at\":\"2026-06-11T03:52:16.655312282+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":\"codex\",\"result\":\"pass\",\"uri\":null}"
-links:
-- target_id: "atelier-8bky"
-  target_kind: "mission"
-  type: "validates"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates:
+  - kind: "mission"
+    id: "atelier-8bky"
+    type: "validates"
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

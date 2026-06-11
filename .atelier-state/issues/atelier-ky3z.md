@@ -1,18 +1,20 @@
 ---
 acceptance: []
-blocks:
-- "atelier-fkgl"
-- "atelier-uuhh"
 created_at: "2026-06-11T02:45:00.523808082+00:00"
-depends_on:
-- "atelier-0se4"
 evidence_required: []
 id: "atelier-ky3z"
 issue_type: "spike"
 labels: []
-links: []
-parent: "atelier-esh8"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-fkgl"
+  - kind: "issue"
+    id: "atelier-uuhh"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

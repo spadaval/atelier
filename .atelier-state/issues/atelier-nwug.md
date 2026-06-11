@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-pakd"
 created_at: "2026-06-10T16:09:12.915812699+00:00"
-depends_on:
-- "atelier-qxvj"
 evidence_required: []
 id: "atelier-nwug"
 issue_type: "task"
@@ -12,9 +8,14 @@ labels:
 - "activity"
 - "cli"
 - "issue-show"
-links: []
-parent: "atelier-pd0w"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-pakd"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

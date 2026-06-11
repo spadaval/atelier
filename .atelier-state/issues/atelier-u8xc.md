@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T20:59:23.907724705+00:00"
-depends_on:
-- "atelier-o78q"
-- "atelier-omnw"
-- "atelier-ugeo"
 evidence_required: []
 id: "atelier-u8xc"
 issue_type: "validation"
@@ -13,9 +8,12 @@ labels:
 - "assignee:root"
 - "cli"
 - "human-output"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

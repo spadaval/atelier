@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000c"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-0009"
-- "atelier-001a"
-- "atelier-001f"
 evidence_required: []
 id: "atelier-000m"
 issue_type: "epic"
@@ -15,9 +9,22 @@ labels:
 - "milestone"
 - "spec"
 - "worktree"
-links: []
-parent: null
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000c"
+  children:
+  - kind: "issue"
+    id: "atelier-000f"
+  - kind: "issue"
+    id: "atelier-000n"
+  - kind: "issue"
+    id: "atelier-000q"
+  - kind: "issue"
+    id: "atelier-000v"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

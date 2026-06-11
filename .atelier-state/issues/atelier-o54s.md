@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-o78q"
-- "atelier-omnw"
-- "atelier-ugeo"
 created_at: "2026-06-10T20:58:48.813640540+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-o54s"
 issue_type: "epic"
@@ -13,9 +8,18 @@ labels:
 - "assignee:root"
 - "cli"
 - "human-output"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-o78q"
+  - kind: "issue"
+    id: "atelier-omnw"
+  - kind: "issue"
+    id: "atelier-ugeo"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

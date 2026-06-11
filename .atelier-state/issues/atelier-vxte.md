@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-pakd"
 created_at: "2026-06-10T16:09:12.894589289+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-vxte"
 issue_type: "task"
@@ -12,9 +9,14 @@ labels:
 - "dependencies"
 - "hierarchy"
 - "issue-show"
-links: []
-parent: "atelier-pd0w"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-pakd"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

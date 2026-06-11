@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-09T19:47:39.925172189+00:00"
-depends_on:
-- "atelier-001x"
 evidence_required: []
 id: "atelier-001y"
 issue_type: "task"
@@ -11,9 +8,12 @@ labels:
 - "mission-control"
 - "tui"
 - "validation"
-links: []
-parent: "atelier-001o"
 priority: "P3"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

@@ -1,17 +1,26 @@
 ---
 acceptance: []
-blocks:
-- "atelier-eq2d"
 created_at: "2026-06-11T02:44:00.747913106+00:00"
-depends_on:
-- "atelier-esh8"
 evidence_required: []
 id: "atelier-y571"
 issue_type: "epic"
 labels: []
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-eq2d"
+  children:
+  - kind: "issue"
+    id: "atelier-bia4"
+  - kind: "issue"
+    id: "atelier-j75o"
+  - kind: "issue"
+    id: "atelier-vhxa"
+  - kind: "issue"
+    id: "atelier-xajk"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

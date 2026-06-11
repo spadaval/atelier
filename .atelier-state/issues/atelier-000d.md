@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000k"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-000d"
 issue_type: "task"
@@ -12,9 +9,14 @@ labels:
 - "fork"
 - "spec"
 - "task"
-links: []
-parent: "atelier-000b"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000k"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

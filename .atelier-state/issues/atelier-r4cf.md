@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T16:00:00.692912198+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-r4cf"
 issue_type: "epic"
@@ -13,9 +11,30 @@ labels:
 - "history"
 - "migration"
 - "record-store"
-links: []
-parent: "atelier-zd4d"
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-1z0u"
+  - kind: "issue"
+    id: "atelier-6kkz"
+  - kind: "issue"
+    id: "atelier-8o8v"
+  - kind: "issue"
+    id: "atelier-krhk"
+  - kind: "issue"
+    id: "atelier-pd0w"
+  - kind: "issue"
+    id: "atelier-qxvj"
+  - kind: "issue"
+    id: "atelier-t79u"
+  - kind: "issue"
+    id: "atelier-ujm4"
+  - kind: "issue"
+    id: "atelier-yvk6"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

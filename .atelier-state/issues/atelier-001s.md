@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-001u"
 created_at: "2026-06-09T19:47:26.227646644+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-001s"
 issue_type: "task"
@@ -13,9 +10,14 @@ labels:
 - "json"
 - "plan"
 - "task"
-links: []
-parent: "atelier-001n"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-001u"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

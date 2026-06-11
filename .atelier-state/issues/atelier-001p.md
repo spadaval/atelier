@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-001q"
 created_at: "2026-06-09T19:47:13.578686404+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-001p"
 issue_type: "task"
@@ -12,9 +9,14 @@ labels:
 - "decision"
 - "diagnostics"
 - "telemetry"
-links: []
-parent: "atelier-001m"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-001q"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

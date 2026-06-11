@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000p"
-- "atelier-000v"
-- "atelier-0011"
 created_at: "2026-06-08T17:33:27+00:00"
-depends_on:
-- "atelier-000y"
 evidence_required: []
 id: "atelier-000g"
 issue_type: "task"
@@ -15,9 +9,18 @@ labels:
 - "rebuild"
 - "spec"
 - "storage"
-links: []
-parent: "atelier-0009"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000p"
+  - kind: "issue"
+    id: "atelier-000v"
+  - kind: "issue"
+    id: "atelier-0011"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

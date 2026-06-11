@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks:
-- "atelier-2h0d"
 created_at: "2026-06-11T02:45:43.526136929+00:00"
-depends_on:
-- "atelier-vfqo"
 evidence_required: []
 id: "atelier-vqsb"
 issue_type: "validation"
 labels: []
-links: []
-parent: "atelier-eq2d"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-2h0d"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

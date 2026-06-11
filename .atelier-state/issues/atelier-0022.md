@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-09T20:44:28.986051251+00:00"
-depends_on:
-- "atelier-0005"
 evidence_required: []
 id: "atelier-0022"
 issue_type: "task"
@@ -13,9 +10,12 @@ labels:
 - "mission"
 - "mission-view"
 - "task"
-links: []
-parent: "atelier-000j"
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

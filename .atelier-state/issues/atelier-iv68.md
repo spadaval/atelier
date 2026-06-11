@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks:
-- "atelier-kaei"
 created_at: "2026-06-11T02:45:00.803546168+00:00"
-depends_on:
-- "atelier-fspm"
 evidence_required: []
 id: "atelier-iv68"
 issue_type: "task"
 labels: []
-links: []
-parent: "atelier-zjb5"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-kaei"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,18 +1,19 @@
 ---
 acceptance: []
-blocks:
-- "atelier-vfqo"
 created_at: "2026-06-11T02:45:01.078632625+00:00"
-depends_on:
-- "atelier-iv68"
 evidence_required: []
 id: "atelier-kaei"
 issue_type: "task"
 labels:
 - "assignee:root"
-links: []
-parent: "atelier-zjb5"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-vfqo"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

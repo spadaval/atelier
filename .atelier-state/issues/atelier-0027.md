@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T00:34:21.482704428+00:00"
-depends_on:
-- "atelier-0023"
-- "atelier-0028"
 evidence_required: []
 id: "atelier-0027"
 issue_type: "task"
@@ -13,9 +9,12 @@ labels:
 - "migration"
 - "storage"
 - "validation"
-links: []
-parent: "atelier-0024"
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

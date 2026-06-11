@@ -1,15 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-zd4d"
 created_at: "2026-06-10T03:51:15.735448190+00:00"
-depends_on:
-- "atelier-e2vh"
-- "atelier-hdhk"
-- "atelier-m25t"
-- "atelier-po2n"
-- "atelier-tfn8"
-- "atelier-z6sc"
 evidence_required: []
 id: "atelier-a4ps"
 issue_type: "validation"
@@ -17,9 +8,14 @@ labels:
 - "closeout"
 - "migration"
 - "validation"
-links: []
-parent: "atelier-zd4d"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-zd4d"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

@@ -1,9 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-pakd"
 created_at: "2026-06-10T16:09:12.870412513+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-p1yj"
 issue_type: "task"
@@ -11,9 +8,14 @@ labels:
 - "cli"
 - "human-output"
 - "issue-show"
-links: []
-parent: "atelier-pd0w"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-pakd"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

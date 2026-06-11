@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-u8xc"
 created_at: "2026-06-10T20:59:05.023604139+00:00"
-depends_on:
-- "atelier-o54s"
 evidence_required: []
 id: "atelier-omnw"
 issue_type: "epic"
@@ -12,9 +8,14 @@ labels:
 - "assignee:root"
 - "cli"
 - "human-output"
-links: []
-parent: null
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-u8xc"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

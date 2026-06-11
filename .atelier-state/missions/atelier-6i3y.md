@@ -2,22 +2,22 @@
 created_at: "2026-06-11T00:40:11.669040461+00:00"
 id: "atelier-6i3y"
 data: "{\"constraints\":[\"Preserve existing JSON schemas unless a separate migration explicitly approves a contract change.\",\"Keep human output useful in colorless logs and narrow terminals; color, if added, cannot be the only carrier of meaning.\",\"Use shared formatter/date helpers where more than one command needs the same policy.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[\"Changing human text may affect users scraping default output; mitigate by documenting JSON as the stable scripting interface and keeping quiet mode minimal.\",\"A broad formatting pass can devolve into cosmetic churn; mitigate by prioritizing the identified rough surfaces and adding focused fixtures.\"],\"validation\":[\"Golden or behavior tests cover mission show, issue show, issue list/ready/search, mission/plan/evidence lists, link list, dep list, workflow validate, and work/worktree status.\",\"Tests or deterministic formatter units prove readable date rendering and raw key/value suffix removal.\",\"Run cargo fmt -- --check, cargo nextest run or focused equivalent, git diff --check, atelier export --check, atelier lint, and atelier doctor.\"],\"work\":[]}"
-links:
-- target_id: "atelier-tm8c"
-  target_kind: "evidence"
-  type: "validates"
-- target_id: "atelier-ap3r"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-pukf"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-v851"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-wnf1"
-  target_kind: "issue"
-  type: "advances"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-ap3r"
+  - kind: "issue"
+    id: "atelier-pukf"
+  - kind: "issue"
+    id: "atelier-v851"
+  - kind: "issue"
+    id: "atelier-wnf1"
+  attachments:
+  - kind: "evidence"
+    id: "atelier-tm8c"
+    role: "validates"
+  relates: []
 schema: "atelier.mission"
 schema_version: 1
 status: "closed"

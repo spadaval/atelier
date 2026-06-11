@@ -2,22 +2,21 @@
 created_at: "2026-06-10T20:37:05.079899571+00:00"
 id: "atelier-wd56"
 data: "{\"constraints\":[\"Preserve documented core command surfaces and Agent Factory workflows.\",\"Remove old compatibility surfaces hard, without deprecation shims.\",\"Do not corrupt existing canonical state; runtime database cleanup must be rebuild-safe or migration-safe.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[\"Deleting command code can accidentally remove helpers still used by core workflows.\",\"Tests and docs may still encode hidden alias behavior.\"],\"validation\":[\"Primary help lists only core commands.\",\"Removed commands fail as unknown commands.\",\"Agent Factory issue workflows, mission show, export, rebuild, lint, and doctor still pass.\"],\"work\":[]}"
-links:
-- target_id: "atelier-34ap"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-lold"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-xf1y"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-xz8u"
-  target_kind: "issue"
-  type: "advances"
-- target_id: "atelier-ytmi"
-  target_kind: "issue"
-  type: "advances"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-34ap"
+  - kind: "issue"
+    id: "atelier-lold"
+  - kind: "issue"
+    id: "atelier-xf1y"
+  - kind: "issue"
+    id: "atelier-xz8u"
+  - kind: "issue"
+    id: "atelier-ytmi"
+  attachments: []
+  relates: []
 schema: "atelier.mission"
 schema_version: 1
 status: "closed"

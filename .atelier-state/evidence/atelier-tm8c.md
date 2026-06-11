@@ -2,7 +2,11 @@
 created_at: "2026-06-11T02:08:17.497035484+00:00"
 id: "atelier-tm8c"
 data: "{\"captured_at\":\"2026-06-11T02:08:17.496914710+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":\"codex\",\"result\":\"pass\",\"uri\":null}"
-links: []
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

@@ -1,17 +1,18 @@
 ---
 acceptance: []
-blocks:
-- "atelier-sspj"
 created_at: "2026-06-11T02:45:02.202454659+00:00"
-depends_on:
-- "atelier-vhxa"
 evidence_required: []
 id: "atelier-xajk"
 issue_type: "task"
 labels: []
-links: []
-parent: "atelier-y571"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-sspj"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

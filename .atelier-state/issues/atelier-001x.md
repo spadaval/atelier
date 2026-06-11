@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-001y"
 created_at: "2026-06-09T19:47:39.911679674+00:00"
-depends_on:
-- "atelier-0006"
-- "atelier-001w"
 evidence_required: []
 id: "atelier-001x"
 issue_type: "task"
@@ -14,9 +9,14 @@ labels:
 - "task"
 - "tui"
 - "ui"
-links: []
-parent: "atelier-001o"
 priority: "P3"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-001y"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

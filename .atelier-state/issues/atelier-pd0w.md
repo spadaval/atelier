@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T16:08:34.447073812+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-pd0w"
 issue_type: "epic"
@@ -12,9 +10,20 @@ labels:
 - "cli"
 - "human-output"
 - "issue-show"
-links: []
-parent: "atelier-r4cf"
 priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-nwug"
+  - kind: "issue"
+    id: "atelier-p1yj"
+  - kind: "issue"
+    id: "atelier-pakd"
+  - kind: "issue"
+    id: "atelier-vxte"
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

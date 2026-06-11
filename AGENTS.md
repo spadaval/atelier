@@ -29,6 +29,10 @@
 
 ## Common Commands
 
+The installed `atelier` binary is often out of date during local development.
+Prefer `cargo run -- ...` when checking current code, or refresh the installed
+binary with `cargo install --path .`.
+
 ```bash
 cargo fmt -- --check
 cargo nextest run

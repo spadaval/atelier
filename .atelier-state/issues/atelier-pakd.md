@@ -1,11 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T16:09:12.937352005+00:00"
-depends_on:
-- "atelier-nwug"
-- "atelier-p1yj"
-- "atelier-vxte"
 evidence_required: []
 id: "atelier-pakd"
 issue_type: "validation"
@@ -13,9 +8,12 @@ labels:
 - "cli"
 - "issue-show"
 - "validation"
-links: []
-parent: "atelier-pd0w"
 priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

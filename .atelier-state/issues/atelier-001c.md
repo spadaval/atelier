@@ -1,10 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-001f"
 created_at: "2026-06-09T17:30:35.613401408+00:00"
-depends_on:
-- "atelier-001b"
 evidence_required: []
 id: "atelier-001c"
 issue_type: "task"
@@ -12,9 +8,14 @@ labels:
 - "beads:type:feature"
 - "cli"
 - "legacy-drag"
-links: []
-parent: "atelier-001a"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-001f"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

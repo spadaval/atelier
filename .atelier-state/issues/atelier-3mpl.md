@@ -1,12 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-e2vh"
-- "atelier-hdhk"
-- "atelier-m25t"
-- "atelier-po2n"
 created_at: "2026-06-10T03:50:32.442728503+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-3mpl"
 issue_type: "task"
@@ -16,9 +10,20 @@ labels:
 - "markdown"
 - "record-store"
 - "storage"
-links: []
-parent: "atelier-zd4d"
 priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-e2vh"
+  - kind: "issue"
+    id: "atelier-hdhk"
+  - kind: "issue"
+    id: "atelier-m25t"
+  - kind: "issue"
+    id: "atelier-po2n"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

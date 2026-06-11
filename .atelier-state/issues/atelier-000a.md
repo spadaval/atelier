@@ -1,8 +1,6 @@
 ---
 acceptance: []
-blocks: []
 created_at: "2026-06-08T17:04:37+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-000a"
 issue_type: "task"
@@ -10,9 +8,12 @@ labels:
 - "agent-factory"
 - "task"
 - "tracker"
-links: []
-parent: null
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

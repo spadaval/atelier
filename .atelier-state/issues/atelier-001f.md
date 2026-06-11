@@ -1,16 +1,6 @@
 ---
 acceptance: []
-blocks:
-- "atelier-000c"
-- "atelier-000j"
-- "atelier-000m"
-- "atelier-000r"
 created_at: "2026-06-09T17:30:35.769115263+00:00"
-depends_on:
-- "atelier-001c"
-- "atelier-001d"
-- "atelier-001e"
-- "atelier-001g"
 evidence_required: []
 id: "atelier-001f"
 issue_type: "task"
@@ -19,9 +9,20 @@ labels:
 - "beads:type:validation"
 - "cli"
 - "validation"
-links: []
-parent: "atelier-001a"
 priority: "P2"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-000c"
+  - kind: "issue"
+    id: "atelier-000j"
+  - kind: "issue"
+    id: "atelier-000m"
+  - kind: "issue"
+    id: "atelier-000r"
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"
