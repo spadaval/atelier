@@ -1,0 +1,22 @@
+---
+acceptance: []
+blocks:
+- "atelier-eq2d"
+created_at: "2026-06-11T02:44:01.010907325+00:00"
+depends_on:
+- "atelier-esh8"
+evidence_required: []
+id: "atelier-vvlj"
+issue_type: "epic"
+labels: []
+links: []
+parent: null
+priority: "P2"
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Epic: Reconcile docs and agent workflows for human-first CLI"
+updated_at: "2026-06-11T02:44:01.010907325+00:00"
+---
+
+Update product, architecture, and Agent Factory documentation to reflect that Atelier no longer treats command-result JSON as the stable automation contract. Acceptance: SPEC/CONTEXT and human CLI docs are reconciled; command examples avoid --json; docs explain quiet output, drill-down commands, canonical state, projections, and when external tools should read repo-state instead of command JSON.

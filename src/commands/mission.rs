@@ -133,18 +133,17 @@ pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()
         );
         return Ok(());
     }
-    if records.is_empty() {
-        print_mission_heading("Missions");
-        println!("(none)");
-        return Ok(());
-    }
-    println!("Missions");
-    println!("========");
-    println!("{} total", records.len());
-    for record in records {
-        println!("  {:<14} {:<10} {}", record.id, record.status, record.title);
-    }
-    Ok(())
+    let mut rows = records
+        .into_iter()
+        .map(|record| {
+            Ok(MissionListRow {
+                summary: mission_list_summary(db, &record.id)?,
+                record,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    rows.sort_by(compare_mission_list_rows);
+    render_mission_list_human(&rows)
 }
 
 pub fn update(
@@ -199,6 +198,213 @@ fn print_record(db: &Database, record: &DomainRecord, json_output: bool) -> Resu
         }
     }
     Ok(())
+}
+
+struct MissionListRow {
+    record: DomainRecord,
+    summary: MissionListSummary,
+}
+
+#[derive(Default)]
+struct MissionListSummary {
+    ready: usize,
+    blocked: usize,
+    done: usize,
+    backlog: usize,
+    open_blockers: usize,
+    evidence: usize,
+}
+
+fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSummary> {
+    let mut summary = MissionListSummary::default();
+    let mut seen_evidence = BTreeSet::new();
+    let mut seen_blockers = BTreeSet::new();
+    let mut seen_work = BTreeSet::new();
+
+    for link in db.list_record_links(KIND, mission_id)? {
+        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
+            continue;
+        };
+        match kind {
+            "evidence" if seen_evidence.insert(linked_id.to_string()) => {
+                summary.evidence += 1;
+            }
+            "issue" if link.relation_type == "blocked_by" => {
+                if seen_blockers.insert(linked_id.to_string()) {
+                    let issue = db.require_issue(linked_id)?;
+                    if issue.status == "open" {
+                        summary.open_blockers += 1;
+                    }
+                }
+            }
+            "issue" => {
+                if !seen_work.insert(linked_id.to_string()) {
+                    continue;
+                }
+                let issue = db.require_issue(linked_id)?;
+                match issue_bucket(db, &issue)? {
+                    "ready" => summary.ready += 1,
+                    "blocked" => summary.blocked += 1,
+                    "done" => summary.done += 1,
+                    _ => summary.backlog += 1,
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(summary)
+}
+
+fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
+    println!("Missions");
+    println!("========");
+    println!("{}", mission_list_summary_line(rows));
+
+    if rows.is_empty() {
+        println!("(none)");
+        print_mission_list_next_commands(None);
+        return Ok(());
+    }
+
+    print_mission_list_group(
+        "Open",
+        rows.iter().filter(|row| row.record.status == "open"),
+    );
+
+    let other_statuses = rows
+        .iter()
+        .filter(|row| row.record.status != "open" && row.record.status != "closed")
+        .map(|row| row.record.status.as_str())
+        .collect::<BTreeSet<_>>();
+    for status in other_statuses.iter() {
+        print_mission_list_group(
+            &status_heading(status),
+            rows.iter().filter(|row| row.record.status == *status),
+        );
+    }
+
+    print_mission_list_group(
+        "Closed",
+        rows.iter().filter(|row| row.record.status == "closed"),
+    );
+
+    let first_actionable = rows
+        .iter()
+        .find(|row| row.record.status != "closed")
+        .or_else(|| rows.first());
+    print_mission_list_next_commands(first_actionable);
+    Ok(())
+}
+
+fn mission_list_summary_line(rows: &[MissionListRow]) -> String {
+    let mut statuses = BTreeMap::<String, usize>::new();
+    let mut blocked_missions = 0;
+    let mut evidence_gaps = 0;
+    for row in rows {
+        *statuses.entry(row.record.status.clone()).or_default() += 1;
+        if row.summary.open_blockers > 0 {
+            blocked_missions += 1;
+        }
+        if row.summary.evidence == 0 {
+            evidence_gaps += 1;
+        }
+    }
+    format!(
+        "{} total | Status: {} | Blocked: {} | Evidence gaps: {}",
+        rows.len(),
+        joined_counts(statuses),
+        blocked_missions,
+        evidence_gaps
+    )
+}
+
+fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a MissionListRow>) {
+    let rows = rows.collect::<Vec<_>>();
+    if rows.is_empty() {
+        return;
+    }
+    println!("\n{title}");
+    println!("{}", "-".repeat(title.len()));
+    for row in rows {
+        println!(
+            "  {} [{}] - {}",
+            row.record.id, row.record.status, row.record.title
+        );
+        println!(
+            "    Updated: {} | Work: ready={} blocked={} done={} backlog={} | Blockers: {} | Evidence: {}",
+            format_human_datetime(row.record.updated_at),
+            row.summary.ready,
+            row.summary.blocked,
+            row.summary.done,
+            row.summary.backlog,
+            row.summary.open_blockers,
+            evidence_text(row.summary.evidence)
+        );
+    }
+}
+
+fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
+    print_mission_heading("Next Commands");
+    if let Some(row) = first_actionable {
+        println!("  atelier mission show {}", row.record.id);
+    }
+    println!("  atelier mission create \"...\"");
+}
+
+fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp::Ordering {
+    mission_status_rank(&a.record.status)
+        .cmp(&mission_status_rank(&b.record.status))
+        .then_with(|| {
+            if a.record.status != "open" && b.record.status != "open" {
+                a.record.status.cmp(&b.record.status)
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .then_with(|| b.record.updated_at.cmp(&a.record.updated_at))
+        .then_with(|| a.record.id.cmp(&b.record.id))
+}
+
+fn mission_status_rank(status: &str) -> u8 {
+    match status {
+        "open" => 0,
+        "closed" => 2,
+        _ => 1,
+    }
+}
+
+fn status_heading(status: &str) -> String {
+    status
+        .split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn joined_counts(counts: BTreeMap<String, usize>) -> String {
+    if counts.is_empty() {
+        return "(none)".to_string();
+    }
+    counts
+        .into_iter()
+        .map(|(status, count)| format!("{status}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn evidence_text(count: usize) -> String {
+    if count == 0 {
+        "gap".to_string()
+    } else {
+        count.to_string()
+    }
 }
 
 fn render_mission_show_human(

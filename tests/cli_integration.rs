@@ -4122,6 +4122,211 @@ fn test_first_class_records_export_rebuild_and_validate() {
 }
 
 #[test]
+fn test_mission_list_human_overview_orders_and_summarizes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, older_out, stderr) =
+        run_atelier(dir.path(), &["--json", "mission", "create", "Older open"]);
+    assert!(success, "older mission create failed: {stderr}");
+    let older_id = json_value(&older_out)["id"].as_str().unwrap().to_string();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let (success, active_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "mission", "create", "Active mission"],
+    );
+    assert!(success, "active mission create failed: {stderr}");
+    let active_id = json_value(&active_out)["id"].as_str().unwrap().to_string();
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let (success, closed_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "mission", "create", "Newest closed"],
+    );
+    assert!(success, "closed mission create failed: {stderr}");
+    let closed_id = json_value(&closed_out)["id"].as_str().unwrap().to_string();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &closed_id, "--status", "closed"],
+    );
+    assert!(success, "close mission failed: {stderr}");
+
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Ready work"]);
+    assert!(success, "ready issue create failed: {stderr}");
+    let ready_id = json_value(&ready_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, blocked_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Blocked work"]);
+    assert!(success, "blocked issue create failed: {stderr}");
+    let blocked_id = json_value(&blocked_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, blocker_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Work blocker"]);
+    assert!(success, "work blocker create failed: {stderr}");
+    let blocker_id = json_value(&blocker_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    assert!(success, "block issue failed: {stderr}");
+
+    let (success, done_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Done work"]);
+    assert!(success, "done issue create failed: {stderr}");
+    let done_id = json_value(&done_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &done_id, "--reason", "done"],
+    );
+    assert!(success, "close issue failed: {stderr}");
+
+    let (success, backlog_out, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "create", "Backlog work"]);
+    assert!(success, "backlog issue create failed: {stderr}");
+    let backlog_id = json_value(&backlog_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &backlog_id, "--status", "in_progress"],
+    );
+    assert!(success, "backlog issue update failed: {stderr}");
+
+    let (success, mission_blocker_out, stderr) = run_atelier(
+        dir.path(),
+        &["--json", "issue", "create", "Mission blocker"],
+    );
+    assert!(success, "mission blocker create failed: {stderr}");
+    let mission_blocker_id = json_value(&mission_blocker_out)["data"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    for issue_id in [&ready_id, &blocked_id, &done_id, &backlog_id] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "link", "add", "mission", &active_id, "issue", issue_id, "--type", "advances",
+            ],
+        );
+        assert!(success, "link work {issue_id} failed: {stderr}");
+    }
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "link",
+            "add",
+            "mission",
+            &active_id,
+            "issue",
+            &mission_blocker_id,
+            "--type",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "link mission blocker failed: {stderr}");
+
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "--json",
+            "evidence",
+            "add",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "older mission evidence",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    let evidence_id = json_value(&evidence_out)["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "link",
+            "add",
+            "evidence",
+            &evidence_id,
+            "mission",
+            &older_id,
+            "--type",
+            "validates",
+        ],
+    );
+    assert!(success, "link evidence failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    assert!(success, "mission list failed: {stderr}");
+    assert!(stdout.contains("Missions"));
+    assert!(stdout.contains("3 total"));
+    assert!(stdout.contains("open=2"));
+    assert!(stdout.contains("closed=1"));
+    assert!(stdout.contains("Blocked: 1"));
+    assert!(stdout.contains("Evidence gaps: 2"));
+    assert!(stdout.contains("Open"));
+    assert!(stdout.contains("Closed"));
+
+    let active_row = format!("{active_id} [open] - Active mission");
+    let older_row = format!("{older_id} [open] - Older open");
+    let closed_row = format!("{closed_id} [closed] - Newest closed");
+    let active_pos = stdout.find(&active_row).expect("missing active row");
+    let older_pos = stdout.find(&older_row).expect("missing older row");
+    let closed_pos = stdout.find(&closed_row).expect("missing closed row");
+    assert!(
+        active_pos < older_pos,
+        "newer open mission should sort first:\n{stdout}"
+    );
+    assert!(
+        older_pos < closed_pos,
+        "open missions should sort before closed missions:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Work: ready=2 blocked=1 done=1 backlog=0 | Blockers: 1 | Evidence: gap"),
+        "missing active mission summary:\n{stdout}"
+    );
+    assert!(stdout.contains("Work: ready=0 blocked=0 done=0 backlog=0 | Blockers: 0 | Evidence: 1"));
+    assert!(stdout.contains(&format!("atelier mission show {active_id}")));
+    assert!(stdout.contains("atelier mission create \"...\""));
+
+    let (success, open_out, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "open"]);
+    assert!(success, "filtered mission list failed: {stderr}");
+    assert!(open_out.contains(&active_row));
+    assert!(open_out.contains(&older_row));
+    assert!(!open_out.contains(&closed_row));
+
+    let (success, empty_out, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "in_progress"]);
+    assert!(success, "empty filtered mission list failed: {stderr}");
+    assert!(empty_out.contains("0 total"));
+    assert!(empty_out.contains("(none)"));
+    assert!(empty_out.contains("atelier mission create \"...\""));
+
+    let (success, json_out, stderr) = run_atelier(dir.path(), &["--json", "mission", "list"]);
+    assert!(success, "json mission list failed: {stderr}");
+    let json = json_value(&json_out);
+    assert!(json["data"].as_array().unwrap().iter().any(|mission| {
+        mission["id"].as_str() == Some(active_id.as_str())
+            && mission["title"].as_str() == Some("Active mission")
+    }));
+}
+
+#[test]
 fn test_first_class_record_rebuild_rejects_schema_drift() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
