@@ -98,6 +98,8 @@ Each transition may define:
 Workflow completion is represented by transitions into `terminal_states`.
 Closure rules should be expressed through `required_fields`, `evidence`, and
 `validators` on those transitions rather than by adding special milestone fields.
+For missions, completion requires all linked work closed, required evidence
+attached, workflow validators passing, and a clean Git worktree.
 
 ## Invalid Configuration Errors
 
@@ -230,6 +232,10 @@ validators:
   milestone_acceptance_met:
     kind: builtin
     builtin: validation_criteria_satisfied
+
+  clean_worktree:
+    kind: builtin
+    builtin: git_worktree_clean
 ```
 
 Builtin validator names are implementation-owned stable names. The initial
@@ -241,6 +247,10 @@ stable builtin namespace is:
 - `no_open_blockers`
 - `no_blocking_lints`
 - `review_complete`
+- `git_worktree_clean`
+
+`git_worktree_clean` checks tracked and untracked changes with
+`git status --porcelain`; any output is a validation failure.
 
 Custom validators are deferred until an implementation issue defines execution,
 sandboxing, caching, and result validation. Hook commands must not be treated as
@@ -321,7 +331,8 @@ Validator results are machine-readable and use a pass/fail shape:
 `result` is `pass` or `fail`. A failing result must name the failed condition,
 the affected record, and at least one next action. Commands that cannot build a
 validator context may report the command-level validation state `blocked`, but a
-validator that runs returns only `pass` or `fail`.
+validator that runs returns only `pass` or `fail`. `atelier workflow validate`
+treats validator failures as command failures by default.
 
 ## Guidance Rendering
 
@@ -462,6 +473,7 @@ workflows:
           - evidence_attached
           - durable_state_current
           - no_open_blockers
+          - git_worktree_clean
         hooks:
           before_transition: [test_before_milestone_close]
 
@@ -480,6 +492,9 @@ validators:
   review_complete:
     kind: builtin
     builtin: review_complete
+  git_worktree_clean:
+    kind: builtin
+    builtin: git_worktree_clean
   validation_criteria_satisfied:
     kind: builtin
     builtin: validation_criteria_satisfied

@@ -26,6 +26,11 @@ in normal Agent Factory workflows:
 - `atelier lint`
 - `atelier doctor`
 
+There is no `atelier mission close` command in v1. Closing a mission uses
+`atelier mission update <id> --status closed`, which routes through the
+configured close transition validators. Reopening with
+`atelier mission update <id> --status open` does not run closeout validators.
+
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
 such as list, ready, search, impact, lint, and Mission Control views may use
@@ -50,6 +55,8 @@ enforce clean worktree plus current-export checks where they affect workflow
 transitions. Worktree helpers expose scan-friendly JSON status, create/remove
 associated Git worktrees, rebuild SQLite in new worktrees, and run
 `worktree_setup` hooks from `atelier.workflow.yaml`.
+Mission closeout is ready only when all linked work is closed, required evidence
+is attached, workflow validators pass, and the Git worktree is clean.
 
 ## Removed Compatibility
 

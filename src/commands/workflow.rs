@@ -1,18 +1,19 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde::Serialize;
-use std::path::Path;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::db::Database;
 
 #[derive(Debug, Serialize)]
-struct ValidatorResult {
-    target_kind: String,
-    target_id: String,
-    transition: String,
-    validator: String,
-    passed: bool,
-    reason: String,
+pub struct ValidatorResult {
+    pub target_kind: String,
+    pub target_id: String,
+    pub transition: String,
+    pub validator: String,
+    pub passed: bool,
+    pub reason: String,
 }
 
 pub fn validate(
@@ -22,6 +23,26 @@ pub fn validate(
     transition: &str,
     validators: Vec<String>,
 ) -> Result<()> {
+    let results = evaluate(db, target_kind, target_id, transition, validators)?;
+    print_validation_results(&results);
+    let failures = results
+        .iter()
+        .filter(|result| !result.passed)
+        .map(|result| result.validator.as_str())
+        .collect::<Vec<_>>();
+    if !failures.is_empty() {
+        bail!("workflow validation failed: {}", failures.join(", "));
+    }
+    Ok(())
+}
+
+pub fn evaluate(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+    transition: &str,
+    validators: Vec<String>,
+) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
     let validators = if validators.is_empty() {
         vec!["durable_state_current".to_string()]
@@ -41,11 +62,10 @@ pub fn validate(
         });
     }
 
-    print_validation_results(&results);
-    Ok(())
+    Ok(results)
 }
 
-fn print_validation_results(results: &[ValidatorResult]) {
+pub fn print_validation_results(results: &[ValidatorResult]) {
     if let Some(first) = results.first() {
         println!(
             "Workflow Validation: {} {}",
@@ -123,20 +143,15 @@ fn evaluate_builtin(
                 Ok((false, "no validating evidence link found".to_string()))
             }
         }
-        "no_open_blockers" if target_kind == "issue" => {
-            let blockers = db.get_blockers(target_id)?;
-            let open = blockers
-                .into_iter()
-                .filter_map(|id| db.get_issue(&id).ok().flatten())
-                .filter(|issue| issue.status == "open")
-                .map(|issue| issue.id)
-                .collect::<Vec<_>>();
+        "no_open_blockers" => {
+            let open = open_blockers(db, target_kind, target_id)?;
             if open.is_empty() {
                 Ok((true, "no open blockers".to_string()))
             } else {
                 Ok((false, format!("open blockers: {}", open.join(", "))))
             }
         }
+        "git_worktree_clean" => git_worktree_clean(),
         "no_blocking_lints" => {
             let status = Command::new(std::env::current_exe()?)
                 .arg("lint")
@@ -159,7 +174,138 @@ fn evaluate_builtin(
     }
 }
 
-fn repo_root() -> Result<std::path::PathBuf> {
+fn open_blockers(db: &Database, target_kind: &str, target_id: &str) -> Result<Vec<String>> {
+    let mut blocker_ids = BTreeSet::new();
+    match target_kind {
+        "issue" => {
+            for blocker in db.get_blockers(target_id)? {
+                blocker_ids.insert(blocker);
+            }
+        }
+        "mission" => {
+            for blocker in mission_direct_blockers(db, target_id)? {
+                blocker_ids.insert(blocker);
+            }
+            for issue_id in mission_issue_ids(db, target_id)? {
+                for blocker in db.get_blockers(&issue_id)? {
+                    blocker_ids.insert(blocker);
+                }
+            }
+        }
+        _ => return Ok(Vec::new()),
+    }
+    let mut open = blocker_ids
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| issue.status == "open")
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    open.sort();
+    Ok(open)
+}
+
+fn mission_direct_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut blockers = Vec::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        if link.relation_type != "blocked_by" {
+            continue;
+        }
+        if link.source_kind == "issue"
+            && link.target_kind == "mission"
+            && link.target_id == mission_id
+        {
+            blockers.push(link.source_id);
+        } else if link.target_kind == "issue"
+            && link.source_kind == "mission"
+            && link.source_id == mission_id
+        {
+            blockers.push(link.target_id);
+        }
+    }
+    Ok(blockers)
+}
+
+fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        if link.relation_type == "blocked_by" {
+            continue;
+        }
+        let linked_id = if link.source_kind == "issue"
+            && link.target_kind == "mission"
+            && link.target_id == mission_id
+        {
+            Some(link.source_id)
+        } else if link.target_kind == "issue"
+            && link.source_kind == "mission"
+            && link.source_id == mission_id
+        {
+            Some(link.target_id)
+        } else {
+            None
+        };
+        if let Some(linked_id) = linked_id {
+            collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
+        }
+    }
+    Ok(issue_ids)
+}
+
+fn collect_issue_and_descendants(
+    db: &Database,
+    issue_id: &str,
+    issue_ids: &mut BTreeSet<String>,
+) -> Result<()> {
+    if !issue_ids.insert(issue_id.to_string()) {
+        return Ok(());
+    }
+    for child in db.get_subissues(issue_id)? {
+        collect_issue_and_descendants(db, &child.id, issue_ids)?;
+    }
+    Ok(())
+}
+
+fn git_worktree_clean() -> Result<(bool, String)> {
+    let root = repo_root()?;
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(&root)
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let message = if stderr.is_empty() {
+            "git status failed".to_string()
+        } else {
+            format!("git status failed: {stderr}")
+        };
+        return Ok((false, message));
+    }
+    let dirty = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if dirty.is_empty() {
+        Ok((true, "git worktree is clean".to_string()))
+    } else {
+        let sample = dirty.iter().take(8).cloned().collect::<Vec<_>>().join("; ");
+        let suffix = if dirty.len() > 8 {
+            format!("; ... and {} more", dirty.len() - 8)
+        } else {
+            String::new()
+        };
+        Ok((
+            false,
+            format!(
+                "git worktree has {} dirty {}: {sample}{suffix}",
+                dirty.len(),
+                if dirty.len() == 1 { "entry" } else { "entries" }
+            ),
+        ))
+    }
+}
+
+fn repo_root() -> Result<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output()?;

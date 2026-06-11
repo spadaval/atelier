@@ -9,6 +9,13 @@ use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::record_store::RecordStore;
 
 const KIND: &str = "mission";
+const MISSION_CLOSE_VALIDATORS: &[&str] = &[
+    "durable_state_current",
+    "evidence_attached",
+    "no_open_blockers",
+    "no_blocking_lints",
+    "git_worktree_clean",
+];
 
 pub fn create(
     state_dir: &Path,
@@ -178,7 +185,8 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
     let active_work = active_work_for_mission(db, &mission.id)?;
-    let validator_failures = tracker.validator_failure_count();
+    let closeout = mission_closeout_status(db, &mission, &summary)?;
+    let validator_failures = closeout.validator_failure_count();
 
     if quiet {
         let work = summary.total_work();
@@ -194,7 +202,9 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
             summary.evidence_gap_count(),
             validator_failures,
             tracker.status_token(),
-            if mission_closeout_needed(&mission, &summary) {
+            if mission.status == "closed" {
+                "complete"
+            } else if closeout.ready() {
                 "yes"
             } else {
                 "no"
@@ -217,10 +227,10 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         "Closeout: {}",
         if mission.status == "closed" {
             "complete"
-        } else if summary.closeout_needed() {
-            "needed"
+        } else if closeout.ready() {
+            "ready"
         } else {
-            "not ready"
+            "blocked"
         }
     );
 
@@ -265,14 +275,28 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         println!("Linked evidence: {}", summary.evidence_count);
     }
 
+    print_mission_heading("Closeout Gates");
+    if mission.status == "closed" {
+        println!("Mission is closed.");
+    } else {
+        closeout.print_human();
+    }
+
     print_mission_heading("Validators");
     if validator_failures == 0 {
-        println!("No validator failures detected by mission status.");
+        println!("All closeout validators passed.");
     } else {
         println!(
-            "{} validator failure detected. Run `atelier export --check` for stale paths.",
+            "{} closeout validator failure detected.",
             validator_failures
         );
+        for result in closeout
+            .validator_results
+            .iter()
+            .filter(|result| !result.passed)
+        {
+            println!("  fail  {} - {}", result.validator, result.reason);
+        }
     }
 
     print_mission_heading("Active Work");
@@ -299,7 +323,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     if summary.evidence_gap_count() > 0 {
         println!("  atelier evidence add --kind validation --result pass \"...\"");
     }
-    if mission_closeout_needed(&mission, &summary) {
+    if mission.status != "closed" && closeout.ready() {
         println!("  atelier mission update {} --status closed", mission.id);
     }
     println!("  atelier doctor");
@@ -470,6 +494,10 @@ pub fn update(
         current.record.title = title.to_string();
     }
     if let Some(status) = status {
+        if status == "closed" && current.record.status != "closed" {
+            let db = Database::open(db_path)?;
+            enforce_closeout(&db, id)?;
+        }
         current.record.status = status.to_string();
         if status == "closed" {
             if let Some(object) = data.as_object_mut() {
@@ -503,6 +531,175 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
         println!("Work {} is already on mission {}", issue.id, id);
     }
     Ok(())
+}
+
+struct MissionCloseoutStatus {
+    open_work: Vec<String>,
+    open_blockers: Vec<String>,
+    evidence_missing: bool,
+    validator_results: Vec<crate::commands::workflow::ValidatorResult>,
+}
+
+impl MissionCloseoutStatus {
+    fn ready(&self) -> bool {
+        self.open_work.is_empty()
+            && self.open_blockers.is_empty()
+            && !self.evidence_missing
+            && self.validator_results.iter().all(|result| result.passed)
+    }
+
+    fn validator_failure_count(&self) -> usize {
+        self.validator_results
+            .iter()
+            .filter(|result| !result.passed)
+            .count()
+    }
+
+    fn blocking_messages(&self) -> Vec<String> {
+        let mut messages = Vec::new();
+        if !self.open_work.is_empty() {
+            messages.push(format!("open mission work: {}", self.open_work.join(", ")));
+        }
+        if !self.open_blockers.is_empty() {
+            messages.push(format!("open blockers: {}", self.open_blockers.join(", ")));
+        }
+        if self.evidence_missing {
+            messages
+                .push("missing evidence: attach validation evidence to the mission".to_string());
+        }
+        for result in self
+            .validator_results
+            .iter()
+            .filter(|result| !result.passed)
+        {
+            messages.push(format!(
+                "validator {} failed: {}",
+                result.validator, result.reason
+            ));
+        }
+        messages
+    }
+
+    fn print_human(&self) {
+        if self.ready() {
+            println!("All required closeout gates pass.");
+            return;
+        }
+        if self.open_work.is_empty() {
+            println!("Work: closed");
+        } else {
+            println!("Work: open - {}", self.open_work.join(", "));
+            println!("  Next: atelier issue close <issue-id> --reason \"...\"");
+        }
+        if self.open_blockers.is_empty() {
+            println!("Blockers: clear");
+        } else {
+            println!("Blockers: open - {}", self.open_blockers.join(", "));
+            println!("  Next: close or unblock the blocker issues.");
+        }
+        if self.evidence_missing {
+            println!("Evidence: missing");
+            println!("  Next: atelier evidence add --kind validation --result pass \"...\"");
+            println!("  Next: atelier evidence attach <evidence-id> mission <mission-id>");
+        } else {
+            println!("Evidence: attached");
+        }
+        for result in &self.validator_results {
+            if result.passed {
+                println!("Validator {}: pass", result.validator);
+            } else {
+                println!("Validator {}: fail - {}", result.validator, result.reason);
+            }
+        }
+    }
+}
+
+fn enforce_closeout(db: &Database, mission_id: &str) -> Result<()> {
+    let mission = db.require_record(KIND, mission_id)?;
+    let summary = mission_list_summary(db, mission_id)?;
+    let closeout = mission_closeout_status(db, &mission, &summary)?;
+    if closeout.ready() {
+        return Ok(());
+    }
+    println!("Mission closeout blocked: {mission_id}");
+    println!("Closeout blockers");
+    println!("-----------------");
+    for message in closeout.blocking_messages() {
+        println!("  - {message}");
+    }
+    bail!("mission closeout blocked; run `atelier mission status {mission_id}` for next commands")
+}
+
+fn mission_closeout_status(
+    db: &Database,
+    mission: &DomainRecord,
+    summary: &MissionListSummary,
+) -> Result<MissionCloseoutStatus> {
+    let open_work = open_mission_work(db, &mission.id)?;
+    let open_blockers = open_mission_blockers(db, &mission.id)?;
+    let validator_results = crate::commands::workflow::evaluate(
+        db,
+        KIND,
+        &mission.id,
+        "close",
+        MISSION_CLOSE_VALIDATORS
+            .iter()
+            .map(|validator| (*validator).to_string())
+            .collect(),
+    )?;
+    Ok(MissionCloseoutStatus {
+        open_work,
+        open_blockers,
+        evidence_missing: summary.evidence_count == 0,
+        validator_results,
+    })
+}
+
+fn open_mission_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut open = mission_issue_ids(db, mission_id)?
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| issue.status != "closed")
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    open.sort();
+    Ok(open)
+}
+
+fn open_mission_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut blocker_ids = BTreeSet::new();
+    for blocker in mission_direct_blocker_ids(db, mission_id)? {
+        blocker_ids.insert(blocker);
+    }
+    for issue_id in mission_issue_ids(db, mission_id)? {
+        for blocker in db.get_blockers(&issue_id)? {
+            blocker_ids.insert(blocker);
+        }
+    }
+    let mut open = blocker_ids
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| issue.status == "open")
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    open.sort();
+    Ok(open)
+}
+
+fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut blockers = Vec::new();
+    for link in db.list_record_links(KIND, mission_id)? {
+        if link.relation_type != "blocked_by" {
+            continue;
+        }
+        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
+            continue;
+        };
+        if kind == "issue" {
+            blockers.push(linked_id.to_string());
+        }
+    }
+    Ok(blockers)
 }
 
 pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
@@ -932,10 +1129,6 @@ impl TrackerHealth {
             format!("stale ({} findings)", self.stale_entries.len())
         }
     }
-
-    fn validator_failure_count(&self) -> usize {
-        usize::from(!self.stale_entries.is_empty())
-    }
 }
 
 fn tracker_health(db: &Database, state_dir: &Path) -> TrackerHealth {
@@ -965,10 +1158,6 @@ fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &
     } else {
         mission_health(summary)
     }
-}
-
-fn mission_closeout_needed(mission: &DomainRecord, summary: &MissionListSummary) -> bool {
-    mission.status != "closed" && summary.closeout_needed()
 }
 
 fn active_work_for_mission(

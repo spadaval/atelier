@@ -68,6 +68,45 @@ fn init_atelier(dir: &Path) {
     assert!(success, "Failed to init: {}", stderr);
 }
 
+fn init_git_repo(dir: &Path) {
+    let status = Command::new("git")
+        .current_dir(dir)
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git init failed");
+    for args in [
+        ["config", "user.email", "atelier-test@example.com"],
+        ["config", "user.name", "Atelier Test"],
+    ] {
+        let status = Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git config failed");
+    }
+}
+
+fn commit_all(dir: &Path, message: &str) {
+    let status = Command::new("git")
+        .current_dir(dir)
+        .args(["add", "-A"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git add failed");
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["commit", "-q", "-m", message])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git commit failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 fn init_atelier_with_telemetry_disabled(dir: &Path) {
     let (success, _, stderr) =
         run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);
@@ -4919,9 +4958,279 @@ fn test_first_class_records_export_rebuild_and_validate() {
 }
 
 #[test]
+fn test_workflow_validate_fails_without_required_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Needs evidence"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Needs evidence");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(!success, "workflow validate should fail without evidence");
+    assert!(stdout.contains("fail  evidence_attached"));
+    assert!(stdout.contains("no validating evidence link found"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_git_worktree_clean_validator_fails_on_tracked_changes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Tracked dirty"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Tracked dirty");
+    commit_all(dir.path(), "baseline");
+
+    std::fs::write(
+        dir.path()
+            .join(".atelier-state")
+            .join("missions")
+            .join(format!("{mission_id}.md")),
+        "dirty",
+    )
+    .unwrap();
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "git_worktree_clean",
+        ],
+    );
+    assert!(
+        !success,
+        "git_worktree_clean should fail on tracked changes"
+    );
+    assert!(stdout.contains("fail  git_worktree_clean"));
+    assert!(stdout.contains(&mission_id));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_git_worktree_clean_validator_fails_on_untracked_changes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Untracked dirty"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Untracked dirty");
+    commit_all(dir.path(), "baseline");
+
+    std::fs::write(dir.path().join("untracked.txt"), "dirty").unwrap();
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "git_worktree_clean",
+        ],
+    );
+    assert!(
+        !success,
+        "git_worktree_clean should fail on untracked changes"
+    );
+    assert!(stdout.contains("fail  git_worktree_clean"));
+    assert!(stdout.contains("untracked.txt"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Strict closeout"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Strict closeout");
+
+    let (success, work_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Closeout work"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(work_out.contains("Created issue atelier-"));
+    let work_id = issue_id_by_title(dir.path(), "Closeout work");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
+    assert!(success, "mission add work failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "closed"],
+    );
+    assert!(
+        !success,
+        "mission close should fail with open work and no evidence"
+    );
+    assert!(stderr.contains("mission closeout blocked"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &work_id, "--reason", "done"],
+    );
+    assert!(success, "issue close failed: {stderr}");
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "strict closeout evidence",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - strict closeout evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "strict closeout evidence");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "mission", &mission_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    commit_all(dir.path(), "ready to close");
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "closed"],
+    );
+    assert!(
+        success,
+        "mission close should succeed after gates pass: {stderr}"
+    );
+    assert!(close_out.contains("Status: closed"));
+    commit_all(dir.path(), "closed mission");
+
+    std::fs::write(dir.path().join("dirty-after-close.txt"), "dirty").unwrap();
+    let (success, reopen_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "open"],
+    );
+    assert!(
+        success,
+        "mission reopen should skip closeout validators: {stderr}"
+    );
+    assert!(reopen_out.contains("Status: open"));
+}
+
+#[test]
+fn test_dirty_worktree_blocks_mission_closeout() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Dirty closeout"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Dirty closeout");
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "dirty closeout evidence",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - dirty closeout evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "dirty closeout evidence");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "mission", &mission_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    commit_all(dir.path(), "ready except dirty");
+    std::fs::write(dir.path().join("untracked-closeout.txt"), "dirty").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "closed"],
+    );
+    assert!(!success, "dirty worktree must block mission closeout");
+    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("validator git_worktree_clean failed"));
+    assert!(stdout.contains("untracked-closeout.txt"));
+    assert!(stderr.contains("mission closeout blocked"));
+}
+
+#[test]
+fn test_mission_status_names_concrete_closeout_blockers() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Status blockers"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Status blockers");
+    let (success, work_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Still open"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(work_out.contains("Created issue atelier-"));
+    let work_id = issue_id_by_title(dir.path(), "Still open");
+    let (success, blocker_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Open blocker"]);
+    assert!(success, "blocker create failed: {stderr}");
+    assert!(blocker_out.contains("Created issue atelier-"));
+    let blocker_id = issue_id_by_title(dir.path(), "Open blocker");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &work_id, &blocker_id]);
+    assert!(success, "issue block failed: {stderr}");
+    commit_all(dir.path(), "status baseline");
+    std::fs::write(dir.path().join("status-dirty.txt"), "dirty").unwrap();
+
+    let (success, status_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Work: open"));
+    assert!(status_out.contains(&work_id));
+    assert!(status_out.contains("Blockers: open"));
+    assert!(status_out.contains(&blocker_id));
+    assert!(status_out.contains("Evidence: missing"));
+    assert!(status_out.contains("Validator git_worktree_clean: fail"));
+    assert!(status_out.contains("status-dirty.txt"));
+    assert!(status_out.contains("closeout validator failure"));
+}
+
+#[test]
 fn test_mission_list_human_overview_orders_and_summarizes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    init_git_repo(dir.path());
 
     let (success, older_out, stderr) =
         run_atelier(dir.path(), &["mission", "create", "Older open"]);
@@ -4945,6 +5254,33 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(closed_out.contains("Mission atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Newest closed");
     let closed_id = closed_id.as_str();
+    let (success, closed_evidence, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "newest closed evidence",
+        ],
+    );
+    assert!(success, "closed evidence create failed: {stderr}");
+    assert!(closed_evidence.contains("[evidence] pass - newest closed evidence"));
+    let closed_evidence_id = record_id_by_title(dir.path(), "evidence", "newest closed evidence");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "attach",
+            &closed_evidence_id,
+            "mission",
+            closed_id,
+        ],
+    );
+    assert!(success, "closed evidence attach failed: {stderr}");
+    commit_all(dir.path(), "close newest mission");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["mission", "update", &closed_id, "--status", "closed"],
@@ -5112,6 +5448,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
 fn test_mission_status_cli_reports_control_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    init_git_repo(dir.path());
 
     let (success, mission_out, stderr) =
         run_atelier(dir.path(), &["mission", "create", "Autonomy status"]);
@@ -5170,8 +5507,10 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Blockers"));
     assert!(status_out.contains("Evidence"));
     assert!(status_out.contains("Gap: no evidence records are linked to this mission."));
+    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Evidence: missing"));
     assert!(status_out.contains("Validators"));
-    assert!(status_out.contains("No validator failures detected by mission status."));
+    assert!(status_out.contains("closeout validator failure detected."));
     assert!(status_out.contains("Next Commands"));
     assert!(status_out.contains(&format!("atelier mission show {mission_id}")));
 
@@ -5237,12 +5576,13 @@ fn test_mission_status_cli_reports_control_state() {
         ],
     );
     assert!(success, "closeout evidence attach failed: {stderr}");
+    commit_all(dir.path(), "closeout status ready");
 
     let (success, closeout_status, stderr) =
         run_atelier(dir.path(), &["mission", "status", closeout_mission]);
     assert!(success, "closeout mission status failed: {stderr}");
     assert!(closeout_status.contains("Health:   closeout"));
-    assert!(closeout_status.contains("Closeout: needed"));
+    assert!(closeout_status.contains("Closeout: ready"));
     assert!(closeout_status.contains(&format!(
         "atelier mission update {closeout_mission} --status closed"
     )));
@@ -5262,7 +5602,7 @@ fn test_mission_status_cli_reports_control_state() {
         run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "stale mission status failed: {stderr}");
     assert!(stale_status.contains("Tracker:  stale"));
-    assert!(stale_status.contains("1 validator failure detected"));
+    assert!(stale_status.contains("closeout validator failure detected."));
 }
 
 #[test]
@@ -5377,12 +5717,34 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
 fn test_mission_list_default_open_empty_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    init_git_repo(dir.path());
 
     let (success, closed_out, stderr) =
         run_atelier(dir.path(), &["mission", "create", "Closed only"]);
     assert!(success, "mission create failed: {stderr}");
     assert!(closed_out.contains("Mission atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Closed only");
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "closed only evidence",
+        ],
+    );
+    assert!(success, "evidence create failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - closed only evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "closed only evidence");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "mission", &closed_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    commit_all(dir.path(), "close only mission");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["mission", "update", &closed_id, "--status", "closed"],

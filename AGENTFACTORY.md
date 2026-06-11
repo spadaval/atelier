@@ -82,9 +82,11 @@ concrete files, commands, and product-specific skills.
   - `atelier lint <id>`
   - `atelier doctor`
 - Closeout expectation: a mission is not done merely because the current
-  issue is closed. Confirm linked work, blockers, validation, and mission
-  status with `atelier mission status <id>` before declaring the mission
-  complete.
+  issue is closed. Mission completion requires all linked work closed, required
+  evidence attached, workflow validators passing, and a clean Git worktree.
+  Confirm blockers, validation, closeout readiness, and mission status with
+  `atelier mission status <id>` and `atelier workflow validate mission <id>`
+  before declaring the mission complete.
 - Beads commands are not part of the Agent Factory path in this repository.
   `atelier import-beads` remains only a one-way external import command.
 

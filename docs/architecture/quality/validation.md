@@ -19,6 +19,10 @@ Install `cargo-nextest` before running the default Rust test command:
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker runtime and rebuild health |
 
+`atelier workflow validate` failures are command failures by default. Mission
+completion is valid only when all linked work is closed, required evidence is
+attached, workflow validators pass, and the Git worktree is clean.
+
 ## Scenario Proof
 
 - CLI behavior changes should include command-level tests or transcript evidence.
@@ -29,6 +33,8 @@ Install `cargo-nextest` before running the default Rust test command:
 - Workflow, validator, evidence, mission, milestone, or plan changes should
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.
+- Mission closeout proof should show linked work closed, evidence attached,
+  workflow validators passing, and clean Git state.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
   validate durable state with `.atelier-state/`, `atelier export --check`,
