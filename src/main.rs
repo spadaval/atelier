@@ -21,6 +21,47 @@ use db::Database;
 #[derive(Parser)]
 #[command(name = "atelier")]
 #[command(about = "A simple, lean issue tracker CLI")]
+#[command(help_template = "{about-section}\nUsage: {usage}\n\n{after-help}\nOptions:\n{options}")]
+#[command(after_help = "Setup:
+  init          Initialize Atelier in the current repository
+
+Issues:
+  issue         Create, list, show, update, close, and relate issues
+  dep           Manage issue blockers with add, remove, and list
+
+Missions and planning:
+  mission       Create, list, show, and update durable missions
+  plan          Create, apply, revise, list, and link durable plans
+
+Records:
+  evidence      Capture validation evidence
+  link          Manage typed links across tracker records
+
+Work:
+  work          Start, finish, and inspect tracked work
+  worktree      Create, inspect, merge, and remove issue worktrees
+  workflow      Validate workflow policy for records
+
+State management:
+  export        Write or check canonical .atelier-state projection
+  rebuild       Rebuild local SQLite state from .atelier-state
+  import-beads  Import an external Beads JSONL backup
+
+Maintenance:
+  lint          Validate tracker records
+  doctor        Check runtime and exported-state health
+
+Common commands:
+  atelier issue list
+  atelier issue ready
+  atelier issue show <id>
+  atelier issue update <id> --claim
+  atelier mission list
+  atelier mission show <id>
+  atelier work status
+  atelier doctor
+  atelier help <command>
+")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)

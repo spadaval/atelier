@@ -257,6 +257,20 @@ fn test_top_level_help_only_shows_core_commands() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
 
+    for heading in [
+        "Setup:",
+        "Issues:",
+        "Missions and planning:",
+        "Records:",
+        "Work:",
+        "State management:",
+        "Maintenance:",
+        "Common commands:",
+        "Options:",
+    ] {
+        assert!(stdout.contains(heading), "missing help heading {heading}");
+    }
+
     for command in [
         "init",
         "issue",
@@ -276,6 +290,27 @@ fn test_top_level_help_only_shows_core_commands() {
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
+
+    for common in [
+        "atelier issue list",
+        "atelier issue ready",
+        "atelier issue show <id>",
+        "atelier issue update <id> --claim",
+        "atelier mission list",
+        "atelier mission show <id>",
+        "atelier work status",
+        "atelier doctor",
+    ] {
+        assert!(
+            stdout.contains(common),
+            "missing common command example {common}"
+        );
+    }
+
+    assert!(
+        !stdout.contains("\nCommands:\n"),
+        "top-level help should use categorized commands, not a flat command dump:\n{stdout}"
+    );
 
     for removed in [
         "archive",
