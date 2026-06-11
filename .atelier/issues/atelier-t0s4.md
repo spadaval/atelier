@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Introduce explicit command storage access modes"
-updated_at: "2026-06-11T20:10:54.046258349+00:00"
+updated_at: "2026-06-11T23:42:14.026415256+00:00"
 ---
 
 Replace scattered get_db/get_fresh_projection_db decisions with explicit access modes: projection query, canonical mutation, runtime-only, and health/repair. Acceptance: command entrypoints declare their mode and share common setup/failure behavior.

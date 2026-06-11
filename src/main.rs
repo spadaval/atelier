@@ -676,14 +676,73 @@ fn find_atelier_dir() -> Result<PathBuf> {
     storage_layout::find_atelier_dir()
 }
 
-fn get_db() -> Result<Database> {
-    let db_path = storage_layout::StorageLayout::discover()?.runtime_db_path();
-    Database::open(&db_path).context("Failed to open database")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommandStorageAccess {
+    /// Read/query commands that depend on a fresh SQLite projection.
+    ProjectionQuery,
+    /// Commands that write canonical Markdown and then refresh the projection.
+    CanonicalMutation,
+    /// Runtime-local commands that must not refresh or mutate canonical state.
+    RuntimeOnly,
+    /// Diagnostics, export, rebuild, and repair flows that own freshness policy.
+    HealthRepair,
 }
 
-fn get_fresh_projection_db() -> Result<Database> {
-    let db = get_db()?;
+impl CommandStorageAccess {
+    fn requires_fresh_projection(self) -> bool {
+        matches!(
+            self,
+            CommandStorageAccess::ProjectionQuery | CommandStorageAccess::CanonicalMutation
+        )
+    }
+}
+
+struct CommandStorage {
+    layout: storage_layout::StorageLayout,
+    db: Database,
+}
+
+impl CommandStorage {
+    fn db(&self) -> &Database {
+        &self.db
+    }
+
+    fn into_db(self) -> Database {
+        self.db
+    }
+
+    fn state_dir(&self) -> PathBuf {
+        self.layout.canonical_dir()
+    }
+
+    fn db_path(&self) -> PathBuf {
+        self.layout.runtime_db_path()
+    }
+
+    fn state_and_db_paths(&self) -> (PathBuf, PathBuf) {
+        (self.state_dir(), self.db_path())
+    }
+
+    fn repo_root(&self) -> &std::path::Path {
+        self.layout.repo_root()
+    }
+}
+
+fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     let layout = storage_layout::StorageLayout::discover()?;
+    let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
+    let db = if mode.requires_fresh_projection() {
+        ensure_fresh_projection_db(db, &layout)?
+    } else {
+        db
+    };
+    Ok(CommandStorage { layout, db })
+}
+
+fn ensure_fresh_projection_db(
+    db: Database,
+    layout: &storage_layout::StorageLayout,
+) -> Result<Database> {
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
         let report = projection_index::check(&db, &state_dir)?;
@@ -707,15 +766,39 @@ fn get_fresh_projection_db() -> Result<Database> {
                 "Projection index was stale; rebuilt local SQLite projection from {}",
                 state_dir.display()
             );
-            return get_db();
+            return Database::open(&db_path).context("Failed to open database");
         }
     }
     Ok(db)
 }
 
 fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
-    let layout = storage_layout::StorageLayout::discover()?;
-    Ok((layout.canonical_dir(), layout.runtime_db_path()))
+    Ok(command_storage(CommandStorageAccess::CanonicalMutation)?.state_and_db_paths())
+}
+
+fn runtime_db() -> Result<Database> {
+    Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
+}
+
+fn projection_query_db() -> Result<Database> {
+    Ok(command_storage(CommandStorageAccess::ProjectionQuery)?.into_db())
+}
+
+fn canonical_mutation_db() -> Result<Database> {
+    Ok(command_storage(CommandStorageAccess::CanonicalMutation)?.into_db())
+}
+
+#[cfg(test)]
+mod command_storage_tests {
+    use super::CommandStorageAccess;
+
+    #[test]
+    fn access_modes_declare_projection_freshness_policy() {
+        assert!(CommandStorageAccess::ProjectionQuery.requires_fresh_projection());
+        assert!(CommandStorageAccess::CanonicalMutation.requires_fresh_projection());
+        assert!(!CommandStorageAccess::RuntimeOnly.requires_fresh_projection());
+        assert!(!CommandStorageAccess::HealthRepair.requires_fresh_projection());
+    }
 }
 
 fn issue_create_parts(
@@ -917,7 +1000,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             priority,
             ready,
         } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             commands::agent_factory::list(
                 &db,
                 Some(&status),
@@ -929,12 +1012,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Search { query } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
 
         IssueCommands::Show { id } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             commands::agent_factory::show(&db, &id)
         }
 
@@ -997,20 +1080,20 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::Delete { id, force } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            let db = get_db()?;
+            let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             drop(db);
             commands::delete::run_lifecycle(&state_dir, &db_path, &id, force)
         }
 
         IssueCommands::Comment { id, text, kind } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
             commands::comment::run_canonical(&db, &resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
@@ -1020,7 +1103,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unlabel { id, label } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
@@ -1030,7 +1113,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Block { id, blocker } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
@@ -1039,7 +1122,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unblock { id, blocker } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
@@ -1048,7 +1131,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Blocked => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             commands::deps::list_blocked(&db)
         }
 
@@ -1057,7 +1140,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             let id = resolve_issue_arg(&db, &id)?;
@@ -1072,7 +1155,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            let db = get_fresh_projection_db()?;
+            let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
             let id = resolve_issue_arg(&db, &id)?;
@@ -1083,25 +1166,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Related { id } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::list(&db, &id)
         }
 
         IssueCommands::Impact { id } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::impact(&db, &id)
         }
 
         IssueCommands::Next => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             let atelier_dir = find_atelier_dir()?;
             commands::next::run(&db, &atelier_dir)
         }
 
         IssueCommands::Tree { status, compact } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             if compact {
                 commands::tree::run_compact(&db, Some(&status))
             } else {
@@ -1141,22 +1224,21 @@ fn run() -> Result<()> {
         Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Export { output, check } => {
-            let db = get_db()?;
-            let layout = storage_layout::StorageLayout::discover()?;
+            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| layout.canonical_dir());
-            commands::agent_factory::export_canonical(&db, &state_dir, check)
+                .unwrap_or_else(|| storage.state_dir());
+            commands::agent_factory::export_canonical(storage.db(), &state_dir, check)
         }
 
         Commands::Rebuild { input } => {
-            let layout = storage_layout::StorageLayout::discover()?;
+            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
             let state_dir = input
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| layout.canonical_dir());
-            let db_path = layout.runtime_db_path();
+                .unwrap_or_else(|| storage.state_dir());
+            let db_path = storage.db_path();
             commands::agent_factory::rebuild(&state_dir, &db_path)
         }
 
@@ -1168,18 +1250,21 @@ fn run() -> Result<()> {
         },
 
         Commands::ImportBeads { input, output } => {
-            let db = get_db()?;
-            let layout = storage_layout::StorageLayout::discover()?;
+            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
             let state_dir = output
                 .as_deref()
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| layout.canonical_dir());
-            commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir)
+                .unwrap_or_else(|| storage.state_dir());
+            commands::import::run_beads_jsonl(
+                storage.db(),
+                std::path::Path::new(&input),
+                &state_dir,
+            )
         }
 
         Commands::Dep { action } => match action {
             DepCommands::Add { blocked, blocker } => {
-                let db = get_fresh_projection_db()?;
+                let db = canonical_mutation_db()?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let store = RecordStore::new(&state_dir);
                 commands::agent_factory::dep_add_canonical(&db, &store, &blocked, &blocker)?;
@@ -1187,7 +1272,7 @@ fn run() -> Result<()> {
                 commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
             }
             DepCommands::Remove { blocked, blocker } => {
-                let db = get_fresh_projection_db()?;
+                let db = canonical_mutation_db()?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let store = RecordStore::new(&state_dir);
                 commands::agent_factory::dep_remove_canonical(&db, &store, &blocked, &blocker)?;
@@ -1195,23 +1280,23 @@ fn run() -> Result<()> {
                 commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
             }
             DepCommands::List { issue } => {
-                let db = get_fresh_projection_db()?;
+                let db = projection_query_db()?;
                 commands::agent_factory::dep_list(&db, issue.as_deref())
             }
         },
 
-        Commands::Mission { action } => {
-            let layout = storage_layout::StorageLayout::discover()?;
-            let db_path = layout.runtime_db_path();
-            let state_dir = layout.canonical_dir();
-            match action {
-                MissionCommands::Create {
-                    title,
-                    body,
-                    constraint,
-                    risk,
-                    validation,
-                } => commands::mission::create(
+        Commands::Mission { action } => match action {
+            MissionCommands::Create {
+                title,
+                body,
+                constraint,
+                risk,
+                validation,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                commands::mission::create(
                     &state_dir,
                     &db_path,
                     &title,
@@ -1219,32 +1304,40 @@ fn run() -> Result<()> {
                     constraint,
                     risk,
                     validation,
-                ),
-                MissionCommands::Show { id } => {
-                    let db = get_db()?;
-                    commands::mission::show(&db, &id)
-                }
-                MissionCommands::Start { id, switch_active } => {
-                    let id = resolve_record_arg(&get_db()?, "mission", &id)?;
-                    commands::mission::start(&state_dir, &db_path, &id, switch_active)
-                }
-                MissionCommands::Status { id } => {
-                    let db = get_db()?;
-                    commands::mission::status(&db, &state_dir, id.as_deref(), quiet)
-                }
-                MissionCommands::List { status } => {
-                    let db = get_db()?;
-                    commands::mission::list(&db, status.as_deref())
-                }
-                MissionCommands::Update {
-                    id,
-                    title,
-                    status,
-                    body,
-                    constraint,
-                    risk,
-                    validation,
-                } => commands::mission::update(
+                )
+            }
+            MissionCommands::Show { id } => {
+                let db = projection_query_db()?;
+                commands::mission::show(&db, &id)
+            }
+            MissionCommands::Start { id, switch_active } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                commands::mission::start(&state_dir, &db_path, &id, switch_active)
+            }
+            MissionCommands::Status { id } => {
+                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                commands::mission::status(storage.db(), &storage.state_dir(), id.as_deref(), quiet)
+            }
+            MissionCommands::List { status } => {
+                let db = projection_query_db()?;
+                commands::mission::list(&db, status.as_deref())
+            }
+            MissionCommands::Update {
+                id,
+                title,
+                status,
+                body,
+                constraint,
+                risk,
+                validation,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                commands::mission::update(
                     &state_dir,
                     &db_path,
                     &id,
@@ -1254,131 +1347,143 @@ fn run() -> Result<()> {
                     constraint,
                     risk,
                     validation,
-                ),
-                MissionCommands::AddWork { id, issue } => {
-                    let db = get_db()?;
-                    let issue = resolve_issue_arg(&db, &issue)?;
-                    drop(db);
-                    commands::mission::add_work(&state_dir, &db_path, &id, &issue)
-                }
-                MissionCommands::AddBlocker { id, issue } => {
-                    let db = get_db()?;
-                    let issue = resolve_issue_arg(&db, &issue)?;
-                    drop(db);
-                    commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
-                }
+                )
             }
-        }
+            MissionCommands::AddWork { id, issue } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                commands::mission::add_work(&state_dir, &db_path, &id, &issue)
+            }
+            MissionCommands::AddBlocker { id, issue } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
+            }
+        },
 
-        Commands::Plan { action } => {
-            let layout = storage_layout::StorageLayout::discover()?;
-            let db_path = layout.runtime_db_path();
-            let state_dir = layout.canonical_dir();
-            match action {
-                PlanCommands::Create {
-                    title,
-                    body,
-                    reason,
-                } => commands::plan::create(
+        Commands::Plan { action } => match action {
+            PlanCommands::Create {
+                title,
+                body,
+                reason,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                commands::plan::create(
                     &state_dir,
                     &db_path,
                     &title,
                     body.as_deref(),
                     reason.as_deref(),
-                ),
-                PlanCommands::Show { id } => {
-                    let db = get_db()?;
-                    commands::plan::show(&db, &id)
-                }
-                PlanCommands::Apply {
-                    input,
+                )
+            }
+            PlanCommands::Show { id } => {
+                let db = projection_query_db()?;
+                commands::plan::show(&db, &id)
+            }
+            PlanCommands::Apply {
+                input,
+                dry_run,
+                validate_only,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                commands::plan::apply(
+                    storage.db(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    &input,
                     dry_run,
                     validate_only,
-                } => {
-                    let db = get_db()?;
-                    commands::plan::apply(&db, &state_dir, &db_path, &input, dry_run, validate_only)
-                }
-                PlanCommands::List { status } => {
-                    let db = get_db()?;
-                    commands::plan::list(&db, status.as_deref())
-                }
-                PlanCommands::Revise { id, body, reason } => {
-                    commands::plan::revise(&state_dir, &db_path, &id, &body, reason.as_deref())
-                }
-                PlanCommands::Link {
-                    id,
-                    target_kind,
-                    target_id,
-                    relation_type,
-                } => {
-                    let db = get_db()?;
-                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
-                    drop(db);
-                    commands::plan::link(
-                        &state_dir,
-                        &db_path,
-                        &id,
-                        &target_kind,
-                        &target_id,
-                        &relation_type,
-                    )
-                }
+                )
             }
-        }
+            PlanCommands::List { status } => {
+                let db = projection_query_db()?;
+                commands::plan::list(&db, status.as_deref())
+            }
+            PlanCommands::Revise { id, body, reason } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                commands::plan::revise(
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    &id,
+                    &body,
+                    reason.as_deref(),
+                )
+            }
+            PlanCommands::Link {
+                id,
+                target_kind,
+                target_id,
+                relation_type,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let target_id = resolve_record_arg(storage.db(), &target_kind, &target_id)?;
+                commands::plan::link(
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    &id,
+                    &target_kind,
+                    &target_id,
+                    &relation_type,
+                )
+            }
+        },
 
-        Commands::Evidence { action } => {
-            let layout = storage_layout::StorageLayout::discover()?;
-            let db_path = layout.runtime_db_path();
-            let state_dir = layout.canonical_dir();
-            match action {
-                EvidenceCommands::Add {
-                    evidence_kind,
-                    result,
-                    summary,
-                    path,
-                    uri,
-                    producer,
-                } => commands::evidence::add(
-                    &state_dir,
-                    &db_path,
+        Commands::Evidence { action } => match action {
+            EvidenceCommands::Add {
+                evidence_kind,
+                result,
+                summary,
+                path,
+                uri,
+                producer,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                commands::evidence::add(
+                    &storage.state_dir(),
+                    &storage.db_path(),
                     &evidence_kind,
                     &result,
                     &summary,
                     path.as_deref(),
                     uri.as_deref(),
                     producer.as_deref(),
-                ),
-                EvidenceCommands::Show { id } => {
-                    let db = get_db()?;
-                    commands::evidence::show(&db, &id)
-                }
-                EvidenceCommands::Attach {
-                    id,
-                    target_kind,
-                    target_id,
-                    role,
-                } => {
-                    let db = get_db()?;
-                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
-                    drop(db);
-                    commands::evidence::attach(
-                        &state_dir,
-                        &db_path,
-                        &id,
-                        &target_kind,
-                        &target_id,
-                        &role,
-                    )
-                }
-                EvidenceCommands::List { result } => {
-                    let db = get_db()?;
-                    commands::evidence::list(&db, result.as_deref())
-                }
+                )
             }
-        }
+            EvidenceCommands::Show { id } => {
+                let db = projection_query_db()?;
+                commands::evidence::show(&db, &id)
+            }
+            EvidenceCommands::Attach {
+                id,
+                target_kind,
+                target_id,
+                role,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let target_id = resolve_record_arg(storage.db(), &target_kind, &target_id)?;
+                commands::evidence::attach(
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    &id,
+                    &target_kind,
+                    &target_id,
+                    &role,
+                )
+            }
+            EvidenceCommands::List { result } => {
+                let db = projection_query_db()?;
+                commands::evidence::list(&db, result.as_deref())
+            }
+        },
 
         Commands::Workflow { action } => {
-            let db = get_db()?;
+            let db = projection_query_db()?;
             match action {
                 WorkflowCommands::Validate {
                     target_kind,
@@ -1399,7 +1504,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Work { action } => {
-            let db = get_db()?;
+            let db = runtime_db()?;
             match action {
                 WorkCommands::Start { id } => {
                     let id = resolve_issue_arg(&db, &id)?;
@@ -1429,7 +1534,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Worktree { action } => {
-            let db = get_db()?;
+            let db = runtime_db()?;
             match action {
                 WorktreeCommands::For { id, path } => {
                     let id = resolve_issue_arg(&db, &id)?;
@@ -1456,15 +1561,13 @@ fn run() -> Result<()> {
         },
 
         Commands::Lint { id } => {
-            let db = get_fresh_projection_db()?;
+            let db = projection_query_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
         }
 
         Commands::Doctor => {
-            let db = get_db()?;
-            let layout = storage_layout::StorageLayout::discover()?;
-            let state_dir = layout.canonical_dir();
-            commands::agent_factory::doctor(&db, layout.repo_root(), &state_dir)
+            let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+            commands::agent_factory::doctor(storage.db(), storage.repo_root(), &storage.state_dir())
         }
     };
 
