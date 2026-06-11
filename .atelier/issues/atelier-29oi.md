@@ -26,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement markdown-first layout migration and compatibility"
-updated_at: "2026-06-11T20:09:59.949770763+00:00"
+updated_at: "2026-06-11T23:35:48.137166586+00:00"
 ---
 
 Move path resolution and migration behavior toward the new .atelier/ layout while preserving a temporary read/migrate-only compatibility path for existing .atelier-state repositories.
