@@ -38,9 +38,8 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // Concurrent writers can leave the projection index stale; canonical state
-    // should still rebuild cleanly and list afterward.
-    h.run_ok(&["rebuild"]);
+    // Concurrent writers can leave the projection index stale; ordinary reads
+    // should validate canonical state, rebuild automatically, and continue.
     let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }
@@ -145,9 +144,8 @@ fn test_concurrent_mixed_operations() {
         "At least one concurrent read should succeed"
     );
 
-    // Concurrent writers can leave the projection index stale; canonical state
-    // should still rebuild cleanly and list afterward.
-    h.run_ok(&["rebuild"]);
+    // Concurrent writers can leave the projection index stale; ordinary reads
+    // should validate canonical state, rebuild automatically, and continue.
     let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }

@@ -178,18 +178,6 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     })
 }
 
-pub fn ensure_fresh(db: &Database, state_dir: &Path) -> Result<()> {
-    let report = check(db, state_dir)?;
-    if report.is_fresh() {
-        return Ok(());
-    }
-
-    bail!(
-        "Projection index is stale; run `atelier rebuild` before querying.\n{}",
-        report.problem_messages().join("\n")
-    )
-}
-
 fn snapshot_sources(state_dir: &Path) -> Result<Vec<SourceEntry>> {
     if !state_dir.exists() {
         return Ok(Vec::new());

@@ -686,17 +686,34 @@ fn get_db() -> Result<Database> {
 
 fn get_fresh_projection_db() -> Result<Database> {
     let db = get_db()?;
-    ensure_projection_fresh_for_query(&db)?;
-    Ok(db)
-}
-
-fn ensure_projection_fresh_for_query(db: &Database) -> Result<()> {
     let repo_root = find_repo_root_for_rebuild()?;
     let state_dir = repo_root.join(".atelier-state");
     if state_dir.is_dir() {
-        projection_index::ensure_fresh(db, &state_dir)?;
+        let report = projection_index::check(&db, &state_dir)?;
+        if !report.is_fresh() {
+            commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
+                format!(
+                    "Projection index is stale and canonical state is not rebuild-ready; \
+                     fix .atelier-state/ before querying.\n{}",
+                    report.problem_messages().join("\n")
+                )
+            })?;
+            let db_path = repo_root.join(".atelier").join("state.db");
+            drop(db);
+            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
+                format!(
+                    "Projection index is stale and automatic rebuild failed for {}",
+                    state_dir.display()
+                )
+            })?;
+            eprintln!(
+                "Projection index was stale; rebuilt local SQLite projection from {}",
+                state_dir.display()
+            );
+            return get_db();
+        }
     }
-    Ok(())
+    Ok(db)
 }
 
 fn export_current_state(db: &Database) -> Result<()> {
@@ -907,7 +924,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::CloseAll { label, priority } => {
             let db = get_db()?;
-            commands::status::close_all(&db, label.as_deref(), priority.as_deref())
+            commands::status::close_all(&db, label.as_deref(), priority.as_deref())?;
+            export_current_state(&db)
         }
 
         IssueCommands::Reopen { id } => {
@@ -919,7 +937,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Delete { id, force } => {
             let db = get_db()?;
             let id = resolve_issue_arg(&db, &id)?;
-            commands::delete::run(&db, &id, force)
+            commands::delete::run(&db, &id, force)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Comment { id, text, kind } => {
@@ -1082,11 +1101,13 @@ fn run() -> Result<()> {
         Commands::Dep { action } => match action {
             DepCommands::Add { blocked, blocker } => {
                 let db = get_db()?;
-                commands::agent_factory::dep_add(&db, &blocked, &blocker)
+                commands::agent_factory::dep_add(&db, &blocked, &blocker)?;
+                export_current_state(&db)
             }
             DepCommands::Remove { blocked, blocker } => {
                 let db = get_db()?;
-                commands::agent_factory::dep_remove(&db, &blocked, &blocker)
+                commands::agent_factory::dep_remove(&db, &blocked, &blocker)?;
+                export_current_state(&db)
             }
             DepCommands::List { issue } => {
                 let db = get_fresh_projection_db()?;
