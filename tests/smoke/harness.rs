@@ -117,6 +117,10 @@ impl SmokeHarness {
         self.atelier_dir().join("state.db")
     }
 
+    pub fn issue_id(&self, ordinal: usize) -> String {
+        self.issue_ref(ordinal)
+    }
+
     fn translate_issue_refs(&self, args: &[&str]) -> Vec<String> {
         self.translate_issue_refs_owned(
             &args

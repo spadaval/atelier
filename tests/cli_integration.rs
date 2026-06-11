@@ -252,6 +252,39 @@ fn test_init_twice_warns() {
 }
 
 #[test]
+fn test_doctor_json_separates_projection_and_runtime_state_health() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    run_atelier(dir.path(), &["issue", "create", "Health check"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "doctor"]);
+    assert!(success, "doctor failed: {stderr}");
+    let doctor = json_value(&stdout);
+    let sections = &doctor["data"]["sections"];
+
+    assert_eq!(
+        sections["canonical_projection"]["rebuild_ready"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        sections["canonical_projection"]["projection_fresh"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(sections["runtime_state"]["directory"].as_bool(), Some(true));
+    assert_eq!(sections["runtime_state"]["database"].as_bool(), Some(true));
+    assert_eq!(
+        sections["runtime_state"]["local_tables"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        sections["compatibility"]["export_repair_current"].as_bool(),
+        Some(true)
+    );
+}
+
+#[test]
 fn test_top_level_help_only_shows_core_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
@@ -640,8 +673,18 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
-    run_atelier(dir.path(), &["issue", "comment", "1", "Legacy note"]);
     let issue_id = issue_id_by_title(dir.path(), "Activity issue");
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "INSERT INTO comments (issue_id, content, created_at, kind) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![
+            &issue_id,
+            "Legacy note",
+            "2026-06-10T18:18:20.123456Z",
+            "note"
+        ],
+    )
+    .unwrap();
     let activity_dir = dir
         .path()
         .join(".atelier-state")
@@ -959,8 +1002,10 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(closed_show.contains("Status:   closed"));
 
     let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(!fresh, "mutating imported issue should stale export");
-    assert!(fresh_err.contains("stale") || fresh_err.contains("changed"));
+    assert!(
+        fresh,
+        "export --check validates canonical Markdown/projection state, not SQLite-only drift: {fresh_err}"
+    );
 }
 
 // ==================== Issue Delete Tests ====================
@@ -1142,6 +1187,175 @@ fn test_issue_mutations_create_activity_sidecars() {
         &["old: \"closed\"", "new: \"open\""],
     );
     assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
+}
+
+#[test]
+fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Rebuild activity"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Rebuild activity");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "comment",
+            &issue_id,
+            "Canonical comment",
+            "--kind",
+            "human",
+        ],
+    );
+    assert!(success, "comment failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &issue_id,
+            "--append-notes",
+            "Canonical handoff",
+            "--claim",
+        ],
+    );
+    assert!(success, "append-notes/claim failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &issue_id, "--reason", "Canonical close"],
+    );
+    assert!(success, "close failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "show", &issue_id]);
+    assert!(success, "show failed: {stderr}");
+    let shown = json_value(&stdout);
+    let notes = shown["data"]["notes"].as_array().unwrap();
+    assert!(notes.iter().any(|note| note["body"] == "Canonical comment"));
+    assert!(notes.iter().any(|note| note["body"] == "Canonical handoff"));
+    assert_eq!(shown["data"]["close_reason"], "Canonical close");
+    assert!(shown["data"]["assignee"].as_str().is_some());
+}
+
+#[test]
+fn test_issue_create_is_durable_without_manual_export() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Create-only durable",
+            "--description",
+            "Created body",
+            "--priority",
+            "high",
+        ],
+    );
+    assert!(success, "create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Create-only durable");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed after create: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "show", &issue_id]);
+    assert!(success, "show failed after rebuild: {stderr}");
+    let shown = json_value(&stdout);
+    assert_eq!(shown["data"]["title"], "Create-only durable");
+    assert_eq!(shown["data"]["description"], "Created body");
+    assert_eq!(shown["data"]["priority"], "high");
+}
+
+#[test]
+fn test_issue_mutations_are_durable_without_manual_export() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutation source"]);
+    assert!(success, "source create failed: {stderr}");
+    let source_id = issue_id_by_title(dir.path(), "Mutation source");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutation target"]);
+    assert!(success, "target create failed: {stderr}");
+    let target_id = issue_id_by_title(dir.path(), "Mutation target");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &source_id,
+            "--title",
+            "Mutation source updated",
+            "--description",
+            "Durable body",
+            "--priority",
+            "high",
+        ],
+    );
+    assert!(success, "update failed: {stderr}");
+
+    for args in [
+        vec!["issue", "label", &source_id, "remove-me"],
+        vec!["issue", "unlabel", &source_id, "remove-me"],
+        vec!["issue", "label", &source_id, "keep-me"],
+        vec!["issue", "block", &source_id, &target_id],
+        vec!["issue", "unblock", &source_id, &target_id],
+        vec![
+            "issue", "relate", &source_id, &target_id, "--type", "related",
+        ],
+        vec![
+            "issue", "unrelate", &source_id, &target_id, "--type", "related",
+        ],
+        vec![
+            "issue", "relate", &source_id, &target_id, "--type", "derived",
+        ],
+        vec!["issue", "close", &source_id, "--reason", "Temporary close"],
+        vec!["issue", "reopen", &source_id],
+        vec!["issue", "block", &source_id, &target_id],
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "{args:?} failed: {stderr}");
+    }
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check failed before rebuild: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--json", "issue", "show", &source_id]);
+    assert!(success, "show failed: {stderr}");
+    let shown = json_value(&stdout);
+    assert_eq!(shown["data"]["title"], "Mutation source updated");
+    assert_eq!(shown["data"]["description"], "Durable body");
+    assert_eq!(shown["data"]["priority"], "high");
+    assert_eq!(shown["data"]["status"], "open");
+    let labels = shown["data"]["labels"].as_array().unwrap();
+    assert!(labels.iter().any(|label| label == "keep-me"));
+    assert!(!labels.iter().any(|label| label == "remove-me"));
+    assert_eq!(shown["data"]["dependencies"][0]["id"], target_id);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "related", &source_id]);
+    assert!(success, "related failed: {stderr}");
+    assert!(stdout.contains("derived"));
+    assert!(stdout.contains("Mutation target"));
 }
 
 // ==================== Dependencies Tests ====================

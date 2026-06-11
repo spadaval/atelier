@@ -22,9 +22,9 @@ parent: "atelier-zd4d"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate Markdown-first migration and closeout"
-updated_at: "2026-06-10T03:51:15.735448190+00:00"
+updated_at: "2026-06-10T23:57:16.721780687+00:00"
 ---
 
 Close out the Markdown-first RecordStore / ProjectionIndex / RuntimeState migration with scenario-centered proof.

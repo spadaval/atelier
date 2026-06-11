@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::activity::list_issue_activities;
+use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
 use crate::utils::format_issue_id;
@@ -195,6 +195,78 @@ fn comment_metadata_value(comments: &[Comment], key: &str) -> Option<String> {
     })
 }
 
+fn activity_note_objects(issue_id: &str) -> Result<Vec<NoteObject>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(Vec::new());
+    };
+    Ok(list_issue_activities(&state_dir, issue_id)?
+        .into_iter()
+        .filter(|activity| {
+            matches!(
+                activity.event_type,
+                ActivityEventType::Comment
+                    | ActivityEventType::Note
+                    | ActivityEventType::Handoff
+                    | ActivityEventType::Decision
+                    | ActivityEventType::Plan
+            )
+        })
+        .map(|activity| NoteObject {
+            id: activity.id,
+            author: Some(activity.actor),
+            kind: activity.event_type.to_string(),
+            created_at: activity.created_at.to_rfc3339(),
+            body: activity.body,
+        })
+        .collect())
+}
+
+fn activity_close_reason(issue_id: &str) -> Result<Option<String>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    Ok(list_issue_activities(&state_dir, issue_id)?
+        .into_iter()
+        .rev()
+        .find(|activity| activity.event_type == ActivityEventType::CloseReason)
+        .map(|activity| activity.body))
+}
+
+fn activity_field_new_value(issue_id: &str, field: &str) -> Result<Option<String>> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    for activity in list_issue_activities(&state_dir, issue_id)?
+        .into_iter()
+        .rev()
+        .filter(|activity| activity.event_type == ActivityEventType::FieldChanged)
+    {
+        if !activity
+            .body
+            .lines()
+            .any(|line| scalar_line_value(line, "field").as_deref() == Some(field))
+        {
+            continue;
+        }
+        if let Some(value) = activity
+            .body
+            .lines()
+            .find_map(|line| scalar_line_value(line, "new"))
+        {
+            return Ok(Some(value));
+        }
+    }
+    Ok(None)
+}
+
+fn scalar_line_value(line: &str, key: &str) -> Option<String> {
+    let value = line.strip_prefix(&format!("{key}: "))?.trim();
+    if value == "null" {
+        return None;
+    }
+    serde_json::from_str::<String>(value).ok()
+}
+
 fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
     let issue = db
         .get_issue(id)?
@@ -233,8 +305,13 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
     let imported_owner = comment_metadata_value(&raw_comments, "owner");
     let imported_assignee = comment_metadata_value(&raw_comments, "assignee");
     let close_reason = comment_metadata_value(&raw_comments, "Close reason")
-        .or_else(|| label_value(&labels, "close-reason:"));
-    let comments = raw_comments.into_iter().map(note_object).collect();
+        .or_else(|| label_value(&labels, "close-reason:"))
+        .or(activity_close_reason(&issue.id)?);
+    let comments = if raw_comments.is_empty() {
+        activity_note_objects(&issue.id)?
+    } else {
+        raw_comments.into_iter().map(note_object).collect()
+    };
 
     Ok(IssueObject {
         id: issue_id_for_agent(db, &issue)?,
@@ -249,7 +326,9 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
         dependencies,
         dependents,
         notes: comments,
-        assignee: label_value(&labels, "assignee:").or(imported_assignee),
+        assignee: label_value(&labels, "assignee:")
+            .or(imported_assignee)
+            .or(activity_field_new_value(&issue.id, "assignee")?),
         owner: label_value(&labels, "owner:").or(imported_owner),
         labels,
         created_at: issue.created_at.to_rfc3339(),
@@ -1202,6 +1281,7 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
 }
 
 pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bool) -> Result<()> {
+    let atelier_dir = repo_root.join(".atelier");
     let db_path = repo_root.join(".atelier").join("state.db");
     let export_fresh = super::export::canonical_stale_entries(db, state_dir)
         .map(|stale| stale.is_empty())
@@ -1210,12 +1290,15 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bo
     let projection_fresh = crate::projection_index::check(db, state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
+    let runtime_tables_available = db.runtime_state_tables_available().unwrap_or(false);
     let mut health = BTreeMap::new();
     health.insert("database", db_path.exists());
     health.insert("projection", state_dir.is_dir());
     health.insert("export_fresh", export_fresh);
     health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
+    health.insert("runtime_state", atelier_dir.is_dir());
+    health.insert("runtime_tables", runtime_tables_available);
     if json_output {
         print_success(
             "doctor",
@@ -1223,12 +1306,66 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bo
                 "database_path": db_path,
                 "state_path": state_dir,
                 "schema_version": 1,
-                "health": health
+                "health": health,
+                "sections": {
+                    "canonical_projection": {
+                        "state_dir": state_dir.is_dir(),
+                        "rebuild_ready": rebuild_ready,
+                        "projection_fresh": projection_fresh,
+                        "tables": crate::db::CANONICAL_PROJECTION_TABLES
+                    },
+                    "runtime_state": {
+                        "directory": atelier_dir.is_dir(),
+                        "database": db_path.exists(),
+                        "local_tables": runtime_tables_available,
+                        "tables": crate::db::RUNTIME_STATE_TABLES
+                    },
+                    "compatibility": {
+                        "export_repair_current": export_fresh,
+                        "tables": crate::db::COMPATIBILITY_TABLES
+                    }
+                }
             }),
         )
     } else {
         println!("Database: {}", db_path.display());
         println!("State: {}", state_dir.display());
+        println!("Canonical projection:");
+        println!(
+            "  state_dir: {}",
+            if state_dir.is_dir() { "ok" } else { "not ok" }
+        );
+        println!(
+            "  rebuild_ready: {}",
+            if rebuild_ready { "ok" } else { "not ok" }
+        );
+        println!(
+            "  projection_fresh: {}",
+            if projection_fresh { "ok" } else { "not ok" }
+        );
+        println!("Runtime state:");
+        println!(
+            "  directory: {}",
+            if atelier_dir.is_dir() { "ok" } else { "not ok" }
+        );
+        println!(
+            "  database: {}",
+            if db_path.exists() { "ok" } else { "not ok" }
+        );
+        println!(
+            "  local_tables: {}",
+            if runtime_tables_available {
+                "ok"
+            } else {
+                "not ok"
+            }
+        );
+        println!("Compatibility:");
+        println!(
+            "  export_repair_current: {}",
+            if export_fresh { "ok" } else { "not ok" }
+        );
+        println!("Legacy health:");
         for (key, value) in health {
             println!("{key}: {}", if value { "ok" } else { "not ok" });
         }
@@ -1258,7 +1395,7 @@ pub fn export_canonical(
             print_error(
                 "export.check",
                 ErrorCode::StaleExport,
-                "Canonical export is stale; run `atelier export` before handoff",
+                "Canonical state or projection index is stale; run `atelier rebuild` for projection drift or `atelier export` only for compatibility repair",
                 json!({ "state_path": state_dir, "stale": stale }),
             )?;
             std::process::exit(1);

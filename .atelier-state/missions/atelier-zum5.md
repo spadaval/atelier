@@ -11,9 +11,9 @@ links:
   type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Markdown-first durable state architecture cutover"
-updated_at: "2026-06-10T20:17:53.279582357+00:00"
+updated_at: "2026-06-10T23:57:40.556245283+00:00"
 ---
 
 Rework Atelier toward a Markdown-first persistence architecture where canonical project state lives in record files and SQLite is a rebuildable projection/index plus clearly separated local runtime state, not a fully equivalent live copy of the canonical records.

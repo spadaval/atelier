@@ -18,9 +18,9 @@ parent: "atelier-zd4d"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Separate RuntimeState from canonical projection health"
-updated_at: "2026-06-10T03:50:58.751960931+00:00"
+updated_at: "2026-06-10T23:49:12.021247310+00:00"
 ---
 
 Make local-only runtime state explicit and separate from canonical projection health.

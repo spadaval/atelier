@@ -21,9 +21,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Migrate issue mutations to Markdown-first writes"
-updated_at: "2026-06-10T03:50:49.785782245+00:00"
+updated_at: "2026-06-10T23:49:11.731358422+00:00"
 ---
 
 Move canonical issue mutations from SQLite-first plus export to Markdown-first writes.

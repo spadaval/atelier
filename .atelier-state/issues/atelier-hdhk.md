@@ -20,9 +20,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Reframe export and rebuild around Markdown-first records"
-updated_at: "2026-06-10T03:52:35.662499167+00:00"
+updated_at: "2026-06-10T22:54:23.191622679+00:00"
 ---
 
 Rework export/check/rebuild semantics so they no longer reassert SQLite as the canonical source after Markdown-first mutation lands.

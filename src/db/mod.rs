@@ -43,6 +43,23 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "related",
 ];
 
+/// SQLite tables rebuilt from canonical Markdown records.
+pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
+    "issues",
+    "labels",
+    "dependencies",
+    "relations",
+    "records",
+    "record_links",
+    "projection_index_sources",
+];
+
+/// SQLite tables that hold local-only runtime state and may be reset by rebuild.
+pub const RUNTIME_STATE_TABLES: &[&str] = &["sessions", "work_associations"];
+
+/// Transitional tables retained for command compatibility during migration.
+pub const COMPATIBILITY_TABLES: &[&str] = &["comments"];
+
 /// Valid values for issue priority.
 pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
 
@@ -650,6 +667,20 @@ impl Database {
             "#,
         )?;
         Ok(())
+    }
+
+    pub fn runtime_state_tables_available(&self) -> Result<bool> {
+        for table in RUNTIME_STATE_TABLES {
+            let exists: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                rusqlite::params![table],
+                |row| row.get(0),
+            )?;
+            if exists == 0 {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 

@@ -18,9 +18,9 @@ parent: "atelier-zd4d"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide and migrate durable notes and comments"
-updated_at: "2026-06-10T03:52:27.308529893+00:00"
+updated_at: "2026-06-10T22:54:23.132139132+00:00"
 ---
 
 Resolve how agent notes, close reasons, claims, and comments survive Markdown-first rebuild.

@@ -942,6 +942,30 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_recreates_canonical_projection_and_resets_runtime_state() {
+        let (db, dir) = setup_test_db();
+        let id = db.create_issue("Runtime reset", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let session_id = db.start_session().unwrap();
+        db.set_session_issue(session_id, &id).unwrap();
+        db.start_work_association(&id, Some("branch"), Some("/tmp/worktree"))
+            .unwrap();
+        assert!(db.get_current_session().unwrap().is_some());
+        assert!(db.get_active_work_association().unwrap().is_some());
+
+        let db_path = dir.path().join(".atelier/state.db");
+        run(&state_dir, &db_path).unwrap();
+        let rebuilt = Database::open(&db_path).unwrap();
+
+        assert!(rebuilt.require_issue(&id).is_ok());
+        assert!(rebuilt.runtime_state_tables_available().unwrap());
+        assert!(rebuilt.get_current_session().unwrap().is_none());
+        assert!(rebuilt.get_active_work_association().unwrap().is_none());
+    }
+
+    #[test]
     fn rebuild_accepts_issue_activity_sidecars() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Activity", None, "medium").unwrap();

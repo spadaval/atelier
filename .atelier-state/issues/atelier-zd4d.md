@@ -19,9 +19,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Execute Markdown-first durable state architecture cutover"
-updated_at: "2026-06-10T20:16:29.188150497+00:00"
+updated_at: "2026-06-10T23:57:22.329259929+00:00"
 ---
 
 Rework Atelier toward a Markdown-first persistence architecture where canonical project state lives in record files and SQLite is a rebuildable projection/index plus clearly separated local runtime state, not a fully equivalent live copy of the canonical records.

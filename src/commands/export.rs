@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::db::Database;
@@ -16,10 +15,8 @@ struct ProjectionFile {
 }
 
 pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
-    let files = build_canonical_projection(db, state_dir)?;
-
     if check {
-        let stale = stale_projection_entries(state_dir, &files)?;
+        let stale = canonical_stale_entries(db, state_dir)?;
         if stale.is_empty() {
             eprintln!("Canonical export is current");
             return Ok(());
@@ -28,8 +25,7 @@ pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()>
         bail!("Canonical export is stale:\n{}", stale.join("\n"));
     }
 
-    write_canonical_projection(state_dir, &files)?;
-    projection_index::refresh(db, state_dir)?;
+    write_canonical_from_db(db, state_dir)?;
     eprintln!(
         "Exported canonical state to {}",
         state_dir.to_string_lossy()
@@ -37,9 +33,14 @@ pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()>
     Ok(())
 }
 
-pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
+pub fn write_canonical_from_db(db: &Database, state_dir: &Path) -> Result<()> {
     let files = build_canonical_projection(db, state_dir)?;
-    stale_projection_entries(state_dir, &files)
+    write_canonical_projection(state_dir, &files)?;
+    projection_index::refresh(db, state_dir)
+}
+
+pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
+    canonical_check_entries(db, state_dir)
 }
 
 fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<ProjectionFile>> {
@@ -129,45 +130,42 @@ fn write_canonical_projection(state_dir: &Path, files: &[ProjectionFile]) -> Res
     Ok(())
 }
 
-fn stale_projection_entries(state_dir: &Path, files: &[ProjectionFile]) -> Result<Vec<String>> {
+fn canonical_check_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
     let mut stale = Vec::new();
-    let expected: BTreeMap<PathBuf, &[u8]> = files
-        .iter()
-        .map(|file| (file.path.clone(), file.bytes.as_slice()))
-        .collect();
 
-    if state_dir.exists() {
-        if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
-            stale.push(format!("invalid: {error:#}"));
+    if !state_dir.exists() {
+        if has_project_records(db)? {
+            stale.push(format!("missing: {}", state_dir.display()));
         }
+        return Ok(stale);
     }
 
-    for (relative_path, expected_bytes) in &expected {
-        let actual_path = state_dir.join(relative_path);
-        match fs::read(&actual_path) {
-            Ok(actual_bytes) if actual_bytes == *expected_bytes => {}
-            Ok(_) => stale.push(format!("changed: {}", display_state_path(relative_path))),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                stale.push(format!("missing: {}", display_state_path(relative_path)));
-            }
-            Err(error) => {
-                return Err(error).with_context(|| {
-                    format!("Failed to read canonical export {}", actual_path.display())
-                })
-            }
-        }
+    if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
+        stale.push(format!("invalid: {error:#}"));
     }
 
-    if state_dir.exists() {
-        for relative_path in canonical_files_under(state_dir)? {
-            if !expected.contains_key(&relative_path) {
-                stale.push(format!("untracked: {}", display_state_path(&relative_path)));
-            }
-        }
-    }
+    let freshness = projection_index::check(db, state_dir)?;
+    stale.extend(
+        freshness
+            .problem_messages()
+            .into_iter()
+            .map(|message| format!("projection: {message}")),
+    );
 
     stale.sort();
     Ok(stale)
+}
+
+fn has_project_records(db: &Database) -> Result<bool> {
+    if !db.list_issues(Some("all"), None, None)?.is_empty() {
+        return Ok(true);
+    }
+    for spec in FIRST_CLASS_RECORD_KINDS {
+        if !db.list_records(spec.kind, None)?.is_empty() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn remove_stale_canonical_files(state_dir: &Path, expected: &BTreeSet<PathBuf>) -> Result<()> {
@@ -458,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_check_fails_when_projection_is_stale() {
+    fn test_canonical_check_ignores_sqlite_only_canonical_drift() {
         let (db, dir) = setup_test_db();
         let state_dir = dir.path().join(".atelier-state");
         let id = db.create_issue("Original title", None, "medium").unwrap();
@@ -466,12 +464,33 @@ mod tests {
 
         db.update_issue(&id, Some("Changed title"), None, None)
             .unwrap();
+
+        assert!(run_canonical(&db, &state_dir, true).is_ok());
+        let issue_text = fs::read_to_string(state_dir.join(issue_record_path(&id))).unwrap();
+        assert!(issue_text.contains("title: \"Original title\""));
+    }
+
+    #[test]
+    fn test_canonical_check_reports_stale_projection_metadata() {
+        let (db, dir) = setup_test_db();
+        let state_dir = dir.path().join(".atelier-state");
+        let id = db.create_issue("Original title", None, "medium").unwrap();
+        run_canonical(&db, &state_dir, false).unwrap();
+
+        let issue_path = state_dir.join(issue_record_path(&id));
+        let markdown = fs::read_to_string(&issue_path).unwrap();
+        fs::write(
+            &issue_path,
+            markdown.replace("Original title", "Markdown-first title"),
+        )
+        .unwrap();
+
         let error = run_canonical(&db, &state_dir, true).unwrap_err();
 
         assert!(error.to_string().contains("Canonical export is stale"));
-        assert!(error
-            .to_string()
-            .contains(&format!("changed: .atelier-state/issues/{id}.md")));
+        assert!(error.to_string().contains(&format!(
+            "projection: indexed source changed: issues/{id}.md"
+        )));
     }
 
     #[test]

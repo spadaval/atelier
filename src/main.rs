@@ -697,7 +697,7 @@ fn ensure_projection_fresh_for_query(db: &Database) -> Result<()> {
 
 fn export_current_state(db: &Database) -> Result<()> {
     let root = find_repo_root_for_rebuild()?;
-    commands::export::run_canonical(db, &root.join(".atelier-state"), false)
+    commands::export::write_canonical_from_db(db, &root.join(".atelier-state"))
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -734,7 +734,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         } => {
             let db = get_db()?;
             if json || issue_type.is_some() || parent.is_some() {
-                return commands::agent_factory::create(
+                commands::agent_factory::create(
                     &db,
                     commands::agent_factory::CreateInput {
                         title: &title,
@@ -745,7 +745,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                         parent: parent.as_deref(),
                     },
                     json,
-                );
+                )?;
+                return export_current_state(&db);
             }
             let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
@@ -761,7 +762,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                 &priority,
                 template.as_deref(),
                 &opts,
-            )
+            )?;
+            export_current_state(&db)
         }
 
         IssueCommands::Quick {
@@ -786,7 +788,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                 &priority,
                 template.as_deref(),
                 &opts,
-            )
+            )?;
+            export_current_state(&db)
         }
 
         IssueCommands::Subissue {
@@ -812,7 +815,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                 description.as_deref(),
                 &priority,
                 &opts,
-            )
+            )?;
+            export_current_state(&db)
         }
 
         IssueCommands::List {
@@ -887,13 +891,15 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                     append_notes: append_notes.as_deref(),
                 },
                 json,
-            )
+            )?;
+            export_current_state(&db)
         }
 
         IssueCommands::Close { id, reason } => {
             let db = get_db()?;
             let _ = quiet;
-            commands::agent_factory::close(&db, &id, reason.as_deref(), json)
+            commands::agent_factory::close(&db, &id, reason.as_deref(), json)?;
+            export_current_state(&db)
         }
 
         IssueCommands::CloseAll { label, priority } => {
@@ -903,7 +909,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Reopen { id } => {
             let db = get_db()?;
-            commands::agent_factory::reopen(&db, &id, json)
+            commands::agent_factory::reopen(&db, &id, json)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Delete { id, force } => {
@@ -914,29 +921,35 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         IssueCommands::Comment { id, text, kind } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::comment::run(&db, &resolved, &text, &kind)
+            export_current_state(&db)?;
+            commands::comment::run(&db, &resolved, &text, &kind)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Label { id, label } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::add(&db, &resolved, &label)
+            commands::label::add(&db, &resolved, &label)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Unlabel { id, label } => {
             let db = get_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::remove(&db, &resolved, &label)
+            commands::label::remove(&db, &resolved, &label)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Block { id, blocker } => {
             let db = get_db()?;
-            commands::agent_factory::dep_add(&db, &id, &blocker, json)
+            commands::agent_factory::dep_add(&db, &id, &blocker, json)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Unblock { id, blocker } => {
             let db = get_db()?;
-            commands::agent_factory::dep_remove(&db, &id, &blocker, json)
+            commands::agent_factory::dep_remove(&db, &id, &blocker, json)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Blocked => {
@@ -967,7 +980,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             relation_type,
         } => {
             let db = get_db()?;
-            commands::relate::add_typed(&db, &id, &related, &relation_type)
+            commands::relate::add_typed(&db, &id, &related, &relation_type)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Unrelate {
@@ -976,7 +990,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             relation_type,
         } => {
             let db = get_db()?;
-            commands::relate::remove_typed(&db, &id, &related, &relation_type)
+            commands::relate::remove_typed(&db, &id, &related, &relation_type)?;
+            export_current_state(&db)
         }
 
         IssueCommands::Related { id } => {
@@ -1032,6 +1047,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet, json),
+
         Commands::Export { output, check } => {
             let db = get_db()?;
             let atelier_dir = find_atelier_dir()?;

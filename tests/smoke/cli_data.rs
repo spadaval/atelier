@@ -105,10 +105,31 @@ fn test_canonical_export_check_cli() {
     h.run_ok(&["export", "--check"]);
 
     h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
+    h.run_ok(&["export", "--check"]);
+
+    let issue_id = h.issue_id(1);
+    let issue_path = h
+        .temp_dir
+        .path()
+        .join(".atelier-state")
+        .join("issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace("Changed canonical issue", "Markdown canonical issue"),
+    )
+    .unwrap();
+
     let result = h.run_err(&["export", "--check"]);
     assert!(
         result.stderr.contains("Canonical export is stale"),
         "expected stale canonical export error, got stderr: {}",
+        result.stderr
+    );
+    assert!(
+        result.stderr.contains("projection: indexed source changed"),
+        "expected stale projection metadata, got stderr: {}",
         result.stderr
     );
 }

@@ -24,6 +24,18 @@ concrete files, commands, and product-specific skills.
 - Durable tracker state: committed `.atelier-state/`
 - Runtime tracker database: local `.atelier/state.db`, rebuilt from
   `.atelier-state/`
+- Missions are durable goal records for product outcomes and coordinated
+  workstreams. Link executable issues to missions and keep mission status in
+  sync with linked work during orchestration and closeout.
+- Issues are executable tracker items. Use them for claimable implementation,
+  validation, documentation, migration, audit, and readiness slices.
+- Mission commands:
+  - `atelier mission list`
+  - `atelier mission show <id>`
+  - `atelier mission create "..."`
+  - `atelier mission update <id> --status <open|closed>`
+  - `atelier link add mission <mission-id> issue <issue-id> --type advances`
+  - `atelier workflow validate mission <id>`
 - Normal tracker commands:
   - `atelier issue ready`
   - `atelier issue list --status open`
@@ -42,6 +54,9 @@ concrete files, commands, and product-specific skills.
   - `atelier lint`
   - `atelier lint <id>`
   - `atelier doctor`
+- Closeout expectation: a mission is not done merely because the current
+  issue is closed. Confirm linked work, blockers, validation, and mission
+  status with `atelier mission show <id>` before declaring the mission complete.
 - Beads commands are not part of the Agent Factory path in this repository.
   `atelier import-beads` remains only a one-way external import command.
 
