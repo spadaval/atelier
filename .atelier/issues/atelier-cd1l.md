@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Centralize safe auto-refresh from canonical Markdown"
-updated_at: "2026-06-11T20:10:54.434763072+00:00"
+updated_at: "2026-06-11T23:49:02.590937457+00:00"
 ---
 
 Implement one freshness policy that checks source hash/mtime/size metadata and refreshes the ProjectionIndex from Markdown when safe. Acceptance: query commands do not use stale SQLite when canonical Markdown changed.

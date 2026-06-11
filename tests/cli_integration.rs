@@ -5819,7 +5819,7 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
         run_atelier(dir.path(), &["issue", "create", "Indexed title"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Indexed title");
+    let issue_id = issue_ref(dir.path(), 1);
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
@@ -5829,7 +5829,7 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
 
     let issue_path = dir
         .path()
-        .join(".atelier-state/issues")
+        .join(".atelier/issues")
         .join(format!("{issue_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(
@@ -5859,7 +5859,7 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
         run_atelier(dir.path(), &["issue", "create", "First indexed issue"]);
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
-    let first_id = issue_id_by_title(dir.path(), "First indexed issue");
+    let first_id = issue_ref(dir.path(), 1);
     let (success, second_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Second indexed issue"]);
     assert!(success, "second create failed: {stderr}");
@@ -5869,7 +5869,7 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
 
     let first_path = dir
         .path()
-        .join(".atelier-state/issues")
+        .join(".atelier/issues")
         .join(format!("{first_id}.md"));
     let first_markdown = std::fs::read_to_string(&first_path).unwrap();
     std::fs::remove_file(&first_path).unwrap();
@@ -5887,7 +5887,7 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     );
 
     std::fs::write(&first_path, first_markdown).unwrap();
-    let unindexed_path = dir.path().join(".atelier-state/issues/atelier-zzzz.md");
+    let unindexed_path = dir.path().join(".atelier/issues/atelier-zzzz.md");
     std::fs::write(
         &unindexed_path,
         r#"---
@@ -5936,19 +5936,19 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
         run_atelier(dir.path(), &["issue", "create", "Projection root"]);
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
-    let first_id = issue_id_by_title(dir.path(), "Projection root");
+    let first_id = issue_ref(dir.path(), 1);
     let (success, second_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Projection leaf"]);
     assert!(success, "second create failed: {stderr}");
     assert!(second_out.contains("Created issue atelier-"));
-    let second_id = issue_id_by_title(dir.path(), "Projection leaf");
+    let second_id = issue_ref(dir.path(), 2);
     let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &second_id, &first_id]);
     assert!(success, "dep add failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    std::fs::write(dir.path().join(".atelier-state/manifest.json"), "{}\n").unwrap();
-    std::fs::write(dir.path().join(".atelier-state/graph.json"), "{}\n").unwrap();
+    std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
+    std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(
         success,
@@ -5958,7 +5958,7 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
 
     let issue_path = dir
         .path()
-        .join(".atelier-state/issues")
+        .join(".atelier/issues")
         .join(format!("{first_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(

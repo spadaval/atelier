@@ -10,6 +10,7 @@ use crate::record_store::{
     self, AttachmentRelationship, CanonicalIssueRecord, RelatesRelationship, RelationshipTarget,
     Relationships, FIRST_CLASS_RECORD_KINDS,
 };
+use crate::storage_layout;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {
@@ -198,12 +199,15 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .context("Failed to relativize canonical export path")?;
+        if storage_layout::is_local_atelier_path(relative) {
+            continue;
+        }
         if path.is_dir() {
             collect_canonical_files(root, &path, files)?;
         } else if path.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .context("Failed to relativize canonical export path")?;
             files.push(relative.to_path_buf());
         }
     }
