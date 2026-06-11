@@ -107,3 +107,23 @@ pub fn has_canonical_records(atelier_dir: &Path) -> bool {
         .iter()
         .any(|dir| atelier_dir.join(dir).is_dir())
 }
+
+pub fn is_local_atelier_path(relative_path: &Path) -> bool {
+    let Some(first) = relative_path.components().next() else {
+        return false;
+    };
+    let first = first.as_os_str();
+    first == ".locks-cache"
+        || first == ".cache"
+        || first == "runtime"
+        || first == "cache"
+        || first == "rules"
+        || first == "rules.local"
+        || relative_path == Path::new(CONFIG_FILE)
+        || relative_path == Path::new("state.db")
+        || relative_path == Path::new("state.db-shm")
+        || relative_path == Path::new("state.db-wal")
+        || relative_path == Path::new("agent.json")
+        || relative_path == Path::new("hook-config.json")
+        || relative_path == Path::new("hook-config.local.json")
+}

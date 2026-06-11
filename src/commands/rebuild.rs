@@ -345,12 +345,18 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .context("Failed to relativize canonical projection path")?;
+        if root.file_name().and_then(|name| name.to_str())
+            == Some(crate::storage_layout::ATELIER_DIR)
+            && crate::storage_layout::is_local_atelier_path(relative)
+        {
+            continue;
+        }
         if path.is_dir() {
             collect_canonical_files(root, &path, files)?;
         } else if path.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .context("Failed to relativize canonical projection path")?;
             files.push(relative.to_path_buf());
         }
     }

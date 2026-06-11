@@ -2,8 +2,8 @@
 
 This document defines the target `.atelier/` canonical record tree. Tracked
 Markdown records under `.atelier/` are the committed rebuild source for the
-local SQLite projection at `.atelier/runtime/state.db`; runtime and cache files
-remain ignored local state.
+local SQLite projection at `.atelier/state.db`; runtime and cache files remain
+ignored local state.
 
 During the migration window, existing repositories may still contain
 `.atelier-state/`. Commands may discover, read, validate, and migrate that tree,
@@ -287,7 +287,7 @@ For unsupported files or stale runtime state:
   as generated caches, local databases, copied rule trees, or editor artifacts.
 - Do not commit `.atelier/runtime/`, `.atelier/cache/`, SQLite databases, lock
   caches, diagnostics, or local identity.
-- If `.atelier/runtime/state.db` is missing or stale, rebuild it from canonical
+- If `.atelier/state.db` is missing or stale, rebuild it from canonical
   records instead of resolving it as a Git conflict.
 
 When `atelier lint` reports invalid canonical Markdown, fix the Markdown rather
@@ -417,7 +417,7 @@ check. The single-tree migration narrows that behavior to compatibility and
 repair: post-migration writes target `.atelier/`, and `.atelier-state/` is
 read/migrate only.
 
-`atelier rebuild` recreates `.atelier/runtime/state.db` from tracked
+`atelier rebuild` recreates `.atelier/state.db` from tracked
 `.atelier/` canonical records and may create ignored runtime/cache directories
 in a fresh checkout. Backup export formats are no longer command surfaces;
 predecessor imports use `atelier import-beads`.
@@ -426,7 +426,7 @@ Rebuild also recreates local `ProjectionIndex` source metadata in SQLite. The
 metadata records canonical file paths, size and modified-time hints, and content
 hashes so query commands can detect stale projections before reading SQLite.
 This metadata is intentionally not tracked and can be discarded with
-`.atelier/runtime/state.db`. Issue activity sidecars are canonical files
+`.atelier/state.db`. Issue activity sidecars are canonical files
 but are read directly by history/show commands, so they are validated by rebuild
 rather than tracked as query-projection sources.
 

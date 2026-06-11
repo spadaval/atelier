@@ -458,7 +458,7 @@ machine-readable source of truth, not command-result JSON.
 - Add `export --check`.
 - Add `rebuild`.
 - Make SQLite rebuildable from committed Markdown records.
-- Keep `.atelier/runtime/state.db` ignored as local runtime state; committed
+- Keep `.atelier/state.db` ignored as local runtime state; committed
   durable state lives under tracked `.atelier/` record directories.
 
 ### Milestone 3: Braid-Style Worktrees
@@ -494,10 +494,10 @@ machine-readable source of truth, not command-result JSON.
   such as `atl` are deferred until the install story is stable.
 - Resolved for the Markdown-first storage overhaul: `.atelier/` is the single
   project root. Canonical Markdown records and tracked project config live under
-  `.atelier/`; `.atelier/runtime/` and `.atelier/cache/` contain ignored local
-  projection/runtime files such as `state.db`, identity, locks, diagnostics, and
-  UI caches. `.atelier-state/` is a read/migrate compatibility source only
-  until the explicit migration slice removes it from normal writes.
+  `.atelier/`; `.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/`
+  contain ignored local projection/runtime/cache files such as SQLite state,
+  identity, locks, diagnostics, and UI caches. `.atelier-state/` is a
+  read/migrate compatibility source only.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata? Command diagnostics are resolved separately as local-only telemetry
   and do not answer this broader run/session policy.

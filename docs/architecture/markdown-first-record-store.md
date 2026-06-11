@@ -142,7 +142,7 @@ lists without treating every Markdown body or record payload as cached UI state.
 ## Rebuild And Freshness
 
 `atelier rebuild` recreates the canonical portion of
-`.atelier/runtime/state.db` from Markdown records discovered under tracked
+`.atelier/state.db` from Markdown records discovered under tracked
 `.atelier/` record directories. It ignores local-only runtime state except
 where runtime tables must be recreated empty or migrated for schema
 compatibility.
@@ -278,7 +278,7 @@ Runtime state remains useful for coordination and operator ergonomics:
 Runtime state may reference canonical record IDs, but those references are local
 and disposable unless a future durable record explicitly captures them. A fresh
 checkout must be able to rebuild canonical query behavior from tracked
-`.atelier/` records without copying `.atelier/runtime/state.db`.
+`.atelier/` records without copying `.atelier/state.db`.
 
 ## Migration Plan
 

@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Migrate canonical records from .atelier-state into .atelier"
-updated_at: "2026-06-11T18:54:32.028629821+00:00"
+updated_at: "2026-06-11T23:26:41.680453642+00:00"
 ---
 
 Move canonical tracker records into the single .atelier/ root and update export/rebuild/query paths accordingly.

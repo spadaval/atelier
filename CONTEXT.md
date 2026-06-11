@@ -43,7 +43,7 @@
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
 - SQLite state: fast local projection and runtime state, currently inherited
-  from Chainlink and targeted to live at `.atelier/runtime/state.db`.
+  from Chainlink and currently living at ignored `.atelier/state.db`.
 
 ## Ambiguities
 
@@ -59,7 +59,7 @@
   for canonical records.
 - `.atelier-state/` is compatibility state for repositories created before the
   single-tree migration. Migration code may discover, read, and import it, but
-  post-migration durable writes target `.atelier/` only.
+  normal durable writes target `.atelier/` only.
 - Dependencies should represent actual sequencing. Canonical state groups
   record relationships under `relationships`: use `blocks` for readiness,
   `children` for hierarchy and mission work, `attachments` for plans/evidence,

@@ -4,7 +4,7 @@ project_slug = "atelier"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
+runtime_dir = ".atelier"
+runtime_database = ".atelier/state.db"
 cache_dir = ".atelier/cache"
 compatibility_state_root = ".atelier-state"

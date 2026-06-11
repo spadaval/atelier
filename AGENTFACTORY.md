@@ -23,7 +23,7 @@ concrete files, commands, and product-specific skills.
 - Tracker: Atelier
 - Durable tracker state: committed canonical Markdown and tracked config under
   `.atelier/`
-- Runtime tracker database: local `.atelier/runtime/state.db`, rebuilt from
+- Runtime tracker database: local `.atelier/state.db`, rebuilt from
   committed `.atelier/` records
 - Compatibility state: `.atelier-state/` may be discovered, read, and migrated
   by explicit migration work only. Do not introduce new normal writes there.
