@@ -8,6 +8,8 @@ relationships:
   - kind: "issue"
     id: "atelier-64w5"
   - kind: "issue"
+    id: "atelier-8ptg"
+  - kind: "issue"
     id: "atelier-ncog"
   - kind: "issue"
     id: "atelier-rr6y"

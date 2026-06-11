@@ -100,7 +100,7 @@ pub fn apply(
             "dry_run": false,
             "validate_only": true,
             "records": {},
-            "links": plan.links.len(),
+            "relationships": 0,
             "message": "bulk plan is valid"
         }))?;
         return Ok(());
@@ -606,27 +606,27 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
         }
     }
 
-    let mut link_count = 0usize;
+    let mut relationship_count = 0usize;
     for mission in &plan.records.missions {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&mission.client_ref))?;
         for target in &mission.work {
             add_resolved_link(db, plan, &resolved, &source, target, "advances")?;
-            link_count += 1;
+            relationship_count += 1;
         }
         for target in &mission.plans {
             add_resolved_link(db, plan, &resolved, &source, target, "planned_by")?;
-            link_count += 1;
+            relationship_count += 1;
         }
         for target in &mission.milestones {
             add_resolved_link(db, plan, &resolved, &source, target, "has_checkpoint")?;
-            link_count += 1;
+            relationship_count += 1;
         }
     }
     for milestone in &plan.records.milestones {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&milestone.client_ref))?;
         for target in &milestone.missions {
             add_resolved_link(db, plan, &resolved, &source, target, "advances")?;
-            link_count += 1;
+            relationship_count += 1;
         }
         for target in &milestone.contributing_work {
             let contributor = resolved_ref(db, plan, &resolved, target)?;
@@ -637,25 +637,25 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
                 &source.id,
                 "contributes_to",
             )?;
-            link_count += 1;
+            relationship_count += 1;
         }
     }
     for record in &plan.records.plans {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&record.client_ref))?;
         for target in &record.applies_to {
             add_resolved_link(db, plan, &resolved, &source, target, "planned_by")?;
-            link_count += 1;
+            relationship_count += 1;
         }
         for target in &record.supersedes {
             add_resolved_link(db, plan, &resolved, &source, target, "supersedes")?;
-            link_count += 1;
+            relationship_count += 1;
         }
     }
     for evidence in &plan.records.evidence {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&evidence.client_ref))?;
         for target in &evidence.validates {
             add_resolved_link(db, plan, &resolved, &source, target, "validates")?;
-            link_count += 1;
+            relationship_count += 1;
         }
     }
 
@@ -666,7 +666,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
         "title": plan.title,
         "description": plan.description,
         "records": created,
-        "links": link_count,
+        "relationships": relationship_count,
     }))
 }
 
@@ -917,7 +917,7 @@ fn dry_run_preview(plan: &BulkPlan) -> Value {
         "title": plan.title,
         "description": plan.description,
         "records": records,
-        "links": plan.links.len(),
+        "relationships": 0,
     })
 }
 
@@ -953,11 +953,16 @@ fn print_apply_summary(summary: Value) -> Result<()> {
         }
     }
 
-    let link_count = summary["links"]
+    let relationship_count = summary["relationships"]
         .as_array()
-        .map(|links| links.len())
+        .map(|relationships| relationships.len())
+        .or_else(|| {
+            summary["relationships"]
+                .as_u64()
+                .map(|count| count as usize)
+        })
         .unwrap_or(0);
-    println!("  links: {link_count}");
+    println!("  relationships: {relationship_count}");
 
     if let Some(id) = first_created_id(&summary, "missions") {
         println!();

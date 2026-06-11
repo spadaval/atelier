@@ -79,8 +79,11 @@ pub fn run_beads_jsonl(db: &Database, input_path: &Path, state_dir: &Path) -> Re
     println!("Imported Beads backup from {}", input_path.display());
     println!("  source records: {}", report.source_records);
     println!("  imported issues: {}", report.imported_issues);
-    println!("  parent-child links: {}", report.parent_child_links);
-    println!("  blocking links: {}", report.blocking_links);
+    println!(
+        "  parent-child relationships: {}",
+        report.parent_child_links
+    );
+    println!("  blocking relationships: {}", report.blocking_links);
     println!("  skipped records: {}", report.skipped_records);
     println!("  lossy/deferred fields: {}", report.lossy_fields.len());
     println!("  canonical state: {}", state_dir.display());

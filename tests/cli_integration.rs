@@ -1371,8 +1371,8 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(success, "import-beads failed: {stderr}");
     assert!(stdout.contains("source records: 3"));
     assert!(stdout.contains("imported issues: 3"));
-    assert!(stdout.contains("parent-child links: 2"));
-    assert!(stdout.contains("blocking links: 1"));
+    assert!(stdout.contains("parent-child relationships: 2"));
+    assert!(stdout.contains("blocking relationships: 1"));
     assert!(dir
         .path()
         .join(".atelier-state")
@@ -5314,7 +5314,7 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
         run_atelier(dir.path(), &["import-beads", fixture.to_str().unwrap()]);
     assert!(success, "import-beads failed: {stderr}");
     assert!(stdout.contains("imported issues: 3"));
-    assert!(stdout.contains("blocking links: 1"));
+    assert!(stdout.contains("blocking relationships: 1"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "3"]);
     assert!(success, "mapped show failed: {stderr}");
