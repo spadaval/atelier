@@ -389,12 +389,65 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
-    assert!(stdout.contains("Canonical projection:"));
+    assert!(stdout.contains("Install health:"));
+    assert!(stdout.contains("ignored_runtime_paths: ok"));
+    assert!(stdout.contains("Projection rebuild:"));
     assert!(stdout.contains("rebuild_ready: ok"));
     assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("Cache health:"));
+    assert!(stdout.contains("projection_metadata: ok"));
     assert!(stdout.contains("Runtime state:"));
     assert!(stdout.contains("database: ok"));
     assert!(stdout.contains("local_tables: ok"));
+    assert!(stdout.contains("diagnostics:"));
+}
+
+#[test]
+fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Doctor runtime boundary"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+
+    let issue_path = dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace(
+            "title: \"Doctor runtime boundary\"",
+            "title: [Doctor runtime boundary",
+        ),
+    )
+    .unwrap();
+
+    let (lint_success, lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(
+        !lint_success,
+        "lint must reject malformed canonical Markdown, stdout: {lint_stdout}"
+    );
+    assert!(
+        lint_stderr.contains("Canonical tracker Markdown is invalid")
+            && lint_stderr.contains("Invalid YAML front matter"),
+        "unexpected lint error: {lint_stderr}"
+    );
+
+    let (doctor_success, doctor_stdout, doctor_stderr) = run_atelier(dir.path(), &["doctor"]);
+    assert!(
+        doctor_success,
+        "doctor should continue reporting runtime health: {doctor_stderr}"
+    );
+    assert!(doctor_stdout.contains("Projection rebuild:"));
+    assert!(doctor_stdout.contains("rebuild_ready: not ok"));
+    assert!(doctor_stdout.contains("Runtime state:"));
+    assert!(doctor_stdout.contains("database: ok"));
+    assert!(doctor_stdout.contains("local_tables: ok"));
 }
 
 #[test]

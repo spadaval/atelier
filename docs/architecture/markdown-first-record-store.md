@@ -255,10 +255,12 @@ comments and close reasons only, refuses to overwrite existing activity IDs,
 skips equivalent already-migrated entries on repeated runs, and prints a
 conversion summary. It is intentionally not a normal `atelier migrate` command.
 
-`atelier doctor` reports both canonical projection health and runtime-state
-health. A repository can be rebuild-ready even when optional runtime state is
-absent. A runtime-state failure should not imply canonical record loss unless
-Markdown validation also fails.
+`atelier doctor` reports install, cache, projection-rebuild, diagnostics, and
+runtime-state health without acting as the canonical durability gate. `atelier
+lint` owns canonical Markdown validity and relationship findings. Doctor may
+show that rebuild readiness is degraded, but a repository can still have healthy
+runtime state when canonical Markdown needs lint repair, and optional runtime
+or cache directories may be absent.
 
 `atelier export --check` verifies deterministic rendering of canonical Markdown
 and known derived projections. In the Markdown-first model, it should not depend

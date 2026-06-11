@@ -15,7 +15,7 @@ runtime_database = ".atelier/state.db"
 cache_dir = ".atelier/cache"
 compatibility_state_root = ".atelier-state"
 "#;
-const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
+pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/.locks-cache/",
     "/.atelier/state.db",
     "/.atelier/state.db-shm",

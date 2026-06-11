@@ -1947,26 +1947,40 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
 pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
     let layout = crate::storage_layout::StorageLayout::new(repo_root);
     let atelier_dir = layout.atelier_dir();
+    let config_path = layout.config_path();
+    let cache_dir = layout.cache_dir();
     let db_path = layout.runtime_db_path();
-    let export_fresh = super::export::canonical_stale_entries(db, state_dir)
-        .map(|stale| stale.is_empty())
-        .unwrap_or(false);
     let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
     let projection_fresh = crate::projection_index::check(db, state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
     let runtime_tables_available = db.runtime_state_tables_available().unwrap_or(false);
+    let ignore_rules_current = runtime_gitignore_entries_present(repo_root);
+    let diagnostics = if crate::telemetry::diagnostics_enabled() {
+        "enabled"
+    } else {
+        "disabled"
+    };
     let mut health = BTreeMap::new();
+    health.insert("config", config_path.exists());
     health.insert("database", db_path.exists());
-    health.insert("projection", state_dir.is_dir());
-    health.insert("export_fresh", export_fresh);
+    health.insert("ignore_rules", ignore_rules_current);
     health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
     health.insert("runtime_state", atelier_dir.is_dir());
     health.insert("runtime_tables", runtime_tables_available);
     println!("Database: {}", db_path.display());
     println!("State: {}", state_dir.display());
-    println!("Canonical projection:");
+    println!("Install health:");
+    println!(
+        "  config: {}",
+        if config_path.exists() { "ok" } else { "not ok" }
+    );
+    println!(
+        "  ignored_runtime_paths: {}",
+        if ignore_rules_current { "ok" } else { "not ok" }
+    );
+    println!("Projection rebuild:");
     println!(
         "  state_dir: {}",
         if state_dir.is_dir() { "ok" } else { "not ok" }
@@ -1982,6 +1996,12 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
     println!(
         "  tables: {}",
         crate::db::CANONICAL_PROJECTION_TABLES.join(", ")
+    );
+    println!("Cache health:");
+    println!("  cache_dir: {}", optional_dir_status(&cache_dir));
+    println!(
+        "  projection_metadata: {}",
+        if projection_fresh { "ok" } else { "stale" }
     );
     println!("Runtime state:");
     println!(
@@ -2000,17 +2020,31 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
             "not ok"
         }
     );
+    println!("  diagnostics: {diagnostics}");
     println!("Compatibility:");
-    println!(
-        "  export_repair_current: {}",
-        if export_fresh { "ok" } else { "not ok" }
-    );
     println!("  tables: {}", crate::db::COMPATIBILITY_TABLES.join(", "));
     println!("Legacy health:");
     for (key, value) in health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });
     }
     Ok(())
+}
+
+fn runtime_gitignore_entries_present(repo_root: &Path) -> bool {
+    let Ok(gitignore) = std::fs::read_to_string(repo_root.join(".gitignore")) else {
+        return false;
+    };
+    crate::commands::init::ROOT_GITIGNORE_ENTRIES
+        .iter()
+        .all(|entry| gitignore.lines().any(|line| line.trim() == *entry))
+}
+
+fn optional_dir_status(path: &Path) -> &'static str {
+    if path.is_dir() {
+        "ok"
+    } else {
+        "missing (optional)"
+    }
 }
 
 pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {

@@ -17,7 +17,7 @@ Install `cargo-nextest` before running the default Rust test command:
 | `cargo test --test smoke_tests` | smoke scenarios |
 | `atelier export --check` | canonical record and derived projection freshness |
 | `atelier lint` | tracker structure |
-| `atelier doctor` | tracker runtime and rebuild health |
+| `atelier doctor` | tracker install, cache, projection-rebuild, diagnostics, and runtime health |
 
 `atelier workflow validate` failures are command failures by default. Mission
 completion is valid only when all linked work is closed, required evidence is
