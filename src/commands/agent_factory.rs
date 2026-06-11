@@ -1,7 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Local, Utc};
-use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -10,14 +9,13 @@ use crate::db::Database;
 use crate::models::{Comment, Issue};
 use crate::utils::format_issue_id;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct IssueSummary {
     pub id: String,
     pub title: String,
     pub status: String,
     pub issue_type: String,
     pub priority: String,
-    pub labels: Vec<String>,
     pub parent: Option<String>,
 }
 
@@ -42,18 +40,14 @@ struct DependencyListRow {
     blocker_priority: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct DependencySummary {
     pub id: String,
-    pub title: String,
-    pub status: String,
-    pub priority: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct IssueObject {
     pub id: String,
-    pub canonical_id: String,
     pub title: String,
     pub description: Option<String>,
     pub acceptance_criteria: Option<String>,
@@ -62,81 +56,20 @@ pub struct IssueObject {
     pub priority: String,
     pub labels: Vec<String>,
     pub parent: Option<String>,
-    pub dependencies: Vec<DependencySummary>,
-    pub dependents: Vec<DependencySummary>,
     pub notes: Vec<NoteObject>,
     pub assignee: Option<String>,
     pub owner: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    pub started_at: Option<String>,
     pub closed_at: Option<String>,
     pub close_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct NoteObject {
-    pub id: String,
-    pub author: Option<String>,
     pub kind: String,
     pub created_at: String,
     pub body: String,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ErrorCode {
-    NotFound,
-    InvalidInput,
-    InvalidDependency,
-    Blocked,
-    StaleExport,
-    SchemaMismatch,
-    DirtyTracker,
-    StorageError,
-}
-
-impl ErrorCode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ErrorCode::NotFound => "not_found",
-            ErrorCode::InvalidInput => "invalid_input",
-            ErrorCode::InvalidDependency => "invalid_dependency",
-            ErrorCode::Blocked => "blocked",
-            ErrorCode::StaleExport => "stale_export",
-            ErrorCode::SchemaMismatch => "schema_mismatch",
-            ErrorCode::DirtyTracker => "dirty_tracker",
-            ErrorCode::StorageError => "storage_error",
-        }
-    }
-}
-
-pub fn print_success(command: &str, data: Value) -> Result<()> {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "ok": true,
-            "command": command,
-            "data": data,
-            "warnings": []
-        }))?
-    );
-    Ok(())
-}
-
-pub fn print_error(command: &str, code: ErrorCode, message: &str, details: Value) -> Result<()> {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "ok": false,
-            "command": command,
-            "error": {
-                "code": code.as_str(),
-                "message": message,
-                "details": details
-            }
-        }))?
-    );
-    Ok(())
 }
 
 pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
@@ -181,14 +114,7 @@ fn split_acceptance(description: Option<&str>) -> (Option<String>, Option<String
 }
 
 fn note_object(comment: Comment) -> NoteObject {
-    let author = comment
-        .content
-        .strip_prefix("Author: ")
-        .and_then(|rest| rest.lines().next())
-        .map(str::to_string);
     NoteObject {
-        id: comment.id.to_string(),
-        author,
         kind: comment.kind,
         created_at: comment.created_at.to_rfc3339(),
         body: comment.content,
@@ -224,8 +150,6 @@ fn activity_note_objects(issue_id: &str) -> Result<Vec<NoteObject>> {
             )
         })
         .map(|activity| NoteObject {
-            id: activity.id,
-            author: Some(activity.actor),
             kind: activity.event_type.to_string(),
             created_at: activity.created_at.to_rfc3339(),
             body: activity.body,
@@ -285,9 +209,6 @@ fn dependency_summary(db: &Database, id: &str) -> Result<DependencySummary> {
         .ok_or_else(|| anyhow!("Dependency issue {} was not found", format_issue_id(id)))?;
     Ok(DependencySummary {
         id: issue_id_for_agent(db, &issue)?,
-        title: issue.title,
-        status: issue.status,
-        priority: issue.priority,
     })
 }
 
@@ -298,20 +219,6 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
         Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
         None => None,
     };
-
-    let mut dependencies = db
-        .get_blockers(&issue.id)?
-        .into_iter()
-        .map(|id| dependency_summary(db, &id))
-        .collect::<Result<Vec<_>>>()?;
-    dependencies.sort_by(|a, b| a.id.cmp(&b.id));
-
-    let mut dependents = db
-        .get_blocking(&issue.id)?
-        .into_iter()
-        .map(|id| dependency_summary(db, &id))
-        .collect::<Result<Vec<_>>>()?;
-    dependents.sort_by(|a, b| a.id.cmp(&b.id));
 
     let raw_comments = db.get_comments(&issue.id)?;
     let imported_owner = comment_metadata_value(&raw_comments, "owner");
@@ -327,7 +234,6 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
 
     Ok(IssueObject {
         id: issue_id_for_agent(db, &issue)?,
-        canonical_id: issue.id.clone(),
         title: issue.title,
         description,
         acceptance_criteria,
@@ -335,8 +241,6 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
         issue_type: issue.issue_type,
         priority: issue.priority,
         parent,
-        dependencies,
-        dependents,
         notes: comments,
         assignee: label_value(&labels, "assignee:")
             .or(imported_assignee)
@@ -345,21 +249,18 @@ pub fn issue_object(db: &Database, issue: Issue) -> Result<IssueObject> {
         labels,
         created_at: issue.created_at.to_rfc3339(),
         updated_at: issue.updated_at.to_rfc3339(),
-        started_at: None,
         closed_at: issue.closed_at.map(|dt| dt.to_rfc3339()),
         close_reason,
     })
 }
 
 fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
-    let labels = db.get_labels(&issue.id)?;
     Ok(IssueSummary {
         id: issue_id_for_agent(db, &issue)?,
         title: issue.title,
         status: issue.status,
         issue_type: issue.issue_type,
         priority: issue.priority,
-        labels,
         parent: issue
             .parent_id
             .map(|id| dependency_summary(db, &id).map(|summary| summary.id))
@@ -367,15 +268,11 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
     })
 }
 
-pub fn show(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
+pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
-    if json_output {
-        print_success("issue.show", serde_json::to_value(object)?)
-    } else {
-        render_issue_show_human(db, &id, &object)
-    }
+    render_issue_show_human(db, &id, &object)
 }
 
 fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObject) -> Result<()> {
@@ -657,7 +554,6 @@ pub fn list(
     status: Option<&str>,
     label: Option<&str>,
     priority: Option<&str>,
-    json_output: bool,
     quiet: bool,
 ) -> Result<()> {
     let items = db
@@ -665,20 +561,7 @@ pub fn list(
         .into_iter()
         .map(|issue| issue_summary(db, issue))
         .collect::<Result<Vec<_>>>()?;
-    if json_output {
-        print_success(
-            "issue.list",
-            json!({
-                "items": items,
-                "count": items.len(),
-                "filters": {
-                    "status": status,
-                    "label": label,
-                    "priority": priority
-                }
-            }),
-        )
-    } else if items.is_empty() {
+    if items.is_empty() {
         println!("No issues found.");
         Ok(())
     } else if quiet {
@@ -689,18 +572,13 @@ pub fn list(
     }
 }
 
-pub fn ready(db: &Database, json_output: bool, quiet: bool) -> Result<()> {
+pub fn ready(db: &Database, quiet: bool) -> Result<()> {
     let items = db
         .list_ready_issues()?
         .into_iter()
         .map(|issue| issue_summary(db, issue))
         .collect::<Result<Vec<_>>>()?;
-    if json_output {
-        print_success(
-            "issue.ready",
-            json!({ "items": items, "count": items.len() }),
-        )
-    } else if items.is_empty() {
+    if items.is_empty() {
         let blocked_count = db.list_blocked_issues()?.len();
         println!("No issues ready to work on ({} blocked).", blocked_count);
         Ok(())
@@ -712,7 +590,7 @@ pub fn ready(db: &Database, json_output: bool, quiet: bool) -> Result<()> {
     }
 }
 
-pub fn search(db: &Database, query: &str, json_output: bool, quiet: bool) -> Result<()> {
+pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
     let lowercase = query.to_lowercase();
     let mut items = Vec::new();
     for issue in db.list_issues(Some("all"), None, None)? {
@@ -726,12 +604,7 @@ pub fn search(db: &Database, query: &str, json_output: bool, quiet: bool) -> Res
             items.push(issue_summary(db, issue)?);
         }
     }
-    if json_output {
-        print_success(
-            "issue.search",
-            json!({ "query": query, "items": items, "count": items.len() }),
-        )
-    } else if items.is_empty() {
+    if items.is_empty() {
         println!("No issues found matching '{query}'.");
         Ok(())
     } else if quiet {
@@ -915,7 +788,7 @@ pub struct CreateInput<'a> {
     pub parent: Option<&'a str>,
 }
 
-pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Result<()> {
+pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
     validate_priority(input.priority)?;
     let issue_type = input.issue_type.unwrap_or("task");
     crate::db::validate_issue_type(issue_type)?;
@@ -940,19 +813,15 @@ pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Resul
     }
     let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
-    if json_output {
-        print_success("issue.create", serde_json::to_value(object)?)
-    } else {
-        println!("Created issue {}: {}", object.id, object.title);
-        println!("Type:     {}", object.issue_type);
-        println!("Priority: {}", object.priority);
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier issue show {}", object.id);
-        println!("  atelier work start {}", object.id);
-        Ok(())
-    }
+    println!("Created issue {}: {}", object.id, object.title);
+    println!("Type:     {}", object.issue_type);
+    println!("Priority: {}", object.priority);
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier issue show {}", object.id);
+    println!("  atelier work start {}", object.id);
+    Ok(())
 }
 
 pub struct UpdateInput<'a> {
@@ -967,7 +836,7 @@ pub struct UpdateInput<'a> {
     pub append_notes: Option<&'a str>,
 }
 
-pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Result<()> {
+pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     let id = resolve_id(db, input.issue_ref)?;
     let previous = db.require_issue(&id)?;
     let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
@@ -1089,45 +958,27 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
 
     let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
-    if json_output {
-        print_success(
-            "issue.update",
-            json!({
-                "issue": object,
-                "previous_assignee": previous_assignee,
-                "assignee": object.assignee,
-                "changed": previous.updated_at != db.require_issue(&id)?.updated_at || !changed_fields.is_empty(),
-                "changed_fields": changed_fields
-            }),
-        )
-    } else {
-        println!(
-            "Updated issue {} ({})",
-            object.id,
-            changed_fields.join(", ")
-        );
-        println!("Status:   {}", object.status);
-        println!("Priority: {}", object.priority);
-        if let Some(assignee) = &object.assignee {
-            println!("Assignee: {assignee}");
-        }
-        if let Some(parent) = &object.parent {
-            println!("Parent:   {parent}");
-        }
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        println!("  atelier issue show {}", object.id);
-        Ok(())
+    println!(
+        "Updated issue {} ({})",
+        object.id,
+        changed_fields.join(", ")
+    );
+    println!("Status:   {}", object.status);
+    println!("Priority: {}", object.priority);
+    if let Some(assignee) = &object.assignee {
+        println!("Assignee: {assignee}");
     }
+    if let Some(parent) = &object.parent {
+        println!("Parent:   {parent}");
+    }
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier issue show {}", object.id);
+    Ok(())
 }
 
-pub fn close(
-    db: &Database,
-    issue_ref: &str,
-    reason: Option<&str>,
-    json_output: bool,
-) -> Result<()> {
+pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let open_blockers = db
         .get_blockers(&id)?
@@ -1155,58 +1006,32 @@ pub fn close(
     }
     let issue = db.require_issue(&id)?;
     let object = issue_object(db, issue)?;
-    if json_output {
-        print_success("issue.close", serde_json::to_value(object)?)
-    } else {
-        println!(
-            "Closed issue {}{}",
-            object.id,
-            reason.map(|r| format!(": {r}")).unwrap_or_default()
-        );
-        Ok(())
-    }
+    println!(
+        "Closed issue {}{}",
+        object.id,
+        reason.map(|r| format!(": {r}")).unwrap_or_default()
+    );
+    Ok(())
 }
 
-pub fn reopen(db: &Database, issue_ref: &str, json_output: bool) -> Result<()> {
+pub fn reopen(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let previous = db.require_issue(&id)?;
     db.reopen_issue(&id)?;
     crate::commands::activity_log::record_status_changed(&id, &previous.status, "open")?;
     let object = issue_object(db, db.require_issue(&id)?)?;
-    if json_output {
-        print_success("issue.reopen", serde_json::to_value(object)?)
-    } else {
-        println!("Reopened issue {}", object.id);
-        Ok(())
-    }
+    println!("Reopened issue {}", object.id);
+    Ok(())
 }
 
-pub fn dep_add(
-    db: &Database,
-    blocked_ref: &str,
-    blocker_ref: &str,
-    json_output: bool,
-) -> Result<()> {
+pub fn dep_add(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
     let changed = db.add_dependency(&blocked_id, &blocker_id)?;
-    dep_result(
-        db,
-        "dep.add",
-        "add",
-        &blocked_id,
-        &blocker_id,
-        changed,
-        json_output,
-    )
+    dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
 }
 
-pub fn dep_remove(
-    db: &Database,
-    blocked_ref: &str,
-    blocker_ref: &str,
-    json_output: bool,
-) -> Result<()> {
+pub fn dep_remove(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
     let changed = db.remove_dependency(&blocked_id, &blocker_id)?;
@@ -1217,7 +1042,6 @@ pub fn dep_remove(
         &blocked_id,
         &blocker_id,
         changed,
-        json_output,
     )
 }
 
@@ -1228,7 +1052,6 @@ fn dep_result(
     blocked_id: &str,
     blocker_id: &str,
     changed: bool,
-    json_output: bool,
 ) -> Result<()> {
     let blocked = db.require_issue(blocked_id)?;
     let blocker = db.require_issue(blocker_id)?;
@@ -1242,18 +1065,15 @@ fn dep_result(
         "state": dependency_state(action, changed),
         "changed": changed
     });
-    if json_output {
-        print_success(command, data)
-    } else {
-        let blocked = data["blocked"].as_str().unwrap_or_default();
-        let blocker = data["blocker"].as_str().unwrap_or_default();
-        let state = data["state"].as_str().unwrap_or_default();
-        match action {
-            "remove" => println!("{blocked} is no longer blocked by {blocker} ({state})"),
-            _ => println!("{blocked} is blocked by {blocker} ({state})"),
-        }
-        Ok(())
+    let _ = command;
+    let blocked = data["blocked"].as_str().unwrap_or_default();
+    let blocker = data["blocker"].as_str().unwrap_or_default();
+    let state = data["state"].as_str().unwrap_or_default();
+    match action {
+        "remove" => println!("{blocked} is no longer blocked by {blocker} ({state})"),
+        _ => println!("{blocked} is blocked by {blocker} ({state})"),
     }
+    Ok(())
 }
 
 fn dependency_state(action: &str, changed: bool) -> &'static str {
@@ -1266,8 +1086,7 @@ fn dependency_state(action: &str, changed: bool) -> &'static str {
     }
 }
 
-pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result<()> {
-    let mut edges = Vec::new();
+pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     let mut rows = Vec::new();
     let issues = if let Some(issue_ref) = issue_ref {
         let id = resolve_id(db, issue_ref)?;
@@ -1288,18 +1107,9 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Re
                 blocker_status: blocker.status.clone(),
                 blocker_priority: blocker.priority.clone(),
             });
-            edges.push(json!({
-                "source": issue_id_for_agent(db, &blocker)?,
-                "target": issue_id_for_agent(db, &issue)?,
-                "blocked": issue_id_for_agent(db, &issue)?,
-                "blocker": issue_id_for_agent(db, &blocker)?,
-                "type": "blocks"
-            }));
         }
     }
-    if json_output {
-        print_success("dep.list", json!({ "items": edges, "count": edges.len() }))
-    } else if rows.is_empty() {
+    if rows.is_empty() {
         println!("No dependencies found.");
         Ok(())
     } else {
@@ -1327,7 +1137,7 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Re
     }
 }
 
-pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result<()> {
+pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     let issues = if let Some(issue_ref) = issue_ref {
         let id = resolve_id(db, issue_ref)?;
         vec![db.require_issue(&id)?]
@@ -1360,14 +1170,7 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
             }
         }
     }
-    let data = json!({
-        "checked": if issue_ref.is_some() { 1 } else { db.list_issues(Some("all"), None, None)?.len() },
-        "findings": findings,
-        "finding_count": findings.len()
-    });
-    if json_output {
-        print_success("lint", data)?;
-    } else if findings.is_empty() {
+    if findings.is_empty() {
         println!("Lint passed.");
     } else {
         println!("Lint found {} issue(s):", findings.len());
@@ -1382,7 +1185,7 @@ pub fn lint(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result
     }
 }
 
-pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bool) -> Result<()> {
+pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
     let atelier_dir = repo_root.join(".atelier");
     let db_path = repo_root.join(".atelier").join("state.db");
     let export_fresh = super::export::canonical_stale_entries(db, state_dir)
@@ -1401,171 +1204,88 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path, json_output: bo
     health.insert("rebuild_ready", rebuild_ready);
     health.insert("runtime_state", atelier_dir.is_dir());
     health.insert("runtime_tables", runtime_tables_available);
-    if json_output {
-        print_success(
-            "doctor",
-            json!({
-                "database_path": db_path,
-                "state_path": state_dir,
-                "schema_version": 1,
-                "health": health,
-                "sections": {
-                    "canonical_projection": {
-                        "state_dir": state_dir.is_dir(),
-                        "rebuild_ready": rebuild_ready,
-                        "projection_fresh": projection_fresh,
-                        "tables": crate::db::CANONICAL_PROJECTION_TABLES
-                    },
-                    "runtime_state": {
-                        "directory": atelier_dir.is_dir(),
-                        "database": db_path.exists(),
-                        "local_tables": runtime_tables_available,
-                        "tables": crate::db::RUNTIME_STATE_TABLES
-                    },
-                    "compatibility": {
-                        "export_repair_current": export_fresh,
-                        "tables": crate::db::COMPATIBILITY_TABLES
-                    }
-                }
-            }),
-        )
-    } else {
-        println!("Database: {}", db_path.display());
-        println!("State: {}", state_dir.display());
-        println!("Canonical projection:");
-        println!(
-            "  state_dir: {}",
-            if state_dir.is_dir() { "ok" } else { "not ok" }
-        );
-        println!(
-            "  rebuild_ready: {}",
-            if rebuild_ready { "ok" } else { "not ok" }
-        );
-        println!(
-            "  projection_fresh: {}",
-            if projection_fresh { "ok" } else { "not ok" }
-        );
-        println!("Runtime state:");
-        println!(
-            "  directory: {}",
-            if atelier_dir.is_dir() { "ok" } else { "not ok" }
-        );
-        println!(
-            "  database: {}",
-            if db_path.exists() { "ok" } else { "not ok" }
-        );
-        println!(
-            "  local_tables: {}",
-            if runtime_tables_available {
-                "ok"
-            } else {
-                "not ok"
-            }
-        );
-        println!("Compatibility:");
-        println!(
-            "  export_repair_current: {}",
-            if export_fresh { "ok" } else { "not ok" }
-        );
-        println!("Legacy health:");
-        for (key, value) in health {
-            println!("{key}: {}", if value { "ok" } else { "not ok" });
+    println!("Database: {}", db_path.display());
+    println!("State: {}", state_dir.display());
+    println!("Canonical projection:");
+    println!(
+        "  state_dir: {}",
+        if state_dir.is_dir() { "ok" } else { "not ok" }
+    );
+    println!(
+        "  rebuild_ready: {}",
+        if rebuild_ready { "ok" } else { "not ok" }
+    );
+    println!(
+        "  projection_fresh: {}",
+        if projection_fresh { "ok" } else { "not ok" }
+    );
+    println!(
+        "  tables: {}",
+        crate::db::CANONICAL_PROJECTION_TABLES.join(", ")
+    );
+    println!("Runtime state:");
+    println!(
+        "  directory: {}",
+        if atelier_dir.is_dir() { "ok" } else { "not ok" }
+    );
+    println!(
+        "  database: {}",
+        if db_path.exists() { "ok" } else { "not ok" }
+    );
+    println!(
+        "  local_tables: {}",
+        if runtime_tables_available {
+            "ok"
+        } else {
+            "not ok"
         }
-        Ok(())
+    );
+    println!("Compatibility:");
+    println!(
+        "  export_repair_current: {}",
+        if export_fresh { "ok" } else { "not ok" }
+    );
+    println!("  tables: {}", crate::db::COMPATIBILITY_TABLES.join(", "));
+    println!("Legacy health:");
+    for (key, value) in health {
+        println!("{key}: {}", if value { "ok" } else { "not ok" });
     }
+    Ok(())
 }
 
-pub fn export_canonical(
-    db: &Database,
-    state_dir: &Path,
-    check: bool,
-    json_output: bool,
-) -> Result<()> {
+pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
     if check {
         let stale = super::export::canonical_stale_entries(db, state_dir)?;
         if stale.is_empty() {
-            if json_output {
-                print_success(
-                    "export.check",
-                    json!({ "fresh": true, "state_path": state_dir, "stale": [] }),
-                )
-            } else {
-                println!("Canonical export is current");
-                println!("State: {}", state_dir.display());
-                Ok(())
-            }
-        } else if json_output {
-            print_error(
-                "export.check",
-                ErrorCode::StaleExport,
-                "Canonical state or projection index is stale; run `atelier rebuild` for projection drift or `atelier export` only for compatibility repair",
-                json!({ "state_path": state_dir, "stale": stale }),
-            )?;
-            std::process::exit(1);
+            println!("Canonical export is current");
+            println!("State: {}", state_dir.display());
+            Ok(())
         } else {
             bail!("Canonical export is stale:\n{}", stale.join("\n"))
         }
     } else {
         super::export::run_canonical(db, state_dir, false)?;
-        if json_output {
-            print_success(
-                "export",
-                json!({ "state_path": state_dir, "written": true }),
-            )
-        } else {
-            println!("Canonical export written");
-            println!("State: {}", state_dir.display());
-            println!();
-            println!("Next Commands");
-            println!("-------------");
-            println!("  atelier export --check");
-            Ok(())
-        }
-    }
-}
-
-pub fn rebuild(state_dir: &Path, db_path: &Path, json_output: bool) -> Result<()> {
-    super::rebuild::run(state_dir, db_path)?;
-    if json_output {
-        print_success(
-            "rebuild",
-            json!({ "state_path": state_dir, "database_path": db_path, "rebuilt": true }),
-        )
-    } else {
-        println!("Runtime state rebuilt");
-        println!("State:    {}", state_dir.display());
-        println!("Database: {}", db_path.display());
+        println!("Canonical export written");
+        println!("State: {}", state_dir.display());
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier doctor");
         println!("  atelier export --check");
         Ok(())
     }
 }
 
-pub fn classify_error(error: &anyhow::Error) -> ErrorCode {
-    let message = error.to_string();
-    if message.contains("not found") || message.contains("was not found") {
-        ErrorCode::NotFound
-    } else if message.contains("block") && message.contains("open blockers") {
-        ErrorCode::Blocked
-    } else if message.contains("dependency")
-        || message.contains("block itself")
-        || message.contains("circular")
-    {
-        ErrorCode::InvalidDependency
-    } else if message.contains("stale") {
-        ErrorCode::StaleExport
-    } else if message.contains("schema") || message.contains("manifest") {
-        ErrorCode::SchemaMismatch
-    } else if message.contains("dirty") {
-        ErrorCode::DirtyTracker
-    } else if message.contains("Invalid") || message.contains("Nothing to update") {
-        ErrorCode::InvalidInput
-    } else {
-        ErrorCode::StorageError
-    }
+pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
+    super::rebuild::run(state_dir, db_path)?;
+    println!("Runtime state rebuilt");
+    println!("State:    {}", state_dir.display());
+    println!("Database: {}", db_path.display());
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier doctor");
+    println!("  atelier export --check");
+    Ok(())
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {

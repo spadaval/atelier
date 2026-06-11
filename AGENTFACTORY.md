@@ -40,9 +40,17 @@ concrete files, commands, and product-specific skills.
   - `atelier issue ready`
   - `atelier issue list --status open`
   - `atelier issue show <id>`
+  - `atelier mission show <id>`
   - `atelier issue update <id> --claim`
   - `atelier issue update <id> --append-notes "..."`
   - `atelier issue close <id> --reason "..."`
+- Human-first workflow: do not use command-result `--json` as the Agent Factory
+  automation contract. Inspect records with focused human output, use quiet
+  output only for commands that naturally acknowledge one ID/count/status, and
+  run explicit drill-down commands such as `atelier issue show <id>`,
+  `atelier mission show <id>`, `atelier issue ready`,
+  `atelier workflow validate mission <id>`, `atelier export --check`,
+  `atelier lint`, and `atelier doctor` when more state is needed.
 - Sync and state commands:
   - `git pull`
   - `atelier rebuild`

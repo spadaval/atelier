@@ -15,7 +15,6 @@ pub fn create(
     constraints: Vec<String>,
     risks: Vec<String>,
     validation: Vec<String>,
-    json_output: bool,
 ) -> Result<()> {
     let data = json!({
         "constraints": constraints,
@@ -28,14 +27,14 @@ pub fn create(
     });
     let id = db.create_record(KIND, title, "open", body, &data.to_string())?;
     let record = db.require_record(KIND, &id)?;
-    print_record(db, &record, json_output)
+    print_record(&record)
 }
 
-pub fn show(db: &Database, id: &str, json_output: bool) -> Result<()> {
-    view(db, id, json_output)
+pub fn show(db: &Database, id: &str) -> Result<()> {
+    view(db, id)
 }
 
-pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
+pub fn view(db: &Database, id: &str) -> Result<()> {
     let mission = db.require_record(KIND, id)?;
     let links = db.list_record_links(KIND, id)?;
     let mut plans = Vec::new();
@@ -91,27 +90,6 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
         }
     }
 
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "mission": record_json(&mission)?,
-                "plans": plans,
-                "milestones": milestones,
-                "evidence": evidence,
-                "work": work,
-                "mission_blockers": mission_blockers,
-                "evidence_gaps": if evidence.is_empty() {
-                    vec!["No evidence records are linked to this mission.".to_string()]
-                } else {
-                    Vec::<String>::new()
-                },
-                "links": links,
-            }))?
-        );
-        return Ok(());
-    }
-
     render_mission_show_human(
         &mission,
         &plans,
@@ -123,16 +101,8 @@ pub fn view(db: &Database, id: &str, json_output: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()> {
+pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     let records = db.list_records(KIND, status)?;
-    if json_output {
-        let data: Vec<Value> = records.iter().map(record_json).collect::<Result<_>>()?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "data": data }))?
-        );
-        return Ok(());
-    }
     let mut rows = records
         .into_iter()
         .map(|record| {
@@ -155,7 +125,6 @@ pub fn update(
     constraints: Vec<String>,
     risks: Vec<String>,
     validation: Vec<String>,
-    json_output: bool,
 ) -> Result<()> {
     if title.is_none()
         && status.is_none()
@@ -180,16 +149,10 @@ pub fn update(
         Some(&serde_json::to_string(&data)?),
     )?;
     let record = db.require_record(KIND, id)?;
-    print_record(db, &record, json_output)
+    print_record(&record)
 }
 
-fn print_record(db: &Database, record: &DomainRecord, json_output: bool) -> Result<()> {
-    if json_output {
-        let mut data = record_json(record)?;
-        data["links"] = serde_json::to_value(db.list_record_links(KIND, &record.id)?)?;
-        println!("{}", serde_json::to_string_pretty(&data)?);
-        return Ok(());
-    }
+fn print_record(record: &DomainRecord) -> Result<()> {
     println!("Mission {}: {}", record.id, record.title);
     println!("Status: {}", record.status);
     if let Some(body) = &record.body {
@@ -624,19 +587,6 @@ fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
 
 fn value_str<'a>(value: &'a Value, key: &str) -> &'a str {
     value[key].as_str().unwrap_or("(unknown)")
-}
-
-fn record_json(record: &DomainRecord) -> Result<Value> {
-    Ok(json!({
-        "id": record.id,
-        "kind": record.kind,
-        "title": record.title,
-        "status": record.status,
-        "body": record.body,
-        "data": serde_json::from_str::<Value>(&record.data_json)?,
-        "created_at": record.created_at.to_rfc3339(),
-        "updated_at": record.updated_at.to_rfc3339()
-    }))
 }
 
 fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str, &'a str)> {

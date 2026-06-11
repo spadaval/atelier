@@ -6,8 +6,10 @@ may change to become more scannable, but it must keep enough text context for
 non-interactive logs, narrow terminals, and colorless environments.
 
 This document defines the visual and structural rules for default non-JSON
-output. It is the implementation guide for improving mission detail, issue
-detail, list/ready/search queues, and compact hierarchy views.
+output. It is also the migration guide for scripts and agents that previously
+expected command-result JSON from ordinary Atelier commands. It is the
+implementation guide for improving mission detail, issue detail,
+list/ready/search queues, and compact hierarchy views.
 
 ## Goals
 
@@ -143,6 +145,40 @@ Blocked high
   atelier-1236 epic  Markdown-first cutover - blocked by atelier-0009
 ```
 
+## Script And Agent Migration
+
+Atelier no longer treats `atelier <command> --json` command-result envelopes as
+the stable automation API for normal tracker workflows. Existing scripts and
+agents should migrate by choosing the smallest supported surface that matches
+their need:
+
+- Use quiet acknowledgements for simple command composition. Mutating commands
+  should print only the affected ID, changed fields, and recovery guidance when
+  quiet output is requested. Scripts may branch on exit status and the stable
+  IDs or paths in quiet output, but should not parse full detail views.
+- Read canonical records under `.atelier-state/` when durable tracker state is
+  needed. These Markdown records are the reviewable, mergeable source of truth
+  for issues, missions, milestones, plans, evidence, and activity sidecars.
+- Rebuild local projections with `atelier rebuild` after checkout, pull, clone,
+  or merge. `.atelier/state.db` and projection metadata are rebuildable local
+  indexes, not durable API payloads to commit.
+- Use export and check commands for freshness and handoff gates. `atelier
+  export --check`, `atelier lint`, and `atelier doctor` are the supported
+  noninteractive health checks for stale records, invalid tracker state, and
+  broken runtime setup.
+- Use focused drill-down commands for targeted state. Prefer commands such as
+  `atelier issue show <id>`, `atelier mission show <id>`, `atelier issue ready`,
+  `atelier issue blocked`, `atelier issue children <id>`, and `atelier dep
+  add/remove` over scraping broad human reports.
+- Use documented authored JSON inputs and derived projection files only where a
+  specific document defines that contract, such as bulk-plan input JSON or a
+  future Mission Control projection.
+
+Full human output is allowed to change for readability, grouping, width, color,
+and next-command guidance. Treat it as an operator interface, not a stable
+machine API. Scripts that scrape section headings, table spacing, prose, or
+complete detail output must be migrated to one of the supported surfaces above.
+
 ## Compact Hierarchy Views
 
 Use a compact hierarchy view when the operator needs shape rather than every
@@ -222,7 +258,9 @@ Human-output changes need focused tests at the behavior boundary they affect:
 - queues with mixed priority, type, status, blockers, and parent context;
 - compact hierarchy with deep trees, wide sibling sets, and closed/open mixes;
 - narrow-width or bounded-output behavior when wrapping or omission is involved;
-- JSON compatibility tests for every command whose human output changes.
+- migration checks proving scripts can use quiet acknowledgements, canonical
+  records, projections, or focused drill-down commands without parsing full
+  human output when a command previously had command-result JSON consumers.
 
 Tests should assert durable signals and structure, not incidental whitespace
 unless the test is specifically for a formatter primitive.

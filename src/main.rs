@@ -716,7 +716,7 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // Dispatch helpers for canonical subcommands
 // ============================================================================
 
-fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> {
+fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
     match action {
         IssueCommands::Create {
             title,
@@ -729,7 +729,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             work,
         } => {
             let db = get_db()?;
-            if json || issue_type.is_some() || parent.is_some() {
+            if issue_type.is_some() || parent.is_some() {
                 commands::agent_factory::create(
                     &db,
                     commands::agent_factory::CreateInput {
@@ -740,7 +740,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                         labels: &label,
                         parent: parent.as_deref(),
                     },
-                    json,
                 )?;
                 return export_current_state(&db);
             }
@@ -821,39 +820,23 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
             priority,
         } => {
             let db = get_fresh_projection_db()?;
-            if json {
-                commands::agent_factory::list(
-                    &db,
-                    Some(&status),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    true,
-                    quiet,
-                )
-            } else {
-                commands::agent_factory::list(
-                    &db,
-                    Some(&status),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    false,
-                    quiet,
-                )
-            }
+            commands::agent_factory::list(
+                &db,
+                Some(&status),
+                label.as_deref(),
+                priority.as_deref(),
+                quiet,
+            )
         }
 
         IssueCommands::Search { query } => {
             let db = get_fresh_projection_db()?;
-            if json {
-                commands::agent_factory::search(&db, &query, true, quiet)
-            } else {
-                commands::agent_factory::search(&db, &query, false, quiet)
-            }
+            commands::agent_factory::search(&db, &query, quiet)
         }
 
         IssueCommands::Show { id } => {
             let db = get_fresh_projection_db()?;
-            commands::agent_factory::show(&db, &id, json)
+            commands::agent_factory::show(&db, &id)
         }
 
         IssueCommands::Update {
@@ -886,7 +869,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
                     claim,
                     append_notes: append_notes.as_deref(),
                 },
-                json,
             )?;
             export_current_state(&db)
         }
@@ -894,7 +876,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
         IssueCommands::Close { id, reason } => {
             let db = get_db()?;
             let _ = quiet;
-            commands::agent_factory::close(&db, &id, reason.as_deref(), json)?;
+            commands::agent_factory::close(&db, &id, reason.as_deref())?;
             export_current_state(&db)
         }
 
@@ -905,7 +887,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Reopen { id } => {
             let db = get_db()?;
-            commands::agent_factory::reopen(&db, &id, json)?;
+            commands::agent_factory::reopen(&db, &id)?;
             export_current_state(&db)
         }
 
@@ -938,36 +920,24 @@ fn dispatch_issue(action: IssueCommands, quiet: bool, json: bool) -> Result<()> 
 
         IssueCommands::Block { id, blocker } => {
             let db = get_db()?;
-            commands::agent_factory::dep_add(&db, &id, &blocker, json)?;
+            commands::agent_factory::dep_add(&db, &id, &blocker)?;
             export_current_state(&db)
         }
 
         IssueCommands::Unblock { id, blocker } => {
             let db = get_db()?;
-            commands::agent_factory::dep_remove(&db, &id, &blocker, json)?;
+            commands::agent_factory::dep_remove(&db, &id, &blocker)?;
             export_current_state(&db)
         }
 
         IssueCommands::Blocked => {
             let db = get_fresh_projection_db()?;
-            if json {
-                let items = db
-                    .list_blocked_issues()?
-                    .into_iter()
-                    .map(|issue| commands::agent_factory::issue_object(&db, issue))
-                    .collect::<Result<Vec<_>>>()?;
-                commands::agent_factory::print_success(
-                    "issue.blocked",
-                    serde_json::json!({ "items": items, "count": items.len() }),
-                )
-            } else {
-                commands::deps::list_blocked(&db)
-            }
+            commands::deps::list_blocked(&db)
         }
 
         IssueCommands::Ready => {
             let db = get_fresh_projection_db()?;
-            commands::agent_factory::ready(&db, json, quiet)
+            commands::agent_factory::ready(&db, quiet)
         }
 
         IssueCommands::Relate {
@@ -1034,7 +1004,6 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(&cli.log_level, &cli.log_format);
     let quiet = cli.quiet;
-    let json = false;
 
     let result = match cli.command {
         Commands::Init { force } => {
@@ -1042,7 +1011,7 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force)
         }
 
-        Commands::Issue { action } => dispatch_issue(action, quiet, json),
+        Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Export { output, check } => {
             let db = get_db()?;
@@ -1054,7 +1023,7 @@ fn run() -> Result<()> {
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
-            commands::agent_factory::export_canonical(&db, &state_dir, check, json)
+            commands::agent_factory::export_canonical(&db, &state_dir, check)
         }
 
         Commands::Rebuild { input } => {
@@ -1064,7 +1033,7 @@ fn run() -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
             let db_path = repo_root.join(".atelier").join("state.db");
-            commands::agent_factory::rebuild(&state_dir, &db_path, json)
+            commands::agent_factory::rebuild(&state_dir, &db_path)
         }
 
         Commands::ImportBeads { input, output } => {
@@ -1077,21 +1046,21 @@ fn run() -> Result<()> {
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| repo_root.join(".atelier-state"));
-            commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir, json)
+            commands::import::run_beads_jsonl(&db, std::path::Path::new(&input), &state_dir)
         }
 
         Commands::Dep { action } => match action {
             DepCommands::Add { blocked, blocker } => {
                 let db = get_db()?;
-                commands::agent_factory::dep_add(&db, &blocked, &blocker, json)
+                commands::agent_factory::dep_add(&db, &blocked, &blocker)
             }
             DepCommands::Remove { blocked, blocker } => {
                 let db = get_db()?;
-                commands::agent_factory::dep_remove(&db, &blocked, &blocker, json)
+                commands::agent_factory::dep_remove(&db, &blocked, &blocker)
             }
             DepCommands::List { issue } => {
                 let db = get_fresh_projection_db()?;
-                commands::agent_factory::dep_list(&db, issue.as_deref(), json)
+                commands::agent_factory::dep_list(&db, issue.as_deref())
             }
         },
 
@@ -1112,14 +1081,11 @@ fn run() -> Result<()> {
                         constraint,
                         risk,
                         validation,
-                        json,
                     )?;
                     export_current_state(&db)
                 }
-                MissionCommands::Show { id } => commands::mission::show(&db, &id, json),
-                MissionCommands::List { status } => {
-                    commands::mission::list(&db, status.as_deref(), json)
-                }
+                MissionCommands::Show { id } => commands::mission::show(&db, &id),
+                MissionCommands::List { status } => commands::mission::list(&db, status.as_deref()),
                 MissionCommands::Update {
                     id,
                     title,
@@ -1138,7 +1104,6 @@ fn run() -> Result<()> {
                         constraint,
                         risk,
                         validation,
-                        json,
                     )?;
                     export_current_state(&db)
                 }
@@ -1153,18 +1118,18 @@ fn run() -> Result<()> {
                     body,
                     reason,
                 } => {
-                    commands::plan::create(&db, &title, body.as_deref(), reason.as_deref(), json)?;
+                    commands::plan::create(&db, &title, body.as_deref(), reason.as_deref())?;
                     export_current_state(&db)
                 }
-                PlanCommands::Show { id } => commands::plan::show(&db, &id, json),
+                PlanCommands::Show { id } => commands::plan::show(&db, &id),
                 PlanCommands::Apply {
                     input,
                     dry_run,
                     validate_only,
-                } => commands::plan::apply(&db, &input, dry_run, validate_only, json),
-                PlanCommands::List { status } => commands::plan::list(&db, status.as_deref(), json),
+                } => commands::plan::apply(&db, &input, dry_run, validate_only),
+                PlanCommands::List { status } => commands::plan::list(&db, status.as_deref()),
                 PlanCommands::Revise { id, body, reason } => {
-                    commands::plan::revise(&db, &id, &body, reason.as_deref(), json)?;
+                    commands::plan::revise(&db, &id, &body, reason.as_deref())?;
                     export_current_state(&db)
                 }
                 PlanCommands::Link {
@@ -1173,7 +1138,7 @@ fn run() -> Result<()> {
                     target_id,
                     relation_type,
                 } => {
-                    commands::plan::link(&db, &id, &target_kind, &target_id, &relation_type, json)?;
+                    commands::plan::link(&db, &id, &target_kind, &target_id, &relation_type)?;
                     export_current_state(&db)
                 }
             }
@@ -1196,7 +1161,6 @@ fn run() -> Result<()> {
                         &target_kind,
                         &target_id,
                         &relation_type,
-                        json,
                     )?;
                     export_current_state(&db)
                 }
@@ -1214,11 +1178,10 @@ fn run() -> Result<()> {
                         &target_kind,
                         &target_id,
                         &relation_type,
-                        json,
                     )?;
                     export_current_state(&db)
                 }
-                LinkCommands::List { kind, id } => commands::link::list(&db, &kind, &id, json),
+                LinkCommands::List { kind, id } => commands::link::list(&db, &kind, &id),
             }
         }
 
@@ -1241,13 +1204,12 @@ fn run() -> Result<()> {
                         path.as_deref(),
                         uri.as_deref(),
                         producer.as_deref(),
-                        json,
                     )?;
                     export_current_state(&db)
                 }
-                EvidenceCommands::Show { id } => commands::evidence::show(&db, &id, json),
+                EvidenceCommands::Show { id } => commands::evidence::show(&db, &id),
                 EvidenceCommands::List { result } => {
-                    commands::evidence::list(&db, result.as_deref(), json)
+                    commands::evidence::list(&db, result.as_deref())
                 }
             }
         }
@@ -1266,7 +1228,6 @@ fn run() -> Result<()> {
                     &target_id,
                     &transition,
                     validator,
-                    json,
                 ),
             }
         }
@@ -1274,19 +1235,17 @@ fn run() -> Result<()> {
         Commands::Work { action } => {
             let db = get_db()?;
             match action {
-                WorkCommands::Start { id } => commands::work::start(&db, &id, json),
-                WorkCommands::Finish { id } => commands::work::finish(&db, &id, json),
-                WorkCommands::Status => commands::work::status(&db, json),
+                WorkCommands::Start { id } => commands::work::start(&db, &id),
+                WorkCommands::Finish { id } => commands::work::finish(&db, &id),
+                WorkCommands::Status => commands::work::status(&db),
                 WorkCommands::Worktree { action } => match action {
                     WorktreeCommands::For { id, path } => {
-                        commands::work::worktree_for(&db, &id, path.as_deref(), json)
+                        commands::work::worktree_for(&db, &id, path.as_deref())
                     }
-                    WorktreeCommands::Status => commands::work::worktree_status(&db, json),
-                    WorktreeCommands::Merge { id } => {
-                        commands::work::worktree_merge(&db, &id, json)
-                    }
+                    WorktreeCommands::Status => commands::work::worktree_status(&db),
+                    WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id),
                     WorktreeCommands::Remove { id, force } => {
-                        commands::work::worktree_remove(&db, &id, force, json)
+                        commands::work::worktree_remove(&db, &id, force)
                     }
                 },
             }
@@ -1296,19 +1255,19 @@ fn run() -> Result<()> {
             let db = get_db()?;
             match action {
                 WorktreeCommands::For { id, path } => {
-                    commands::work::worktree_for(&db, &id, path.as_deref(), json)
+                    commands::work::worktree_for(&db, &id, path.as_deref())
                 }
-                WorktreeCommands::Status => commands::work::worktree_status(&db, json),
-                WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id, json),
+                WorktreeCommands::Status => commands::work::worktree_status(&db),
+                WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id),
                 WorktreeCommands::Remove { id, force } => {
-                    commands::work::worktree_remove(&db, &id, force, json)
+                    commands::work::worktree_remove(&db, &id, force)
                 }
             }
         }
 
         Commands::Lint { id } => {
             let db = get_fresh_projection_db()?;
-            commands::agent_factory::lint(&db, id.as_deref(), json)
+            commands::agent_factory::lint(&db, id.as_deref())
         }
 
         Commands::Doctor => {
@@ -1318,7 +1277,7 @@ fn run() -> Result<()> {
                 .parent()
                 .ok_or_else(|| anyhow::anyhow!("Cannot determine repository root"))?;
             let state_dir = repo_root.join(".atelier-state");
-            commands::agent_factory::doctor(&db, repo_root, &state_dir, json)
+            commands::agent_factory::doctor(&db, repo_root, &state_dir)
         }
     };
 

@@ -1,6 +1,5 @@
 use anyhow::{bail, Context, Result};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,7 @@ use std::process::Command;
 use crate::db::Database;
 use crate::models::WorkAssociation;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct WorktreeStatus {
     path: String,
     branch: Option<String>,
@@ -22,14 +21,6 @@ struct WorktreeStatus {
     associated_work: Vec<WorkAssociation>,
     export_fresh: Option<bool>,
     export_errors: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct HookRun {
-    id: String,
-    status: String,
-    stdout: String,
-    stderr: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +42,7 @@ struct HookCommand {
     env: BTreeMap<String, String>,
 }
 
-pub fn start(db: &Database, id: &str, json_output: bool) -> Result<()> {
+pub fn start(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
     ensure_clean_worktree()?;
     let branch = current_branch().ok();
@@ -59,27 +50,15 @@ pub fn start(db: &Database, id: &str, json_output: bool) -> Result<()> {
     db.start_work_association(id, branch.as_deref(), Some(&path))?;
     crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
     ensure_session_work(db, id)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "issue": { "id": issue.id, "title": issue.title },
-                "branch": branch,
-                "worktree_path": path,
-                "agent_launched": false
-            }))?
-        );
-    } else {
-        println!("Started work on {} {}", issue.id, issue.title);
-        if let Some(branch) = branch {
-            println!("Branch: {branch}");
-        }
-        println!("Worktree: {path}");
+    println!("Started work on {} {}", issue.id, issue.title);
+    if let Some(branch) = branch {
+        println!("Branch: {branch}");
     }
+    println!("Worktree: {path}");
     Ok(())
 }
 
-pub fn finish(db: &Database, id: &str, json_output: bool) -> Result<()> {
+pub fn finish(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
     ensure_clean_worktree()?;
     let export_stale =
@@ -91,20 +70,7 @@ pub fn finish(db: &Database, id: &str, json_output: bool) -> Result<()> {
     if finished {
         crate::commands::activity_log::record_work_finished(id)?;
     }
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "issue": { "id": issue.id, "title": issue.title },
-                "finished": finished,
-                "validators": [{
-                    "validator": "durable_state_current",
-                    "passed": true,
-                    "reason": "canonical export is current"
-                }]
-            }))?
-        );
-    } else if finished {
+    if finished {
         println!("Finished work on {} {}", issue.id, issue.title);
     } else {
         println!("No active work association for {}", issue.id);
@@ -112,18 +78,8 @@ pub fn finish(db: &Database, id: &str, json_output: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn status(db: &Database, json_output: bool) -> Result<()> {
+pub fn status(db: &Database) -> Result<()> {
     let active = db.get_active_work_association()?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "active": active,
-                "worktrees": worktree_statuses(db)?
-            }))?
-        );
-        return Ok(());
-    }
     match active {
         Some(work) => {
             let title = db
@@ -160,15 +116,8 @@ pub fn status(db: &Database, json_output: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn worktree_status(db: &Database, json_output: bool) -> Result<()> {
+pub fn worktree_status(db: &Database) -> Result<()> {
     let statuses = worktree_statuses(db)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "data": statuses }))?
-        );
-        return Ok(());
-    }
     if statuses.is_empty() {
         print_heading("Worktree Status");
         println!("No Git worktrees found.");
@@ -201,6 +150,19 @@ pub fn worktree_status(db: &Database, json_output: bool) -> Result<()> {
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "(unknown)".to_string())
         );
+        println!(
+            "Unpushed: {}",
+            status
+                .unpushed_commits
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "(unknown)".to_string())
+        );
+        if !status.dirty_paths.is_empty() {
+            print_heading("Dirty Paths");
+            for path in status.dirty_paths {
+                println!("  {path}");
+            }
+        }
         print_heading("Associated Work");
         if status.associated_work.is_empty() {
             println!("  (none)");
@@ -237,7 +199,7 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
-pub fn worktree_for(db: &Database, id: &str, path: Option<&str>, json_output: bool) -> Result<()> {
+pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let issue = db.require_issue(id)?;
     let root = repo_root()?;
     let branch = format!("codex/{}", id);
@@ -267,26 +229,15 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>, json_output: bo
             .arg("rebuild")
             .status();
     }
-    let setup_hooks = run_worktree_setup_hooks(&root, &worktree_path, id, &branch)?;
+    run_worktree_setup_hooks(&root, &worktree_path, id, &branch)?;
     db.start_work_association(id, Some(&branch), Some(&worktree_path.to_string_lossy()))?;
     crate::commands::activity_log::record_work_started(
         id,
         Some(&branch),
         Some(&worktree_path.to_string_lossy()),
     )?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "issue": { "id": issue.id, "title": issue.title },
-                "branch": branch,
-                "worktree_path": worktree_path,
-                "setup_hooks": setup_hooks
-            }))?
-        );
-    } else {
-        println!("{}", worktree_path.display());
-    }
+    let _ = issue;
+    println!("{}", worktree_path.display());
     Ok(())
 }
 
@@ -295,16 +246,15 @@ fn run_worktree_setup_hooks(
     worktree_path: &Path,
     issue_id: &str,
     branch: &str,
-) -> Result<Vec<HookRun>> {
+) -> Result<()> {
     let config_path = root.join("atelier.workflow.yaml");
     if !config_path.is_file() {
-        return Ok(Vec::new());
+        return Ok(());
     }
     let text = std::fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read {}", config_path.display()))?;
     let config: WorkflowConfig = serde_yaml::from_str(&text)
         .with_context(|| format!("failed to parse {}", config_path.display()))?;
-    let mut results = Vec::new();
     for (id, hook) in config.hooks {
         if hook.event != "worktree_setup" {
             continue;
@@ -325,27 +275,14 @@ fn run_worktree_setup_hooks(
         let output = command
             .output()
             .with_context(|| format!("failed to run worktree_setup hook {id}"))?;
-        let status = if output.status.success() {
-            "pass"
-        } else {
-            "fail"
-        };
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        results.push(HookRun {
-            id: id.clone(),
-            status: status.to_string(),
-            stdout,
-            stderr,
-        });
         if !output.status.success() {
             bail!("worktree_setup hook {id} failed");
         }
     }
-    Ok(results)
+    Ok(())
 }
 
-pub fn worktree_merge(db: &Database, id: &str, json_output: bool) -> Result<()> {
+pub fn worktree_merge(db: &Database, id: &str) -> Result<()> {
     let work = db
         .get_work_association(id)?
         .ok_or_else(|| anyhow::anyhow!("No worktree association for {id}"))?;
@@ -362,22 +299,11 @@ pub fn worktree_merge(db: &Database, id: &str, json_output: bool) -> Result<()> 
     if !status.success() {
         bail!("git merge failed; resolve conflicts with Git, then rerun validation");
     }
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "issue_id": id,
-                "branch": branch,
-                "merged": true
-            }))?
-        );
-    } else {
-        println!("Merged {branch} for {id}");
-    }
+    println!("Merged {branch} for {id}");
     Ok(())
 }
 
-pub fn worktree_remove(db: &Database, id: &str, force: bool, json_output: bool) -> Result<()> {
+pub fn worktree_remove(db: &Database, id: &str, force: bool) -> Result<()> {
     let work = db
         .get_work_association(id)?
         .ok_or_else(|| anyhow::anyhow!("No worktree association for {id}"))?;
@@ -398,20 +324,8 @@ pub fn worktree_remove(db: &Database, id: &str, force: bool, json_output: bool) 
     if !status.success() {
         bail!("git worktree remove failed; inspect with `git worktree list`");
     }
-    let removed_association = db.remove_work_association(id)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "issue_id": id,
-                "worktree_path": path,
-                "removed": true,
-                "removed_association": removed_association
-            }))?
-        );
-    } else {
-        println!("Removed worktree {path}");
-    }
+    db.remove_work_association(id)?;
+    println!("Removed worktree {path}");
     Ok(())
 }
 

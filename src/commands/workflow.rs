@@ -1,6 +1,5 @@
 use anyhow::Result;
 use serde::Serialize;
-use serde_json::json;
 use std::path::Path;
 use std::process::Command;
 
@@ -22,7 +21,6 @@ pub fn validate(
     target_id: &str,
     transition: &str,
     validators: Vec<String>,
-    json_output: bool,
 ) -> Result<()> {
     ensure_target_exists(db, target_kind, target_id)?;
     let validators = if validators.is_empty() {
@@ -43,14 +41,7 @@ pub fn validate(
         });
     }
 
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "data": results }))?
-        );
-    } else {
-        print_validation_results(&results);
-    }
+    print_validation_results(&results);
     Ok(())
 }
 

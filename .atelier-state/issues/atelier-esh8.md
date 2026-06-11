@@ -15,9 +15,9 @@ parent: null
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Inventory JSON result surfaces and confirm removal boundaries"
-updated_at: "2026-06-11T02:44:00.118936827+00:00"
+updated_at: "2026-06-11T04:31:02.400112498+00:00"
 ---
 
 Map every command-result JSON surface before implementation. Identify --json flags, output enums, formatter branches, tests, docs, examples, scripts, and any Agent Factory usage. Produce a policy note in tracker notes or docs that distinguishes command result JSON from diagnostic logs, canonical projection files, exports, and future APIs. Acceptance: inventory is complete enough to drive removals; any unresolved boundary is called out as a human decision blocker; downstream implementation issues reference the inventory.

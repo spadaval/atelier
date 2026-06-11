@@ -3720,6 +3720,44 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(!success, "--json should not be accepted");
     assert!(stderr.contains("unexpected argument '--json'"));
 
+    for args in [
+        vec!["issue", "list", "--json"],
+        vec!["issue", "show", "1", "--json"],
+        vec!["issue", "update", "1", "--claim", "--json"],
+        vec!["mission", "list", "--json"],
+        vec![
+            "workflow",
+            "validate",
+            "issue",
+            "1",
+            "--transition",
+            "close",
+            "--json",
+        ],
+        vec!["doctor", "--json"],
+    ] {
+        let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(!success, "{args:?} should reject --json");
+        assert!(
+            stderr.contains("unexpected argument '--json'"),
+            "{args:?} stderr did not reject --json: {stderr}"
+        );
+    }
+
+    for args in [
+        vec!["issue", "--help"],
+        vec!["mission", "--help"],
+        vec!["workflow", "--help"],
+        vec!["doctor", "--help"],
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(success, "{args:?} help failed: {stderr}");
+        assert!(
+            !stdout.contains("--json"),
+            "{args:?} help still advertises --json:\n{stdout}"
+        );
+    }
+
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[

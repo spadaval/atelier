@@ -2,9 +2,9 @@
 
 This document defines the minimum Atelier contract required before this
 repository and Agent Factory can replace Beads for durable work tracking. It is
-not a full Beads compatibility promise. The bar is the smallest command,
-storage, JSON, and failure-mode surface that lets agents plan, claim, update,
-validate, and hand off work without private chat state.
+not a full Beads compatibility promise. The bar is the smallest human command,
+storage, projection, drill-down, and failure-mode surface that lets agents plan,
+claim, update, validate, and hand off work without private chat state.
 
 Current storage architecture is superseded by
 [ADR 0002: Markdown-First Record Store](../../adr/0002-markdown-first-record-store.md).
@@ -33,7 +33,7 @@ The cutover must prove:
   commands. Global Agent Factory procedure updates are tracked separately by
   `atelier-z1p.5`.
 
-## Retired Command-Result JSON Contract
+## Command-Result JSON Migration
 
 Earlier cutover work required a command-result `--json` envelope for Agent
 Factory parity. That contract is retired. Atelier command results are
@@ -41,6 +41,23 @@ human-first, quiet output remains intentionally terse, and durable
 machine-readable state lives in `.atelier-state/`, rebuildable projection files,
 authored JSON inputs, and diagnostic logging surfaces such as
 `--log-format json`.
+
+Scripts and agents migrating away from command-result JSON should use these
+supported replacements:
+
+- quiet acknowledgements for simple composition and exit-status checks;
+- canonical `.atelier-state/` Markdown records for durable state;
+- rebuildable local projections refreshed by `atelier rebuild`;
+- freshness and health commands such as `atelier export --check`,
+  `atelier lint`, and `atelier doctor`;
+- focused drill-down commands such as `atelier issue show <id>`,
+  `atelier mission show <id>`, `atelier issue ready`, and dependency commands;
+- documented authored JSON inputs or derived projection files only when a
+  specific spec defines the contract.
+
+Full human detail output is not a stable API. Automation must not scrape section
+headings, table layout, prose, or whole command reports as if they were a
+versioned machine-readable schema.
 
 Historical error codes from the replacement MVP remain useful vocabulary for
 human diagnostics and workflow validators:
@@ -51,7 +68,7 @@ human diagnostics and workflow validators:
 | `invalid_input` | Flags, status values, issue types, priorities, labels, or IDs are invalid. |
 | `invalid_dependency` | A dependency would reference a missing record, duplicate an edge, or create a cycle where cycles are forbidden. |
 | `blocked` | A command cannot proceed because open blockers exist. |
-| `stale_export` | SQLite and `.atelier-state/` differ during `export --check` or a cutover check. |
+| `stale_export` | SQLite, derived projections, and `.atelier-state/` differ during `export --check` or a cutover check. |
 | `schema_mismatch` | Rebuild/import encountered unsupported projection schema or version. |
 | `dirty_tracker` | Tracker state has unexported or unpushed changes that must be resolved before handoff. |
 | `storage_error` | SQLite, file IO, or manifest validation failed. |
@@ -88,30 +105,34 @@ Rows marked required are blockers for repository cutover. Optional rows may be
 implemented earlier, but they are not allowed to delay the first Beads
 replacement unless they become necessary to satisfy a required row.
 
-| Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Machine-readable boundary | Required | Owner |
+The `Machine-readable replacement` column names the supported replacement for
+the retired command-result JSON envelope. It is not a requirement to emit a
+JSON result from the command itself.
+
+| Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Machine-readable replacement | Required | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Return one issue object with all required issue fields plus direct blocker/dependent summaries. Missing IDs use `not_found`. | Yes | `atelier-z1p.3` |
-| Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Return updated issue plus `previous_assignee`, `assignee`, and `changed`. | Yes | `atelier-z1p.3` |
-| Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Return updated issue or appended note object with author and timestamp. | Yes | `atelier-z1p.3` |
-| Update title/body/priority/status/labels/parent | `bd update <id> --title ... --description ... --priority ... --status ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags | Print changed fields and the ID. Invalid values are rejected with actionable text. | Return updated issue plus a sorted `changed_fields` array. Invalid values use `invalid_input`. | Yes | `atelier-z1p.3` |
-| Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Return updated issue with `status: "closed"`, `closed_at`, and `close_reason`; blocked closure uses `blocked`. | Yes | `atelier-z1p.3` |
-| Reopen accidentally closed work | `bd reopen <id>` | `atelier issue reopen <id>` | Print reopened ID and previous close reason. | Return updated issue with reopened status and `closed_at: null`. | Yes | `atelier-z1p.3` |
-| Find ready executable work | `bd ready` | `atelier issue ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Return array or envelope `data.items`; each item includes ID, title, type, priority, labels, parent, and blocker summaries. | Yes | `atelier-z1p.3` |
-| List/filter work | `bd list --status=open` | `atelier issue list --status open` | Print compact rows with ID, status, priority, type, title, and assignee. | Return stable item array with pagination metadata if pagination exists. | Yes | `atelier-z1p.3` |
-| Search work by text | `bd search "<topic>"` | `atelier issue search "<topic>"` | Print ranked matches with ID, title, status, and short excerpt when available. | Return stable item array with query string and match metadata when available. | Yes | `atelier-z1p.3` |
-| Create normal task/feature/bug/validation/closeout beads | `bd create ...` | `atelier issue create ...` | Print new ID and title. All required fields must be accepted by flags or stdin, not an editor. | Return created issue. | Yes | `atelier-z1p.3` |
-| Create parent/child hierarchy | `bd update <child> --parent <epic>` and `bd children <epic>` | `atelier issue update <child> --parent <parent>` and `atelier issue children <parent>` or `atelier issue tree` | Parent update prints child and parent IDs. Children/tree output distinguishes hierarchy from blocking dependencies. | Return updated child for parent changes; children/tree returns stable nested or flat relation data. | Yes | `atelier-z1p.3` |
-| Add/remove blocking dependency | `bd dep add <blocked> <blocker>` and `bd dep remove <blocked> <blocker>` | `atelier issue block <blocked> <blocker>` and `atelier issue unblock <blocked> <blocker>` or `atelier dep add/remove` | Print blocked ID and blocker ID. Duplicate adds and missing removes must be idempotent or report clear no-op behavior. | Return dependency edge with source, target, type, and `changed`; invalid edges use `invalid_dependency`. | Yes | `atelier-z1p.3` |
-| List blocked work | `bd blocked` | `atelier issue blocked` | Print open issues grouped or annotated by open blockers. | Return item array with blocker summaries. | Yes | `atelier-z1p.3` |
-| Validate tracker records | `bd lint` and `bd lint <id>` | `atelier lint` and `atelier lint <id>` or documented equivalent | Print pass/fail summary and each actionable defect with record ID. | Return counts and findings; failures exit non-zero with `invalid_input` or `dirty_tracker` as appropriate. | Yes | `atelier-z1p.3` |
-| Check tracker installation/health | `bd doctor` / `bd ping` | `atelier doctor` or `atelier status --check` | Print runtime DB path, state path, schema version, export freshness, and rebuild readiness. | Return health object with booleans for database, projection, schema, export freshness, and sync state. | Yes | `atelier-z1p.3` |
-| Export durable state | `bd export -o .beads/issues.manual.jsonl` | `atelier export` and `atelier export --output .atelier-state` | Print records written, output path, and whether derived files were regenerated. | Return output path, record counts by kind, manifest hash when available, and warnings. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
-| Check export freshness before handoff | No exact Beads equivalent; Agent Factory uses backup plus Dolt status | `atelier export --check` | Print whether `.atelier-state/` is current. Stale files name changed, missing, or unexpected paths. | Return freshness result; stale state exits non-zero with `stale_export` and changed paths. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
-| Rebuild runtime state after checkout | `bd bootstrap` / Dolt sync | `atelier rebuild` | Print source state dir, runtime DB path, record counts, and schema validation result. | Return rebuilt DB path, source path, record counts, and skipped derived records. | Yes | `atelier-fq9y` closed; cutover proof in `atelier-z1p.4` |
-| Import current Beads data | `bd export` then `bd import` | `atelier import-beads .beads/issues.manual.jsonl` or `atelier import --format beads-jsonl ...` | Print imported, skipped, lossy, and failed counts. Preserve or report every source ID. | Return counts by record/link kind, ID mapping, lossy fields, and validation errors. | Yes | `atelier-z1p.2` |
-| Push/pull tracker state | `bd dolt pull`, `bd dolt push`, `bd dolt status` | Git plus `.atelier-state/`: `git status`, `git pull`, `atelier rebuild`, `atelier export --check`, `git push` | Agent docs must state that committed `.atelier-state/` is the durable sync surface and SQLite is local runtime state. | Health/check commands must expose dirty projection state; Git output remains external. | Yes | `atelier-z1p.4` |
-| Preserve manual backup before cutover | `.beads/issues.manual.jsonl` | Archived Beads export plus Atelier import report | Print backup path and source record count. | Return backup path, source hash, and imported count. | Yes | `atelier-z1p.2`, `atelier-z1p.4` |
-| Record comments separately from notes | `bd comment` / `bd comments` | `atelier issue comment` / future notes model | Text must show chronological comments if used by Agent Factory. | JSON must preserve author, time, body, kind, and issue ID. | No for first cutover if Beads notes are preserved | Later feature bead |
+| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier-state/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
+| Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Quiet acknowledgement with changed ID/fields; canonical issue record records durable owner/assignee state. | Yes | `atelier-z1p.3` |
+| Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier-state/issues/<id>.activity/` or the canonical note field, depending on the notes model in use. | Yes | `atelier-z1p.3` |
+| Update title/body/priority/status/labels/parent | `bd update <id> --title ... --description ... --priority ... --status ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags | Print changed fields and the ID. Invalid values are rejected with actionable text. | Quiet acknowledgement and canonical issue record; invalid values fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
+| Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Quiet acknowledgement and canonical close metadata; `atelier lint` or workflow validation owns machine-checkable closure defects. | Yes | `atelier-z1p.3` |
+| Reopen accidentally closed work | `bd reopen <id>` | `atelier issue reopen <id>` | Print reopened ID and previous close reason. | Quiet acknowledgement and canonical issue record with reopened state. | Yes | `atelier-z1p.3` |
+| Find ready executable work | `bd ready` | `atelier issue ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier-state/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
+| List/filter work | `bd list --status=open` | `atelier issue list --status open` | Print compact rows with ID, status, priority, type, title, and assignee. | Focused queue command backed by ProjectionIndex; durable fields remain in canonical records. | Yes | `atelier-z1p.3` |
+| Search work by text | `bd search "<topic>"` | `atelier issue search "<topic>"` | Print ranked matches with ID, title, status, and short excerpt when available. | Focused search command backed by ProjectionIndex; scripts should use returned IDs for follow-up drill-down instead of parsing excerpts. | Yes | `atelier-z1p.3` |
+| Create normal task/feature/bug/validation/closeout beads | `bd create ...` | `atelier issue create ...` | Print new ID and title. All required fields must be accepted by flags or stdin, not an editor. | Quiet acknowledgement with new ID; canonical record is the durable created state. | Yes | `atelier-z1p.3` |
+| Create parent/child hierarchy | `bd update <child> --parent <epic>` and `bd children <epic>` | `atelier issue update <child> --parent <parent>` and `atelier issue children <parent>` or `atelier issue tree` | Parent update prints child and parent IDs. Children/tree output distinguishes hierarchy from blocking dependencies. | Parent mutation uses quiet acknowledgement and canonical links/parent fields; children/tree are focused drill-down commands backed by ProjectionIndex. | Yes | `atelier-z1p.3` |
+| Add/remove blocking dependency | `bd dep add <blocked> <blocker>` and `bd dep remove <blocked> <blocker>` | `atelier issue block <blocked> <blocker>` and `atelier issue unblock <blocked> <blocker>` or `atelier dep add/remove` | Print blocked ID and blocker ID. Duplicate adds and missing removes must be idempotent or report clear no-op behavior. | Quiet acknowledgement and canonical typed relation state; invalid edges fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
+| List blocked work | `bd blocked` | `atelier issue blocked` | Print open issues grouped or annotated by open blockers. | Focused queue command backed by ProjectionIndex; use `issue show` for a selected record's durable details. | Yes | `atelier-z1p.3` |
+| Validate tracker records | `bd lint` and `bd lint <id>` | `atelier lint` and `atelier lint <id>` or documented equivalent | Print pass/fail summary and each actionable defect with record ID. | Supported health/check command. Exit status and finding text are the stable automation boundary unless a future diagnostic format is documented. | Yes | `atelier-z1p.3` |
+| Check tracker installation/health | `bd doctor` / `bd ping` | `atelier doctor` or `atelier status --check` | Print runtime DB path, state path, schema version, export freshness, and rebuild readiness. | Supported health/check command. Exit status and named paths/state are the stable automation boundary unless a future diagnostic format is documented. | Yes | `atelier-z1p.3` |
+| Export durable state | `bd export -o .beads/issues.manual.jsonl` | `atelier export` and `atelier export --output .atelier-state` | Print records written, output path, and whether derived files were regenerated. | Canonical `.atelier-state/` records and derived projections; `export --check` verifies freshness. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
+| Check export freshness before handoff | No exact Beads equivalent; Agent Factory uses backup plus Dolt status | `atelier export --check` | Print whether `.atelier-state/` is current. Stale files name changed, missing, or unexpected paths. | Supported freshness gate. Exit status, stale path names, and canonical records are the automation boundary. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
+| Rebuild runtime state after checkout | `bd bootstrap` / Dolt sync | `atelier rebuild` | Print source state dir, runtime DB path, record counts, and schema validation result. | Rebuildable ProjectionIndex and RuntimeState generated from `.atelier-state/`; the rebuilt SQLite database is local runtime state. | Yes | `atelier-fq9y` closed; cutover proof in `atelier-z1p.4` |
+| Import current Beads data | `bd export` then `bd import` | `atelier import-beads .beads/issues.manual.jsonl` or `atelier import --format beads-jsonl ...` | Print imported, skipped, lossy, and failed counts. Preserve or report every source ID. | One-way import input and canonical `.atelier-state/` output; import reports are migration evidence, not an ongoing command-result API. | Yes | `atelier-z1p.2` |
+| Push/pull tracker state | `bd dolt pull`, `bd dolt push`, `bd dolt status` | Git plus `.atelier-state/`: `git status`, `git pull`, `atelier rebuild`, `atelier export --check`, `git push` | Agent docs must state that committed `.atelier-state/` is the durable sync surface and SQLite is local runtime state. | Git moves committed canonical records; `atelier rebuild` recreates local projections; health/check commands detect dirty projection state. | Yes | `atelier-z1p.4` |
+| Preserve manual backup before cutover | `.beads/issues.manual.jsonl` | Archived Beads export plus Atelier import report | Print backup path and source record count. | Archived migration artifact and import evidence only. It is not part of normal Atelier automation after cutover. | Yes | `atelier-z1p.2`, `atelier-z1p.4` |
+| Record comments separately from notes | `bd comment` / `bd comments` | `atelier issue comment` / future notes model | Text must show chronological comments if used by Agent Factory. | Canonical activity sidecars or future notes records. A command-result JSON comment envelope is not required for the first cutover. | No for first cutover if Beads notes are preserved | Later feature bead |
 | Worktree creation and assignment | `bd worktree` | Future `atelier worktree` | Not required for first cutover; agents can use normal Git worktrees. | Not required. | No | Deferred |
 | Mission Control dashboards | None in Beads MVP | Future `atelier mission-control` or UI | Not required for first cutover. | Not required. | No | Deferred |
 | Workflow validators and evidence enforcement | `bd gate` and local conventions | Future Atelier workflows, validators, and evidence records | Not required beyond lint/close diagnostics for first cutover. | Not required beyond MVP errors. | No | Deferred |

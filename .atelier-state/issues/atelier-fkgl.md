@@ -7,15 +7,16 @@ depends_on:
 evidence_required: []
 id: "atelier-fkgl"
 issue_type: "task"
-labels: []
+labels:
+- "assignee:root"
 links: []
 parent: "atelier-vvlj"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Update Agent Factory and tracker workflow examples"
-updated_at: "2026-06-11T02:45:42.897885439+00:00"
+updated_at: "2026-06-11T04:23:55.019447200+00:00"
 ---
 
 Remove --json assumptions from Agent Factory binding examples, tracker guidance, and repository workflow docs where Atelier commands are shown. Acceptance: future agents can plan, inspect, validate, and close work using human output, quiet output, and explicit drill-down commands without private chat knowledge.

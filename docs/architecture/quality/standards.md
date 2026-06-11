@@ -12,8 +12,9 @@
 - Add or update CLI integration tests for user-visible command behavior.
 - Add focused database tests for schema, migration, transaction, and invariant
   changes.
-- Preserve JSON compatibility unless a migration bead or ADR explicitly changes
-  the contract.
+- Preserve documented authored-input and projection JSON compatibility unless a
+  migration bead or ADR explicitly changes that contract. Do not treat retired
+  command-result JSON as the default automation boundary.
 
 ## Data And State
 

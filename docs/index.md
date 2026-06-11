@@ -10,7 +10,7 @@
   versioned JSON contract, validation diagnostics, dry-run preview shape, and
   fixtures for authored bulk graph plans.
 - [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
-  minimum command, JSON, storage, and workflow contract required before Atelier
+  minimum human command, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
 - `docs/adr/`: durable architecture and process decisions.
 - [docs/adr/0001-project-scoped-random-record-ids.md](adr/0001-project-scoped-random-record-ids.md):

@@ -8,15 +8,16 @@ depends_on:
 evidence_required: []
 id: "atelier-kaei"
 issue_type: "task"
-labels: []
+labels:
+- "assignee:root"
 links: []
 parent: "atelier-zjb5"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Delete or simplify JSON result formatter code"
-updated_at: "2026-06-11T02:45:01.078632625+00:00"
+updated_at: "2026-06-11T04:31:01.560730327+00:00"
 ---
 
 Remove output-format plumbing, JSON serialization branches, and command result renderers that exist only for command-result JSON mode. Acceptance: remaining formatter abstractions are human/quiet focused; dead code and unused dependencies are removed; compiler warnings stay clean.

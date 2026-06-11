@@ -29,6 +29,11 @@ Install `cargo-nextest` before running the default Rust test command:
 - Workflow, validator, evidence, mission, milestone, or plan changes should
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.
+- Agent Factory and tracker workflow validation should use human command output
+  plus explicit drill-down commands. Do not rely on command-result `--json`;
+  validate durable state with `.atelier-state/`, `atelier export --check`,
+  `atelier lint`, `atelier doctor`, and focused `show` or `workflow validate`
+  commands.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.
 

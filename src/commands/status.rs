@@ -17,7 +17,7 @@ pub fn close_all(
 
     let mut closed_count = 0;
     for issue in &issues {
-        match commands::agent_factory::close(db, &issue.id.to_string(), None, false) {
+        match commands::agent_factory::close(db, &issue.id.to_string(), None) {
             Ok(()) => closed_count += 1,
             Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
         }

@@ -10,6 +10,10 @@
 - Orchestrators assign exactly one agent-factory subskill to each subagent.
 - Do not use interactive tracker commands; use explicit `atelier issue`
   commands instead.
+- Do not plan or validate work by parsing command-result JSON. Use the focused
+  human output from show/list/ready/workflow commands, quiet acknowledgements
+  only where the command is naturally terse, and explicit drill-down commands
+  when more state is needed.
 - Treat `.atelier-state/` as the committed durable tracker state and
   `.atelier/state.db` as local runtime state that can be rebuilt.
 - Beads is no longer repository tracking state. Do not use the predecessor CLI

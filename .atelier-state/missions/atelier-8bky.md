@@ -68,9 +68,9 @@ links:
   type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Remove JSON command output mode and focus human CLI output"
-updated_at: "2026-06-11T02:43:59.824955638+00:00"
+updated_at: "2026-06-11T04:35:54.612060029+00:00"
 ---
 
 Atelier should retire command-result JSON mode and make the default human-readable CLI the primary supported output surface. The goal is not to pour every previously available JSON field into normal output. Instead, each command should show the small set of details a human or agent needs for the immediate workflow, with clear next commands for related records, history, evidence, dependencies, and validation details.

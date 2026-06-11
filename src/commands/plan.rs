@@ -12,13 +12,7 @@ use crate::models::DomainRecord;
 
 const KIND: &str = "plan";
 
-pub fn create(
-    db: &Database,
-    title: &str,
-    body: Option<&str>,
-    reason: Option<&str>,
-    json_output: bool,
-) -> Result<()> {
+pub fn create(db: &Database, title: &str, body: Option<&str>, reason: Option<&str>) -> Result<()> {
     let data = json!({
         "revision": 1,
         "revisions": [{
@@ -29,24 +23,16 @@ pub fn create(
     });
     let id = db.create_record(KIND, title, "open", body, &data.to_string())?;
     let record = db.require_record(KIND, &id)?;
-    print_record(db, &record, json_output)
+    print_record(db, &record)
 }
 
-pub fn show(db: &Database, id: &str, json_output: bool) -> Result<()> {
+pub fn show(db: &Database, id: &str) -> Result<()> {
     let record = db.require_record(KIND, id)?;
-    print_record(db, &record, json_output)
+    print_record(db, &record)
 }
 
-pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()> {
+pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     let records = db.list_records(KIND, status)?;
-    if json_output {
-        let data: Vec<Value> = records.iter().map(record_json).collect::<Result<_>>()?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "data": data }))?
-        );
-        return Ok(());
-    }
     if records.is_empty() {
         print_heading("Plans");
         println!("(none)");
@@ -60,13 +46,7 @@ pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()
     Ok(())
 }
 
-pub fn revise(
-    db: &Database,
-    id: &str,
-    body: &str,
-    reason: Option<&str>,
-    json_output: bool,
-) -> Result<()> {
+pub fn revise(db: &Database, id: &str, body: &str, reason: Option<&str>) -> Result<()> {
     let current = db.require_record(KIND, id)?;
     let mut data: Value = serde_json::from_str(&current.data_json)?;
     let next_revision = data["revision"].as_i64().unwrap_or(1) + 1;
@@ -89,7 +69,7 @@ pub fn revise(
         Some(&serde_json::to_string(&data)?),
     )?;
     let record = db.require_record(KIND, id)?;
-    print_record(db, &record, json_output)
+    print_record(db, &record)
 }
 
 pub fn link(
@@ -98,21 +78,9 @@ pub fn link(
     target_kind: &str,
     target_id: &str,
     relation_type: &str,
-    json_output: bool,
 ) -> Result<()> {
     db.add_record_link(KIND, id, target_kind, target_id, relation_type)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "source": { "kind": KIND, "id": id },
-                "target": { "kind": target_kind, "id": target_id },
-                "type": relation_type
-            }))?
-        );
-    } else {
-        println!("Linked plan {id} {relation_type} {target_kind} {target_id}");
-    }
+    println!("Linked plan {id} {relation_type} {target_kind} {target_id}");
     Ok(())
 }
 
@@ -121,7 +89,6 @@ pub fn apply(
     input: &str,
     dry_run_override: bool,
     validate_only_override: bool,
-    json_output: bool,
 ) -> Result<()> {
     let bytes = fs::read(input).with_context(|| format!("Failed to read bulk plan {input}"))?;
     let plan: BulkPlan = serde_json::from_slice(&bytes)
@@ -130,23 +97,20 @@ pub fn apply(
     validate_bulk_plan(db, &plan)?;
 
     if options.validate_only {
-        print_apply_summary(
-            json!({
-                "applied": false,
-                "dry_run": false,
-                "validate_only": true,
-                "records": {},
-                "links": plan.links.len(),
-                "message": "bulk plan is valid"
-            }),
-            json_output,
-        )?;
+        print_apply_summary(json!({
+            "applied": false,
+            "dry_run": false,
+            "validate_only": true,
+            "records": {},
+            "links": plan.links.len(),
+            "message": "bulk plan is valid"
+        }))?;
         return Ok(());
     }
 
     if options.dry_run {
         let preview = dry_run_preview(&plan);
-        print_apply_summary(preview, json_output)?;
+        print_apply_summary(preview)?;
         return Ok(());
     }
 
@@ -158,16 +122,10 @@ pub fn apply(
         other => bail!("Invalid export option '{other}'"),
     }
 
-    print_apply_summary(summary, json_output)
+    print_apply_summary(summary)
 }
 
-fn print_record(db: &Database, record: &DomainRecord, json_output: bool) -> Result<()> {
-    if json_output {
-        let mut data = record_json(record)?;
-        data["links"] = serde_json::to_value(db.list_record_links(KIND, &record.id)?)?;
-        println!("{}", serde_json::to_string_pretty(&data)?);
-        return Ok(());
-    }
+fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
     println!("{} [plan] {} - {}", record.id, record.status, record.title);
     println!(
         "{}",
@@ -729,19 +687,6 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
     }))
 }
 
-fn record_json(record: &DomainRecord) -> Result<Value> {
-    Ok(json!({
-        "id": record.id,
-        "kind": record.kind,
-        "title": record.title,
-        "status": record.status,
-        "body": record.body,
-        "data": serde_json::from_str::<Value>(&record.data_json)?,
-        "created_at": record.created_at.to_rfc3339(),
-        "updated_at": record.updated_at.to_rfc3339()
-    }))
-}
-
 impl BulkPlan {
     fn effective_options(
         &self,
@@ -993,59 +938,55 @@ fn dry_run_preview(plan: &BulkPlan) -> Value {
     })
 }
 
-fn print_apply_summary(summary: Value, json_output: bool) -> Result<()> {
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(&summary)?);
+fn print_apply_summary(summary: Value) -> Result<()> {
+    let validate_only = summary["validate_only"].as_bool().unwrap_or(false);
+    let dry_run = summary["dry_run"].as_bool().unwrap_or(false);
+    if validate_only {
+        println!("Bulk plan is valid.");
+    } else if dry_run {
+        println!("Bulk plan preview is valid.");
     } else {
-        let validate_only = summary["validate_only"].as_bool().unwrap_or(false);
-        let dry_run = summary["dry_run"].as_bool().unwrap_or(false);
-        if validate_only {
-            println!("Bulk plan is valid.");
-        } else if dry_run {
-            println!("Bulk plan preview is valid.");
-        } else {
-            println!("Bulk plan applied.");
+        println!("Bulk plan applied.");
+    }
+
+    println!(
+        "Applied:       {}",
+        summary["applied"].as_bool().unwrap_or(false)
+    );
+    println!("Dry run:       {dry_run}");
+    println!("Validate only: {validate_only}");
+
+    if let Some(records) = summary["records"].as_object() {
+        println!();
+        println!("Records");
+        println!("-------");
+        for key in ["issues", "missions", "milestones", "plans", "evidence"] {
+            let count = records
+                .get(key)
+                .and_then(|value| value.as_array())
+                .map(|items| items.len())
+                .unwrap_or(0);
+            println!("  {key}: {count}");
         }
+    }
 
-        println!(
-            "Applied:       {}",
-            summary["applied"].as_bool().unwrap_or(false)
-        );
-        println!("Dry run:       {dry_run}");
-        println!("Validate only: {validate_only}");
+    let link_count = summary["links"]
+        .as_array()
+        .map(|links| links.len())
+        .unwrap_or(0);
+    println!("  links: {link_count}");
 
-        if let Some(records) = summary["records"].as_object() {
-            println!();
-            println!("Records");
-            println!("-------");
-            for key in ["issues", "missions", "milestones", "plans", "evidence"] {
-                let count = records
-                    .get(key)
-                    .and_then(|value| value.as_array())
-                    .map(|items| items.len())
-                    .unwrap_or(0);
-                println!("  {key}: {count}");
-            }
-        }
-
-        let link_count = summary["links"]
-            .as_array()
-            .map(|links| links.len())
-            .unwrap_or(0);
-        println!("  links: {link_count}");
-
-        if let Some(id) = first_created_id(&summary, "missions") {
-            println!();
-            println!("Next Commands");
-            println!("-------------");
-            println!("  atelier mission show {id}");
-            println!("  atelier export --check");
-        } else if !validate_only && !dry_run {
-            println!();
-            println!("Next Commands");
-            println!("-------------");
-            println!("  atelier export --check");
-        }
+    if let Some(id) = first_created_id(&summary, "missions") {
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier mission show {id}");
+        println!("  atelier export --check");
+    } else if !validate_only && !dry_run {
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier export --check");
     }
     Ok(())
 }

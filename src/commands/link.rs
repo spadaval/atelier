@@ -1,5 +1,4 @@
 use anyhow::Result;
-use serde_json::json;
 use std::collections::BTreeMap;
 
 use crate::db::Database;
@@ -11,7 +10,6 @@ pub fn add(
     target_kind: &str,
     target_id: &str,
     relation_type: &str,
-    json_output: bool,
 ) -> Result<()> {
     let inserted = db.add_record_link(
         source_kind,
@@ -23,17 +21,7 @@ pub fn add(
     if inserted {
         record_evidence_activity(db, source_kind, source_id, target_kind, target_id)?;
     }
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "inserted": inserted,
-                "source": { "kind": source_kind, "id": source_id },
-                "target": { "kind": target_kind, "id": target_id },
-                "type": relation_type
-            }))?
-        );
-    } else if inserted {
+    if inserted {
         println!("Linked {source_kind} {source_id} {relation_type} {target_kind} {target_id}");
     } else {
         println!("Link already exists");
@@ -76,7 +64,6 @@ pub fn remove(
     target_kind: &str,
     target_id: &str,
     relation_type: &str,
-    json_output: bool,
 ) -> Result<()> {
     let removed = db.remove_record_link(
         source_kind,
@@ -85,12 +72,7 @@ pub fn remove(
         target_id,
         relation_type,
     )?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "removed": removed }))?
-        );
-    } else if removed {
+    if removed {
         println!(
             "Removed link: {source_kind} {source_id} {relation_type} {target_kind} {target_id}"
         );
@@ -106,15 +88,8 @@ pub fn remove(
     Ok(())
 }
 
-pub fn list(db: &Database, kind: &str, id: &str, json_output: bool) -> Result<()> {
+pub fn list(db: &Database, kind: &str, id: &str) -> Result<()> {
     let links = db.list_record_links(kind, id)?;
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({ "data": links }))?
-        );
-        return Ok(());
-    }
     if links.is_empty() {
         println!("No links.");
         return Ok(());

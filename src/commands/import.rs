@@ -72,31 +72,22 @@ struct LossyField {
     handling: String,
 }
 
-pub fn run_beads_jsonl(
-    db: &Database,
-    input_path: &Path,
-    state_dir: &Path,
-    json: bool,
-) -> Result<()> {
+pub fn run_beads_jsonl(db: &Database, input_path: &Path, state_dir: &Path) -> Result<()> {
     let report = import_beads_jsonl(db, input_path)?;
     super::export::run_canonical(db, state_dir, false)?;
 
-    if json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else {
-        println!("Imported Beads backup from {}", input_path.display());
-        println!("  source records: {}", report.source_records);
-        println!("  imported issues: {}", report.imported_issues);
-        println!("  parent-child links: {}", report.parent_child_links);
-        println!("  blocking links: {}", report.blocking_links);
-        println!("  skipped records: {}", report.skipped_records);
-        println!("  lossy/deferred fields: {}", report.lossy_fields.len());
-        println!("  canonical state: {}", state_dir.display());
-        if !report.lossy_fields.is_empty() {
-            println!("\nLossy/deferred field report:");
-            for field in &report.lossy_fields {
-                println!("  {} {}: {}", field.source_id, field.field, field.handling);
-            }
+    println!("Imported Beads backup from {}", input_path.display());
+    println!("  source records: {}", report.source_records);
+    println!("  imported issues: {}", report.imported_issues);
+    println!("  parent-child links: {}", report.parent_child_links);
+    println!("  blocking links: {}", report.blocking_links);
+    println!("  skipped records: {}", report.skipped_records);
+    println!("  lossy/deferred fields: {}", report.lossy_fields.len());
+    println!("  canonical state: {}", state_dir.display());
+    if !report.lossy_fields.is_empty() {
+        println!("\nLossy/deferred field report:");
+        for field in &report.lossy_fields {
+            println!("  {} {}: {}", field.source_id, field.field, field.handling);
         }
     }
 
@@ -521,7 +512,7 @@ mod tests {
         .unwrap();
         import_beads_jsonl(&db, &import_path).unwrap();
 
-        super::super::agent_factory::show(&db, &record_id::legacy_issue_id(2), false).unwrap();
+        super::super::agent_factory::show(&db, &record_id::legacy_issue_id(2)).unwrap();
         assert!(db
             .update_issue(
                 record_id::legacy_issue_id(2),
@@ -552,7 +543,7 @@ mod tests {
         )
         .unwrap();
 
-        run_beads_jsonl(&db, &import_path, &state_dir, true).unwrap();
+        run_beads_jsonl(&db, &import_path, &state_dir).unwrap();
 
         assert!(!state_dir.join("manifest.json").exists());
         assert!(!state_dir.join("graph.json").exists());

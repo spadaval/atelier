@@ -25,6 +25,12 @@ and skill bindings were updated.
 - Health checks: `atelier lint atelier-z1p.6`, `atelier export --check`, and
   `atelier doctor` passed. The historical `atelier sync` proof is superseded by
   Git plus canonical export/rebuild checks.
+- Current Agent Factory validation should inspect and close work through human
+  command output, quiet acknowledgements where a command naturally returns a
+  single result, and explicit drill-down commands such as `atelier issue show
+  <id>`, `atelier mission show <id>`, `atelier workflow validate mission <id>`,
+  `atelier export --check`, `atelier lint`, and `atelier doctor`. Do not use
+  command-result `--json` as the workflow proof.
 - Clean rebuild: `/tmp/atelier-rebuild-check` was populated with
   `.atelier-state` and an empty `.atelier`; from that directory, `atelier
   rebuild --input .atelier-state` rebuilt `/tmp/atelier-rebuild-check/.atelier/state.db`,
