@@ -750,7 +750,7 @@ fn ensure_fresh_projection_db(
             commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
                 format!(
                     "Projection index is stale and canonical state is not rebuild-ready; \
-                     fix canonical tracker records before querying.\n{}",
+                     run `atelier lint` for details, then fix canonical tracker records before querying.\n{}",
                     report.problem_messages().join("\n")
                 )
             })?;

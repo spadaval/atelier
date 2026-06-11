@@ -5992,13 +5992,13 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
         run_atelier(dir.path(), &["issue", "create", "Invalid Markdown source"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Invalid Markdown source");
+    let issue_id = issue_ref(dir.path(), 1);
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
     let issue_path = dir
         .path()
-        .join(".atelier-state/issues")
+        .join(".atelier/issues")
         .join(format!("{issue_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(
@@ -6017,6 +6017,7 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     );
     assert!(
         stderr.contains("canonical state is not rebuild-ready")
+            && stderr.contains("atelier lint")
             && stderr.contains("Invalid YAML front matter"),
         "unexpected invalid Markdown error: {stderr}"
     );

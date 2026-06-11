@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Fail projection queries clearly when canonical Markdown is invalid"
-updated_at: "2026-06-11T20:10:54.799132612+00:00"
+updated_at: "2026-06-11T23:51:07.978213441+00:00"
 ---
 
 Ensure invalid canonical Markdown blocks query refresh and produces actionable guidance to run atelier lint, without falling back to stale projection rows. Acceptance: tests cover invalid records with existing stale state.db.
