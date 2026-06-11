@@ -19,7 +19,7 @@ const MCP_JSON: &str = include_str!("../../resources/mcp.json");
 
 // Embed hook configuration
 const HOOK_CONFIG_JSON: &str = include_str!("../../resources/atelier/hook-config.json");
-const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
+pub(crate) const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier"
 
@@ -113,7 +113,7 @@ fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
     Ok(warnings)
 }
 
-fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
+pub(crate) fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
     let gitignore_path = path.join(".gitignore");
     let mut existing = match fs::read_to_string(&gitignore_path) {
         Ok(content) => content,

@@ -9,6 +9,7 @@ pub mod export;
 pub mod import;
 pub mod init;
 pub mod label;
+pub mod migrate;
 pub mod mission;
 pub mod next;
 pub mod plan;

@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add one-shot markdown-first layout migration"
-updated_at: "2026-06-11T20:10:52.813630582+00:00"
+updated_at: "2026-06-11T23:31:47.652647633+00:00"
 ---
 
 Implement atelier migrate markdown-first or equivalent internal migration to move existing committed records from .atelier-state/* into .atelier/*, preserve runtime state under ignored paths, and report clear next steps. Acceptance: writes after migration target only the new canonical layout.
