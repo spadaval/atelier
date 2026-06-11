@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde_json::json;
+use std::collections::BTreeMap;
 
 use crate::db::Database;
 
@@ -110,11 +111,25 @@ pub fn list(db: &Database, kind: &str, id: &str, json_output: bool) -> Result<()
         println!("No links.");
         return Ok(());
     }
+    println!("Links for {kind} {id}");
+    println!("{}", "=".repeat(format!("Links for {kind} {id}").len()));
+    let mut grouped = BTreeMap::<String, Vec<_>>::new();
     for link in links {
-        println!(
-            "{} {} --{}--> {} {}",
-            link.source_kind, link.source_id, link.relation_type, link.target_kind, link.target_id
-        );
+        grouped
+            .entry(link.relation_type.clone())
+            .or_default()
+            .push(link);
+    }
+    for (relation, links) in grouped {
+        let heading = relation.replace('_', " ");
+        println!("\n{heading}");
+        println!("{}", "-".repeat(heading.len()));
+        for link in links {
+            println!(
+                "  {} {} -> {} {}",
+                link.source_kind, link.source_id, link.target_kind, link.target_id
+            );
+        }
     }
     Ok(())
 }

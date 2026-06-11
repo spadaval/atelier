@@ -140,7 +140,7 @@ Ready high
 
 Blocked high
 ------------
-  atelier-1236 epic  Markdown-first cutover  blocked_by=atelier-0009
+  atelier-1236 epic  Markdown-first cutover - blocked by atelier-0009
 ```
 
 ## Compact Hierarchy Views

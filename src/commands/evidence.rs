@@ -45,11 +45,19 @@ pub fn list(db: &Database, result: Option<&str>, json_output: bool) -> Result<()
         return Ok(());
     }
     if records.is_empty() {
-        println!("No evidence.");
+        print_heading("Evidence");
+        println!("(none)");
         return Ok(());
     }
+    print_heading("Evidence");
+    println!("{} total", records.len());
     for record in records {
-        println!("{:<14} {:<10} {}", record.id, record.status, record.title);
+        let data = evidence_data(&record)?;
+        let kind = data["kind"].as_str().unwrap_or("unknown");
+        println!(
+            "  {:<14} {:<13} {:<10} {}",
+            record.id, record.status, kind, record.title
+        );
     }
     Ok(())
 }
@@ -58,10 +66,53 @@ fn print_record(record: &DomainRecord, json_output: bool) -> Result<()> {
     if json_output {
         println!("{}", serde_json::to_string_pretty(&record_json(record)?)?);
     } else {
-        println!("Evidence {}: {}", record.id, record.title);
-        println!("Result: {}", record.status);
+        let data = evidence_data(record)?;
+        println!(
+            "{} [evidence] {} - {}",
+            record.id, record.status, record.title
+        );
+        println!(
+            "{}",
+            "=".repeat(record.id.len() + record.status.len() + record.title.len() + 15)
+        );
+        println!("Result:      {}", record.status);
+        println!(
+            "Kind:        {}",
+            data["kind"].as_str().unwrap_or("unknown")
+        );
+        println!(
+            "Captured:    {}",
+            data["captured_at"].as_str().unwrap_or("(unknown)")
+        );
+        println!(
+            "Producer:    {}",
+            data["producer"].as_str().unwrap_or("(none)")
+        );
+        println!("Path:        {}", data["path"].as_str().unwrap_or("(none)"));
+        println!("URI:         {}", data["uri"].as_str().unwrap_or("(none)"));
+        println!("Created:     {}", record.created_at.to_rfc3339());
+        println!("Updated:     {}", record.updated_at.to_rfc3339());
+        print_heading("Summary");
+        if let Some(summary) = &record.body {
+            if summary.is_empty() {
+                println!("(none)");
+            } else {
+                println!("{summary}");
+            }
+        } else {
+            println!("(none)");
+        }
     }
     Ok(())
+}
+
+fn print_heading(title: &str) {
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
+}
+
+fn evidence_data(record: &DomainRecord) -> Result<Value> {
+    Ok(serde_json::from_str::<Value>(&record.data_json)?)
 }
 
 fn record_json(record: &DomainRecord) -> Result<Value> {

@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -133,11 +134,15 @@ pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()
         return Ok(());
     }
     if records.is_empty() {
-        println!("No missions.");
+        print_mission_heading("Missions");
+        println!("(none)");
         return Ok(());
     }
+    println!("Missions");
+    println!("========");
+    println!("{} total", records.len());
     for record in records {
-        println!("{:<14} {:<10} {}", record.id, record.status, record.title);
+        println!("  {:<14} {:<10} {}", record.id, record.status, record.title);
     }
     Ok(())
 }
@@ -212,8 +217,8 @@ fn render_mission_show_human(
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
     println!("Status:   {}", mission.status);
-    println!("Created:  {}", mission.created_at.to_rfc3339());
-    println!("Updated:  {}", mission.updated_at.to_rfc3339());
+    println!("Created:  {}", format_human_datetime(mission.created_at));
+    println!("Updated:  {}", format_human_datetime(mission.updated_at));
 
     print_mission_text_section("Body", mission.body.as_deref());
     print_mission_list_section("Constraints", string_array(&data, "constraints"));
@@ -234,7 +239,7 @@ fn render_mission_show_human(
         work_bucket_len(work, "done"),
         work_bucket_len(work, "backlog")
     );
-    println!("Mission blockers={}", mission_blockers.len());
+    println!("Mission Blockers: {}", mission_blockers.len());
 
     print_record_group("Plans", plans);
     print_record_group("Milestones", milestones);
@@ -288,7 +293,7 @@ fn print_mission_blockers(blockers: &[Value]) {
     }
     for blocker in blockers {
         let marker = if blocker["status"].as_str() == Some("open") {
-            " OPEN BLOCKER"
+            " (open blocker)"
         } else {
             ""
         };
@@ -376,21 +381,39 @@ fn issue_row(issue: &Value) -> String {
         .as_array()
         .map_or(0, |blockers| blockers.len());
     let relation_type = value_str(issue, "relation_type");
-    let blocker_suffix = if open_blockers > 0 {
-        format!(" open_blockers={open_blockers}")
+    let relation = if relation_type == "(unknown)" || relation_type.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", readable_relation(relation_type))
+    };
+    let blocker_suffix = if open_blockers == 1 {
+        " - 1 open blocker".to_string()
+    } else if open_blockers > 1 {
+        format!(" - {open_blockers} open blockers")
     } else {
         String::new()
     };
     format!(
-        "{} [{}] {} {} - {} relation={}{}",
+        "{} [{}] {} {} - {}{}{}",
         value_str(issue, "id"),
         value_str(issue, "status"),
         value_str(issue, "priority"),
         value_str(issue, "issue_type"),
         value_str(issue, "title"),
-        relation_type,
+        relation,
         blocker_suffix
     )
+}
+
+fn readable_relation(relation_type: &str) -> String {
+    relation_type.replace('_', " ")
+}
+
+fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
+    timestamp
+        .with_timezone(&Local)
+        .format("%Y-%m-%d %H:%M %Z")
+        .to_string()
 }
 
 fn value_str<'a>(value: &'a Value, key: &str) -> &'a str {

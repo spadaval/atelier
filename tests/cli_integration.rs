@@ -507,10 +507,10 @@ fn test_list_issues() {
 
     assert!(success);
     assert!(stdout.contains("Issue Queue"));
-    assert!(stdout.contains("2 total | status: open=2"));
+    assert!(stdout.contains("2 total | Status: open=2"));
     assert!(stdout.contains("open high"));
     assert!(stdout.contains("open medium"));
-    assert!(stdout.contains("parent=atelier-"));
+    assert!(stdout.contains("(parent: atelier-"));
     assert!(stdout.contains("Issue 1"));
     assert!(stdout.contains("Issue 2"));
 
@@ -613,7 +613,7 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Parent issue"));
     assert!(stdout.contains("1 total | status: open=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
-    assert!(stdout.contains("OPEN BLOCKER"));
+    assert!(stdout.contains("(open blocker)"));
     assert!(stdout.contains("Downstream issue"));
     assert!(stdout.contains("Recent Activity"));
     assert!(stdout.contains("Recent note"));
@@ -980,7 +980,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(show_out.contains("Parent: atelier-0001"));
     assert!(show_out.contains("Blocked by"));
     assert!(show_out.contains("atelier-0002 [open]"));
-    assert!(show_out.contains("OPEN BLOCKER"));
+    assert!(show_out.contains("(open blocker)"));
     assert!(show_out.contains("Acceptance Criteria"));
 
     let (updated, _, update_err) = run_atelier(
@@ -4027,6 +4027,27 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert_eq!(results.len(), 2);
     assert!(results.iter().all(|result| result["passed"] == true));
 
+    let (success, validate_human, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            mission_id,
+            "--validator",
+            "durable_state_current",
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "human workflow validate failed: {stderr}");
+    assert!(validate_human.contains("Workflow Validation: mission"));
+    assert!(validate_human.contains("Transition: close"));
+    assert!(validate_human.contains("Results"));
+    assert!(validate_human.contains("pass  durable_state_current"));
+    assert!(validate_human.contains("Reason: canonical export is current"));
+    assert!(!validate_human.contains("pass durable_state_current:"));
+
     let (success, view_out, stderr) =
         run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
@@ -4060,7 +4081,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("cargo test passed"));
     assert!(human_out.contains("Mission Blockers"));
     assert!(human_out.contains("Resolve mission blocker"));
-    assert!(human_out.contains("OPEN BLOCKER"));
+    assert!(human_out.contains("(open blocker)"));
     assert!(human_out.contains("Linked Work"));
     assert!(human_out.contains("Ready (1)"));
     assert!(human_out.contains("Wire mission work"));
@@ -4068,6 +4089,36 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("(none)"));
     assert!(human_out.contains("Next Commands"));
     assert!(human_out.contains("atelier workflow validate mission"));
+
+    let (success, plan_show, stderr) = run_atelier(dir.path(), &["plan", "show", plan_id]);
+    assert!(success, "human plan show failed: {stderr}");
+    assert!(plan_show.contains(&format!("{plan_id} [plan] open - Execution plan")));
+    assert!(plan_show.contains("Revision: 1"));
+    assert!(plan_show.contains("Body"));
+    assert!(plan_show.contains("Do the thing"));
+    assert!(plan_show.contains("Links:"));
+
+    let (success, plan_list, stderr) = run_atelier(dir.path(), &["plan", "list"]);
+    assert!(success, "human plan list failed: {stderr}");
+    assert!(plan_list.contains("Plans"));
+    assert!(plan_list.contains("1 total"));
+    assert!(plan_list.contains("Execution plan"));
+
+    let (success, evidence_show, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", evidence_id]);
+    assert!(success, "human evidence show failed: {stderr}");
+    assert!(evidence_show.contains(&format!(
+        "{evidence_id} [evidence] pass - cargo test passed"
+    )));
+    assert!(evidence_show.contains("Result:"));
+    assert!(evidence_show.contains("Kind:"));
+    assert!(evidence_show.contains("Summary"));
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "human evidence list failed: {stderr}");
+    assert!(evidence_list.contains("Evidence"));
+    assert!(evidence_list.contains("1 total"));
+    assert!(evidence_list.contains("cargo test passed"));
 }
 
 #[test]
@@ -4468,6 +4519,14 @@ hooks:
     assert!(success, "work status failed: {stderr}");
     assert_eq!(json_value(&status_out)["active"]["issue_id"], issue_id);
 
+    let (success, status_human, stderr) = run_atelier(dir.path(), &["work", "status"]);
+    assert!(success, "human work status failed: {stderr}");
+    assert!(status_human.contains("Work Status"));
+    assert!(status_human.contains("Active:   yes"));
+    assert!(status_human.contains(&format!("Issue:    {issue_id} - Work item")));
+    assert!(status_human.contains("Branch:"));
+    assert!(status_human.contains("Worktree:"));
+
     let (success, finish_out, stderr) =
         run_atelier(dir.path(), &["--json", "work", "finish", &issue_id]);
     assert!(success, "work finish failed: {stderr}");
@@ -4508,6 +4567,17 @@ hooks:
     assert!(worktrees.iter().any(|entry| entry["path"]
         == serde_json::Value::String(worktree_arg.clone())
         && entry["associated_work"][0]["issue_id"] == issue_id));
+
+    let (success, status_human, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(success, "human worktree status failed: {stderr}");
+    assert!(status_human.contains("Worktree Status"));
+    assert!(status_human.contains(&worktree_arg));
+    assert!(status_human.contains("Branch:"));
+    assert!(status_human.contains("State:"));
+    assert!(status_human.contains("Associated Work"));
+    assert!(status_human.contains(&format!("{issue_id} [active]")));
+    assert!(!status_human.contains("work:"));
+    assert!(!status_human.contains("export:"));
 
     let (success, remove_out, stderr) = run_atelier(
         dir.path(),

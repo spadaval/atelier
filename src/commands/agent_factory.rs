@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Result};
+use chrono::{DateTime, Local, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -28,6 +29,17 @@ struct QueueRow {
     priority: String,
     parent: Option<String>,
     open_blockers: usize,
+}
+
+struct DependencyListRow {
+    blocked_id: String,
+    blocked_title: String,
+    blocked_status: String,
+    blocked_priority: String,
+    blocker_id: String,
+    blocker_title: String,
+    blocker_status: String,
+    blocker_priority: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -376,10 +388,16 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     println!("Status:   {}", object.status);
     println!("Type:     {}", object.issue_type);
     println!("Priority: {}", object.priority);
-    println!("Created:  {}", object.created_at);
-    println!("Updated:  {}", object.updated_at);
+    println!(
+        "Created:  {}",
+        format_human_datetime_str(&object.created_at)
+    );
+    println!(
+        "Updated:  {}",
+        format_human_datetime_str(&object.updated_at)
+    );
     if let Some(closed_at) = &object.closed_at {
-        println!("Closed:   {closed_at}");
+        println!("Closed:   {}", format_human_datetime_str(closed_at));
     }
     if let Some(owner) = &object.owner {
         println!("Owner:    {owner}");
@@ -461,7 +479,7 @@ fn dependency_rows_for_text(
         .map(|id| {
             let issue = db.require_issue(&id)?;
             let marker = if blockers && issue.status == "open" {
-                " OPEN BLOCKER"
+                " (open blocker)"
             } else {
                 ""
             };
@@ -584,21 +602,17 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
                 .rev()
                 .take(5)
                 .map(|activity| {
-                    let body = activity.body.replace('\n', "\n  ");
+                    let body = human_activity_body(&activity.body).replace('\n', "\n  ");
+                    let timestamp = format_human_datetime(activity.created_at);
                     if body.trim().is_empty() {
                         format!(
                             "[{}] {}: {}",
-                            activity.created_at.to_rfc3339(),
-                            activity.event_type,
-                            activity.summary
+                            timestamp, activity.event_type, activity.summary
                         )
                     } else {
                         format!(
                             "[{}] {}: {}\n  {}",
-                            activity.created_at.to_rfc3339(),
-                            activity.event_type,
-                            activity.summary,
-                            body
+                            timestamp, activity.event_type, activity.summary, body
                         )
                     }
                 })
@@ -614,7 +628,7 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
         .map(|note| {
             format!(
                 "[{}] {}: {}",
-                note.created_at,
+                format_human_datetime_str(&note.created_at),
                 note.kind,
                 note.body.replace('\n', "\n  ")
             )
@@ -816,7 +830,7 @@ fn queue_summary(rows: &[QueueRow]) -> String {
         }
     }
     format!(
-        "{} total | status: {} | priority: {} | blocked={}",
+        "{} total | Status: {} | Priority: {} | Blocked: {}",
         rows.len(),
         joined_counts(statuses),
         joined_counts(priorities),
@@ -837,10 +851,12 @@ fn print_queue_group(status: &str, priority: &str, rows: Vec<QueueRow>, show_sta
         let parent = row
             .parent
             .as_deref()
-            .map(|parent| format!(" parent={parent}"))
+            .map(|parent| format!(" (parent: {parent})"))
             .unwrap_or_default();
-        let blockers = if row.open_blockers > 0 {
-            format!(" blocked_by={}", row.open_blockers)
+        let blockers = if row.open_blockers == 1 {
+            " - 1 open blocker".to_string()
+        } else if row.open_blockers > 1 {
+            format!(" - {} open blockers", row.open_blockers)
         } else {
             String::new()
         };
@@ -849,6 +865,45 @@ fn print_queue_group(status: &str, priority: &str, rows: Vec<QueueRow>, show_sta
             status_text, row.id, parent, row.issue_type, row.title, blockers
         );
     }
+}
+
+fn format_human_datetime_str(timestamp: &str) -> String {
+    DateTime::parse_from_rfc3339(timestamp)
+        .map(|dt| format_human_datetime(dt.with_timezone(&Utc)))
+        .unwrap_or_else(|_| timestamp.to_string())
+}
+
+fn format_human_datetime(timestamp: DateTime<Utc>) -> String {
+    timestamp
+        .with_timezone(&Local)
+        .format("%Y-%m-%d %H:%M %Z")
+        .to_string()
+}
+
+fn human_activity_body(body: &str) -> String {
+    let mut field = None;
+    let mut old = None;
+    let mut new = None;
+    let mut all_structured = true;
+    for line in body.lines().filter(|line| !line.trim().is_empty()) {
+        if let Some(value) = scalar_line_value(line, "field") {
+            field = Some(value);
+        } else if let Some(value) = scalar_line_value(line, "old") {
+            old = Some(value);
+        } else if let Some(value) = scalar_line_value(line, "new") {
+            new = Some(value);
+        } else {
+            all_structured = false;
+        }
+    }
+    if all_structured {
+        if let Some(field) = field {
+            let old = old.unwrap_or_else(|| "(none)".to_string());
+            let new = new.unwrap_or_else(|| "(none)".to_string());
+            return format!("Changed {field}: {old} -> {new}");
+        }
+    }
+    body.to_string()
 }
 
 pub struct CreateInput<'a> {
@@ -1194,6 +1249,7 @@ fn dependency_state(action: &str, changed: bool) -> &'static str {
 
 pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Result<()> {
     let mut edges = Vec::new();
+    let mut rows = Vec::new();
     let issues = if let Some(issue_ref) = issue_ref {
         let id = resolve_id(db, issue_ref)?;
         vec![db.require_issue(&id)?]
@@ -1203,6 +1259,16 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Re
     for issue in issues {
         for blocker_id in db.get_blockers(&issue.id)? {
             let blocker = db.require_issue(&blocker_id)?;
+            rows.push(DependencyListRow {
+                blocked_id: issue_id_for_agent(db, &issue)?,
+                blocked_title: issue.title.clone(),
+                blocked_status: issue.status.clone(),
+                blocked_priority: issue.priority.clone(),
+                blocker_id: issue_id_for_agent(db, &blocker)?,
+                blocker_title: blocker.title.clone(),
+                blocker_status: blocker.status.clone(),
+                blocker_priority: blocker.priority.clone(),
+            });
             edges.push(json!({
                 "source": issue_id_for_agent(db, &blocker)?,
                 "target": issue_id_for_agent(db, &issue)?,
@@ -1214,12 +1280,29 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>, json_output: bool) -> Re
     }
     if json_output {
         print_success("dep.list", json!({ "items": edges, "count": edges.len() }))
-    } else if edges.is_empty() {
+    } else if rows.is_empty() {
         println!("No dependencies found.");
         Ok(())
     } else {
-        for edge in edges {
-            println!("{} is blocked by {}", edge["blocked"], edge["blocker"]);
+        println!("Dependencies");
+        println!("============");
+        println!("{} total", rows.len());
+        rows.sort_by(|a, b| {
+            status_rank(&a.blocked_status)
+                .cmp(&status_rank(&b.blocked_status))
+                .then(priority_rank(&a.blocked_priority).cmp(&priority_rank(&b.blocked_priority)))
+                .then(a.blocked_id.cmp(&b.blocked_id))
+                .then(a.blocker_id.cmp(&b.blocker_id))
+        });
+        for row in rows {
+            println!(
+                "  {} [{}] {} - {}",
+                row.blocked_id, row.blocked_status, row.blocked_priority, row.blocked_title
+            );
+            println!(
+                "    blocked by {} [{}] {} - {}",
+                row.blocker_id, row.blocker_status, row.blocker_priority, row.blocker_title
+            );
         }
         Ok(())
     }
@@ -1492,7 +1575,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].contains(&format_issue_id(&blocker)));
         assert!(rows[0].contains("[open] high - Blocking issue"));
-        assert!(rows[0].contains("OPEN BLOCKER"));
+        assert!(rows[0].contains("(open blocker)"));
     }
 
     #[test]

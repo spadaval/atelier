@@ -49,12 +49,42 @@ pub fn validate(
             serde_json::to_string_pretty(&json!({ "data": results }))?
         );
     } else {
-        for result in results {
-            let status = if result.passed { "pass" } else { "fail" };
-            println!("{} {}: {}", status, result.validator, result.reason);
-        }
+        print_validation_results(&results);
     }
     Ok(())
+}
+
+fn print_validation_results(results: &[ValidatorResult]) {
+    if let Some(first) = results.first() {
+        println!(
+            "Workflow Validation: {} {}",
+            first.target_kind, first.target_id
+        );
+        println!(
+            "{}",
+            "=".repeat(first.target_kind.len() + first.target_id.len() + 21)
+        );
+        println!("Transition: {}", first.transition);
+        println!("Validators: {}", results.len());
+    } else {
+        print_heading("Workflow Validation");
+        println!("Validators: 0");
+    }
+    print_heading("Results");
+    if results.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for result in results {
+        let status = if result.passed { "pass" } else { "fail" };
+        println!("  {}  {}", status, result.validator);
+        println!("      Reason: {}", result.reason);
+    }
+}
+
+fn print_heading(title: &str) {
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
 }
 
 fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {

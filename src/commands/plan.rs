@@ -48,11 +48,14 @@ pub fn list(db: &Database, status: Option<&str>, json_output: bool) -> Result<()
         return Ok(());
     }
     if records.is_empty() {
-        println!("No plans.");
+        print_heading("Plans");
+        println!("(none)");
         return Ok(());
     }
+    print_heading("Plans");
+    println!("{} total", records.len());
     for record in records {
-        println!("{:<14} {:<10} {}", record.id, record.status, record.title);
+        println!("  {:<14} {:<10} {}", record.id, record.status, record.title);
     }
     Ok(())
 }
@@ -165,14 +168,49 @@ fn print_record(db: &Database, record: &DomainRecord, json_output: bool) -> Resu
         println!("{}", serde_json::to_string_pretty(&data)?);
         return Ok(());
     }
-    println!("Plan {}: {}", record.id, record.title);
-    println!("Status: {}", record.status);
+    println!("{} [plan] {} - {}", record.id, record.status, record.title);
+    println!(
+        "{}",
+        "=".repeat(record.id.len() + record.status.len() + record.title.len() + 11)
+    );
+    println!("Status:   {}", record.status);
+    println!("Revision: {}", data_revision(record).unwrap_or(1));
+    println!("Created:  {}", record.created_at.to_rfc3339());
+    println!("Updated:  {}", record.updated_at.to_rfc3339());
+    let links = db.list_record_links(KIND, &record.id)?;
+    println!("Links:    {}", links.len());
+    print_heading("Body");
     if let Some(body) = &record.body {
         if !body.is_empty() {
-            println!("\n{}", body);
+            println!("{body}");
+        } else {
+            println!("(none)");
+        }
+    } else {
+        println!("(none)");
+    }
+    if !links.is_empty() {
+        print_heading("Links");
+        for link in links {
+            let (kind, id) = if link.source_kind == KIND && link.source_id == record.id {
+                (link.target_kind, link.target_id)
+            } else {
+                (link.source_kind, link.source_id)
+            };
+            println!("  {} {} {}", link.relation_type, kind, id);
         }
     }
     Ok(())
+}
+
+fn print_heading(title: &str) {
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
+}
+
+fn data_revision(record: &DomainRecord) -> Result<i64> {
+    let data: Value = serde_json::from_str(&record.data_json)?;
+    Ok(data["revision"].as_i64().unwrap_or(1))
 }
 
 #[derive(Debug, Deserialize)]

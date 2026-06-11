@@ -130,15 +130,32 @@ pub fn status(db: &Database, json_output: bool) -> Result<()> {
                 .get_issue(&work.issue_id)?
                 .map(|issue| issue.title)
                 .unwrap_or_else(|| "(issue missing)".to_string());
-            println!("Active work: {} {}", work.issue_id, title);
-            if let Some(branch) = work.branch {
-                println!("Branch: {branch}");
-            }
-            if let Some(path) = work.worktree_path {
-                println!("Worktree: {path}");
-            }
+            println!("Work Status");
+            println!("===========");
+            println!("Active:   yes");
+            println!("Issue:    {} - {}", work.issue_id, title);
+            println!("Status:   {}", work.status);
+            println!("Branch:   {}", work.branch.as_deref().unwrap_or("(none)"));
+            println!(
+                "Worktree: {}",
+                work.worktree_path.as_deref().unwrap_or("(none)")
+            );
+            println!("Started:  {}", work.started_at.to_rfc3339());
+            println!(
+                "Finished: {}",
+                work.finished_at
+                    .map(|finished_at| finished_at.to_rfc3339())
+                    .unwrap_or_else(|| "(none)".to_string())
+            );
         }
-        None => println!("No active work."),
+        None => {
+            println!("Work Status");
+            println!("===========");
+            println!("Active: no");
+            print_heading("Next Commands");
+            println!("  atelier issue ready");
+            println!("  atelier work start <issue-id>");
+        }
     }
     Ok(())
 }
@@ -153,21 +170,71 @@ pub fn worktree_status(db: &Database, json_output: bool) -> Result<()> {
         return Ok(());
     }
     if statuses.is_empty() {
+        print_heading("Worktree Status");
         println!("No Git worktrees found.");
         return Ok(());
     }
+    println!("Worktree Status");
+    println!("===============");
+    println!("{} total", statuses.len());
     for status in statuses {
         let dirty = if status.dirty { "dirty" } else { "clean" };
         let branch = status.branch.as_deref().unwrap_or("(detached)");
-        println!("{}  {}  {}", status.path, branch, dirty);
+        print_heading(&status.path);
+        println!("Branch:   {branch}");
+        println!("State:    {dirty}");
+        println!(
+            "Head:     {}",
+            status.head.as_deref().unwrap_or("(unknown)")
+        );
+        println!(
+            "Ahead:    {}",
+            status
+                .ahead
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "(unknown)".to_string())
+        );
+        println!(
+            "Behind:   {}",
+            status
+                .behind
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "(unknown)".to_string())
+        );
+        print_heading("Associated Work");
+        if status.associated_work.is_empty() {
+            println!("  (none)");
+        }
         for work in status.associated_work {
-            println!("  work: {} ({})", work.issue_id, work.status);
+            println!("  {} [{}]", work.issue_id, work.status);
+            println!(
+                "    Branch:   {}",
+                work.branch.as_deref().unwrap_or("(none)")
+            );
+            println!("    Started:  {}", work.started_at.to_rfc3339());
         }
         if let Some(false) = status.export_fresh {
-            println!("  export: stale");
+            print_heading("Export");
+            println!("  State: stale");
+            if status.export_errors.is_empty() {
+                println!("  Errors: (none)");
+            } else {
+                println!("  Errors:");
+                for error in status.export_errors {
+                    println!("    {error}");
+                }
+            }
+        } else if let Some(true) = status.export_fresh {
+            print_heading("Export");
+            println!("  State: current");
         }
     }
     Ok(())
+}
+
+fn print_heading(title: &str) {
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
 }
 
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>, json_output: bool) -> Result<()> {
