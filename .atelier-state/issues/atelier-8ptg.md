@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-8ptg"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cache"
 - "markdown"
 - "projection"
@@ -17,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Convert SQLite projection to metadata-only index"
-updated_at: "2026-06-11T16:06:43.274863790+00:00"
+updated_at: "2026-06-11T16:16:38.419539034+00:00"
 ---
 
 Reduce SQLite from a broad shadow copy of canonical Markdown into a metadata/index-only ProjectionIndex. The goal is to keep enough derived rows for fast lists, ready-work discovery, graph traversal, workflow checks, search inputs, and Mission Control summaries, while reading full record content directly from Markdown when detail views need it.

@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-ncog"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "cache"
 - "projection"
 - "rebuild"
@@ -17,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add transparent stale projection rebuild"
-updated_at: "2026-06-11T15:57:00.695787358+00:00"
+updated_at: "2026-06-11T16:26:29.833981292+00:00"
 ---
 
 Make SQLite projection staleness self-healing for ordinary read paths. Projection-backed commands should validate canonical Markdown, rebuild the local SQLite projection when safe, then answer without requiring operators to manually run `atelier rebuild`.

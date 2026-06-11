@@ -5,20 +5,23 @@ evidence_required: []
 id: "atelier-64w5"
 issue_type: "epic"
 labels:
+- "assignee:root"
 - "markdown"
 - "recordstore"
 - "storage"
 priority: "P1"
 relationships:
   blocks: []
-  children: []
+  children:
+  - kind: "issue"
+    id: "atelier-b3gc"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Finish Markdown-first durable writes"
-updated_at: "2026-06-11T15:56:47.184687838+00:00"
+updated_at: "2026-06-11T16:26:56.053247071+00:00"
 ---
 
 Migrate remaining durable command mutations so canonical Markdown records are written through RecordStore before SQLite projection refresh.

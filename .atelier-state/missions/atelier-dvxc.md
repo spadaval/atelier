@@ -6,20 +6,27 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-52ev"
+  - kind: "issue"
     id: "atelier-64w5"
+  - kind: "issue"
+    id: "atelier-6xoh"
   - kind: "issue"
     id: "atelier-8ptg"
   - kind: "issue"
     id: "atelier-ncog"
   - kind: "issue"
     id: "atelier-rr6y"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-uu8j"
+    role: "validates"
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Finish Markdown-first storage transition"
-updated_at: "2026-06-11T15:53:53.956344586+00:00"
+updated_at: "2026-06-11T16:30:27.591718302+00:00"
 ---
 
 Complete the second phase of the Markdown-first storage transition. The product outcome is that durable project state is owned by Markdown records, while SQLite behaves as an automatically repaired hot cache/projection for query speed and UI inputs. Operators should not need to understand or manually repair the cache during ordinary read workflows.

@@ -96,12 +96,46 @@ schema and subject references.
 
 During the staged migration, `atelier export` also refreshes this metadata after
 it writes canonical Markdown from SQLite so compatibility workflows remain
-queryable. Issue query surfaces (`issue list`, `issue list --ready`, `issue search`,
-`issue show`, `issue blocked`, `issue related`, `issue impact`, `issue next`,
-and `issue tree`) check the metadata before reading SQLite whenever
+queryable. Ordinary projection-backed read surfaces (`issue list`,
+`issue list --ready`, `issue search`, `issue show`, `issue blocked`,
+`issue related`, `issue impact`, `issue next`, `issue tree`, dependency lists,
+and tracker lint) check the metadata before reading SQLite whenever
 `.atelier-state/` exists. If a canonical source changed, disappeared, appeared
-without being indexed, or lacks metadata, the command fails with actionable
-`atelier rebuild` guidance instead of returning stale projection results.
+without being indexed, or lacks metadata, the command first validates
+`.atelier-state/`; when validation succeeds it automatically rebuilds the local
+SQLite projection and answers the query. Invalid Markdown, schema drift,
+conflicting records, missing required canonical state, or rebuild failures still
+fail closed with the stale-path diagnostics attached.
+
+The projection is metadata-only in the target design: it may keep fields needed
+to find, sort, filter, traverse, and validate records, but it must not be
+treated as a full Markdown mirror for detail rendering. Current SQLite columns
+are classified as follows:
+
+| Table or field | Classification | Target ownership |
+| --- | --- | --- |
+| `issues.id`, `title`, `status`, `issue_type`, `priority`, `parent_id`, `created_at`, `updated_at`, `closed_at` | Projection metadata | Keep as the issue list, ready-work, graph, workflow, and Mission Control summary index. These fields are small and commonly used for sorting and filtering. |
+| `issues.description` | Removal candidate | Canonical Markdown body owned by `RecordStore`; detail views should load it from `.atelier-state/issues/*.md`. It remains only as migration compatibility until write paths stop depending on it. |
+| `labels.issue_id`, `labels.label` | Projection metadata | Keep for queue filters, ownership labels, and Mission Control facets. |
+| `dependencies.blocker_id`, `dependencies.blocked_id` | Projection metadata | Keep as derived graph edges for ready queries and workflow checks. |
+| `relations.issue_id_1`, `relations.issue_id_2`, `relations.relation_type`, `relations.created_at` | Projection metadata | Keep as derived typed issue-link edges for traversal and impact views. |
+| `records.id`, `records.kind`, `records.title`, `records.status`, `records.created_at`, `records.updated_at` | Projection metadata | Keep or replace with a narrower cross-record metadata index for missions, milestones, plans, and evidence. |
+| `records.body`, `records.data_json` | Removal candidate | Rich first-class record content owned by `RecordStore`; command detail views should load selected Markdown records instead of rendering these columns. |
+| `record_links.source_kind`, `source_id`, `target_kind`, `target_id`, `relation_type`, `created_at` | Projection metadata | Keep as derived cross-record graph edges for workflow validation and Mission Control rollups. |
+| `projection_index_sources.path`, `size_bytes`, `modified_micros`, `sha256`, `indexed_at` | Projection metadata | Keep as rebuildable freshness metadata. Hash is authoritative; size and modified time are optimization hints. |
+| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts. |
+| `comments.content`, `comments.kind`, `comments.created_at` | Compatibility residue | Legacy SQLite notes retained for imports and repositories not yet migrated to activity sidecars. New issue activity detail is canonical Markdown sidecar state. |
+| Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
+
+Representative detail paths for this boundary are `atelier issue show`,
+`atelier mission show`, `atelier plan show`, and `atelier evidence show`: the
+commands use SQLite to resolve requested IDs, relationships, and graph/runtime
+metadata, then load the selected Markdown payload from `RecordStore` before
+rendering. `atelier issue search` also matches issue titles and bodies from
+canonical issue files, with comment/note text read from canonical activity
+sidecars instead of legacy SQLite `comments.content`. This allows frequent
+polling surfaces such as Mission Control to use small SQLite rows for candidate
+lists without treating every Markdown body or record payload as cached UI state.
 
 ## Rebuild And Freshness
 
@@ -145,6 +179,32 @@ and `atelier export --check` validates them instead of reporting them as
 untracked drift. `atelier rebuild` validates sidecars, rejects activity entries
 whose subject issue is missing, and keeps the runtime projection rebuildable
 from `.atelier-state/` alone.
+
+## Durable Mutation Audit
+
+Audit date: 2026-06-11. The current command surface has three write classes:
+
+| Path | Classification | Notes |
+| --- | --- | --- |
+| `RecordStore::write_issue_atomic` | Markdown-first through `RecordStore` | Implemented file API for known issue records. It validates and atomically replaces canonical Markdown, but most public commands have not yet moved onto it. |
+| Issue create/update/close/reopen/comment/label/unlabel/block/unblock/relate/unrelate/subissue/quick | Compatibility SQLite-first | Public commands mutate SQLite, write issue activity sidecars where applicable, then call `export_current_state` so `.atelier-state/` is recoverable without a later manual export. |
+| Issue delete and close-all | Compatibility SQLite-first | These commands now call `export_current_state` after successful mutation so removed or closed records are reflected in `.atelier-state/` before the command exits. |
+| `dep add` and `dep remove` | Compatibility SQLite-first | The top-level Agent Factory dependency aliases now call `export_current_state`; `dep list` is query-only and checks projection freshness. |
+| Mission create/update/add-work/add-blocker | Compatibility SQLite-first | Mission records and cross-record links write SQLite first and export canonical mission Markdown plus relationships before returning. |
+| Plan create/revise/link | Compatibility SQLite-first | Plan records and typed links write SQLite first and export canonical plan Markdown plus relationships before returning. |
+| Plan apply | Compatibility SQLite-first by default | `apply.export = "auto"` writes `.atelier-state/` before returning. `check_only` validates freshness, and `skip` is an explicit compatibility escape hatch for callers that take responsibility for a later export. |
+| Evidence add/attach | Compatibility SQLite-first | Evidence records and attachment links write SQLite first and export canonical evidence Markdown plus relationships before returning. Issue evidence attachments also write issue activity sidecars. |
+| Typed record links | Compatibility SQLite-first | Mission, plan, evidence, milestone, and issue relationship commands currently use `record_links`, issue dependencies, parent edges, or issue relation tables, then export relationship front matter. |
+| Labels and dependencies | Compatibility SQLite-first | Issue labels and blocker edges remain SQLite mutations followed by canonical export. Rebuild derives labels and dependency edges from issue Markdown. |
+| Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |
+| Work start/finish and worktree helpers | Runtime plus activity sidecars | Work associations and sessions are local runtime state in `.atelier/`. The durable part is the issue activity sidecar, which is written directly under `.atelier-state/issues/<id>.activity/` when the issue Markdown file exists. |
+| Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, or compatibility repair | Telemetry and work markers are local/runtime. `import-beads` is an external import that writes SQLite and immediately exports canonical state. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
+
+The remaining architectural gap is ownership, not recoverability: public durable
+commands still depend on SQLite as the mutation engine and use export as the
+compatibility writer. A future slice must move issue lifecycle, first-class
+record, and cross-record relationship mutations onto `RecordStore` before
+projection refresh.
 
 The explicit one-off migration path for old local SQLite comments is
 `scripts/migrate_sqlite_comments_to_activity.py`. Operators run it manually with
