@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
@@ -158,15 +158,32 @@ impl Database {
             return Ok(None);
         }
 
-        if record_id::validate_record_id(normalized).is_err() {
-            return Ok(None);
-        }
-
-        if self.get_issue(normalized)?.is_some() {
+        if record_id::validate_record_id(normalized).is_ok()
+            && self.get_issue(normalized)?.is_some()
+        {
             return Ok(Some(normalized.to_string()));
         }
 
-        Ok(None)
+        if !is_partial_issue_key(normalized) {
+            return Ok(None);
+        }
+
+        let suffix = format!("%-{normalized}");
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM issues WHERE id LIKE ?1 ORDER BY id LIMIT 2")?;
+        let matches = stmt
+            .query_map([suffix], |row| row.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        match matches.as_slice() {
+            [id] => Ok(Some(id.clone())),
+            [] => Ok(None),
+            _ => bail!(
+                "Issue key {normalized} is ambiguous: {}",
+                matches.join(", ")
+            ),
+        }
     }
 
     /// Get an issue by ID, returning an error if not found.
@@ -372,5 +389,76 @@ impl Database {
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(issues)
+    }
+}
+
+fn is_partial_issue_key(value: &str) -> bool {
+    !value.is_empty()
+        && !value.contains('-')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn setup_test_db() -> (Database, tempfile::TempDir) {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let db = Database::open(&db_path).unwrap();
+        (db, dir)
+    }
+
+    fn insert_issue(db: &Database, id: &str, title: &str) {
+        let now = Utc::now();
+        db.insert_issue_import(&Issue {
+            id: id.to_string(),
+            title: title.to_string(),
+            description: None,
+            status: "open".to_string(),
+            issue_type: "task".to_string(),
+            priority: "medium".to_string(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn resolve_issue_ref_accepts_full_id() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-000r", "Full key");
+
+        let resolved = db.resolve_issue_ref("atelier-000r").unwrap();
+
+        assert_eq!(resolved.as_deref(), Some("atelier-000r"));
+    }
+
+    #[test]
+    fn resolve_issue_ref_accepts_partial_key() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-000r", "Partial key");
+
+        let resolved = db.resolve_issue_ref("000r").unwrap();
+
+        assert_eq!(resolved.as_deref(), Some("atelier-000r"));
+    }
+
+    #[test]
+    fn resolve_issue_ref_rejects_ambiguous_partial_key() {
+        let (db, _dir) = setup_test_db();
+        insert_issue(&db, "atelier-000r", "First");
+        insert_issue(&db, "other-000r", "Second");
+
+        let error = db.resolve_issue_ref("000r").unwrap_err();
+
+        assert!(error.to_string().contains("ambiguous"));
+        assert!(error.to_string().contains("atelier-000r"));
+        assert!(error.to_string().contains("other-000r"));
     }
 }

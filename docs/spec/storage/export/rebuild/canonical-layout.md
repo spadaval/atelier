@@ -103,18 +103,18 @@ Common required front matter:
 | `created_at` | string | UTC RFC 3339 timestamp. |
 | `updated_at` | string | UTC RFC 3339 timestamp. |
 | `labels` | array | Sorted lexically. |
-| `links` | array | Sorted by `type`, `target_kind`, then `target_id`. |
+| `relationships` | object | Sorted relationship buckets: `blocks`, `children`, `attachments`, and `relates`. |
 
 The body is the canonical rich-text description. Rebuild stores it as the
 record body without front matter.
 
-`links` is the canonical typed graph metadata for semantic relationships owned
-by a record. Each entry contains `type`, `target_kind`, and `target_id`.
-Dependencies and issue hierarchy remain in the issue-specific `depends_on`,
-`blocks`, and `parent` fields because they have dedicated command semantics.
-Typed relation rows are rebuilt from `links`; `export --check` validates that
-link targets exist, link objects are not duplicated, and relation types are
-valid.
+`relationships` is the canonical record relationship model. `blocks` stores
+operational blocker edges from the source record to blocked issue targets.
+`children` stores hierarchy, scope, and mission-work edges. `attachments` stores
+supporting plan/evidence/milestone records with a `role`. `relates` stores peer
+semantic relationships with a `type`. Rebuild derives issue readiness,
+hierarchy, and runtime relation indexes from these buckets; `depends_on` is a
+query/display concept derived as the inverse of `blocks`.
 
 ## Issues
 
@@ -126,9 +126,6 @@ Issue front matter adds:
 | --- | --- | --- |
 | `priority` | string | Stable priority value, such as `P1`. |
 | `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, `spike`, or `decision`. |
-| `parent` | string or null | Parent issue ID in the current canonical issue schema. Typed mission and milestone parent targets are reserved for the expanded record graph. |
-| `blocks` | array | Issue IDs this issue blocks, sorted lexically. |
-| `depends_on` | array | Issue IDs this issue depends on, sorted lexically. |
 | `acceptance` | array | Acceptance criteria strings in user-defined order. |
 | `evidence_required` | array | Evidence requirements in user-defined order. |
 
@@ -138,7 +135,7 @@ Path: `.atelier-state/missions/<record-id>.md`
 
 Current staged support writes mission records with common front matter fields
 (`schema`, `schema_version`, `id`, `title`, `status`, `created_at`,
-`updated_at`, `links`) plus a quoted JSON `data` field. The JSON object carries
+`updated_at`, `relationships`) plus a quoted JSON `data` field. The JSON object carries
 `constraints`, `risks`, `validation`, `milestones`, `plans`, `evidence`, and
 `work`. The body carries the mission summary or objective text.
 
@@ -216,8 +213,9 @@ Rebuild proceeds in this order:
    command slice lands.
 2. Validate each record's schema, schema version, ID, path, front matter shape,
    and body encoding.
-3. Validate that `parent`, `blocks`, `depends_on`, and `links` references point
-   to discovered records and that duplicate IDs or duplicate links are rejected.
+3. Validate that `relationships` references point to discovered records, that
+   duplicate relationships are rejected, and that `blocks` and issue
+   `children` do not create cycles.
 4. Recreate SQLite tables inside a transaction.
 5. Regenerate derived projections such as `mission-control.json` when supported.
 

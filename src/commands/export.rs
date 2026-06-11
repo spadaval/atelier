@@ -4,9 +4,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue};
+use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::projection_index;
-use crate::record_store::{self, CanonicalIssueRecord, FIRST_CLASS_RECORD_KINDS};
+use crate::record_store::{
+    self, AttachmentRelationship, CanonicalIssueRecord, RelatesRelationship, RelationshipTarget,
+    Relationships, FIRST_CLASS_RECORD_KINDS,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {
@@ -209,44 +212,21 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
 
 fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     let labels = db.get_labels(&issue.id)?;
-    let mut blocks = issue_ids(db.get_blocking(&issue.id)?);
-    let mut depends_on = issue_ids(db.get_blockers(&issue.id)?);
-    let mut links = issue_links(db, &issue.id)?;
-    blocks.sort();
-    depends_on.sort();
-    links.sort();
+    let mut relationships = issue_relationships(db, issue)?;
+    record_store::sort_relationships(&mut relationships);
 
     record_store::render_issue_record(&CanonicalIssueRecord {
         issue: issue.clone(),
         labels,
-        blocks,
-        depends_on,
         acceptance: Vec::new(),
         evidence_required: Vec::new(),
-        links,
+        relationships,
     })
 }
 
 fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> {
-    let mut links = db
-        .list_record_links(&record.kind, &record.id)?
-        .into_iter()
-        .filter(|link| link.source_kind == record.kind && link.source_id == record.id)
-        .collect::<Vec<_>>();
-    links.sort_by(|a, b| {
-        (
-            &a.target_kind,
-            &a.target_id,
-            &a.relation_type,
-            &a.created_at,
-        )
-            .cmp(&(
-                &b.target_kind,
-                &b.target_id,
-                &b.relation_type,
-                &b.created_at,
-            ))
-    });
+    let mut relationships = domain_relationships(db, record)?;
+    record_store::sort_relationships(&mut relationships);
     let mut output = String::new();
     output.push_str("---\n");
     write_yaml_scalar(
@@ -256,7 +236,7 @@ fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> 
     )?;
     write_yaml_scalar(&mut output, "id", Some(&record.id))?;
     write_json_scalar(&mut output, "data", &record.data_json)?;
-    write_record_links(&mut output, "links", &links)?;
+    record_store::write_yaml_relationships(&mut output, &relationships)?;
     write_yaml_scalar(
         &mut output,
         "schema",
@@ -279,22 +259,97 @@ fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> 
     Ok(output)
 }
 
-fn issue_links(db: &Database, issue_id: &str) -> Result<Vec<record_store::IssueLink>> {
-    let mut links = Vec::new();
-    for relation in db.get_typed_relations(issue_id)? {
-        if relation.issue_id_1 == issue_id {
-            links.push(record_store::IssueLink {
+fn issue_relationships(db: &Database, issue: &Issue) -> Result<Relationships> {
+    let mut relationships = Relationships::default();
+    for id in db.get_blocking(&issue.id)? {
+        relationships.blocks.push(RelationshipTarget {
+            kind: "issue".to_string(),
+            id,
+        });
+    }
+    for child in db.get_subissues(&issue.id)? {
+        relationships.children.push(RelationshipTarget {
+            kind: "issue".to_string(),
+            id: child.id,
+        });
+    }
+    for relation in db.get_typed_relations(&issue.id)? {
+        if relation.issue_id_1 == issue.id {
+            relationships.relates.push(RelatesRelationship {
+                kind: "issue".to_string(),
+                id: relation.issue_id_2,
                 relation_type: relation.relation_type,
-                target_kind: "issue".to_string(),
-                target_id: relation.issue_id_2,
             });
         }
     }
-    Ok(links)
+    for link in db.list_record_links("issue", &issue.id)? {
+        classify_record_link_for_owner(&mut relationships, &link, "issue", &issue.id);
+    }
+    Ok(relationships)
 }
 
-fn issue_ids(ids: Vec<String>) -> Vec<String> {
-    ids
+fn domain_relationships(db: &Database, record: &DomainRecord) -> Result<Relationships> {
+    let mut relationships = Relationships::default();
+    for link in db.list_record_links(&record.kind, &record.id)? {
+        classify_record_link_for_owner(&mut relationships, &link, &record.kind, &record.id);
+    }
+    Ok(relationships)
+}
+
+fn classify_record_link_for_owner(
+    relationships: &mut Relationships,
+    link: &RecordLink,
+    owner_kind: &str,
+    owner_id: &str,
+) {
+    if link.source_kind == owner_kind && link.source_id == owner_id {
+        if link.target_kind == "issue" && is_child_relation(&link.relation_type) {
+            relationships.children.push(RelationshipTarget {
+                kind: link.target_kind.clone(),
+                id: link.target_id.clone(),
+            });
+        } else if is_attachment_kind(&link.target_kind) && is_attachment_role(&link.relation_type) {
+            relationships.attachments.push(AttachmentRelationship {
+                kind: link.target_kind.clone(),
+                id: link.target_id.clone(),
+                role: link.relation_type.clone(),
+            });
+        } else {
+            relationships.relates.push(RelatesRelationship {
+                kind: link.target_kind.clone(),
+                id: link.target_id.clone(),
+                relation_type: link.relation_type.clone(),
+            });
+        }
+    } else if link.target_kind == owner_kind
+        && link.target_id == owner_id
+        && is_attachment_kind(&link.source_kind)
+        && is_attachment_role(&link.relation_type)
+    {
+        relationships.attachments.push(AttachmentRelationship {
+            kind: link.source_kind.clone(),
+            id: link.source_id.clone(),
+            role: link.relation_type.clone(),
+        });
+    }
+}
+
+fn is_child_relation(relation_type: &str) -> bool {
+    matches!(
+        relation_type,
+        "advances" | "contributes_to" | "implements" | "has_checkpoint"
+    )
+}
+
+fn is_attachment_kind(kind: &str) -> bool {
+    matches!(kind, "plan" | "evidence" | "milestone")
+}
+
+fn is_attachment_role(relation_type: &str) -> bool {
+    matches!(
+        relation_type,
+        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
+    )
 }
 
 fn issue_record_path(id: &str) -> PathBuf {
@@ -324,31 +379,6 @@ fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Res
             output.push_str(key);
             output.push_str(": null\n");
         }
-    }
-    Ok(())
-}
-
-fn write_record_links(
-    output: &mut String,
-    key: &str,
-    links: &[crate::models::RecordLink],
-) -> Result<()> {
-    output.push_str(key);
-    if links.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for link in links {
-        output.push_str("- target_id: ");
-        output.push_str(&serde_json::to_string(&link.target_id)?);
-        output.push('\n');
-        output.push_str("  target_kind: ");
-        output.push_str(&serde_json::to_string(&link.target_kind)?);
-        output.push('\n');
-        output.push_str("  type: ");
-        output.push_str(&serde_json::to_string(&link.relation_type)?);
-        output.push('\n');
     }
     Ok(())
 }
@@ -542,16 +572,16 @@ mod tests {
         let missing_id = "atelier-zzzz";
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
-            "links: []",
+            "  relates: []",
             &format!(
-                "links:\n- target_id: \"{missing_id}\"\n  target_kind: \"issue\"\n  type: \"related\""
+                "  relates:\n  - kind: \"issue\"\n    id: \"{missing_id}\"\n    type: \"related\""
             ),
         );
         fs::write(path, text).unwrap();
 
         let error = run_canonical(&db, &state_dir, true).unwrap_err();
         assert!(error.to_string().contains(&format!(
-            "Issue {id} has related reference to missing issue {missing_id}"
+            "{id} has related reference to missing issue {missing_id}"
         )));
     }
 
@@ -584,17 +614,22 @@ mod tests {
         assert_eq!(first, second);
         let issue_text = String::from_utf8(issue.bytes.clone()).unwrap();
         assert!(issue_text.contains("labels:\n- \"alpha\"\n- \"zeta\"\n"));
-        assert!(issue_text.contains(&format!("parent: \"{parent}\"")));
         assert!(issue_text.ends_with("Child body\n"));
 
-        let link_text = String::from_utf8(parent_issue.bytes.clone()).unwrap()
-            + &String::from_utf8(issue.bytes.clone()).unwrap();
+        let parent_text = String::from_utf8(parent_issue.bytes.clone()).unwrap();
+        assert!(parent_text.contains(&format!(
+            "  blocks:\n  - kind: \"issue\"\n    id: \"{child}\"\n"
+        )));
+        assert!(parent_text.contains(&format!(
+            "  children:\n  - kind: \"issue\"\n    id: \"{child}\"\n"
+        )));
+        let combined_text = parent_text + &String::from_utf8(issue.bytes.clone()).unwrap();
         assert!(
-            link_text.contains(&format!(
-                "links:\n- target_id: \"{child}\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
-            )) || link_text.contains(&format!(
-            "links:\n- target_id: \"{parent}\"\n  target_kind: \"issue\"\n  type: \"derived\"\n"
-        ))
+            combined_text.contains(&format!(
+                "  relates:\n  - kind: \"issue\"\n    id: \"{child}\"\n    type: \"derived\"\n"
+            )) || combined_text.contains(&format!(
+                "  relates:\n  - kind: \"issue\"\n    id: \"{parent}\"\n    type: \"derived\"\n"
+            ))
         );
     }
 }

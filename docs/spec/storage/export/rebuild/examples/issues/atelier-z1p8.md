@@ -1,28 +1,30 @@
 ---
 acceptance:
 - Canonical layout is documented.
-- Record-owned links are documented.
-blocks:
-- atelier-x2b4
+- Record-owned relationships are documented.
 created_at: "2026-06-08T00:00:00Z"
-depends_on: []
 evidence_required:
 - Markdown diff whitespace check passes.
-id: atelier-z1p8
-issue_type: task
+id: "atelier-z1p8"
+issue_type: "task"
 labels:
-- projection
-- storage
-links:
-- target_id: atelier-n8da
-  target_kind: evidence
-  type: evidenced_by
-parent: atelier-k7mq
-priority: P1
-schema: atelier.issue
+- "projection"
+- "storage"
+priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-x2b4"
+  children: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-n8da"
+    role: "evidenced_by"
+  relates: []
+schema: "atelier.issue"
 schema_version: 1
-status: open
-title: Define canonical export layout
+status: "open"
+title: "Define canonical export layout"
 updated_at: "2026-06-08T00:00:00Z"
 ---
 

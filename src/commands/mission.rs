@@ -102,7 +102,12 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
 }
 
 pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
-    let records = db.list_records(KIND, status)?;
+    let status_filter = match status {
+        Some("all") => None,
+        Some(status) => Some(status),
+        None => Some("open"),
+    };
+    let records = db.list_records(KIND, status_filter)?;
     let mut rows = records
         .into_iter()
         .map(|record| {
@@ -152,6 +157,30 @@ pub fn update(
     print_record(&record)
 }
 
+pub fn add_work(db: &Database, id: &str, issue_id: &str) -> Result<()> {
+    db.require_record(KIND, id)?;
+    let issue = db.require_issue(issue_id)?;
+    let inserted = db.add_record_link(KIND, id, "issue", &issue.id, "advances")?;
+    if inserted {
+        println!("Added work {} to mission {}", issue.id, id);
+    } else {
+        println!("Work {} is already on mission {}", issue.id, id);
+    }
+    Ok(())
+}
+
+pub fn add_blocker(db: &Database, id: &str, issue_id: &str) -> Result<()> {
+    db.require_record(KIND, id)?;
+    let issue = db.require_issue(issue_id)?;
+    let inserted = db.add_record_link(KIND, id, "issue", &issue.id, "blocked_by")?;
+    if inserted {
+        println!("Added blocker {} to mission {}", issue.id, id);
+    } else {
+        println!("Blocker {} is already on mission {}", issue.id, id);
+    }
+    Ok(())
+}
+
 fn print_record(record: &DomainRecord) -> Result<()> {
     println!("Mission {}: {}", record.id, record.title);
     println!("Status: {}", record.status);
@@ -170,28 +199,36 @@ struct MissionListRow {
 
 #[derive(Default)]
 struct MissionListSummary {
+    work: WorkCounts,
+    other_work: WorkCounts,
+    epics: Vec<MissionListEpic>,
+    open_blockers: usize,
+}
+
+struct MissionListEpic {
+    issue: Issue,
+    work: WorkCounts,
+}
+
+#[derive(Clone, Copy, Default)]
+struct WorkCounts {
     ready: usize,
     blocked: usize,
     done: usize,
     backlog: usize,
-    open_blockers: usize,
-    evidence: usize,
 }
 
 fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSummary> {
     let mut summary = MissionListSummary::default();
-    let mut seen_evidence = BTreeSet::new();
     let mut seen_blockers = BTreeSet::new();
     let mut seen_work = BTreeSet::new();
+    let mut linked_work = Vec::new();
 
     for link in db.list_record_links(KIND, mission_id)? {
         let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
             continue;
         };
         match kind {
-            "evidence" if seen_evidence.insert(linked_id.to_string()) => {
-                summary.evidence += 1;
-            }
             "issue" if link.relation_type == "blocked_by" => {
                 if seen_blockers.insert(linked_id.to_string()) {
                     let issue = db.require_issue(linked_id)?;
@@ -205,17 +242,31 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
                     continue;
                 }
                 let issue = db.require_issue(linked_id)?;
-                match issue_bucket(db, &issue)? {
-                    "ready" => summary.ready += 1,
-                    "blocked" => summary.blocked += 1,
-                    "done" => summary.done += 1,
-                    _ => summary.backlog += 1,
-                }
+                linked_work.push(issue);
             }
             _ => {}
         }
     }
 
+    let linked_epic_ids = linked_work
+        .iter()
+        .filter(|issue| issue.issue_type == "epic")
+        .map(|issue| issue.id.clone())
+        .collect::<BTreeSet<_>>();
+
+    for issue in linked_work {
+        summary.work.add_bucket(issue_bucket(db, &issue)?);
+        if issue.issue_type == "epic" {
+            summary.epics.push(MissionListEpic {
+                work: epic_work_counts(db, &issue.id)?,
+                issue,
+            });
+        } else if !has_ancestor_in_set(db, &issue, &linked_epic_ids)? {
+            summary.other_work.add_bucket(issue_bucket(db, &issue)?);
+        }
+    }
+
+    summary.epics.sort_by(compare_mission_list_epics);
     Ok(summary)
 }
 
@@ -263,23 +314,15 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
 fn mission_list_summary_line(rows: &[MissionListRow]) -> String {
     let mut statuses = BTreeMap::<String, usize>::new();
     let mut blocked_missions = 0;
-    let mut evidence_gaps = 0;
     for row in rows {
         *statuses.entry(row.record.status.clone()).or_default() += 1;
-        if row.summary.open_blockers > 0 {
+        if row.summary.open_blockers > 0 || row.summary.work.blocked > 0 {
             blocked_missions += 1;
         }
-        if row.summary.evidence == 0 {
-            evidence_gaps += 1;
-        }
     }
-    format!(
-        "{} total | Status: {} | Blocked: {} | Evidence gaps: {}",
-        rows.len(),
-        joined_counts(statuses),
-        blocked_missions,
-        evidence_gaps
-    )
+    let status_text = mission_status_summary_text(rows.len(), statuses);
+    let blocked_text = count_label(blocked_missions, "blocked");
+    format!("{status_text} | {blocked_text}")
 }
 
 fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a MissionListRow>) {
@@ -294,16 +337,9 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
             "  {} [{}] - {}",
             row.record.id, row.record.status, row.record.title
         );
-        println!(
-            "    Updated: {} | Work: ready={} blocked={} done={} backlog={} | Blockers: {} | Evidence: {}",
-            format_human_datetime(row.record.updated_at),
-            row.summary.ready,
-            row.summary.blocked,
-            row.summary.done,
-            row.summary.backlog,
-            row.summary.open_blockers,
-            evidence_text(row.summary.evidence)
-        );
+        if row.record.status == "open" {
+            print_mission_list_open_work(row);
+        }
     }
 }
 
@@ -351,22 +387,153 @@ fn status_heading(status: &str) -> String {
         .join(" ")
 }
 
-fn joined_counts(counts: BTreeMap<String, usize>) -> String {
-    if counts.is_empty() {
-        return "(none)".to_string();
+fn mission_status_summary_text(total: usize, statuses: BTreeMap<String, usize>) -> String {
+    if statuses.len() == 1 {
+        let (status, count) = statuses
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| ("mission".to_string(), total));
+        format!("{count} {status} {}", plural_noun(count, "mission"))
+    } else if statuses.is_empty() {
+        "0 missions".to_string()
+    } else {
+        format!("{total} missions | {}", joined_plain_counts(statuses))
     }
+}
+
+fn joined_plain_counts(counts: BTreeMap<String, usize>) -> String {
     counts
         .into_iter()
-        .map(|(status, count)| format!("{status}={count}"))
+        .map(|(status, count)| format!("{count} {status}"))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-fn evidence_text(count: usize) -> String {
-    if count == 0 {
-        "gap".to_string()
+fn print_mission_list_open_work(row: &MissionListRow) {
+    if row.summary.epics.is_empty() {
+        println!("    No linked epics.");
     } else {
-        count.to_string()
+        for epic in &row.summary.epics {
+            println!(
+                "    [epic] {} [{}] {} - {} | {}",
+                epic.issue.id,
+                epic.issue.status,
+                epic.issue.priority,
+                epic.issue.title,
+                epic.work.to_inline_text()
+            );
+        }
+    }
+    if !row.summary.other_work.is_empty() {
+        println!(
+            "    Other linked work: {}",
+            row.summary.other_work.to_compact_text()
+        );
+    }
+    if row.summary.open_blockers > 0 {
+        println!(
+            "    Mission blockers: {}",
+            count_label(row.summary.open_blockers, "open")
+        );
+    }
+}
+
+fn epic_work_counts(db: &Database, epic_id: &str) -> Result<WorkCounts> {
+    let mut counts = WorkCounts::default();
+    let mut seen = BTreeSet::new();
+    collect_descendant_work_counts(db, epic_id, &mut seen, &mut counts)?;
+    Ok(counts)
+}
+
+fn collect_descendant_work_counts(
+    db: &Database,
+    parent_id: &str,
+    seen: &mut BTreeSet<String>,
+    counts: &mut WorkCounts,
+) -> Result<()> {
+    for child in db.get_subissues(parent_id)? {
+        if !seen.insert(child.id.clone()) {
+            continue;
+        }
+        counts.add_bucket(issue_bucket(db, &child)?);
+        collect_descendant_work_counts(db, &child.id, seen, counts)?;
+    }
+    Ok(())
+}
+
+fn compare_mission_list_epics(a: &MissionListEpic, b: &MissionListEpic) -> std::cmp::Ordering {
+    mission_status_rank(&a.issue.status)
+        .cmp(&mission_status_rank(&b.issue.status))
+        .then_with(|| a.issue.id.cmp(&b.issue.id))
+}
+
+fn has_ancestor_in_set(
+    db: &Database,
+    issue: &Issue,
+    ancestor_ids: &BTreeSet<String>,
+) -> Result<bool> {
+    let mut parent_id = issue.parent_id.clone();
+    while let Some(id) = parent_id {
+        if ancestor_ids.contains(&id) {
+            return Ok(true);
+        }
+        parent_id = db.require_issue(&id)?.parent_id;
+    }
+    Ok(false)
+}
+
+impl WorkCounts {
+    fn add_bucket(&mut self, bucket: &str) {
+        match bucket {
+            "ready" => self.ready += 1,
+            "blocked" => self.blocked += 1,
+            "done" => self.done += 1,
+            _ => self.backlog += 1,
+        }
+    }
+
+    fn is_empty(self) -> bool {
+        self.ready == 0 && self.blocked == 0 && self.done == 0 && self.backlog == 0
+    }
+
+    fn to_inline_text(self) -> String {
+        format!(
+            "ready {}, blocked {}, done {}",
+            self.ready, self.blocked, self.done
+        )
+    }
+
+    fn to_compact_text(self) -> String {
+        let mut parts = Vec::new();
+        if self.ready > 0 {
+            parts.push(count_label(self.ready, "ready"));
+        }
+        if self.blocked > 0 {
+            parts.push(count_label(self.blocked, "blocked"));
+        }
+        if self.done > 0 {
+            parts.push(count_label(self.done, "done"));
+        }
+        if self.backlog > 0 {
+            parts.push(count_label(self.backlog, "backlog"));
+        }
+        if parts.is_empty() {
+            "none".to_string()
+        } else {
+            parts.join(", ")
+        }
+    }
+}
+
+fn count_label(count: usize, label: &str) -> String {
+    format!("{count} {label}")
+}
+
+fn plural_noun(count: usize, noun: &str) -> String {
+    if count == 1 {
+        noun.to_string()
+    } else {
+        format!("{noun}s")
     }
 }
 
@@ -514,10 +681,7 @@ fn print_mission_next_commands(mission: &DomainRecord) {
     if mission.status == "closed" {
         println!("  atelier mission update {} --status open", mission.id);
     } else {
-        println!(
-            "  atelier link add mission {} issue <issue-id> --type advances",
-            mission.id
-        );
+        println!("  atelier mission add-work {} <issue-id>", mission.id);
         println!("  atelier workflow validate mission {}", mission.id);
     }
 }

@@ -123,6 +123,10 @@ fn issue_ref(dir: &Path, ordinal: usize) -> String {
         .unwrap_or_else(|| ordinal.to_string())
 }
 
+fn issue_key(id: &str) -> &str {
+    id.rsplit_once('-').map(|(_, key)| key).unwrap_or(id)
+}
+
 fn issue_id_by_title(dir: &Path, title: &str) -> String {
     record_id_by_title(dir, "issues", title)
 }
@@ -627,7 +631,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "mission",
         "plan",
         "evidence",
-        "link",
         "workflow",
         "work",
         "worktree",
@@ -890,6 +893,112 @@ fn test_show_issue() {
 }
 
 #[test]
+fn test_issue_commands_accept_partial_issue_key() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Partial key issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Partial key issue");
+    let key = issue_key(&issue_id);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", key]);
+
+    assert!(success, "show by partial key failed: {stderr}");
+    assert!(stdout.contains(&issue_id));
+    assert!(stdout.contains("Partial key issue"));
+}
+
+#[test]
+fn test_issue_reference_surfaces_accept_partial_issue_keys() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Parent key issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Related key issue"]);
+    let parent_id = issue_id_by_title(dir.path(), "Parent key issue");
+    let related_id = issue_id_by_title(dir.path(), "Related key issue");
+    let parent_key = issue_key(&parent_id);
+    let related_key = issue_key(&related_id);
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "subissue", parent_key, "Child key issue"],
+    );
+    assert!(success, "subissue by partial key failed: {stderr}");
+    assert!(stdout.contains(&parent_id));
+    let child_id = issue_id_by_title(dir.path(), "Child key issue");
+    assert!(!child_id.is_empty());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "relate", parent_key, related_key]);
+    assert!(success, "relate by partial keys failed: {stderr}");
+    assert!(stdout.contains(&parent_id));
+    assert!(stdout.contains(&related_id));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "related", parent_key]);
+    assert!(success, "related by partial key failed: {stderr}");
+    assert!(stdout.contains(&related_id));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            parent_key,
+            "--validator",
+            "no_open_blockers",
+        ],
+    );
+    assert!(success, "workflow validate by partial key failed: {stderr}");
+    assert!(stdout.contains(&format!("Workflow Validation: issue {parent_id}")));
+}
+
+#[test]
+fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Existing issue target"]);
+    let issue_id = issue_id_by_title(dir.path(), "Existing issue target");
+    let issue_key = issue_key(&issue_id);
+    let bulk_path = dir.path().join("partial-key-plan.json");
+    std::fs::write(
+        &bulk_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bulk-plan",
+  "schema_version": 1,
+  "title": "Partial key bulk apply",
+  "apply": {{ "export": "auto" }},
+  "records": {{
+    "issues": [
+      {{
+        "client_ref": "issue.partial",
+        "title": "Partial key dependent",
+        "issue_type": "task",
+        "priority": "medium",
+        "depends_on": [{{ "id": "{issue_key}" }}]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["plan", "apply", bulk_path.to_str().unwrap()]);
+    assert!(success, "bulk apply by partial issue key failed: {stderr}");
+    assert!(stdout.contains("Bulk plan applied."));
+
+    let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &dependent_id]);
+    assert!(success, "dep list failed: {stderr}");
+    assert!(stdout.contains(&issue_id));
+}
+
+#[test]
 fn test_show_issue_rich_human_output() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1117,17 +1226,14 @@ fn test_evidence_issue_link_creates_history_activity() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "link",
-            "add",
             "evidence",
+            "attach",
             &evidence_id,
             "issue",
             issue_id.as_str(),
-            "--type",
-            "validates",
         ],
     );
-    assert!(success, "evidence link failed: {stderr}");
+    assert!(success, "evidence attach failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -4324,12 +4430,11 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
+            "plan",
             "link",
-            "add",
+            plan_id,
             "mission",
             mission_id,
-            "plan",
-            plan_id,
             "--type",
             "planned_by",
         ],
@@ -4337,18 +4442,9 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(success, "mission-plan link failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "link",
-            "add",
-            "evidence",
-            evidence_id,
-            "mission",
-            mission_id,
-            "--type",
-            "validates",
-        ],
+        &["evidence", "attach", evidence_id, "mission", mission_id],
     );
-    assert!(success, "evidence link failed: {stderr}");
+    assert!(success, "evidence attach failed: {stderr}");
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -4364,12 +4460,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Wire mission work");
     let issue_id = issue_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "link", "add", "mission", mission_id, "issue", issue_id, "--type", "advances",
-        ],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
     assert!(success, "mission-work link failed: {stderr}");
     let (success, blocker_out, stderr) = run_atelier(
         dir.path(),
@@ -4387,16 +4479,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let blocker_id = blocker_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "link",
-            "add",
-            "mission",
-            mission_id,
-            "issue",
-            blocker_id,
-            "--type",
-            "blocked_by",
-        ],
+        &["mission", "add-blocker", mission_id, blocker_id],
     );
     assert!(success, "mission-blocker link failed: {stderr}");
 
@@ -4412,7 +4495,10 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(mission_markdown.contains("schema: \"atelier.mission\""));
     assert!(mission_markdown.contains("schema_version: 1"));
     assert!(mission_markdown.contains("data: "));
-    assert!(mission_markdown.contains("links:"));
+    assert!(mission_markdown.contains("relationships:"));
+    assert!(mission_markdown.contains(&format!("id: \"{issue_id}\"")));
+    assert!(mission_markdown.contains(&format!("id: \"{plan_id}\"")));
+    assert!(mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
 
     std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -4555,15 +4641,24 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     );
     assert!(success, "close mission failed: {stderr}");
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready work"]);
-    assert!(success, "ready issue create failed: {stderr}");
-    assert!(ready_out.contains("Created issue atelier-"));
-    let ready_id = issue_id_by_title(dir.path(), "Ready work");
-    let ready_id = ready_id.as_str();
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Mission epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic issue create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Mission epic");
+    let epic_id = epic_id.as_str();
+
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Ready work"]);
+    assert!(success, "ready subissue create failed: {stderr}");
+    assert!(ready_out.contains(epic_id));
+
     let (success, blocked_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Blocked work"]);
-    assert!(success, "blocked issue create failed: {stderr}");
-    assert!(blocked_out.contains("Created issue atelier-"));
+        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Blocked work"]);
+    assert!(success, "blocked subissue create failed: {stderr}");
+    assert!(blocked_out.contains(epic_id));
     let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
     let blocked_id = blocked_id.as_str();
     let (success, blocker_out, stderr) =
@@ -4576,9 +4671,10 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
     assert!(success, "block issue failed: {stderr}");
 
-    let (success, done_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Done work"]);
-    assert!(success, "done issue create failed: {stderr}");
-    assert!(done_out.contains("Created issue atelier-"));
+    let (success, done_out, stderr) =
+        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Done work"]);
+    assert!(success, "done subissue create failed: {stderr}");
+    assert!(done_out.contains(epic_id));
     let done_id = issue_id_by_title(dir.path(), "Done work");
     let done_id = done_id.as_str();
     let (success, _, stderr) = run_atelier(
@@ -4587,17 +4683,12 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     );
     assert!(success, "close issue failed: {stderr}");
 
-    let (success, backlog_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Backlog work"]);
-    assert!(success, "backlog issue create failed: {stderr}");
-    assert!(backlog_out.contains("Created issue atelier-"));
-    let backlog_id = issue_id_by_title(dir.path(), "Backlog work");
-    let backlog_id = backlog_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", &backlog_id, "--status", "in_progress"],
-    );
-    assert!(success, "backlog issue update failed: {stderr}");
+    let (success, loose_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Loose mission work"]);
+    assert!(success, "loose issue create failed: {stderr}");
+    assert!(loose_out.contains("Created issue atelier-"));
+    let loose_id = issue_id_by_title(dir.path(), "Loose mission work");
+    let loose_id = loose_id.as_str();
 
     let (success, mission_blocker_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Mission blocker"]);
@@ -4606,27 +4697,14 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let mission_blocker_id = issue_id_by_title(dir.path(), "Mission blocker");
     let mission_blocker_id = mission_blocker_id.as_str();
 
-    for issue_id in [&ready_id, &blocked_id, &done_id, &backlog_id] {
-        let (success, _, stderr) = run_atelier(
-            dir.path(),
-            &[
-                "link", "add", "mission", &active_id, "issue", issue_id, "--type", "advances",
-            ],
-        );
+    for issue_id in [&epic_id, &loose_id] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["mission", "add-work", &active_id, issue_id]);
         assert!(success, "link work {issue_id} failed: {stderr}");
     }
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "link",
-            "add",
-            "mission",
-            &active_id,
-            "issue",
-            &mission_blocker_id,
-            "--type",
-            "blocked_by",
-        ],
+        &["mission", "add-blocker", &active_id, &mission_blocker_id],
     );
     assert!(success, "link mission blocker failed: {stderr}");
 
@@ -4648,51 +4726,57 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "link",
-            "add",
-            "evidence",
-            &evidence_id,
-            "mission",
-            &older_id,
-            "--type",
-            "validates",
-        ],
+        &["evidence", "attach", &evidence_id, "mission", &older_id],
     );
     assert!(success, "link evidence failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
     assert!(success, "mission list failed: {stderr}");
     assert!(stdout.contains("Missions"));
-    assert!(stdout.contains("3 total"));
-    assert!(stdout.contains("open=2"));
-    assert!(stdout.contains("closed=1"));
-    assert!(stdout.contains("Blocked: 1"));
-    assert!(stdout.contains("Evidence gaps: 2"));
+    assert!(stdout.contains("2 open missions | 1 blocked"));
+    assert!(!stdout.contains("Updated:"));
+    assert!(!stdout.contains("Evidence gaps"));
+    assert!(!stdout.contains("Evidence: gap"));
+    assert!(!stdout.contains("ready="));
     assert!(stdout.contains("Open"));
-    assert!(stdout.contains("Closed"));
+    assert!(!stdout.contains("Closed"));
 
     let active_row = format!("{active_id} [open] - Active mission");
     let older_row = format!("{older_id} [open] - Older open");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
     let active_pos = stdout.find(&active_row).expect("missing active row");
     let older_pos = stdout.find(&older_row).expect("missing older row");
-    let closed_pos = stdout.find(&closed_row).expect("missing closed row");
     assert!(
         active_pos < older_pos,
         "newer open mission should sort first:\n{stdout}"
     );
+    assert!(!stdout.contains(&closed_row));
     assert!(
-        older_pos < closed_pos,
-        "open missions should sort before closed missions:\n{stdout}"
+        stdout.contains(&format!(
+            "[epic] {epic_id} [open] medium - Mission epic | ready 1, blocked 1, done 1"
+        )),
+        "missing linked epic summary:\n{stdout}"
     );
-    assert!(
-        stdout.contains("Work: ready=2 blocked=1 done=1 backlog=0 | Blockers: 1 | Evidence: gap"),
-        "missing active mission summary:\n{stdout}"
-    );
-    assert!(stdout.contains("Work: ready=0 blocked=0 done=0 backlog=0 | Blockers: 0 | Evidence: 1"));
+    assert!(stdout.contains("Other linked work: 1 ready"));
+    assert!(stdout.contains("Mission blockers: 1 open"));
+    assert!(stdout.contains("No linked epics."));
+    assert!(!stdout.contains("Loose mission work"));
     assert!(stdout.contains(&format!("atelier mission show {active_id}")));
     assert!(stdout.contains("atelier mission create \"...\""));
+
+    let (success, all_out, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "all"]);
+    assert!(success, "all mission list failed: {stderr}");
+    assert!(all_out.contains("3 missions | 1 closed, 2 open | 1 blocked"));
+    assert!(all_out.contains(&active_row));
+    assert!(all_out.contains(&older_row));
+    assert!(all_out.contains(&closed_row));
+    let active_pos = all_out.find(&active_row).expect("missing active row");
+    let closed_pos = all_out.find(&closed_row).expect("missing closed row");
+    assert!(
+        active_pos < closed_pos,
+        "open missions should sort before closed missions:\n{all_out}"
+    );
 
     let (success, open_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "open"]);
@@ -4704,13 +4788,42 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let (success, empty_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "in_progress"]);
     assert!(success, "empty filtered mission list failed: {stderr}");
-    assert!(empty_out.contains("0 total"));
+    assert!(empty_out.contains("0 missions"));
     assert!(empty_out.contains("(none)"));
     assert!(empty_out.contains("atelier mission create \"...\""));
 
     let (success, list_out, stderr) = run_atelier(dir.path(), &["mission", "list"]);
     assert!(success, "mission list failed: {stderr}");
     assert!(list_out.contains(&active_row));
+}
+
+#[test]
+fn test_mission_list_default_open_empty_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, closed_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Closed only"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(closed_out.contains("Mission atelier-"));
+    let closed_id = record_id_by_title(dir.path(), "missions", "Closed only");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &closed_id, "--status", "closed"],
+    );
+    assert!(success, "close mission failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    assert!(success, "mission list failed: {stderr}");
+    assert!(stdout.contains("0 missions | 0 blocked"));
+    assert!(stdout.contains("(none)"));
+    assert!(!stdout.contains("Closed only"));
+
+    let (success, closed_stdout, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "closed"]);
+    assert!(success, "closed mission list failed: {stderr}");
+    assert!(closed_stdout.contains("1 closed mission | 0 blocked"));
+    assert!(closed_stdout.contains("Closed only"));
 }
 
 #[test]
@@ -4826,16 +4939,17 @@ fn test_projection_index_rejects_missing_and_unindexed_sources() {
         &unindexed_path,
         r#"---
 acceptance: []
-blocks: []
 created_at: "2026-06-10T12:00:00+00:00"
-depends_on: []
 evidence_required: []
 id: "atelier-zzzz"
 issue_type: "task"
 labels: []
-links: []
-parent: null
 priority: "P2"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
@@ -4954,6 +5068,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "client_ref": "mission.bulk",
         "title": "Bulk mission",
         "body": "Mission from bulk plan",
+        "work": [{ "client_ref": "issue.work" }],
         "plans": [{ "client_ref": "plan.bulk" }],
         "milestones": [{ "client_ref": "milestone.bulk" }]
       }
@@ -4987,14 +5102,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "validates": [{ "client_ref": "mission.bulk" }]
       }
     ]
-  },
-  "links": [
-    {
-      "source": { "client_ref": "mission.bulk" },
-      "type": "advances",
-      "target": { "client_ref": "issue.work" }
-    }
-  ]
+  }
 }"#,
     )
     .unwrap();

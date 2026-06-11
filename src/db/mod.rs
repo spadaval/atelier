@@ -158,6 +158,14 @@ pub fn validate_link_type(relation_type: &str) -> Result<()> {
     }
 }
 
+pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
+    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
+        Ok(())
+    } else {
+        validate_relation_type(relation_type)
+    }
+}
+
 pub struct Database {
     pub(crate) conn: Connection,
 }

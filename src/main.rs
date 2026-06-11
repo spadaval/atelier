@@ -38,7 +38,6 @@ Missions and planning:
 
 Records:
   evidence      Capture validation evidence
-  link          Manage typed links across tracker records
 
 Work:
   work          Start, finish, and inspect tracked work
@@ -146,12 +145,6 @@ enum Commands {
     Plan {
         #[command(subcommand)]
         action: PlanCommands,
-    },
-
-    /// Typed links across records
-    Link {
-        #[command(subcommand)]
-        action: LinkCommands,
     },
 
     /// First-class evidence records
@@ -488,6 +481,7 @@ enum MissionCommands {
     Show { id: String },
     /// List missions
     List {
+        /// Filter missions by status (default: open; use all to include closed/history)
         #[arg(short, long)]
         status: Option<String>,
     },
@@ -507,6 +501,10 @@ enum MissionCommands {
         #[arg(long)]
         validation: Vec<String>,
     },
+    /// Add issue work to a mission
+    AddWork { id: String, issue: String },
+    /// Add an issue blocker to a mission
+    AddBlocker { id: String, issue: String },
 }
 
 #[derive(Subcommand)]
@@ -552,30 +550,6 @@ enum PlanCommands {
 }
 
 #[derive(Subcommand)]
-enum LinkCommands {
-    /// Add a typed link
-    Add {
-        source_kind: String,
-        source_id: String,
-        target_kind: String,
-        target_id: String,
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-    /// Remove a typed link
-    Remove {
-        source_kind: String,
-        source_id: String,
-        target_kind: String,
-        target_id: String,
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-    /// List typed links for a record
-    List { kind: String, id: String },
-}
-
-#[derive(Subcommand)]
 enum EvidenceCommands {
     /// Add validation evidence
     Add {
@@ -593,6 +567,14 @@ enum EvidenceCommands {
     },
     /// Show an evidence record
     Show { id: String },
+    /// Attach evidence to a target record
+    Attach {
+        id: String,
+        target_kind: String,
+        target_id: String,
+        #[arg(long, default_value = "validates")]
+        role: String,
+    },
     /// List evidence records
     List {
         #[arg(long)]
@@ -722,6 +704,18 @@ fn export_current_state(db: &Database) -> Result<()> {
     commands::export::write_canonical_from_db(db, &root.join(".atelier-state"))
 }
 
+fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
+    commands::agent_factory::resolve_id(db, issue_ref)
+}
+
+fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
+    if kind == "issue" {
+        resolve_issue_arg(db, id)
+    } else {
+        Ok(id.to_string())
+    }
+}
+
 fn init_tracing(log_level: &str, log_format: &str) {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     let filter = EnvFilter::try_new(log_level).unwrap_or_else(|_| EnvFilter::new("warn"));
@@ -822,6 +816,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             work,
         } => {
             let db = get_db()?;
+            let parent = resolve_issue_arg(&db, &parent)?;
             let atelier_dir = find_atelier_dir().ok();
             let opts = commands::create::CreateOpts {
                 labels: &label,
@@ -923,6 +918,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::Delete { id, force } => {
             let db = get_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
             commands::delete::run(&db, &id, force)
         }
 
@@ -971,6 +967,8 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             relation_type,
         } => {
             let db = get_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
+            let related = resolve_issue_arg(&db, &related)?;
             commands::relate::add_typed(&db, &id, &related, &relation_type)?;
             export_current_state(&db)
         }
@@ -981,17 +979,21 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             relation_type,
         } => {
             let db = get_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
+            let related = resolve_issue_arg(&db, &related)?;
             commands::relate::remove_typed(&db, &id, &related, &relation_type)?;
             export_current_state(&db)
         }
 
         IssueCommands::Related { id } => {
             let db = get_fresh_projection_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
             commands::relate::list(&db, &id)
         }
 
         IssueCommands::Impact { id } => {
             let db = get_fresh_projection_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
             commands::relate::impact(&db, &id)
         }
 
@@ -1135,6 +1137,16 @@ fn run() -> Result<()> {
                     )?;
                     export_current_state(&db)
                 }
+                MissionCommands::AddWork { id, issue } => {
+                    let issue = resolve_issue_arg(&db, &issue)?;
+                    commands::mission::add_work(&db, &id, &issue)?;
+                    export_current_state(&db)
+                }
+                MissionCommands::AddBlocker { id, issue } => {
+                    let issue = resolve_issue_arg(&db, &issue)?;
+                    commands::mission::add_blocker(&db, &id, &issue)?;
+                    export_current_state(&db)
+                }
             }
         }
 
@@ -1166,50 +1178,10 @@ fn run() -> Result<()> {
                     target_id,
                     relation_type,
                 } => {
+                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
                     commands::plan::link(&db, &id, &target_kind, &target_id, &relation_type)?;
                     export_current_state(&db)
                 }
-            }
-        }
-
-        Commands::Link { action } => {
-            let db = get_db()?;
-            match action {
-                LinkCommands::Add {
-                    source_kind,
-                    source_id,
-                    target_kind,
-                    target_id,
-                    relation_type,
-                } => {
-                    commands::link::add(
-                        &db,
-                        &source_kind,
-                        &source_id,
-                        &target_kind,
-                        &target_id,
-                        &relation_type,
-                    )?;
-                    export_current_state(&db)
-                }
-                LinkCommands::Remove {
-                    source_kind,
-                    source_id,
-                    target_kind,
-                    target_id,
-                    relation_type,
-                } => {
-                    commands::link::remove(
-                        &db,
-                        &source_kind,
-                        &source_id,
-                        &target_kind,
-                        &target_id,
-                        &relation_type,
-                    )?;
-                    export_current_state(&db)
-                }
-                LinkCommands::List { kind, id } => commands::link::list(&db, &kind, &id),
             }
         }
 
@@ -1236,6 +1208,16 @@ fn run() -> Result<()> {
                     export_current_state(&db)
                 }
                 EvidenceCommands::Show { id } => commands::evidence::show(&db, &id),
+                EvidenceCommands::Attach {
+                    id,
+                    target_kind,
+                    target_id,
+                    role,
+                } => {
+                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
+                    commands::evidence::attach(&db, &id, &target_kind, &target_id, &role)?;
+                    export_current_state(&db)
+                }
                 EvidenceCommands::List { result } => {
                     commands::evidence::list(&db, result.as_deref())
                 }
@@ -1250,29 +1232,43 @@ fn run() -> Result<()> {
                     target_id,
                     transition,
                     validator,
-                } => commands::workflow::validate(
-                    &db,
-                    &target_kind,
-                    &target_id,
-                    &transition,
-                    validator,
-                ),
+                } => {
+                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
+                    commands::workflow::validate(
+                        &db,
+                        &target_kind,
+                        &target_id,
+                        &transition,
+                        validator,
+                    )
+                }
             }
         }
 
         Commands::Work { action } => {
             let db = get_db()?;
             match action {
-                WorkCommands::Start { id } => commands::work::start(&db, &id),
-                WorkCommands::Finish { id } => commands::work::finish(&db, &id),
+                WorkCommands::Start { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::start(&db, &id)
+                }
+                WorkCommands::Finish { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::finish(&db, &id)
+                }
                 WorkCommands::Status => commands::work::status(&db),
                 WorkCommands::Worktree { action } => match action {
                     WorktreeCommands::For { id, path } => {
+                        let id = resolve_issue_arg(&db, &id)?;
                         commands::work::worktree_for(&db, &id, path.as_deref())
                     }
                     WorktreeCommands::Status => commands::work::worktree_status(&db),
-                    WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id),
+                    WorktreeCommands::Merge { id } => {
+                        let id = resolve_issue_arg(&db, &id)?;
+                        commands::work::worktree_merge(&db, &id)
+                    }
                     WorktreeCommands::Remove { id, force } => {
+                        let id = resolve_issue_arg(&db, &id)?;
                         commands::work::worktree_remove(&db, &id, force)
                     }
                 },
@@ -1283,11 +1279,16 @@ fn run() -> Result<()> {
             let db = get_db()?;
             match action {
                 WorktreeCommands::For { id, path } => {
+                    let id = resolve_issue_arg(&db, &id)?;
                     commands::work::worktree_for(&db, &id, path.as_deref())
                 }
                 WorktreeCommands::Status => commands::work::worktree_status(&db),
-                WorktreeCommands::Merge { id } => commands::work::worktree_merge(&db, &id),
+                WorktreeCommands::Merge { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::worktree_merge(&db, &id)
+                }
                 WorktreeCommands::Remove { id, force } => {
+                    let id = resolve_issue_arg(&db, &id)?;
                     commands::work::worktree_remove(&db, &id, force)
                 }
             }
@@ -1376,6 +1377,8 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Show { .. } => "mission show",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
+            MissionCommands::AddWork { .. } => "mission add-work",
+            MissionCommands::AddBlocker { .. } => "mission add-blocker",
         },
         Commands::Plan { action } => match action {
             PlanCommands::Create { .. } => "plan create",
@@ -1385,14 +1388,10 @@ fn command_identity(command: &Commands) -> &'static str {
             PlanCommands::Revise { .. } => "plan revise",
             PlanCommands::Link { .. } => "plan link",
         },
-        Commands::Link { action } => match action {
-            LinkCommands::Add { .. } => "link add",
-            LinkCommands::Remove { .. } => "link remove",
-            LinkCommands::List { .. } => "link list",
-        },
         Commands::Evidence { action } => match action {
             EvidenceCommands::Add { .. } => "evidence add",
             EvidenceCommands::Show { .. } => "evidence show",
+            EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
         },
         Commands::Workflow { action } => match action {

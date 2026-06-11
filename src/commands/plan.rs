@@ -5,9 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::db::{
-    validate_issue_type, validate_link_type, validate_priority, validate_status, Database,
-};
+use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
 use crate::models::DomainRecord;
 
 const KIND: &str = "plan";
@@ -183,7 +181,7 @@ struct BulkPlan {
     #[serde(default)]
     records: BulkRecords,
     #[serde(default)]
-    links: Vec<BulkLink>,
+    links: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -270,6 +268,8 @@ struct BulkMission {
     #[serde(default)]
     labels: Vec<String>,
     #[serde(default)]
+    work: Vec<BulkRef>,
+    #[serde(default)]
     plans: Vec<BulkRef>,
     #[serde(default)]
     milestones: Vec<BulkRef>,
@@ -336,14 +336,6 @@ struct BulkNote {
     created_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct BulkLink {
-    source: BulkRef,
-    #[serde(rename = "type")]
-    relation_type: String,
-    target: BulkRef,
-}
-
 #[derive(Debug, Clone)]
 struct ResolvedRef {
     kind: String,
@@ -404,6 +396,7 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
         }
         validate_refs_exist(db, plan, mission.plans.iter(), &mission.client_ref)?;
         validate_refs_exist(db, plan, mission.milestones.iter(), &mission.client_ref)?;
+        validate_refs_exist(db, plan, mission.work.iter(), &mission.client_ref)?;
     }
     for milestone in &plan.records.milestones {
         if milestone.title.trim().is_empty() {
@@ -453,10 +446,8 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
         }
         validate_refs_exist(db, plan, evidence.validates.iter(), &evidence.client_ref)?;
     }
-    for link in &plan.links {
-        validate_link_type(&link.relation_type)?;
-        validate_ref_exists(db, plan, &link.source, "link.source")?;
-        validate_ref_exists(db, plan, &link.target, "link.target")?;
+    if !plan.links.is_empty() {
+        bail!("Top-level bulk-plan links are no longer supported; use domain fields such as issue blocks/depends_on, mission plans/milestones, plan applies_to, or evidence validates");
     }
     Ok(())
 }
@@ -618,6 +609,10 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
     let mut link_count = 0usize;
     for mission in &plan.records.missions {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&mission.client_ref))?;
+        for target in &mission.work {
+            add_resolved_link(db, plan, &resolved, &source, target, "advances")?;
+            link_count += 1;
+        }
         for target in &mission.plans {
             add_resolved_link(db, plan, &resolved, &source, target, "planned_by")?;
             link_count += 1;
@@ -662,18 +657,6 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
             add_resolved_link(db, plan, &resolved, &source, target, "validates")?;
             link_count += 1;
         }
-    }
-    for link in &plan.links {
-        let source = resolved_ref(db, plan, &resolved, &link.source)?;
-        add_resolved_link(
-            db,
-            plan,
-            &resolved,
-            &source,
-            &link.target,
-            &link.relation_type,
-        )?;
-        link_count += 1;
     }
 
     Ok(json!({
@@ -809,10 +792,10 @@ fn validate_ref_exists(
 }
 
 fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
-    if db.get_issue(id)?.is_some() {
+    if let Some(issue_id) = db.resolve_issue_ref(id)? {
         return Ok(ResolvedRef {
             kind: "issue".to_string(),
-            id: id.to_string(),
+            id: issue_id,
         });
     }
     for kind in [

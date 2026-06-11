@@ -15,7 +15,7 @@ compatibility mode supports them.
 A bulk plan lets an agent describe a small graph before durable IDs exist. The
 file uses `client_ref` values for intra-file references, validates the complete
 graph first, supports dry-run previews without state mutation, and then applies
-records and links through normal Atelier storage.
+records and relationships through normal Atelier storage.
 
 This feature is for authored work plans, not import, restore, or explicit-ID
 migration. Durable IDs are allocated by Atelier during apply and are reported in
@@ -32,7 +32,6 @@ Required top-level fields:
 | `title` | string | Human-readable plan title. |
 | `apply` | object | Apply options. |
 | `records` | object | Record arrays keyed by record kind. |
-| `links` | array | Typed semantic links between records. |
 
 Optional top-level fields:
 
@@ -135,7 +134,7 @@ Optional fields:
 
 `depends_on` and `blocks` describe sequencing dependencies. They must not be
 used for semantic contribution, validation, duplicate, supersession, or planning
-relationships; use typed links for those relationships.
+relationships; use the domain fields below for those relationships.
 
 Notes use this shape:
 
@@ -155,6 +154,7 @@ Mission records use:
 | `title` | string | Mission title. |
 | `body` | string or null | Mission intent and constraints. |
 | `labels` | array of strings | Stored sorted lexically. |
+| `work` | array of references | Issues or epics included as mission work. |
 | `plans` | array of references | Plan records linked to the mission. |
 | `milestones` | array of references | Checkpoint records linked to the mission. |
 
@@ -174,7 +174,8 @@ Milestone records follow the first-class checkpoint model in
 | `contributing_work` | array of references | Issues, epics, reviews, validations, or closeouts that contribute. |
 
 Milestones are not parent work queues. Use hierarchy for issue ownership and
-typed links such as `contributes_to` or `validates` for milestone relationships.
+mission `work`, plan `applies_to`, evidence `validates`, or milestone
+`contributing_work` for other relationships.
 
 ### Plans
 
@@ -203,34 +204,18 @@ Evidence records describe proof:
 | `validates` | array of references | Records or criteria this evidence validates. |
 | `artifact` | string or null | Repo path or external URI. |
 
-## Typed Links
+## Relationships
 
-`links` stores semantic graph relationships that do not belong to issue
-dependency fields. Each link has this shape:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `source` | reference | Source record. |
-| `type` | string | Link type. |
-| `target` | reference | Target record. |
-| `metadata` | object | Optional JSON metadata. Defaults to `{}`. |
-
-Known link types include `related`, `duplicates`, `supersedes`,
-`derived_from`, `part_of`, `implements`, `validates`, `evidenced_by`,
-`planned_by`, `advances`, and `contributes_to`.
-
-`blocks`, `blocked_by`, and `depends_on` are accepted link types only when the
-implementation normalizes them into issue dependency fields or clearly reports
-them as dependency edges in previews. The preferred authored form for
-sequencing is the issue-level `depends_on` or `blocks` arrays.
-
-Custom relation types are allowed only when repository link policy accepts
-them. Invalid custom relation types are validation errors.
+Bulk plans do not accept a top-level generic `links` array. Relationship intent
+is authored through domain fields: issue `blocks`/`depends_on`, mission `work`,
+mission `plans`, mission `milestones`, milestone `contributing_work`, plan
+`applies_to`, plan `supersedes`, and evidence `validates`. Apply normalizes
+those fields into canonical `.atelier-state` `relationships` buckets.
 
 ## Validation
 
 Validation must complete before any mutation. A failed validation creates no
-records, no dependency edges, no typed links, no notes, and no export changes.
+records, no dependency edges, no relationships, no notes, and no export changes.
 
 Required validation checks:
 
@@ -242,9 +227,9 @@ Required validation checks:
 - Every `id` reference resolves in current tracker state when required.
 - Issue hierarchy does not create a parent cycle.
 - Issue dependencies do not create a forbidden cycle.
-- `depends_on`, `blocks`, and typed links do not create duplicate edges after
+- `depends_on`, `blocks`, and relationship fields do not create duplicate edges after
   normalization.
-- Labels, priorities, issue types, statuses, evidence types, and link types are
+- Labels, priorities, issue types, statuses, evidence types, and relationship roles are
   accepted by repository policy.
 - Dry-run, validate-only, and export options are compatible.
 
@@ -297,7 +282,7 @@ human-readable diagnostics.
 
 The staged `atelier plan apply` implementation accepts this v1 input contract
 and prints a compact human summary with `applied`, `dry_run`, `validate_only`,
-record counts by kind, link count, and next commands. Mutating apply persists
+record counts by kind, relationship count, and next commands. Mutating apply persists
 durable records under `.atelier-state/`, where `client_ref` to durable `id`
 mappings can be audited. Dry-run output reports preview counts without reserved
 IDs. Validate-only output reports that validation completed without allocating a
@@ -310,7 +295,7 @@ A successful mutating apply returns:
 | `dry_run` | boolean | `false`. |
 | `created` | array | Created records with `kind`, `client_ref`, and durable `id`. |
 | `updated` | array | Updated records when update behavior is supported. |
-| `links` | array | Created dependency or typed-link edges. |
+| `links` | array | Created relationship edges; retained in the summary for compatibility with existing apply output. |
 | `notes` | array | Appended notes with target record references. |
 | `client_ref_map` | object | Maps every authored `client_ref` to the durable record ID. |
 | `export` | object | Export action, result, and changed paths when `apply.export` is not `skip`. |
@@ -324,7 +309,7 @@ agent to repair or resume safely.
 Compact examples live in this directory:
 
 - [valid-bulk-plan.json](fixtures/valid-bulk-plan.json): valid authored input
-  containing issues, hierarchy, dependencies, typed links, labels, priorities,
+  containing issues, hierarchy, dependencies, relationships, labels, priorities,
   notes, plan and milestone references, and apply options.
 - [invalid-bulk-plan.json](fixtures/invalid-bulk-plan.json): invalid authored
   input designed to produce path and `client_ref` diagnostics.

@@ -215,27 +215,21 @@ recorded in a user-local diagnostics store for performance analysis, but they
 must not be exported to `.atelier-state/` or treated as Mission Control run
 projection data until an explicit run/session projection contract exists.
 
-## Links
+## Relationships
 
-Links should be explicit and typed. Do not overload dependencies to represent
-all hierarchy.
+Relationships should be explicit without exposing a generic graph-editing
+workflow as the normal product model. Canonical Markdown stores relationships in
+one `relationships` section with four buckets:
 
-Likely link types:
+- `blocks` for operational issue readiness blockers.
+- `children` for hierarchy, scope, and mission work.
+- `attachments` for owned supporting records such as plans and evidence.
+- `relates` for peer semantic relationships such as related, duplicates,
+  supersedes, derived_from, and implements.
 
-- `blocks`
-- `blocked_by`
-- `depends_on`
-- `related`
-- `duplicates`
-- `supersedes`
-- `derived_from`
-- `part_of`
-- `implements`
-- `validates`
-- `evidenced_by`
-- `planned_by`
-
-The link model should support custom relation types with validation and linting.
+Domain commands own relationship mutations. For example, issue blocking,
+mission work, evidence attachment, and plan linkage should be surfaced through
+their domain command groups instead of a public generic `link` command.
 
 ## Workflows
 
@@ -418,7 +412,7 @@ atelier issue create
 atelier mission create
 atelier milestone create
 atelier plan create
-atelier link add
+atelier mission add-work
 atelier work start
 atelier work finish
 atelier evidence add
@@ -465,7 +459,7 @@ machine-readable source of truth, not command-result JSON.
 
 - Add first-class missions, milestone checkpoint records, plans, evidence,
   workflow validators, and runs.
-- Add typed links.
+- Add canonical relationship buckets and domain-specific relationship commands.
 - Keep compatibility migration paths where reasonable.
 
 ### Milestone 5: Workflows And Rules

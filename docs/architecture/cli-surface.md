@@ -14,9 +14,9 @@ in normal Agent Factory workflows:
 - `atelier issue ...`
 - `atelier dep add/remove/list`
 - `atelier mission create/show/list/update`
+- `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
-- `atelier evidence add/show/list`
-- `atelier link add/remove/list`
+- `atelier evidence add/show/list/attach`
 - `atelier workflow validate`
 - `atelier work start/finish/status`
 - `atelier worktree for/status/merge/remove`
@@ -31,14 +31,14 @@ RecordStore followed by projection refresh. Projection-backed query commands
 such as list, ready, search, impact, lint, and Mission Control views may use
 SQLite after freshness checks.
 
-First-class mission, milestone, plan, evidence, typed-link, workflow validation,
+First-class mission, milestone, plan, evidence, relationship, workflow validation,
 and work lifecycle commands are now core as a staged implementation. Mission,
 milestone, plan, and evidence mutations persist through SQLite and immediately
 refresh deterministic Markdown projection under `.atelier-state/`; rebuild
 restores those records from Markdown. `atelier plan apply` validates authored
 bulk-plan JSON, supports dry-run and validate-only previews, creates issue and
-record graphs atomically, normalizes issue dependency fields, writes typed
-links, and refreshes or checks canonical export according to the input's
+record graphs atomically, normalizes issue dependency fields, writes canonical
+relationship buckets, and refreshes or checks canonical export according to the input's
 `apply.export` option. `atelier mission show` is the single rich mission read:
 it summarizes linked plans, milestones, evidence, and work grouped by ready,
 blocked, done, and backlog state.
@@ -78,8 +78,7 @@ Removed experiments should return as explicit core proposals rather than hidden
 command groups.
 
 Generic replacements should use domain language. `atelier issue impact <id>` is
-the visible relation-impact command. Until first-class `atelier link` commands
-define directed typed-link semantics, impact follows hierarchy plus the
+the visible relation-impact command. Impact follows hierarchy plus the
 impact-bearing relation types `derived`, `caused-by`, and `falsifies`
 transitively, and `assumption` one hop from the source. The inherited `cascade`
 and `falsify` commands are removed so reassessment stays an explicit operator

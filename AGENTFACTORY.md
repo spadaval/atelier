@@ -34,7 +34,7 @@ concrete files, commands, and product-specific skills.
   - `atelier mission show <id>`
   - `atelier mission create "..."`
   - `atelier mission update <id> --status <open|closed>`
-  - `atelier link add mission <mission-id> issue <issue-id> --type advances`
+  - `atelier mission add-work <mission-id> <issue-id>`
   - `atelier workflow validate mission <id>`
 - Normal tracker commands:
   - `atelier issue list --ready`

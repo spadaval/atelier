@@ -55,8 +55,10 @@
 - The canonical-state target is Markdown-first: successful durable mutations
   should write record files through RecordStore, then refresh ProjectionIndex.
   SQLite is not the destination source of truth for canonical records.
-- Dependencies should represent actual sequencing. Use typed links for other
-  relationships such as related, validates, implements, or evidenced_by.
+- Dependencies should represent actual sequencing. Canonical state groups
+  record relationships under `relationships`: use `blocks` for readiness,
+  `children` for hierarchy and mission work, `attachments` for plans/evidence,
+  and `relates` for peer semantic relationships.
 - Missions, milestone checkpoint records, plans, evidence, and runs are target
   first-class concepts, not just labels on issues.
 - Workflow validators belong to workflow policy, not to milestone records.

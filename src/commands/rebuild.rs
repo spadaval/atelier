@@ -10,21 +10,21 @@ use crate::db::Database;
 use crate::models::{DomainRecord, Issue};
 use crate::projection_index;
 use crate::record_id;
-use crate::record_store::{self, FIRST_CLASS_RECORD_KINDS};
+use crate::record_store::{self, Relationships, FIRST_CLASS_RECORD_KINDS};
 
 #[derive(Debug)]
 struct CanonicalIssue {
     issue: Issue,
     labels: Vec<String>,
-    blocks: Vec<String>,
-    depends_on: Vec<String>,
-    relations: Vec<(String, String, String)>,
+    relationships: Relationships,
 }
 
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
     records: Vec<CanonicalRecord>,
+    child_edges: Vec<(String, String)>,
+    dependency_edges: Vec<(String, String)>,
     relations: Vec<(String, String, String)>,
     record_links: Vec<(String, String, String, String, String)>,
 }
@@ -32,7 +32,7 @@ struct RebuildProjection {
 #[derive(Debug)]
 struct CanonicalRecord {
     record: DomainRecord,
-    links: Vec<(String, String, String, String, String)>,
+    relationships: Relationships,
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -59,17 +59,10 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
     for relative in store.discover_issue_paths()? {
         canonical_paths.insert(relative.clone());
         let record = store.load_issue(&relative)?;
-        let source_id = record.issue.id.clone();
         let issue = CanonicalIssue {
             issue: record.issue,
             labels: record.labels,
-            blocks: record.blocks,
-            depends_on: record.depends_on,
-            relations: record
-                .links
-                .into_iter()
-                .map(|link| (source_id.clone(), link.target_id, link.relation_type))
-                .collect(),
+            relationships: record.relationships,
         };
         if !issue_ids.insert(issue.issue.id.clone()) {
             bail!(
@@ -115,23 +108,63 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
 
     let mut relations = Vec::new();
     let mut relation_keys = BTreeSet::new();
+    let mut child_edges = Vec::new();
+    let mut child_edge_keys = BTreeSet::new();
+    let mut dependency_edges = Vec::new();
+    let mut dependency_edge_keys = BTreeSet::new();
     for subject_id in &activity_subject_ids {
         ensure_issue_exists(subject_id, &issue_ids, "activity", subject_id)?;
     }
     for issue in &issues {
-        if let Some(parent_id) = &issue.issue.parent_id {
-            ensure_issue_exists(parent_id, &issue_ids, "parent", &issue.issue.id)?;
+        for blocked in &issue.relationships.blocks {
+            if blocked.kind != "issue" {
+                bail!(
+                    "Issue {} has blocks target {} {}; blocks must target issue records",
+                    issue.issue.id,
+                    blocked.kind,
+                    blocked.id
+                );
+            }
+            ensure_issue_exists(&blocked.id, &issue_ids, "blocks", &issue.issue.id)?;
+            let key = (blocked.id.clone(), issue.issue.id.clone());
+            if !dependency_edge_keys.insert(key.clone()) {
+                bail!("Duplicate blocks edge {} blocks {}", key.1, key.0);
+            }
+            dependency_edges.push(key);
         }
-        for blocked_id in &issue.blocks {
-            ensure_issue_exists(blocked_id, &issue_ids, "blocks", &issue.issue.id)?;
+        for child in &issue.relationships.children {
+            if child.kind != "issue" {
+                bail!(
+                    "Issue {} has children target {} {}; issue hierarchy children must target issue records",
+                    issue.issue.id,
+                    child.kind,
+                    child.id
+                );
+            }
+            ensure_issue_exists(&child.id, &issue_ids, "children", &issue.issue.id)?;
+            let key = (child.id.clone(), issue.issue.id.clone());
+            if !child_edge_keys.insert(key.clone()) {
+                bail!("Duplicate children edge {} contains {}", key.1, key.0);
+            }
+            child_edges.push(key);
         }
-        for blocker_id in &issue.depends_on {
-            ensure_issue_exists(blocker_id, &issue_ids, "depends_on", &issue.issue.id)?;
-        }
-
-        for relation in &issue.relations {
-            ensure_issue_exists(&relation.1, &issue_ids, &relation.2, &issue.issue.id)?;
-            let key = (relation.0.clone(), relation.1.clone(), relation.2.clone());
+        for relation in &issue.relationships.relates {
+            ensure_record_exists(
+                &relation.kind,
+                &relation.id,
+                &issue_ids,
+                &record_refs,
+                &relation.relation_type,
+                &issue.issue.id,
+            )?;
+            if relation.kind != "issue" {
+                continue;
+            }
+            let key = (
+                issue.issue.id.clone(),
+                relation.id.clone(),
+                relation.relation_type.clone(),
+            );
             if !relation_keys.insert(key.clone()) {
                 bail!("Duplicate typed link {} -> {} ({})", key.0, key.1, key.2);
             }
@@ -141,41 +174,39 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
 
     let mut record_links = Vec::new();
     let mut record_link_keys = BTreeSet::new();
-    for record in &records {
-        for link in &record.links {
-            let target_exists = if link.2 == "issue" {
-                issue_ids.contains(&link.3)
-            } else {
-                record_refs.contains(&(link.2.clone(), link.3.clone()))
-            };
-            if !target_exists {
-                bail!(
-                    "Unknown {} link target {} from {} {}",
-                    link.2,
-                    link.3,
-                    record.record.kind,
-                    record.record.id
-                );
-            }
-            if !record_link_keys.insert(link.clone()) {
-                bail!(
-                    "Duplicate typed link {} {} -> {} {} ({})",
-                    link.0,
-                    link.1,
-                    link.2,
-                    link.3,
-                    link.4
-                );
-            }
-            record_links.push(link.clone());
-        }
+    for issue in &issues {
+        collect_record_relationship_links(
+            &mut record_links,
+            &mut record_link_keys,
+            "issue",
+            &issue.issue.id,
+            &issue.relationships,
+            &issue_ids,
+            &record_refs,
+        )?;
     }
+    for record in &records {
+        collect_record_relationship_links(
+            &mut record_links,
+            &mut record_link_keys,
+            &record.record.kind,
+            &record.record.id,
+            &record.relationships,
+            &issue_ids,
+            &record_refs,
+        )?;
+    }
+
+    validate_issue_child_cycles(&child_edges)?;
+    validate_dependency_cycles(&dependency_edges)?;
 
     issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
     records.sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
     Ok(RebuildProjection {
         issues,
         records,
+        child_edges,
+        dependency_edges,
         relations,
         record_links,
     })
@@ -345,7 +376,7 @@ fn load_domain_record(
     let data_json = require_scalar(&front_matter, "data", relative)?;
     let _: Value = serde_json::from_str(&data_json)
         .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    let links = record_links(&front_matter, "links", spec.kind, &id, relative)?;
+    let relationships = record_store::parse_relationships(&front_matter, relative)?;
     let body = if body.is_empty() {
         None
     } else {
@@ -362,7 +393,7 @@ fn load_domain_record(
             created_at: require_datetime(&front_matter, "created_at", relative)?,
             updated_at: require_datetime(&front_matter, "updated_at", relative)?,
         },
-        links,
+        relationships,
     })
 }
 
@@ -416,25 +447,22 @@ fn write_rebuilt_database(
                 row.parent_id = None;
                 db.insert_issue_rebuild(&row)?;
             }
-            for issue in &rebuild.issues {
-                if issue.issue.parent_id.is_some() {
-                    db.update_parent_import(
-                        &issue.issue.id,
-                        issue.issue.parent_id.as_deref(),
-                        &issue.issue.updated_at,
-                    )?;
-                }
+            for (child_id, parent_id) in &rebuild.child_edges {
+                let updated_at = rebuild
+                    .issues
+                    .iter()
+                    .find(|issue| issue.issue.id == *child_id)
+                    .map(|issue| issue.issue.updated_at)
+                    .ok_or_else(|| anyhow!("Missing child issue {child_id}"))?;
+                db.update_parent_import(child_id, Some(parent_id), &updated_at)?;
             }
             for issue in &rebuild.issues {
                 for label in &issue.labels {
                     db.add_label(&issue.issue.id, label)?;
                 }
-                for blocked_id in &issue.blocks {
-                    db.add_dependency(blocked_id, &issue.issue.id)?;
-                }
-                for blocker_id in &issue.depends_on {
-                    db.add_dependency(&issue.issue.id, blocker_id)?;
-                }
+            }
+            for (blocked_id, blocker_id) in &rebuild.dependency_edges {
+                db.add_dependency(blocked_id, blocker_id)?;
             }
             for (source, target, relation_type) in &rebuild.relations {
                 db.add_typed_relation(&source, &target, relation_type)?;
@@ -494,98 +522,12 @@ fn split_front_matter<'a>(
 }
 
 fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
-    let mut values = BTreeMap::new();
-    let mut lines = front.lines().peekable();
-    while let Some(line) = lines.next() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let (key, value) = line.split_once(':').ok_or_else(|| {
-            anyhow!(
-                "Invalid front matter line in {}: {}",
-                display_state_path(relative),
-                line
-            )
-        })?;
-        let key = key.to_string();
-        let value = value.trim_start();
-        if value.is_empty() {
-            let mut array = Vec::new();
-            while let Some(next) = lines.peek() {
-                if !next.starts_with("- ") {
-                    break;
-                }
-                let item = lines.next().unwrap().trim_start_matches("- ");
-                if item.contains(": ") {
-                    let mut object = serde_json::Map::new();
-                    parse_yaml_object_field(item, &mut object, relative)?;
-                    while let Some(next) = lines.peek() {
-                        if !next.starts_with("  ") {
-                            break;
-                        }
-                        let nested = lines.next().unwrap().trim_start();
-                        parse_yaml_object_field(nested, &mut object, relative)?;
-                    }
-                    array.push(Value::Object(object));
-                } else {
-                    array.push(parse_yaml_value(item, relative)?);
-                }
-            }
-            values.insert(key, Value::Array(array));
-        } else {
-            values.insert(key, parse_yaml_value(value, relative)?);
-        }
-    }
-    Ok(values)
-}
-
-fn parse_yaml_object_field(
-    field: &str,
-    object: &mut serde_json::Map<String, Value>,
-    relative: &Path,
-) -> Result<()> {
-    let (key, value) = field.split_once(": ").ok_or_else(|| {
-        anyhow!(
-            "Invalid object front matter field in {}: {}",
-            display_state_path(relative),
-            field
-        )
-    })?;
-    if object
-        .insert(key.to_string(), parse_yaml_value(value, relative)?)
-        .is_some()
-    {
-        bail!(
-            "Duplicate object front matter key '{}' in {}",
-            key,
+    serde_yaml::from_str(front).with_context(|| {
+        format!(
+            "Invalid YAML front matter in {}",
             display_state_path(relative)
-        );
-    }
-    Ok(())
-}
-
-fn parse_yaml_value(value: &str, relative: &Path) -> Result<Value> {
-    match value {
-        "null" => Ok(Value::Null),
-        "[]" => Ok(Value::Array(Vec::new())),
-        value if value.starts_with('"') => serde_json::from_str(value).with_context(|| {
-            format!(
-                "Invalid quoted front matter value '{}' in {}",
-                value,
-                display_state_path(relative)
-            )
-        }),
-        value => value
-            .parse::<i64>()
-            .map(|number| Value::Number(number.into()))
-            .with_context(|| {
-                format!(
-                    "Unsupported front matter value '{}' in {}",
-                    value,
-                    display_state_path(relative)
-                )
-            }),
-    }
+        )
+    })
 }
 
 fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {
@@ -630,77 +572,189 @@ fn require_datetime(
         })
 }
 
-fn record_links(
-    values: &BTreeMap<String, Value>,
-    key: &str,
+fn collect_record_relationship_links(
+    record_links: &mut Vec<(String, String, String, String, String)>,
+    record_link_keys: &mut BTreeSet<(String, String, String, String, String)>,
     source_kind: &str,
     source_id: &str,
-    relative: &Path,
-) -> Result<Vec<(String, String, String, String, String)>> {
-    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
-        anyhow!(
-            "Missing array front matter key '{}' in {}",
-            key,
-            display_state_path(relative)
-        )
-    })?;
-
-    let mut links = Vec::new();
-    let mut seen = BTreeSet::new();
-    for value in values {
-        let object = value.as_object().ok_or_else(|| {
-            anyhow!(
-                "Array '{}' in {} must contain link objects",
-                key,
-                display_state_path(relative)
-            )
-        })?;
-        let target_kind = object
-            .get("target_kind")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Link in {} is missing target_kind",
-                    display_state_path(relative)
-                )
-            })?;
-        crate::db::validate_record_kind(target_kind)?;
-        let target_id = object
-            .get("target_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Link in {} is missing target_id",
-                    display_state_path(relative)
-                )
-            })?;
-        record_id::validate_record_id(target_id)?;
-        let relation_type = object
-            .get("type")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("Link in {} is missing type", display_state_path(relative)))?;
-        crate::db::validate_link_type(relation_type)?;
-        let link = (
-            source_kind.to_string(),
-            source_id.to_string(),
-            target_kind.to_string(),
-            target_id.to_string(),
-            relation_type.to_string(),
-        );
-        if !seen.insert(link.clone()) {
-            bail!(
-                "Duplicate link {} {} -> {} {} ({}) in {}",
-                source_kind,
-                source_id,
-                target_kind,
-                target_id,
-                relation_type,
-                display_state_path(relative)
-            );
+    relationships: &Relationships,
+    issue_ids: &BTreeSet<String>,
+    record_refs: &BTreeSet<(String, String)>,
+) -> Result<()> {
+    for child in &relationships.children {
+        ensure_record_exists(
+            &child.kind,
+            &child.id,
+            issue_ids,
+            record_refs,
+            "children",
+            source_id,
+        )?;
+        if source_kind == "issue" && child.kind == "issue" {
+            continue;
         }
-        links.push(link);
+        push_record_link(
+            record_links,
+            record_link_keys,
+            source_kind,
+            source_id,
+            &child.kind,
+            &child.id,
+            child_relation_type(&child.kind),
+        )?;
     }
-    Ok(links)
+    for attachment in &relationships.attachments {
+        ensure_record_exists(
+            &attachment.kind,
+            &attachment.id,
+            issue_ids,
+            record_refs,
+            &attachment.role,
+            source_id,
+        )?;
+        push_record_link(
+            record_links,
+            record_link_keys,
+            source_kind,
+            source_id,
+            &attachment.kind,
+            &attachment.id,
+            &attachment.role,
+        )?;
+    }
+    for relation in &relationships.relates {
+        ensure_record_exists(
+            &relation.kind,
+            &relation.id,
+            issue_ids,
+            record_refs,
+            &relation.relation_type,
+            source_id,
+        )?;
+        if source_kind == "issue" && relation.kind == "issue" {
+            continue;
+        }
+        push_record_link(
+            record_links,
+            record_link_keys,
+            source_kind,
+            source_id,
+            &relation.kind,
+            &relation.id,
+            &relation.relation_type,
+        )?;
+    }
+    Ok(())
+}
+
+fn push_record_link(
+    record_links: &mut Vec<(String, String, String, String, String)>,
+    record_link_keys: &mut BTreeSet<(String, String, String, String, String)>,
+    source_kind: &str,
+    source_id: &str,
+    target_kind: &str,
+    target_id: &str,
+    relation_type: &str,
+) -> Result<()> {
+    let link = (
+        source_kind.to_string(),
+        source_id.to_string(),
+        target_kind.to_string(),
+        target_id.to_string(),
+        relation_type.to_string(),
+    );
+    if !record_link_keys.insert(link.clone()) {
+        bail!(
+            "Duplicate relationship {} {} -> {} {} ({})",
+            source_kind,
+            source_id,
+            target_kind,
+            target_id,
+            relation_type
+        );
+    }
+    record_links.push(link);
+    Ok(())
+}
+
+fn child_relation_type(target_kind: &str) -> &'static str {
+    match target_kind {
+        "milestone" => "has_checkpoint",
+        _ => "advances",
+    }
+}
+
+fn ensure_record_exists(
+    kind: &str,
+    id: &str,
+    issue_ids: &BTreeSet<String>,
+    record_refs: &BTreeSet<(String, String)>,
+    relation: &str,
+    source_id: &str,
+) -> Result<()> {
+    if (kind == "issue" && issue_ids.contains(id))
+        || record_refs.contains(&(kind.to_string(), id.to_string()))
+    {
+        Ok(())
+    } else {
+        bail!("{source_id} has {relation} reference to missing {kind} {id}")
+    }
+}
+
+fn validate_issue_child_cycles(edges: &[(String, String)]) -> Result<()> {
+    let mut parents = BTreeMap::<String, String>::new();
+    for (child, parent) in edges {
+        if let Some(existing) = parents.insert(child.clone(), parent.clone()) {
+            bail!("Issue {child} appears under multiple parents: {existing}, {parent}");
+        }
+    }
+    validate_directed_acyclic(edges, "children")
+}
+
+fn validate_dependency_cycles(edges: &[(String, String)]) -> Result<()> {
+    validate_directed_acyclic(edges, "blocks")
+}
+
+fn validate_directed_acyclic(edges: &[(String, String)], relation: &str) -> Result<()> {
+    let mut graph = BTreeMap::<String, Vec<String>>::new();
+    for (target, source) in edges {
+        graph
+            .entry(source.clone())
+            .or_default()
+            .push(target.clone());
+    }
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    for node in graph.keys() {
+        if has_cycle(node, &graph, &mut visiting, &mut visited) {
+            bail!("relationships.{relation} contains a cycle");
+        }
+    }
+    Ok(())
+}
+
+fn has_cycle(
+    node: &str,
+    graph: &BTreeMap<String, Vec<String>>,
+    visiting: &mut BTreeSet<String>,
+    visited: &mut BTreeSet<String>,
+) -> bool {
+    if visited.contains(node) {
+        return false;
+    }
+    if !visiting.insert(node.to_string()) {
+        return true;
+    }
+    if let Some(children) = graph.get(node) {
+        for child in children {
+            if has_cycle(child, graph, visiting, visited) {
+                return true;
+            }
+        }
+    }
+    visiting.remove(node);
+    visited.insert(node.to_string());
+    false
 }
 
 fn ensure_issue_exists(
@@ -850,7 +904,9 @@ mod tests {
         assert!(mission_markdown.contains("schema: \"atelier.mission\""));
         assert!(mission_markdown.contains("schema_version: 1"));
         assert!(mission_markdown.contains("data: "));
-        assert!(mission_markdown.contains("target_kind: \"plan\""));
+        assert!(mission_markdown.contains(&format!(
+            "  attachments:\n  - kind: \"evidence\"\n    id: \"{evidence_id}\"\n    role: \"validates\"\n  - kind: \"plan\"\n    id: \"{plan_id}\"\n    role: \"planned_by\"\n"
+        )));
 
         let rebuilt_path = dir.path().join(".atelier/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
@@ -1052,29 +1108,32 @@ mod tests {
         let missing_id = "atelier-zzzz";
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
-            "depends_on: []",
-            &format!("depends_on:\n- \"{missing_id}\""),
+            "  blocks: []",
+            &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{missing_id}\""),
         );
         fs::write(&path, text).unwrap();
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
-            "Issue {id} has depends_on reference to missing issue {missing_id}"
+            "{id} has blocks reference to missing issue {missing_id}"
         )));
 
         let text = fs::read_to_string(&path)
             .unwrap()
-            .replace(&format!("depends_on:\n- \"{missing_id}\""), "depends_on: []")
             .replace(
-                "links: []",
+                &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{missing_id}\""),
+                "  blocks: []",
+            )
+            .replace(
+                "  relates: []",
                 &format!(
-                    "links:\n- target_id: \"{id}\"\n  target_kind: \"issue\"\n  type: \"related\"\n- target_id: \"{id}\"\n  target_kind: \"issue\"\n  type: \"related\""
+                    "  relates:\n  - kind: \"issue\"\n    id: \"{id}\"\n    type: \"related\"\n  - kind: \"issue\"\n    id: \"{id}\"\n    type: \"related\""
                 ),
             );
         fs::write(&path, text).unwrap();
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains(&format!("Duplicate link to {id} (related)")));
+        assert!(error.to_string().contains(&format!(
+            "Duplicate relationships.relates target issue {id} (related)"
+        )));
     }
 
     #[test]
@@ -1101,7 +1160,7 @@ mod tests {
         fs::write(path, text).unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
-        assert!(error.to_string().contains("Invalid link relation type ''"));
+        assert!(error.to_string().contains("Relation type cannot be empty"));
     }
 
     fn write_activity_sidecar(state_dir: &Path, issue_id: &str) {

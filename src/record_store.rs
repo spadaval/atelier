@@ -123,21 +123,40 @@ fn all_record_kind_names() -> Vec<&'static str> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct IssueLink {
+pub struct RelationshipTarget {
+    pub kind: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct AttachmentRelationship {
+    pub kind: String,
+    pub id: String,
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub struct RelatesRelationship {
+    pub kind: String,
+    pub id: String,
     pub relation_type: String,
-    pub target_kind: String,
-    pub target_id: String,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct Relationships {
+    pub blocks: Vec<RelationshipTarget>,
+    pub children: Vec<RelationshipTarget>,
+    pub attachments: Vec<AttachmentRelationship>,
+    pub relates: Vec<RelatesRelationship>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanonicalIssueRecord {
     pub issue: Issue,
     pub labels: Vec<String>,
-    pub blocks: Vec<String>,
-    pub depends_on: Vec<String>,
     pub acceptance: Vec<String>,
     pub evidence_required: Vec<String>,
-    pub links: Vec<IssueLink>,
+    pub relationships: Relationships,
 }
 
 pub struct RecordStore {
@@ -236,35 +255,28 @@ impl RecordStore {
 pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     validate_issue_record(record, Path::new("<record>"))?;
     let mut labels = record.labels.clone();
-    let mut blocks = record.blocks.clone();
-    let mut depends_on = record.depends_on.clone();
-    let mut links = record.links.clone();
+    let mut relationships = record.relationships.clone();
     labels.sort();
-    blocks.sort();
-    depends_on.sort();
-    links.sort();
+    sort_relationships(&mut relationships);
 
     let mut output = String::new();
     output.push_str("---\n");
     write_yaml_array(&mut output, "acceptance", &record.acceptance)?;
-    write_yaml_array(&mut output, "blocks", &blocks)?;
     write_yaml_scalar(
         &mut output,
         "created_at",
         Some(&record.issue.created_at.to_rfc3339()),
     )?;
-    write_yaml_array(&mut output, "depends_on", &depends_on)?;
     write_yaml_array(&mut output, "evidence_required", &record.evidence_required)?;
     write_yaml_scalar(&mut output, "id", Some(&record.issue.id))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
-    write_yaml_links(&mut output, "links", &links)?;
-    write_yaml_scalar(&mut output, "parent", record.issue.parent_id.as_deref())?;
     write_yaml_scalar(
         &mut output,
         "priority",
         Some(&canonical_priority(&record.issue.priority)),
     )?;
+    write_yaml_relationships(&mut output, &relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(ISSUE_KIND.schema))?;
     output.push_str(&format!("schema_version: {}\n", ISSUE_KIND.schema_version));
     write_yaml_scalar(&mut output, "status", Some(&record.issue.status))?;
@@ -325,12 +337,10 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         );
     }
 
-    let parent_id = optional_issue_id(&front_matter, "parent", relative)?;
-    let blocks = issue_id_array(&front_matter, "blocks", relative)?;
-    let depends_on = issue_id_array(&front_matter, "depends_on", relative)?;
+    reject_legacy_relationship_keys(&front_matter, relative)?;
+    let relationships = parse_relationships(&front_matter, relative)?;
     let acceptance = string_array(&front_matter, "acceptance", relative)?;
     let evidence_required = string_array(&front_matter, "evidence_required", relative)?;
-    let links = typed_links(&front_matter, "links", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
     crate::db::validate_status(&status)
         .with_context(|| format!("Invalid status in {}", display_state_path(relative)))?;
@@ -353,17 +363,15 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
             issue_type,
             priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
                 .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
-            parent_id,
+            parent_id: None,
             created_at: require_datetime(&front_matter, "created_at", relative)?,
             updated_at,
             closed_at: (status == "closed").then_some(updated_at),
         },
         labels: string_array(&front_matter, "labels", relative)?,
-        blocks,
-        depends_on,
         acceptance,
         evidence_required,
-        links,
+        relationships,
     })
 }
 
@@ -381,54 +389,7 @@ fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Resu
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     crate::db::validate_priority(&record.issue.priority)
         .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?;
-    if let Some(parent_id) = record.issue.parent_id.as_deref() {
-        record_id::validate_record_id(parent_id).with_context(|| {
-            format!(
-                "Invalid issue id '{}' in key 'parent' of {}",
-                parent_id,
-                display_state_path(relative)
-            )
-        })?;
-    }
-    validate_issue_ids(&record.blocks, "blocks", relative)?;
-    validate_issue_ids(&record.depends_on, "depends_on", relative)?;
-    for link in &record.links {
-        if link.target_kind != "issue" {
-            bail!(
-                "Link in {} has unsupported target_kind '{}'; expected issue",
-                display_state_path(relative),
-                link.target_kind
-            );
-        }
-        record_id::validate_record_id(&link.target_id).with_context(|| {
-            format!(
-                "Invalid link target_id '{}' in {}",
-                link.target_id,
-                display_state_path(relative)
-            )
-        })?;
-        crate::db::validate_relation_type(&link.relation_type).with_context(|| {
-            format!(
-                "Invalid link relation type '{}' in {}",
-                link.relation_type,
-                display_state_path(relative)
-            )
-        })?;
-    }
-    Ok(())
-}
-
-fn validate_issue_ids(values: &[String], key: &str, relative: &Path) -> Result<()> {
-    for value in values {
-        record_id::validate_record_id(value).with_context(|| {
-            format!(
-                "Invalid issue id '{}' in key '{}' of {}",
-                value,
-                key,
-                display_state_path(relative)
-            )
-        })?;
-    }
+    validate_relationships(&record.relationships, relative)?;
     Ok(())
 }
 
@@ -484,98 +445,12 @@ fn split_front_matter<'a>(
 }
 
 fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
-    let mut values = BTreeMap::new();
-    let mut lines = front.lines().peekable();
-    while let Some(line) = lines.next() {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let (key, value) = line.split_once(':').ok_or_else(|| {
-            anyhow!(
-                "Invalid front matter line in {}: {}",
-                display_state_path(relative),
-                line
-            )
-        })?;
-        let key = key.to_string();
-        let value = value.trim_start();
-        if value.is_empty() {
-            let mut array = Vec::new();
-            while let Some(next) = lines.peek() {
-                if !next.starts_with("- ") {
-                    break;
-                }
-                let item = lines.next().unwrap().trim_start_matches("- ");
-                if item.contains(": ") {
-                    let mut object = serde_json::Map::new();
-                    parse_yaml_object_field(item, &mut object, relative)?;
-                    while let Some(next) = lines.peek() {
-                        if !next.starts_with("  ") {
-                            break;
-                        }
-                        let nested = lines.next().unwrap().trim_start();
-                        parse_yaml_object_field(nested, &mut object, relative)?;
-                    }
-                    array.push(Value::Object(object));
-                } else {
-                    array.push(parse_yaml_value(item, relative)?);
-                }
-            }
-            values.insert(key, Value::Array(array));
-        } else {
-            values.insert(key, parse_yaml_value(value, relative)?);
-        }
-    }
-    Ok(values)
-}
-
-fn parse_yaml_object_field(
-    field: &str,
-    object: &mut serde_json::Map<String, Value>,
-    relative: &Path,
-) -> Result<()> {
-    let (key, value) = field.split_once(": ").ok_or_else(|| {
-        anyhow!(
-            "Invalid object front matter field in {}: {}",
-            display_state_path(relative),
-            field
-        )
-    })?;
-    if object
-        .insert(key.to_string(), parse_yaml_value(value, relative)?)
-        .is_some()
-    {
-        bail!(
-            "Duplicate object front matter key '{}' in {}",
-            key,
+    serde_yaml::from_str(front).with_context(|| {
+        format!(
+            "Invalid YAML front matter in {}",
             display_state_path(relative)
-        );
-    }
-    Ok(())
-}
-
-fn parse_yaml_value(value: &str, relative: &Path) -> Result<Value> {
-    match value {
-        "null" => Ok(Value::Null),
-        "[]" => Ok(Value::Array(Vec::new())),
-        value if value.starts_with('"') => serde_json::from_str(value).with_context(|| {
-            format!(
-                "Invalid quoted front matter value '{}' in {}",
-                value,
-                display_state_path(relative)
-            )
-        }),
-        value => value
-            .parse::<i64>()
-            .map(|number| Value::Number(number.into()))
-            .with_context(|| {
-                format!(
-                    "Unsupported front matter value '{}' in {}",
-                    value,
-                    display_state_path(relative)
-                )
-            }),
-    }
+        )
+    })
 }
 
 fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {
@@ -620,32 +495,6 @@ fn require_datetime(
         })
 }
 
-fn optional_issue_id(
-    values: &BTreeMap<String, Value>,
-    key: &str,
-    relative: &Path,
-) -> Result<Option<String>> {
-    match values.get(key) {
-        Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => {
-            record_id::validate_record_id(value).with_context(|| {
-                format!(
-                    "Invalid issue id '{}' in key '{}' of {}",
-                    value,
-                    key,
-                    display_state_path(relative)
-                )
-            })?;
-            Ok(Some(value.clone()))
-        }
-        _ => bail!(
-            "Front matter key '{}' in {} must be string or null",
-            key,
-            display_state_path(relative)
-        ),
-    }
-}
-
 fn string_array(
     values: &BTreeMap<String, Value>,
     key: &str,
@@ -674,109 +523,252 @@ fn string_array(
         .collect()
 }
 
-fn issue_id_array(
+fn reject_legacy_relationship_keys(
     values: &BTreeMap<String, Value>,
-    key: &str,
     relative: &Path,
-) -> Result<Vec<String>> {
-    string_array(values, key, relative)?
-        .into_iter()
-        .map(|value| {
-            record_id::validate_record_id(&value).with_context(|| {
-                format!(
-                    "Invalid issue id '{}' in key '{}' of {}",
-                    value,
-                    key,
-                    display_state_path(relative)
-                )
-            })?;
-            Ok(value)
-        })
-        .collect()
+) -> Result<()> {
+    for key in ["blocks", "depends_on", "parent", "links"] {
+        if values.contains_key(key) {
+            bail!(
+                "Legacy relationship front matter key '{}' in {}; use relationships",
+                key,
+                display_state_path(relative)
+            );
+        }
+    }
+    Ok(())
 }
 
-fn typed_links(
+pub fn parse_relationships(
     values: &BTreeMap<String, Value>,
+    relative: &Path,
+) -> Result<Relationships> {
+    let object = values
+        .get("relationships")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            anyhow!(
+                "Missing object front matter key 'relationships' in {}",
+                display_state_path(relative)
+            )
+        })?;
+    let mut relationships = Relationships {
+        blocks: relationship_targets(object, "blocks", relative)?,
+        children: relationship_targets(object, "children", relative)?,
+        attachments: attachment_relationships(object, "attachments", relative)?,
+        relates: relates_relationships(object, "relates", relative)?,
+    };
+    sort_relationships(&mut relationships);
+    validate_relationships(&relationships, relative)?;
+    Ok(relationships)
+}
+
+fn relationship_targets(
+    values: &serde_json::Map<String, Value>,
     key: &str,
     relative: &Path,
-) -> Result<Vec<IssueLink>> {
+) -> Result<Vec<RelationshipTarget>> {
     let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
         anyhow!(
-            "Missing array front matter key '{}' in {}",
+            "Missing relationships.{} array in {}",
             key,
             display_state_path(relative)
         )
     })?;
 
-    let mut links = Vec::new();
+    let mut targets = Vec::new();
     let mut seen = BTreeSet::new();
     for value in values {
         let object = value.as_object().ok_or_else(|| {
             anyhow!(
-                "Array '{}' in {} must contain link objects",
+                "relationships.{} in {} must contain objects",
                 key,
                 display_state_path(relative)
             )
         })?;
-        let target_kind = object
-            .get("target_kind")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Link in {} is missing target_kind",
-                    display_state_path(relative)
-                )
-            })?;
-        if target_kind != "issue" {
-            bail!(
-                "Link in {} has unsupported target_kind '{}'; expected issue",
-                display_state_path(relative),
-                target_kind
-            );
-        }
-        let target_id = object
-            .get("target_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                anyhow!(
-                    "Link in {} is missing target_id",
-                    display_state_path(relative)
-                )
-            })?;
-        record_id::validate_record_id(target_id).with_context(|| {
-            format!(
-                "Invalid link target_id '{}' in {}",
-                target_id,
+        let kind = object.get("kind").and_then(Value::as_str).ok_or_else(|| {
+            anyhow!(
+                "relationships.{} entry in {} is missing kind",
+                key,
                 display_state_path(relative)
             )
         })?;
-        let relation_type = object
-            .get("type")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("Link in {} is missing type", display_state_path(relative)))?;
-        crate::db::validate_relation_type(relation_type).with_context(|| {
-            format!(
-                "Invalid link relation type '{}' in {}",
-                relation_type,
+        crate::db::validate_record_kind(kind)?;
+        let id = object.get("id").and_then(Value::as_str).ok_or_else(|| {
+            anyhow!(
+                "relationships.{} entry in {} is missing id",
+                key,
                 display_state_path(relative)
             )
         })?;
-        let link = IssueLink {
-            relation_type: relation_type.to_string(),
-            target_kind: target_kind.to_string(),
-            target_id: target_id.to_string(),
+        record_id::validate_record_id(id).with_context(|| {
+            format!(
+                "Invalid relationships.{} id '{}' in {}",
+                key,
+                id,
+                display_state_path(relative)
+            )
+        })?;
+        let target = RelationshipTarget {
+            kind: kind.to_string(),
+            id: id.to_string(),
         };
-        if !seen.insert(link.clone()) {
+        if !seen.insert(target.clone()) {
             bail!(
-                "Duplicate link to {} ({}) in {}",
-                target_id,
-                relation_type,
+                "Duplicate relationships.{} target {} {} in {}",
+                key,
+                kind,
+                id,
                 display_state_path(relative)
             );
         }
-        links.push(link);
+        targets.push(target);
     }
-    Ok(links)
+    Ok(targets)
+}
+
+fn attachment_relationships(
+    values: &serde_json::Map<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Vec<AttachmentRelationship>> {
+    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
+        anyhow!(
+            "Missing relationships.{} array in {}",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+    let mut attachments = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in values {
+        let object = value.as_object().ok_or_else(|| {
+            anyhow!(
+                "relationships.{} in {} must contain objects",
+                key,
+                display_state_path(relative)
+            )
+        })?;
+        let attachment = AttachmentRelationship {
+            kind: required_relationship_string(object, key, "kind", relative)?,
+            id: required_relationship_string(object, key, "id", relative)?,
+            role: required_relationship_string(object, key, "role", relative)?,
+        };
+        crate::db::validate_record_kind(&attachment.kind)?;
+        crate::db::validate_link_type(&attachment.role)?;
+        record_id::validate_record_id(&attachment.id)?;
+        if !seen.insert(attachment.clone()) {
+            bail!(
+                "Duplicate relationships.{} target {} {} ({}) in {}",
+                key,
+                attachment.kind,
+                attachment.id,
+                attachment.role,
+                display_state_path(relative)
+            );
+        }
+        attachments.push(attachment);
+    }
+    Ok(attachments)
+}
+
+fn relates_relationships(
+    values: &serde_json::Map<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Vec<RelatesRelationship>> {
+    let values = values.get(key).and_then(Value::as_array).ok_or_else(|| {
+        anyhow!(
+            "Missing relationships.{} array in {}",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+    let mut relates = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in values {
+        let object = value.as_object().ok_or_else(|| {
+            anyhow!(
+                "relationships.{} in {} must contain objects",
+                key,
+                display_state_path(relative)
+            )
+        })?;
+        let relation = RelatesRelationship {
+            kind: required_relationship_string(object, key, "kind", relative)?,
+            id: required_relationship_string(object, key, "id", relative)?,
+            relation_type: required_relationship_string(object, key, "type", relative)?,
+        };
+        crate::db::validate_record_kind(&relation.kind)?;
+        crate::db::validate_relationship_type(&relation.relation_type)?;
+        record_id::validate_record_id(&relation.id)?;
+        if !seen.insert(relation.clone()) {
+            bail!(
+                "Duplicate relationships.{} target {} {} ({}) in {}",
+                key,
+                relation.kind,
+                relation.id,
+                relation.relation_type,
+                display_state_path(relative)
+            );
+        }
+        relates.push(relation);
+    }
+    Ok(relates)
+}
+
+fn required_relationship_string(
+    object: &serde_json::Map<String, Value>,
+    bucket: &str,
+    key: &str,
+    relative: &Path,
+) -> Result<String> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            anyhow!(
+                "relationships.{} entry in {} is missing {}",
+                bucket,
+                display_state_path(relative),
+                key
+            )
+        })
+}
+
+fn validate_relationships(relationships: &Relationships, relative: &Path) -> Result<()> {
+    for target in relationships
+        .blocks
+        .iter()
+        .chain(relationships.children.iter())
+    {
+        crate::db::validate_record_kind(&target.kind)?;
+        record_id::validate_record_id(&target.id)?;
+    }
+    for attachment in &relationships.attachments {
+        crate::db::validate_record_kind(&attachment.kind)?;
+        crate::db::validate_link_type(&attachment.role)?;
+        record_id::validate_record_id(&attachment.id)?;
+    }
+    for relation in &relationships.relates {
+        crate::db::validate_record_kind(&relation.kind)?;
+        crate::db::validate_relationship_type(&relation.relation_type)?;
+        record_id::validate_record_id(&relation.id)?;
+    }
+    let _ = relative;
+    Ok(())
+}
+
+pub fn sort_relationships(relationships: &mut Relationships) {
+    relationships.blocks.sort();
+    relationships.blocks.dedup();
+    relationships.children.sort();
+    relationships.children.dedup();
+    relationships.attachments.sort();
+    relationships.attachments.dedup();
+    relationships.relates.sort();
+    relationships.relates.dedup();
 }
 
 fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Result<()> {
@@ -810,22 +802,78 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
     Ok(())
 }
 
-fn write_yaml_links(output: &mut String, key: &str, links: &[IssueLink]) -> Result<()> {
+pub fn write_yaml_relationships(output: &mut String, relationships: &Relationships) -> Result<()> {
+    output.push_str("relationships:\n");
+    write_relationship_targets(output, "blocks", &relationships.blocks)?;
+    write_relationship_targets(output, "children", &relationships.children)?;
+    write_attachment_relationships(output, &relationships.attachments)?;
+    write_relates_relationships(output, &relationships.relates)?;
+    Ok(())
+}
+
+fn write_relationship_targets(
+    output: &mut String,
+    key: &str,
+    values: &[RelationshipTarget],
+) -> Result<()> {
+    output.push_str("  ");
     output.push_str(key);
-    if links.is_empty() {
+    if values.is_empty() {
         output.push_str(": []\n");
         return Ok(());
     }
     output.push_str(":\n");
-    for link in links {
-        output.push_str("- target_id: ");
-        output.push_str(&serde_json::to_string(&link.target_id)?);
+    for value in values {
+        output.push_str("  - kind: ");
+        output.push_str(&serde_json::to_string(&value.kind)?);
         output.push('\n');
-        output.push_str("  target_kind: ");
-        output.push_str(&serde_json::to_string(&link.target_kind)?);
+        output.push_str("    id: ");
+        output.push_str(&serde_json::to_string(&value.id)?);
         output.push('\n');
-        output.push_str("  type: ");
-        output.push_str(&serde_json::to_string(&link.relation_type)?);
+    }
+    Ok(())
+}
+
+fn write_attachment_relationships(
+    output: &mut String,
+    values: &[AttachmentRelationship],
+) -> Result<()> {
+    output.push_str("  attachments");
+    if values.is_empty() {
+        output.push_str(": []\n");
+        return Ok(());
+    }
+    output.push_str(":\n");
+    for value in values {
+        output.push_str("  - kind: ");
+        output.push_str(&serde_json::to_string(&value.kind)?);
+        output.push('\n');
+        output.push_str("    id: ");
+        output.push_str(&serde_json::to_string(&value.id)?);
+        output.push('\n');
+        output.push_str("    role: ");
+        output.push_str(&serde_json::to_string(&value.role)?);
+        output.push('\n');
+    }
+    Ok(())
+}
+
+fn write_relates_relationships(output: &mut String, values: &[RelatesRelationship]) -> Result<()> {
+    output.push_str("  relates");
+    if values.is_empty() {
+        output.push_str(": []\n");
+        return Ok(());
+    }
+    output.push_str(":\n");
+    for value in values {
+        output.push_str("  - kind: ");
+        output.push_str(&serde_json::to_string(&value.kind)?);
+        output.push('\n');
+        output.push_str("    id: ");
+        output.push_str(&serde_json::to_string(&value.id)?);
+        output.push('\n');
+        output.push_str("    type: ");
+        output.push_str(&serde_json::to_string(&value.relation_type)?);
         output.push('\n');
     }
     Ok(())
@@ -884,18 +932,27 @@ mod tests {
                 closed_at: None,
             },
             labels: vec!["record-store".to_string(), "storage".to_string()],
-            blocks: vec!["atelier-bbbb".to_string()],
-            depends_on: vec!["atelier-aaaa".to_string()],
             acceptance: vec![
                 "Issue Markdown round-trips without losing fields".to_string(),
                 "Atomic writes do not expose partial state".to_string(),
             ],
             evidence_required: vec!["cargo test record_store".to_string()],
-            links: vec![IssueLink {
-                relation_type: "related".to_string(),
-                target_kind: "issue".to_string(),
-                target_id: "atelier-cccc".to_string(),
-            }],
+            relationships: Relationships {
+                blocks: vec![RelationshipTarget {
+                    kind: "issue".to_string(),
+                    id: "atelier-bbbb".to_string(),
+                }],
+                children: vec![RelationshipTarget {
+                    kind: "issue".to_string(),
+                    id: "atelier-aaaa".to_string(),
+                }],
+                attachments: Vec::new(),
+                relates: vec![RelatesRelationship {
+                    kind: "issue".to_string(),
+                    id: "atelier-cccc".to_string(),
+                    relation_type: "related".to_string(),
+                }],
+            },
         }
     }
 
@@ -941,6 +998,12 @@ mod tests {
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.issue\""));
         assert!(text.contains("schema_version: 1"));
+        assert!(text.contains("relationships:\n"));
+        assert!(text.contains("  blocks:\n  - kind: \"issue\"\n    id: \"atelier-bbbb\"\n"));
+        assert!(text.contains("  children:\n  - kind: \"issue\"\n    id: \"atelier-aaaa\"\n"));
+        assert!(text.contains(
+            "  relates:\n  - kind: \"issue\"\n    id: \"atelier-cccc\"\n    type: \"related\"\n"
+        ));
         assert!(text.contains("- \"Issue Markdown round-trips without losing fields\""));
         assert!(text.contains("- \"cargo test record_store\""));
     }

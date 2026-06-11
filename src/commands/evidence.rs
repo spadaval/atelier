@@ -33,6 +33,27 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
     print_record(&record)
 }
 
+pub fn attach(
+    db: &Database,
+    id: &str,
+    target_kind: &str,
+    target_id: &str,
+    role: &str,
+) -> Result<()> {
+    db.require_record(KIND, id)?;
+    let inserted = db.add_record_link(KIND, id, target_kind, target_id, role)?;
+    if inserted && target_kind == "issue" {
+        let evidence = db.require_record(KIND, id)?;
+        super::activity_log::record_evidence_attached(target_id, id, Some(&evidence.status))?;
+    }
+    if inserted {
+        println!("Attached evidence {id} to {target_kind} {target_id} ({role})");
+    } else {
+        println!("Evidence {id} is already attached to {target_kind} {target_id} ({role})");
+    }
+    Ok(())
+}
+
 pub fn list(db: &Database, result: Option<&str>) -> Result<()> {
     let records = db.list_records(KIND, result)?;
     if records.is_empty() {
