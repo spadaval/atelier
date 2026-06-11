@@ -20,7 +20,7 @@ requirements before the core record model is stable.
 ## Decision
 
 The first artifact backend is metadata-only evidence records in
-`.atelier-state/evidence/`.
+`.atelier/evidence/`.
 
 Evidence records may reference:
 

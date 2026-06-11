@@ -3,8 +3,8 @@
 This document defines the target JSON contract for authored bulk plans. Bulk
 plans are agent-authored intent files that create or connect multiple Atelier
 records in one operation. They are not backup exports and do not replace the
-canonical `.atelier-state/` projection described in
-[Canonical Export/Rebuild Layout](../storage/export/rebuild/canonical-layout.md).
+canonical `.atelier/` record tree described in
+[Canonical Record And Rebuild Layout](../storage/export/rebuild/canonical-layout.md).
 
 The contract covers `schema_version: 1`. Future versions may add fields, but
 commands must reject unknown future versions unless an explicit migration or
@@ -49,10 +49,10 @@ previews. Commands must not rely on object key order when parsing.
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `dry_run` | boolean | `false` | When `true`, validate and emit a preview without mutating SQLite or `.atelier-state/`. |
+| `dry_run` | boolean | `false` | When `true`, validate and emit a preview without mutating canonical records or SQLite. |
 | `on_conflict` | string | `fail` | `fail`, `skip_existing`, or `update_existing`. Conflict behavior applies only to explicit durable IDs or aliases when future support exists. |
 | `atomic` | boolean | `true` | When `true`, validation failure or apply failure must leave no partial graph where practical. If full transactionality is impossible, the command must emit recovery guidance. |
-| `export` | string | `auto` | `auto`, `skip`, or `check_only`. `auto` updates `.atelier-state/` after a successful mutation. `check_only` validates export freshness without writing. |
+| `export` | string | `auto` | Compatibility option: `auto`, `skip`, or `check_only`. In the target design, apply writes canonical `.atelier/` records first and refreshes projection state; compatibility readers may still use this field to decide whether to check legacy export freshness. |
 | `validate_only` | boolean | `false` | When `true`, validate and emit validation output without constructing an allocation preview. |
 
 `dry_run` and `validate_only` never mutate state. If both are true, the command
@@ -210,7 +210,7 @@ Bulk plans do not accept a top-level generic `links` array. Relationship intent
 is authored through domain fields: issue `blocks`/`depends_on`, mission `work`,
 mission `plans`, mission `milestones`, milestone `contributing_work`, plan
 `applies_to`, plan `supersedes`, and evidence `validates`. Apply normalizes
-those fields into canonical `.atelier-state` `relationships` buckets.
+those fields into canonical `.atelier/` `relationships` buckets.
 
 ## Validation
 
@@ -249,8 +249,8 @@ Top-level errors that do not belong to a record use `"client_ref": null`.
 
 ## Dry-Run Output
 
-Dry-run output must be deterministic and must not mutate SQLite or
-`.atelier-state/`. A dry run should return the same envelope style as other
+Dry-run output must be deterministic and must not mutate canonical records or
+SQLite. A dry run should return the same envelope style as other
 agent-facing JSON commands:
 
 ```json
@@ -282,11 +282,11 @@ human-readable diagnostics.
 
 The staged `atelier plan apply` implementation accepts this v1 input contract
 and prints a compact human summary with `applied`, `dry_run`, `validate_only`,
-record counts by kind, relationship count, and next commands. Mutating apply persists
-durable records under `.atelier-state/`, where `client_ref` to durable `id`
-mappings can be audited. Dry-run output reports preview counts without reserved
-IDs. Validate-only output reports that validation completed without allocating a
-preview.
+record counts by kind, relationship count, and next commands. Mutating apply
+persists durable records under tracked `.atelier/`, where `client_ref` to
+durable `id` mappings can be audited. Dry-run output reports preview counts
+without reserved IDs. Validate-only output reports that validation completed
+without allocating a preview.
 
 A successful mutating apply returns:
 

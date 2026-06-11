@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide canonical activity, notes, and imported comment policy"
-updated_at: "2026-06-11T20:10:51.629151183+00:00"
+updated_at: "2026-06-11T23:11:50.732742289+00:00"
 ---
 
 Resolve whether comments imported from predecessor trackers are kept only as

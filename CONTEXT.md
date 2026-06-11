@@ -10,15 +10,16 @@
 - Beads: the predecessor tracker replaced by Atelier. Beads data was imported
   and the repository archive was purged; only the external `import-beads`
   input format remains supported.
-- Canonical projection: deterministic repo-state files that can rebuild the
-  local SQLite runtime database.
+- Canonical record tree: deterministic tracked Markdown files under `.atelier/`
+  that can rebuild the local SQLite projection/runtime database.
 - RecordStore: the target component that owns canonical Markdown record reads,
   writes, validation, deterministic rendering, and ID allocation.
 - ProjectionIndex: the target rebuildable SQLite index derived from
   RecordStore records for global queries, graph traversal, search, validation,
   and Mission Control inputs.
-- RuntimeState: local-only `.atelier/` data such as current work association,
-  sessions used by that association, agent identity, and caches. It can
+- RuntimeState: local-only ignored data under `.atelier/runtime/` and
+  `.atelier/cache/` such as current work association, sessions used by that
+  association, agent identity, diagnostics, locks, and UI caches. It can
   reference canonical IDs but is not the durable project record source.
 - Local command diagnostics: user-local command telemetry used for performance
   and failure analysis. It is RuntimeState-adjacent diagnostic data, not a
@@ -41,8 +42,8 @@
 - Plan: durable execution intent that matters beyond ephemeral context.
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
-- SQLite state: fast local runtime state, currently inherited from Chainlink and
-  targeted to live under `.atelier/`.
+- SQLite state: fast local projection and runtime state, currently inherited
+  from Chainlink and targeted to live at `.atelier/runtime/state.db`.
 
 ## Ambiguities
 
@@ -52,9 +53,13 @@
   product design.
 - Export/import in the inherited code is backup-oriented. The target
   architecture needs canonical projection and rebuild semantics instead.
-- The canonical-state target is Markdown-first: successful durable mutations
-  should write record files through RecordStore, then refresh ProjectionIndex.
-  SQLite is not the destination source of truth for canonical records.
+- The canonical-state target is Markdown-first in a single `.atelier/` tree:
+  successful durable mutations should write record files through RecordStore,
+  then refresh ProjectionIndex. SQLite is not the destination source of truth
+  for canonical records.
+- `.atelier-state/` is compatibility state for repositories created before the
+  single-tree migration. Migration code may discover, read, and import it, but
+  post-migration durable writes target `.atelier/` only.
 - Dependencies should represent actual sequencing. Canonical state groups
   record relationships under `relationships`: use `blocks` for readiness,
   `children` for hierarchy and mission work, `attachments` for plans/evidence,

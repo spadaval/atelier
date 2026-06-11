@@ -8,8 +8,9 @@ Accepted.
 
 Atelier is a local-first tracker whose durable project state must be legible,
 mergeable, and recoverable through Git. The previous milestone established
-Markdown records in `.atelier-state/` and removed aggregate `manifest.json` and
-`graph.json` files as canonical state.
+Markdown records and removed aggregate `manifest.json` and `graph.json` files
+as canonical state. The single-tree follow-up moves the target committed root to
+`.atelier/` while treating `.atelier-state/` as compatibility state.
 
 The inherited Chainlink implementation still centers many commands on SQLite
 rows and then uses export to render Markdown. That path is useful for migration,
@@ -25,7 +26,7 @@ not parse every Markdown file on every command.
 
 Atelier will use a Markdown-first persistence architecture:
 
-- `RecordStore` owns canonical record files under `.atelier-state/`: discovery,
+- `RecordStore` owns canonical record files under `.atelier/`: discovery,
   parsing, validation, deterministic rendering, ID allocation, and atomic
   writes.
 - `ProjectionIndex` owns rebuildable SQLite indexes derived from `RecordStore`
@@ -33,8 +34,9 @@ Atelier will use a Markdown-first persistence architecture:
   Control inputs. It is a metadata index for locating, sorting, filtering,
   traversing, and checking records, not a complete copy of Markdown bodies or
   rich record payloads.
-- `RuntimeState` owns local-only `.atelier/` state such as current
-  work/session association, local agent identity, and caches.
+- `RuntimeState` owns local-only `.atelier/runtime/` and `.atelier/cache/`
+  state such as current work/session association, local agent identity, locks,
+  diagnostics, and caches.
 
 Successful canonical mutations write Markdown records first, then refresh or
 mark stale the projection index. Normal durability must not depend on a later
@@ -52,7 +54,7 @@ ordinary step that makes successful mutations durable.
 
 - Markdown record files are the source of truth for canonical project records.
 - SQLite remains the fast query and runtime engine, but canonical records must
-  be rebuildable from `.atelier-state/`.
+  be rebuildable from tracked `.atelier/` records.
 - Command implementations must avoid adding new SQLite-first canonical mutation
   paths.
 - Projection freshness becomes part of query correctness, not just handoff

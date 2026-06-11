@@ -56,20 +56,23 @@ Accepted ADRs record cross-cutting product decisions:
 [SPEC.md](../../SPEC.md) defines the target architecture, using the vocabulary in
 [CONTEXT.md](../../CONTEXT.md):
 
-- `.atelier-state/` contains deterministic, mergeable Markdown records.
-- SQLite is the fast local ProjectionIndex and RuntimeState store for queries,
-  locks, sessions, workflow checks, and Mission Control inputs.
-- Command diagnostics are local-only telemetry outside `.atelier-state/` and do
-  not create exported run/session records until a later projection contract
-  explicitly opts in.
+- `.atelier/` is the single project state root. It contains deterministic,
+  mergeable Markdown records and tracked project config.
+- `.atelier/runtime/` and `.atelier/cache/` are ignored local state for the
+  SQLite ProjectionIndex, locks, sessions, diagnostics, identity, workflow
+  checks, Mission Control inputs, and UI caches.
+- Command diagnostics are local-only telemetry outside the canonical record
+  directories and do not create exported run/session records until a later
+  projection contract explicitly opts in.
 - Mutating commands are migrating toward Markdown-first writes through
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
 - `export --check` detects stale canonical records and derived projections.
 - `rebuild` recreates SQLite projection state from committed Markdown records.
 - First-class concepts include missions, milestone checkpoint records, issues,
   plans, evidence, runs, typed links, workflows, and workflow validators.
-- Repository-owned workflow policy lives in `atelier.workflow.yaml`, while
-  `.atelier-state/` remains the deterministic exported tracker projection.
+- Repository-owned workflow policy lives in `.atelier/config.toml` or a
+  documented workflow policy file selected by config; copied rule trees are
+  integrations, not project tracker state.
 
 ## Boundaries
 
@@ -96,6 +99,6 @@ Accepted ADRs record cross-cutting product decisions:
 - Some inherited Chainlink concepts and module boundaries can still obscure
   Atelier target-state work.
 - Backup-style export/import can be mistaken for canonical projection/rebuild.
-- SQLite state must not become the only durable source once `.atelier-state/`
-  exists.
+- SQLite state must not become the only durable source once tracked `.atelier/`
+  canonical records exist.
 - Process features must stay risk-scaled and configurable to avoid red tape.

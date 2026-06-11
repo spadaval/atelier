@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define the one-directory .atelier filesystem contract"
-updated_at: "2026-06-11T18:54:24.351600365+00:00"
+updated_at: "2026-06-11T23:07:08.456713794+00:00"
 ---
 
 Document the target contract for a single .atelier/ root before implementation begins.

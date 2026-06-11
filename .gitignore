@@ -1,5 +1,15 @@
 /target/
-/.atelier/
+/.atelier/.gitignore
+/.atelier/.locks-cache/
+/.atelier/state.db
+/.atelier/hook-config.json
+/.atelier/rules/
+/.atelier/rules.local/
+/.atelier/runtime/
+/.atelier/cache/
+/.atelier/**/*.db
+/.atelier/**/*.db-shm
+/.atelier/**/*.db-wal
 /.atelier-state/cache/
 .dolt/
 .beads-credential-key

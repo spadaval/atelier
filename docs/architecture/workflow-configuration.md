@@ -1,16 +1,17 @@
 # Workflow Configuration Contract
 
-Atelier workflow policy is owned by the repository in a committed YAML file:
+Atelier workflow policy is owned by the repository and selected by tracked
+project config. The target config entry point is:
 
 ```text
-atelier.workflow.yaml
+.atelier/config.toml
 ```
 
-This file lives at the repository root. It is not stored under `.atelier/`
-because `.atelier/` is local runtime state, and it is not stored under
-`.atelier-state/` because `.atelier-state/` is the deterministic exported record
-projection. Workflow configuration is hand-authored repository policy that
-commands load alongside the exported tracker state.
+During the compatibility window, commands may continue to load the existing root
+`atelier.workflow.yaml` when `.atelier/config.toml` has not yet selected a
+policy path. Workflow configuration is hand-authored repository policy that
+commands load alongside canonical tracker records; it is not local runtime
+state and must not be copied into generated rule trees.
 
 ## Scope
 
@@ -109,7 +110,7 @@ evidence, and Mission Control projections.
 
 | Error name | Meaning |
 | --- | --- |
-| `workflow_config_missing` | `atelier.workflow.yaml` is required for the action and is absent. |
+| `workflow_config_missing` | The configured workflow policy file is required for the action and is absent. |
 | `workflow_config_not_file` | The configured path exists but is not a regular file. |
 | `workflow_config_parse_error` | YAML parsing failed. |
 | `workflow_config_schema_missing` | `schema` or `schema_version` is absent. |
@@ -265,7 +266,7 @@ Validators receive a deterministic input context:
   "schema": "atelier.workflow_validator_context",
   "schema_version": 1,
   "config": {
-    "path": "atelier.workflow.yaml",
+    "path": ".atelier/config.toml",
     "sha256": "<config-file-sha256>"
   },
   "workflow": "milestone_task",
@@ -284,7 +285,7 @@ Validators receive a deterministic input context:
   "evidence": [],
   "milestone": null,
   "projection": {
-    "state_path": ".atelier-state",
+    "state_path": ".atelier",
     "export_current": true
   },
   "git": {
@@ -359,14 +360,14 @@ except through explicit expandable values in the config.
 
 ## Reload Behavior
 
-Every CLI invocation that depends on workflow policy reads and validates
-`atelier.workflow.yaml` before acting. The command captures the config file hash
-in validator, hook, and diagnostic output.
+Every CLI invocation that depends on workflow policy reads and validates the
+configured workflow policy before acting. The command captures the config file
+hash in validator, hook, and diagnostic output.
 
 Long-lived future surfaces such as Mission Control, file watchers, or local
 helpers must perform a reload check before each config-dependent action:
 
-1. Hash `atelier.workflow.yaml`.
+1. Hash the configured workflow policy file.
 2. If the hash is unchanged, keep the loaded config.
 3. If the hash changed, parse and validate the new file.
 4. If the new file is valid, use it for the action and report the new hash.

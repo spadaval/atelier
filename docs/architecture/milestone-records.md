@@ -19,9 +19,9 @@ A first-class milestone record must model these fields:
 | `missions` | One or more mission IDs that the checkpoint belongs to or advances. |
 | `contributing_work` | Linked epics, issues, reviews, validation items, or closeout items that contribute to the checkpoint. |
 
-The canonical export shape follows the storage contract in
-[Canonical Export/Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md):
-milestone records live under `.atelier-state/milestones/<record-id>.md`, IDs
+The canonical record shape follows the storage contract in
+[Canonical Record And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md):
+milestone records live under `.atelier/milestones/<record-id>.md`, IDs
 use the project-scoped random record ID format, ID arrays are sorted lexically,
 and text arrays preserve author order.
 
@@ -60,8 +60,8 @@ and reviewable while keeping process enforcement configurable.
 A workflow may require validators such as `evidence_attached`,
 `validation_criteria_satisfied`, `no_open_blockers`, or `no_blocking_lints`
 before a milestone acceptance or closeout transition can complete. Those
-validators belong in `atelier.workflow.yaml` or the workflow implementation
-contract, not as milestone-attached transition checks.
+validators belong in the configured workflow policy or the workflow
+implementation contract, not as milestone-attached transition checks.
 
 Milestone verification should therefore answer three questions:
 
@@ -89,6 +89,6 @@ validation.
 
 Milestones are first-class checkpoint records, not an inherited issue lifecycle
 subsystem. They are created today through `atelier plan apply` bulk-plan input
-and rendered under `.atelier-state/milestones/`. A future dedicated checkpoint
-command must target this record contract directly rather than restoring the
-deleted legacy `milestone` command group.
+and rendered under `.atelier/milestones/` after the single-tree migration. A
+future dedicated checkpoint command must target this record contract directly
+rather than restoring the deleted legacy `milestone` command group.

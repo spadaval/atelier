@@ -85,8 +85,9 @@ An agent tasked with a mission should be able to:
 
 `atelier worktree for <issue-id>` creates or locates a Git worktree using the
 configured branch/path policy, rebuilds local SQLite state from
-`.atelier-state/`, runs `worktree_setup` hooks from `atelier.workflow.yaml`, and
-records the issue/branch/worktree association in local runtime state.
+tracked `.atelier/` records, runs `worktree_setup` hooks from the configured
+workflow policy, and records the issue/branch/worktree association in local
+runtime state.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated work, and canonical export
 freshness when available. `atelier worktree merge` and

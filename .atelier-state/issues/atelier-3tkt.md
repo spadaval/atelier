@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Specify the Markdown-first single-tree contract"
-updated_at: "2026-06-11T20:09:59.529402818+00:00"
+updated_at: "2026-06-11T23:13:05.117383453+00:00"
 ---
 
 Document the Markdown-first storage contract before implementation. This epic owns the product and architecture language for the single .atelier/ layout, direct edit workflow, deterministic Markdown shape, activity/notes model, migration/backcompat window, merge-conflict guidance, and validation responsibilities.

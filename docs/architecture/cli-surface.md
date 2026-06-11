@@ -54,7 +54,7 @@ Work lifecycle commands store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow
 transitions. Worktree helpers expose scan-friendly JSON status, create/remove
 associated Git worktrees, rebuild SQLite in new worktrees, and run
-`worktree_setup` hooks from `atelier.workflow.yaml`.
+`worktree_setup` hooks from the configured workflow policy.
 Mission closeout is ready only when all linked work is closed, required evidence
 is attached, workflow validators pass, and the Git worktree is clean.
 
@@ -101,7 +101,7 @@ The daemon surface and changelog-on-close behavior are not part of the target
 public workflow. Issue closure records close state, close time, and optional
 reason in tracker state; it does not mutate `CHANGELOG.md`.
 
-Canonical state is Markdown under `.atelier-state/`, checked with
-`atelier export --check` and indexed into SQLite with `atelier rebuild`.
-`atelier export` is the deterministic canonical renderer; backup JSON/Markdown
-formats are no longer command surfaces.
+Canonical state is Markdown under tracked `.atelier/` records, checked with
+lint/export compatibility gates and indexed into SQLite with `atelier rebuild`.
+`atelier export` remains a compatibility and repair renderer during migration;
+backup JSON/Markdown formats are no longer command surfaces.

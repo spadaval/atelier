@@ -21,9 +21,12 @@ concrete files, commands, and product-specific skills.
 ## Tracker
 
 - Tracker: Atelier
-- Durable tracker state: committed `.atelier-state/`
-- Runtime tracker database: local `.atelier/state.db`, rebuilt from
-  `.atelier-state/`
+- Durable tracker state: committed canonical Markdown and tracked config under
+  `.atelier/`
+- Runtime tracker database: local `.atelier/runtime/state.db`, rebuilt from
+  committed `.atelier/` records
+- Compatibility state: `.atelier-state/` may be discovered, read, and migrated
+  by explicit migration work only. Do not introduce new normal writes there.
 - Missions are durable active-focus records for product outcomes and
   coordinated workstreams. Link executable issues to missions and select worker
   issues from the active mission or epic graph. Keep mission status in sync with

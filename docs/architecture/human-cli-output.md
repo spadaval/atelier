@@ -156,12 +156,12 @@ their need:
   should print only the affected ID, changed fields, and recovery guidance when
   quiet output is requested. Scripts may branch on exit status and the stable
   IDs or paths in quiet output, but should not parse full detail views.
-- Read canonical records under `.atelier-state/` when durable tracker state is
+- Read canonical records under `.atelier/` when durable tracker state is
   needed. These Markdown records are the reviewable, mergeable source of truth
   for issues, missions, milestones, plans, evidence, and activity sidecars.
 - Rebuild local projections with `atelier rebuild` after checkout, pull, clone,
-  or merge. `.atelier/state.db` and projection metadata are rebuildable local
-  indexes, not durable API payloads to commit.
+  or merge. `.atelier/runtime/state.db` and projection metadata are rebuildable
+  local indexes, not durable API payloads to commit.
 - Use export and check commands for freshness and handoff gates. `atelier
   export --check`, `atelier lint`, and `atelier doctor` are the supported
   noninteractive health checks for stale records, invalid tracker state, and

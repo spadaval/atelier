@@ -75,13 +75,11 @@ Atelier should implement this storage contract:
 
 ```text
 .atelier/
-  state.db              # live local SQLite state
-  agent.json            # machine-local agent identity
-  cache/                # derived local-only data
-
-.atelier-state/
+  config.toml           # tracked project tracker configuration
   issues/
     atelier-z1p8.md
+    atelier-z1p8.activity/
+      20260611T160930000000Z.md
   missions/
     atelier-k7mq.md
   milestones/
@@ -90,19 +88,28 @@ Atelier should implement this storage contract:
     atelier-p3v6.md
   evidence/
     atelier-n8da.md
-  mission-control.json  # derived projection, not rebuild source
+  runtime/              # ignored local runtime state
+    state.db
+    agent.json
+    locks/
+    diagnostics/
+  cache/                # ignored derived local-only data
 ```
 
 The exact layout can change, but the principles should not:
 
 - Canonical Markdown records must be deterministic.
 - Canonical Markdown records must be sufficient to rebuild SQLite projections.
-- `export --check` must detect stale canonical records and derived projections.
+- `export --check` must detect stale canonical records and derived projections
+  during the compatibility window, and the target lint/rebuild checks must
+  validate canonical `.atelier/` Markdown directly.
 - Mutating commands should write canonical Markdown records first, then refresh
   or mark stale the SQLite projection.
 - Git merges should happen through Markdown record files, not by merging SQLite
   files.
 - SQLite should be rebuildable after checkout, merge, pull, or clone.
+- Runtime and cache paths under `.atelier/runtime/` and `.atelier/cache/` are
+  ignored local state and are never the durable project record source.
 
 The existing Chainlink export/import system is backup-oriented. Atelier needs a
 Markdown-first canonical record store with rebuildable projections instead.
@@ -212,8 +219,9 @@ into rigid accounting.
 Local command diagnostics are not run records. Command duration, exit status,
 redacted command family, workspace grouping, and phase timing events may be
 recorded in a user-local diagnostics store for performance analysis, but they
-must not be exported to `.atelier-state/` or treated as Mission Control run
-projection data until an explicit run/session projection contract exists.
+must not be exported into tracked `.atelier/` canonical records or treated as
+Mission Control run projection data until an explicit run/session projection
+contract exists.
 
 ## Relationships
 
@@ -445,13 +453,13 @@ machine-readable source of truth, not command-result JSON.
 
 ### Milestone 2: Canonical Export/Rebuild
 
-- Define `.atelier-state`.
+- Define tracked canonical Markdown under `.atelier/`.
 - Export deterministic per-record files.
 - Add `export --check`.
 - Add `rebuild`.
 - Make SQLite rebuildable from committed Markdown records.
-- Keep `.atelier/state.db` ignored as local runtime state; committed durable
-  state lives under `.atelier-state/`.
+- Keep `.atelier/runtime/state.db` ignored as local runtime state; committed
+  durable state lives under tracked `.atelier/` record directories.
 
 ### Milestone 3: Braid-Style Worktrees
 
@@ -484,8 +492,12 @@ machine-readable source of truth, not command-result JSON.
 
 - Resolved for Milestone 1: the canonical binary is `atelier`; short aliases
   such as `atl` are deferred until the install story is stable.
-- Resolved for Milestone 1: `.atelier/state.db` is ignored local runtime state,
-  while `.atelier-state/` is the committed rebuild source.
+- Resolved for the Markdown-first storage overhaul: `.atelier/` is the single
+  project root. Canonical Markdown records and tracked project config live under
+  `.atelier/`; `.atelier/runtime/` and `.atelier/cache/` contain ignored local
+  projection/runtime files such as `state.db`, identity, locks, diagnostics, and
+  UI caches. `.atelier-state/` is a read/migrate compatibility source only
+  until the explicit migration slice removes it from normal writes.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata? Command diagnostics are resolved separately as local-only telemetry
   and do not answer this broader run/session policy.

@@ -1,23 +1,34 @@
-# Canonical Export And Rebuild Layout
+# Canonical Record And Rebuild Layout
 
-This document defines the target `.atelier-state/` projection for Milestone 2.
-It is the committed rebuild source for `.atelier/state.db`; the live SQLite
-database remains local runtime state.
+This document defines the target `.atelier/` canonical record tree. Tracked
+Markdown records under `.atelier/` are the committed rebuild source for the
+local SQLite projection at `.atelier/runtime/state.db`; runtime and cache files
+remain ignored local state.
+
+During the migration window, existing repositories may still contain
+`.atelier-state/`. Commands may discover, read, validate, and migrate that tree,
+but post-migration durable writes target `.atelier/` only.
 
 ## Goals
 
 - The export is deterministic for the same logical state.
 - The export is sufficient to rebuild SQLite for all canonical records.
 - Every record carries schema and version metadata.
-- `export --check` can compare SQLite state with the committed projection.
-- Git merges happen through files in `.atelier-state/`, not through SQLite.
+- `export --check` can compare compatibility state with the committed
+  projection during migration, and target lint/rebuild checks validate
+  `.atelier/` Markdown directly.
+- Git merges happen through tracked `.atelier/` record files, not through
+  SQLite.
 
 ## Directory Layout
 
 ```text
-.atelier-state/
+.atelier/
+  config.toml
   issues/
     atelier-z1p8.md
+    atelier-z1p8.activity/
+      20260611T160930000000Z.md
   missions/
     atelier-k7mq.md
   milestones/
@@ -26,8 +37,20 @@ database remains local runtime state.
     atelier-p3v6.md
   evidence/
     atelier-n8da.md
-  mission-control.json
+  runtime/
+    state.db
+    agent.json
+    locks/
+    diagnostics/
+  cache/
 ```
+
+Tracked canonical paths are `config.toml`, `issues/`, `missions/`,
+`milestones/`, `plans/`, `evidence/`, and canonical activity sidecars.
+`.atelier/runtime/` and `.atelier/cache/` are ignored. Copied rule trees,
+editor integration files, hook scaffolding, and UI caches are not project
+tracker state unless a future contract explicitly promotes a file into the
+tracked config surface.
 
 ## Schema Identity
 
@@ -61,11 +84,11 @@ The canonical file path is derived from the record ID:
 
 | Record kind | ID format | Path |
 | --- | --- | --- |
-| Issue | `atelier-z1p8` | `.atelier-state/issues/atelier-z1p8.md` |
-| Mission | `atelier-k7mq` | `.atelier-state/missions/atelier-k7mq.md` |
-| Milestone | `atelier-4x9t` | `.atelier-state/milestones/atelier-4x9t.md` |
-| Plan | `atelier-p3v6` | `.atelier-state/plans/atelier-p3v6.md` |
-| Evidence | `atelier-n8da` | `.atelier-state/evidence/atelier-n8da.md` |
+| Issue | `atelier-z1p8` | `.atelier/issues/atelier-z1p8.md` |
+| Mission | `atelier-k7mq` | `.atelier/missions/atelier-k7mq.md` |
+| Milestone | `atelier-4x9t` | `.atelier/milestones/atelier-4x9t.md` |
+| Plan | `atelier-p3v6` | `.atelier/plans/atelier-p3v6.md` |
+| Evidence | `atelier-n8da` | `.atelier/evidence/atelier-n8da.md` |
 
 IDs use `<project-slug>-<random-base36>`. The project slug is lowercase ASCII
 and normally matches the repository or workspace slug. The random suffix is
@@ -116,9 +139,156 @@ semantic relationships with a `type`. Rebuild derives issue readiness,
 hierarchy, and runtime relation indexes from these buckets; `depends_on` is a
 query/display concept derived as the inverse of `blocks`.
 
+## Direct Edit Contract
+
+Direct edits are a supported operator and agent workflow:
+
+1. Edit tracked Markdown under `.atelier/` using the deterministic layout in
+   this document.
+2. Run `atelier lint` to validate schema, path, front matter, relationships,
+   activity sidecars, and unsupported files.
+3. Run the normal command that depends on the changed record, or run
+   `atelier rebuild` when the local projection needs explicit refresh.
+
+Every canonical Markdown file must use YAML front matter bounded by `---`, UTF-8
+encoding, LF line endings, and exactly one trailing newline. Front matter keys
+are rendered lexically by Atelier writers. Hand edits may use any YAML key order,
+but `atelier lint` and repair commands may report non-canonical ordering as
+format drift once the direct-edit lint slice lands.
+
+Required common fields are `schema`, `schema_version`, `id`, `title`, `status`,
+`created_at`, `updated_at`, `labels`, and `relationships`. Record-kind sections
+below define additional required fields. Unknown required-field omissions are
+lint/rebuild errors; unknown extra front matter keys are rejected unless the
+record kind explicitly permits an extension map.
+
+Relationship buckets are the only canonical relationship surface:
+
+```yaml
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates: []
+```
+
+Bucket names are always present and sorted lexically. Entries are sorted by
+target kind, target ID, role or type, then creation timestamp where applicable.
+Operators should add dependency intent to `blocks`; `depends_on` remains a
+derived display concept and must not be authored in canonical front matter.
+
+Example issue:
+
+```markdown
+---
+acceptance:
+  - "Document the operator-visible behavior."
+created_at: "2026-06-11T20:00:00Z"
+evidence_required: []
+id: atelier-z1p8
+issue_type: task
+labels:
+  - docs
+priority: high
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates: []
+schema: atelier.issue
+schema_version: 1
+status: open
+title: "Define direct edit behavior"
+updated_at: "2026-06-11T20:00:00Z"
+---
+
+The body contains the durable issue description.
+```
+
+Example issue activity sidecar:
+
+```markdown
+---
+actor: "agent"
+created_at: "2026-06-11T20:01:00Z"
+event_type: note
+id: "20260611T200100000000Z"
+schema: atelier.activity
+schema_version: 1
+subject_id: atelier-z1p8
+subject_kind: issue
+summary: "Recorded hand-edit note"
+---
+
+The activity body contains the note text.
+```
+
+## Merge Conflict And Recovery Guidance
+
+Canonical records are ordinary Git files, so operators resolve conflicts with
+normal Git tools and then use Atelier commands to validate the result. The
+standard recovery loop is:
+
+1. Resolve file conflicts under tracked `.atelier/` record directories.
+2. Run `atelier lint`.
+3. Use focused drill-down commands such as `atelier issue show <id>`,
+   `atelier mission show <id>`, `atelier evidence show <id>`, or
+   `atelier issue list --ready` to inspect the affected records.
+4. Run `atelier rebuild` if the local projection is stale or was rebuilt from
+   invalid intermediate files.
+5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
+   mission being closed.
+
+For a single Markdown record conflict:
+
+- Keep exactly one YAML front matter block.
+- Preserve the record ID, schema, schema version, and path identity.
+- Merge body text as normal prose, retaining useful intent from both sides.
+- Preserve `created_at`; set `updated_at` to the later valid timestamp or to
+  the timestamp of the resolving edit when the correct source timestamp is
+  ambiguous.
+- Preserve labels and other set-like arrays in deterministic sorted order.
+- Preserve ordered user-authored arrays, such as acceptance criteria, in the
+  order that best preserves meaning.
+
+For relationship conflicts:
+
+- Merge relationship buckets by target identity and role/type.
+- Keep both edges when two branches add distinct blockers, children,
+  attachments, or semantic relations.
+- Remove exact duplicate edges.
+- Do not author `depends_on`; express sequencing in `blocks` and let commands
+  derive inverse display.
+- After resolving dependency changes, inspect readiness with
+  `atelier issue list --ready` and targeted issue `show` output.
+
+For activity sidecar conflicts:
+
+- Prefer keeping both files when two branches add different activity entries.
+- If two files share the same timestamp ID but have different content, rename
+  one file with the next deterministic suffix, such as
+  `20260611T200100000000Z-01.md`, and update its `id` field to match.
+- If the same sidecar file conflicts, preserve one front matter block, keep the
+  original `subject_kind`, `subject_id`, and `created_at`, and merge the body
+  only when both versions contain distinct useful text.
+- Reject or repair any activity entry whose subject record no longer exists.
+
+For unsupported files or stale runtime state:
+
+- Delete or move files that do not belong in tracked canonical directories, such
+  as generated caches, local databases, copied rule trees, or editor artifacts.
+- Do not commit `.atelier/runtime/`, `.atelier/cache/`, SQLite databases, lock
+  caches, diagnostics, or local identity.
+- If `.atelier/runtime/state.db` is missing or stale, rebuild it from canonical
+  records instead of resolving it as a Git conflict.
+
+When `atelier lint` reports invalid canonical Markdown, fix the Markdown rather
+than trusting the current SQLite projection. SQLite is rebuildable; the
+canonical Markdown record tree is the durable review surface.
+
 ## Issues
 
-Path: `.atelier-state/issues/<record-id>.md`
+Path: `.atelier/issues/<record-id>.md`
 
 Issue front matter adds:
 
@@ -131,7 +301,7 @@ Issue front matter adds:
 
 ## Missions
 
-Path: `.atelier-state/missions/<record-id>.md`
+Path: `.atelier/missions/<record-id>.md`
 
 Current staged support writes mission records with common front matter fields
 (`schema`, `schema_version`, `id`, `title`, `status`, `created_at`,
@@ -145,7 +315,7 @@ text arrays preserve author order.
 
 ## Milestones
 
-Path: `.atelier-state/milestones/<record-id>.md`
+Path: `.atelier/milestones/<record-id>.md`
 
 Milestone front matter adds `desired_state`, `scope`,
 `validation_criteria`, `accepted_evidence`, `completion_state`, `missions`, and
@@ -155,7 +325,7 @@ link to them as contributing work.
 
 ## Plans
 
-Path: `.atelier-state/plans/<record-id>.md`
+Path: `.atelier/plans/<record-id>.md`
 
 Current staged support writes plan records with common front matter fields plus
 a quoted JSON `data` field containing `revision` and `revisions`. The body is
@@ -167,7 +337,7 @@ lexically. Plan body is the durable execution intent.
 
 ## Evidence
 
-Path: `.atelier-state/evidence/<record-id>.md`
+Path: `.atelier/evidence/<record-id>.md`
 
 Evidence front matter adds:
 
@@ -190,12 +360,12 @@ RecordStore slice.
 
 ## Mission Control Projection
 
-Path: `.atelier-state/mission-control.json`
+Path: `.atelier/cache/mission-control.json` or another documented cache path.
 
-`mission-control.json` is derived, not a rebuild source for Milestone 2.
-`export --check` compares it only after Mission Control projection export lands.
-Rebuild must ignore it for canonical state reconstruction and regenerate it from
-canonical records when Mission Control projection work lands in Milestone 6.
+`mission-control.json` is derived, not a rebuild source. Target rebuild and lint
+must ignore cache projections for canonical state reconstruction and regenerate
+them from canonical records when Mission Control projection work lands in
+Milestone 6.
 
 Until Milestone 6, the file may be absent. If present, it must carry
 `schema: "atelier.mission-control"` and `schema_version: 1`.
@@ -219,10 +389,10 @@ Rebuild proceeds in this order:
 4. Recreate SQLite tables inside a transaction.
 5. Regenerate derived projections such as `mission-control.json` when supported.
 
-If any unexpected canonical file exists under `.atelier-state/`, `export
---check` must report a stale or untracked projection error. `manifest.json` and
-`graph.json` are not canonical source files and canonical export removes stale
-copies when it writes the projection.
+If any unexpected canonical file exists under tracked `.atelier/` record
+directories, lint/rebuild must report an untracked or unsupported canonical file
+error. `manifest.json` and `graph.json` are not canonical source files and
+canonical repair removes stale copies when it writes the projection.
 
 The staged implementation uses a registered first-class record contract for
 non-issue records. Each canonical kind declares its record kind, schema,
@@ -233,19 +403,22 @@ defines its durable layout.
 
 ## Mutating Command Rollout
 
-Milestone 2 introduces `atelier export` as the deterministic writer for
+Milestone 2 introduced `atelier export` as the deterministic writer for
 `.atelier-state/` and `atelier export --check` as the durable-state freshness
-check.
-`atelier rebuild` recreates `.atelier/state.db` from `.atelier-state/` and may
-create the local `.atelier/` runtime directory in a fresh checkout. Backup
-export formats are no longer command surfaces; predecessor imports use
-`atelier import-beads`.
+check. The single-tree migration narrows that behavior to compatibility and
+repair: post-migration writes target `.atelier/`, and `.atelier-state/` is
+read/migrate only.
+
+`atelier rebuild` recreates `.atelier/runtime/state.db` from tracked
+`.atelier/` canonical records and may create ignored runtime/cache directories
+in a fresh checkout. Backup export formats are no longer command surfaces;
+predecessor imports use `atelier import-beads`.
 
 Rebuild also recreates local `ProjectionIndex` source metadata in SQLite. The
 metadata records canonical file paths, size and modified-time hints, and content
 hashes so query commands can detect stale projections before reading SQLite.
-This metadata is intentionally not exported into `.atelier-state/` and can be
-discarded with `.atelier/state.db`. Issue activity sidecars are canonical files
+This metadata is intentionally not tracked and can be discarded with
+`.atelier/runtime/state.db`. Issue activity sidecars are canonical files
 but are read directly by history/show commands, so they are validated by rebuild
 rather than tracked as query-projection sources.
 

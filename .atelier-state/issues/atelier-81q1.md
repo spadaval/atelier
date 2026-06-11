@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Update product and architecture docs for the single .atelier contract"
-updated_at: "2026-06-11T20:10:50.795049048+00:00"
+updated_at: "2026-06-11T23:07:08.490408135+00:00"
 ---
 
 Refresh SPEC.md, CONTEXT.md, AGENTFACTORY.md, storage layout docs, and ADR language so the single committed .atelier/ tree and ignored runtime/cache subpaths are the documented source of truth. Acceptance: docs name canonical and runtime paths, old .atelier-state compatibility, command responsibilities, and closeout validation.

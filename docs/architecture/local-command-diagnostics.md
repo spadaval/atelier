@@ -3,7 +3,7 @@
 Atelier records command telemetry as local diagnostics, not as durable project
 records. The diagnostics store exists to help operators find slow commands,
 failed workflows, and stale projections without making agent sessions or raw
-command interactions part of committed `.atelier-state/`.
+command interactions part of committed `.atelier/` records.
 
 This policy unblocks command instrumentation while keeping
 `atelier-000i` deferred: future run/session export can project from these local
@@ -24,7 +24,7 @@ When neither `ATELIER_HOME` nor `XDG_STATE_HOME` is set, Atelier uses:
 ```
 
 This directory is global to the user account and intentionally outside both the
-workspace `.atelier/` runtime directory and committed `.atelier-state/`.
+workspace `.atelier/runtime/` directory and committed `.atelier/` records.
 Implementations must create it only when diagnostics are enabled and a command
 has an event to write.
 
@@ -93,7 +93,7 @@ The required fields and defaults are:
 | `result` | string | `success`, `failure`, or `interrupted`. |
 | `workspace_id` | string or null | Stable hash of the workspace root path when a workspace is detected. |
 | `workspace_root` | string or null | Redacted or omitted by default. Present only in verbose mode. |
-| `state_path` | string or null | Redacted path to `.atelier-state/` when relevant. |
+| `state_path` | string or null | Redacted path to the canonical `.atelier/` record root when relevant. |
 | `agent_id` | string or null | Local agent identity when available from runtime state or environment. |
 | `phase_timings` | object | Named duration fields in milliseconds. Empty object when no phase timings are available. |
 | `redaction` | object | Redaction policy metadata described below. |
@@ -162,7 +162,7 @@ commands may expose cleanup warnings because diagnostics are their primary
 surface.
 
 The retention policy applies only to local diagnostics logs. It does not govern
-evidence artifact retention, committed `.atelier-state/` records, or future
+evidence artifact retention, committed `.atelier/` records, or future
 exported run/session records.
 
 ## Local-Only Versus Exported Data
@@ -178,7 +178,7 @@ Local-only diagnostics data:
 Exported or committed data:
 
 - none from command diagnostics in this slice;
-- no changes to `.atelier-state/`;
+- no changes to tracked `.atelier/` records;
 - no Mission Control `runs[]`, `agents[]`, or command-performance fields until a
   later issue defines a projection contract.
 

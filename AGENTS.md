@@ -14,8 +14,12 @@
   human output from show/list/ready/workflow commands, quiet acknowledgements
   only where the command is naturally terse, and explicit drill-down commands
   when more state is needed.
-- Treat `.atelier-state/` as the committed durable tracker state and
-  `.atelier/state.db` as local runtime state that can be rebuilt.
+- Treat `.atelier/` canonical Markdown and tracked config as the committed
+  durable tracker state. Treat `.atelier/runtime/state.db`,
+  `.atelier/runtime/` identity, locks, diagnostics, and `.atelier/cache/` as
+  ignored local runtime/cache state that can be rebuilt or recreated.
+- `.atelier-state/` is compatibility state for read/migrate work only until the
+  explicit migration slice lands; do not introduce new normal writes there.
 - Beads is no longer repository tracking state. Do not use the predecessor CLI
   for planning, execution, handoff, or recovery in this repository.
 

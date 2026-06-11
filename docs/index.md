@@ -5,7 +5,8 @@
 - [CONTEXT.md](../CONTEXT.md): domain language and ambiguity decisions.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  canonical `.atelier-state` record file and rebuild layout.
+  canonical `.atelier/` record file, ignored runtime/cache, compatibility, and
+  rebuild layout.
 - [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
   versioned JSON contract, validation diagnostics, dry-run preview shape, and
   fixtures for authored bulk graph plans.

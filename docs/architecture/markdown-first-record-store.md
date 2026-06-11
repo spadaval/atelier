@@ -2,15 +2,18 @@
 
 This document defines the target persistence architecture for Atelier after the
 Markdown-only canonical state cutover. It refines the storage contract in
-[Canonical Export And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md)
+[Canonical Record And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md)
 by separating canonical record ownership from rebuildable query indexes and
 local-only runtime state.
 
 ## Direction
 
-Atelier's durable project state lives in Markdown record files under
-`.atelier-state/`. SQLite remains valuable, but as a rebuildable projection and
+Atelier's durable project state lives in tracked Markdown record files under
+`.atelier/`. SQLite remains valuable, but as a rebuildable projection and
 runtime store rather than a second canonical copy of the same facts.
+`.atelier-state/` is compatibility state for repositories created before the
+single-tree migration; it may be read and migrated, but it is not the
+post-migration write target.
 
 The target architecture has three explicit components:
 
@@ -18,7 +21,7 @@ The target architecture has three explicit components:
 | --- | --- | --- |
 | `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, local work/session association, or long-lived caches. |
 | `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: issue lists, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
-| `RuntimeState` | Local-only state under `.atelier/`: current work association, sessions used by that association, local agent identity, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
+| `RuntimeState` | Local-only ignored state under `.atelier/runtime/` and `.atelier/cache/`: current work association, sessions used by that association, local agent identity, locks, diagnostics, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
 
 Successful canonical mutations must write Markdown first. A command may refresh
 the projection in the same operation, but durability must not depend on a later
@@ -48,15 +51,14 @@ Export, rebuild, and link validation must consume that registry instead of
 carrying command-local record kind lists. The registered canonical kinds are
 missions, milestone checkpoint records, plans, and evidence; workflow validator
 records are recognized as a future kind but do not yet have a canonical
-`.atelier-state/` directory.
+`.atelier/` directory.
 
-The first issue-focused `RecordStore` slice is implemented as a testable file
-API for `.atelier-state/issues/*.md`. It owns issue record discovery, canonical
-path validation, schema and front matter parsing, deterministic rendering, ID
-collision checks across canonical directories, and atomic issue file replacement.
-During the remaining migration, existing commands may still mutate SQLite first,
-but canonical issue export and rebuild should route issue Markdown rendering and
-loading through `RecordStore`.
+The first issue-focused `RecordStore` slice was implemented as a testable file
+API for the legacy `.atelier-state/issues/*.md` layout. The single-tree
+migration keeps the same responsibilities while moving the target path to
+`.atelier/issues/*.md`: issue record discovery, canonical path validation,
+schema and front matter parsing, deterministic rendering, ID collision checks
+across canonical directories, and atomic issue file replacement.
 
 `atelier export` remains a compatibility and repair command during migration.
 Its target role is to re-render canonical records, remove obsolete derived files,
@@ -83,7 +85,7 @@ result could affect orchestration, validation, or closeout decisions.
 
 The first `ProjectionIndex` slice stores canonical record-source provenance in
 local SQLite table `projection_index_sources`. Each entry records the relative
-`.atelier-state/` path, file size, modified-time hint, SHA-256 content hash, and
+`.atelier/` path, file size, modified-time hint, SHA-256 content hash, and
 index timestamp for files under canonical record directories such as `issues/`,
 `missions/`, `milestones/`, `plans/`, and `evidence/`. Content hash is
 authoritative; size and mtime exist only as cheap diagnostics and future
@@ -100,9 +102,9 @@ queryable. Ordinary projection-backed read surfaces (`issue list`,
 `issue list --ready`, `issue search`, `issue show`, `issue blocked`,
 `issue related`, `issue impact`, `issue next`, `issue tree`, dependency lists,
 and tracker lint) check the metadata before reading SQLite whenever
-`.atelier-state/` exists. If a canonical source changed, disappeared, appeared
+canonical records exist. If a canonical source changed, disappeared, appeared
 without being indexed, or lacks metadata, the command first validates
-`.atelier-state/`; when validation succeeds it automatically rebuilds the local
+`.atelier/`; when validation succeeds it automatically rebuilds the local
 SQLite projection and answers the query. Invalid Markdown, schema drift,
 conflicting records, missing required canonical state, or rebuild failures still
 fail closed with the stale-path diagnostics attached.
@@ -115,7 +117,7 @@ are classified as follows:
 | Table or field | Classification | Target ownership |
 | --- | --- | --- |
 | `issues.id`, `title`, `status`, `issue_type`, `priority`, `parent_id`, `created_at`, `updated_at`, `closed_at` | Projection metadata | Keep as the issue list, ready-work, graph, workflow, and Mission Control summary index. These fields are small and commonly used for sorting and filtering. |
-| `issues.description` | Removal candidate | Canonical Markdown body owned by `RecordStore`; detail views should load it from `.atelier-state/issues/*.md`. It remains only as migration compatibility until write paths stop depending on it. |
+| `issues.description` | Removal candidate | Canonical Markdown body owned by `RecordStore`; detail views should load it from `.atelier/issues/*.md`. It remains only as migration compatibility until write paths stop depending on it. |
 | `labels.issue_id`, `labels.label` | Projection metadata | Keep for queue filters, ownership labels, and Mission Control facets. |
 | `dependencies.blocker_id`, `dependencies.blocked_id` | Projection metadata | Keep as derived graph edges for ready queries and workflow checks. |
 | `relations.issue_id_1`, `relations.issue_id_2`, `relations.relation_type`, `relations.created_at` | Projection metadata | Keep as derived typed issue-link edges for traversal and impact views. |
@@ -123,7 +125,7 @@ are classified as follows:
 | `records.body`, `records.data_json` | Removal candidate | Rich first-class record content owned by `RecordStore`; command detail views should load selected Markdown records instead of rendering these columns. |
 | `record_links.source_kind`, `source_id`, `target_kind`, `target_id`, `relation_type`, `created_at` | Projection metadata | Keep as derived cross-record graph edges for workflow validation and Mission Control rollups. |
 | `projection_index_sources.path`, `size_bytes`, `modified_micros`, `sha256`, `indexed_at` | Projection metadata | Keep as rebuildable freshness metadata. Hash is authoritative; size and modified time are optimization hints. |
-| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts. |
+| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/runtime/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts. |
 | `comments.content`, `comments.kind`, `comments.created_at` | Compatibility residue | Legacy SQLite notes retained for imports and repositories not yet migrated to activity sidecars. New issue activity detail is canonical Markdown sidecar state. |
 | Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
 
@@ -139,13 +141,14 @@ lists without treating every Markdown body or record payload as cached UI state.
 
 ## Rebuild And Freshness
 
-`atelier rebuild` recreates the canonical portion of `.atelier/state.db` from
-Markdown records discovered under `.atelier-state/`. It ignores local-only
-runtime state except where runtime tables must be recreated empty or migrated
-for schema compatibility.
+`atelier rebuild` recreates the canonical portion of
+`.atelier/runtime/state.db` from Markdown records discovered under tracked
+`.atelier/` record directories. It ignores local-only runtime state except
+where runtime tables must be recreated empty or migrated for schema
+compatibility.
 
 Issue activity history is canonical sidecar state under
-`.atelier-state/issues/<issue-id>.activity/`. Each activity entry is a Markdown
+`.atelier/issues/<issue-id>.activity/`. Each activity entry is a Markdown
 file named with a UTC microsecond timestamp ID:
 `YYYYMMDDTHHMMSSffffffZ.md`. If multiple entries share the same timestamp,
 writers append deterministic `-01`, `-02`, and later suffixes while refusing to
@@ -165,7 +168,7 @@ Activity front matter uses `schema: "atelier.activity"` and
 - `summary`: one-line event summary.
 
 The Markdown body stores user-authored text or lightweight event details.
-Evidence remains a rich first-class record under `.atelier-state/evidence/`;
+Evidence remains a rich first-class record under `.atelier/evidence/`;
 issue activity records only lightweight `evidence_attached` references such as
 `evidence_id` and `result` so operators can follow up with
 `atelier evidence show`.
@@ -174,11 +177,31 @@ issue activity records only lightweight `evidence_attached` references such as
 preview when they exist, and falls back to legacy SQLite notes/comments when a
 repository has not yet written activity sidecars.
 
+Imported predecessor comments and close reasons are migration input, not a
+separate durable comment store. The accepted policy is:
+
+- New Atelier notes, comments, handoffs, work-start/work-finish events,
+  decisions, close reasons, and evidence attachments are canonical issue
+  activity sidecars.
+- Imported comments from Beads or older SQLite rows may be converted into
+  activity sidecars by an explicit migration step. Conversion preserves original
+  author and timestamp when available and records the event type as `comment`,
+  `note`, or `close_reason`.
+- Legacy SQLite `comments` rows remain compatibility residue for repositories
+  not yet migrated. New normal commands must not create durable project history
+  only in SQLite comments.
+- Display order is chronological by `created_at`, then activity ID, then file
+  path. Duplicate timestamps are represented by deterministic filename suffixes
+  rather than overwriting entries.
+- Merge conflict resolution is file-level: keep both valid sidecar files when
+  two agents add distinct history entries, and edit the body/front matter only
+  when the same activity file conflicts.
+
 `atelier export` preserves existing issue activity sidecars as canonical files
 and `atelier export --check` validates them instead of reporting them as
 untracked drift. `atelier rebuild` validates sidecars, rejects activity entries
 whose subject issue is missing, and keeps the runtime projection rebuildable
-from `.atelier-state/` alone.
+from tracked `.atelier/` records alone.
 
 ## Durable Mutation Audit
 
@@ -196,7 +219,7 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 | Evidence add/attach | RecordStore-owned Markdown-first | Evidence records and attachment links write canonical evidence Markdown and relationships before projection refresh. Issue evidence attachments also write issue activity sidecars. |
 | Typed record links, labels, and dependencies | RecordStore-owned Markdown-first | Rebuild derives labels, dependency edges, typed relations, hierarchy, and record links from canonical relationship front matter. |
 | Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |
-| Work start/finish and worktree helpers | Runtime plus activity sidecars | Work associations and sessions are local runtime state in `.atelier/`. The durable part is the issue activity sidecar, which is written directly under `.atelier-state/issues/<id>.activity/` when the issue Markdown file exists. |
+| Work start/finish and worktree helpers | Runtime plus activity sidecars | Work associations and sessions are local runtime state in `.atelier/runtime/`. The durable part is the issue activity sidecar, which is written directly under `.atelier/issues/<id>.activity/` when the issue Markdown file exists. |
 | Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, import, or repair | Telemetry and work markers are local/runtime. `import-beads` is an external import bridge that still renders canonical state from imported SQLite rows. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
 
 The remaining compatibility residue is internal: several inherited SQLite
@@ -207,7 +230,7 @@ but normal public durable commands no longer call export to become recoverable.
 
 For RecordStore-owned mutations, Atelier uses a runtime-preserving projection
 refresh after each successful canonical write. Mutation commands write
-`.atelier-state/` first through `RecordStore`, then call
+tracked `.atelier/` records first through `RecordStore`, then call
 `refresh_projection_after_canonical_write` to validate canonical Markdown and
 replace projection rows from that source while copying valid local session and
 work-association rows forward. This preserves the clear ownership boundary:
@@ -254,8 +277,8 @@ Runtime state remains useful for coordination and operator ergonomics:
 
 Runtime state may reference canonical record IDs, but those references are local
 and disposable unless a future durable record explicitly captures them. A fresh
-checkout must be able to rebuild canonical query behavior from `.atelier-state/`
-without copying `.atelier/state.db`.
+checkout must be able to rebuild canonical query behavior from tracked
+`.atelier/` records without copying `.atelier/runtime/state.db`.
 
 ## Migration Plan
 
@@ -296,6 +319,7 @@ the temporary breakage and the reconnect item that owns it.
   as the destination.
 - Do not introduce a daemon only to keep projections fresh; add one only after
   an interactive workflow proves it needs a long-lived process.
-- Do not move workflow policy into `.atelier-state/`; repository-authored policy
-  remains separate from deterministic record projections.
+- Do not move workflow policy into ad hoc runtime files; repository-authored
+  policy belongs in tracked `.atelier/config.toml` or a documented policy file
+  selected by that config, separate from deterministic record projections.
 - Do not restore `manifest.json` or `graph.json` as canonical source files.

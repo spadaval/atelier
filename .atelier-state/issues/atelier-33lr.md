@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Document Markdown merge-conflict and recovery guidance"
-updated_at: "2026-06-11T20:10:52.013444562+00:00"
+updated_at: "2026-06-11T23:12:45.081141459+00:00"
 ---
 
 Add operator/agent guidance for common Markdown record conflicts, relationship conflicts, activity sidecar conflicts, and recovery steps using atelier lint, show, and focused drill-down commands. Acceptance: guidance is concrete enough for hand-edited tracker state.

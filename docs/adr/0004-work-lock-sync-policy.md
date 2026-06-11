@@ -40,8 +40,8 @@ projection semantics.
 
 - Work lifecycle behavior stays understandable as Git plus local runtime
   association.
-- A fresh worktree can rebuild projection state from `.atelier-state/` and then
-  establish its own local work association.
+- A fresh worktree can rebuild projection state from tracked `.atelier/`
+  records and then establish its own local work association.
 - Advanced/manual coordination needs a new explicit core proposal rather than a
   hidden inherited command.
 - Mission Control can project branch/worktree association separately from locks.

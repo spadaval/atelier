@@ -37,9 +37,9 @@ attached, workflow validators pass, and the Git worktree is clean.
   workflow validators passing, and clean Git state.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
-  validate durable state with `.atelier-state/`, `atelier export --check`,
-  `atelier lint`, `atelier doctor`, and focused `show` or `workflow validate`
-  commands.
+  validate durable state with tracked `.atelier/` records, compatibility
+  `atelier export --check`, `atelier lint`, `atelier doctor`, and focused
+  `show` or `workflow validate` commands.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.
 

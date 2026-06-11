@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define deterministic direct-edit Markdown record rules"
-updated_at: "2026-06-11T20:10:51.238390497+00:00"
+updated_at: "2026-06-11T23:11:50.749732882+00:00"
 ---
 
 Specify required front matter, deterministic ordering, relationship buckets, schema/version fields, examples, and hand-edit flow: edit Markdown, run atelier lint, then run normal commands. Acceptance: future lint and parser work can implement directly from this contract.

@@ -38,7 +38,7 @@
 - Track work in Atelier.
 - Use explicit noninteractive `atelier issue` commands.
 - Record follow-up work as Atelier issues.
-- Commit `.atelier-state/` changes with related tracker updates; treat
-  `.atelier/state.db` as rebuildable local runtime state.
+- Commit tracked `.atelier/` record changes with related tracker updates; treat
+  `.atelier/runtime/state.db` as rebuildable local runtime state.
 - Include validation evidence in handoff notes when checks are skipped, fail, or
   only partially cover the change.
