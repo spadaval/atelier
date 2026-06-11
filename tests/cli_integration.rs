@@ -352,17 +352,30 @@ fn test_init_creates_atelier_directory() {
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
     assert!(dir.path().join(".atelier").exists());
     assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(dir.path().join(".atelier").join("config.toml").exists());
+    assert!(!dir.path().join(".atelier").join("rules").exists());
+    assert!(!dir.path().join(".atelier").join("rules.local").exists());
+    assert!(!dir
+        .path()
+        .join(".atelier")
+        .join("hook-config.json")
+        .exists());
+    assert!(!dir.path().join(".claude").exists());
+    assert!(!dir.path().join(".mcp.json").exists());
 }
 
 #[test]
-fn test_init_twice_warns() {
+fn test_init_twice_is_idempotent() {
     let dir = tempdir().unwrap();
 
     run_atelier(dir.path(), &["init"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["init"]);
 
     assert!(success);
-    assert!(stdout.contains("Already") || stdout.contains("already") || stdout.contains("exists"));
+    assert!(stdout.contains("Atelier initialized successfully"));
+    assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(!dir.path().join(".atelier").join("rules").exists());
+    assert!(!dir.path().join(".claude").exists());
 }
 
 #[test]
@@ -3503,12 +3516,11 @@ fn test_init_force_update() {
     let (success, stdout, _) = run_atelier(dir.path(), &["init", "--force"]);
 
     assert!(success);
-    assert!(
-        stdout.contains("Updated")
-            || stdout.contains("updated")
-            || stdout.contains("Created")
-            || stdout.contains("initialized")
-    );
+    assert!(stdout.contains("Atelier initialized successfully"));
+    assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(!dir.path().join(".atelier").join("rules").exists());
+    assert!(!dir.path().join(".claude").exists());
+    assert!(!dir.path().join(".mcp.json").exists());
 }
 
 // ==================== Complex Workflow Tests ====================
