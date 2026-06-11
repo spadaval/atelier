@@ -19,6 +19,33 @@ const MCP_JSON: &str = include_str!("../../resources/mcp.json");
 
 // Embed hook configuration
 const HOOK_CONFIG_JSON: &str = include_str!("../../resources/atelier/hook-config.json");
+const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
+schema_version = 1
+project_slug = "atelier"
+
+[paths]
+state_root = ".atelier"
+runtime_dir = ".atelier"
+runtime_database = ".atelier/state.db"
+cache_dir = ".atelier/cache"
+compatibility_state_root = ".atelier-state"
+"#;
+const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
+    "/.atelier/.locks-cache/",
+    "/.atelier/state.db",
+    "/.atelier/state.db-shm",
+    "/.atelier/state.db-wal",
+    "/.atelier/agent.json",
+    "/.atelier/hook-config.json",
+    "/.atelier/hook-config.local.json",
+    "/.atelier/.cache/",
+    "/.atelier/rules/",
+    "/.atelier/rules.local/",
+    "/.atelier/runtime/",
+    "/.atelier/cache/",
+    "/.atelier-worktrees/",
+    "/.atelier-state/cache/",
+];
 
 // Auto-generated rule file includes from build.rs
 // Includes all RULE_* constants and RULE_FILES array
@@ -86,6 +113,42 @@ fn write_mcp_json_merged(mcp_path: &Path) -> Result<Vec<String>> {
     Ok(warnings)
 }
 
+fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
+    let gitignore_path = path.join(".gitignore");
+    let mut existing = match fs::read_to_string(&gitignore_path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(anyhow::Error::from(e).context("Failed to read .gitignore")),
+    };
+    let mut changed = force && !gitignore_path.exists();
+    if !existing.is_empty() && !existing.ends_with('\n') {
+        existing.push('\n');
+        changed = true;
+    }
+
+    let missing = ROOT_GITIGNORE_ENTRIES
+        .iter()
+        .copied()
+        .filter(|entry| !existing.lines().any(|line| line.trim() == *entry))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        if !existing.is_empty() {
+            existing.push('\n');
+        }
+        existing.push_str("# Atelier local runtime/cache\n");
+        for entry in missing {
+            existing.push_str(entry);
+            existing.push('\n');
+        }
+        changed = true;
+    }
+
+    if changed {
+        fs::write(&gitignore_path, existing).context("Failed to write .gitignore")?;
+    }
+    Ok(())
+}
+
 pub fn run(path: &Path, force: bool) -> Result<()> {
     let layout = crate::storage_layout::StorageLayout::new(path);
     let atelier_dir = layout.atelier_dir();
@@ -112,6 +175,19 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         Database::open(&db_path)?;
         println!("Created {}", atelier_dir.display());
     }
+
+    for dir in crate::record_store::canonical_record_dirs() {
+        fs::create_dir_all(atelier_dir.join(dir))
+            .with_context(|| format!("Failed to create .atelier/{} directory", dir))?;
+    }
+
+    let project_config_path = layout.config_path();
+    if !project_config_path.exists() || force {
+        fs::write(&project_config_path, PROJECT_CONFIG_TOML)
+            .context("Failed to write .atelier/config.toml")?;
+    }
+
+    ensure_root_gitignore(path, force)?;
 
     // Write hook config (create or update)
     let config_path = atelier_dir.join("hook-config.json");
@@ -141,16 +217,6 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
     if !rules_local_dir.exists() {
         fs::create_dir_all(&rules_local_dir)
             .context("Failed to create .atelier/rules.local directory")?;
-    }
-
-    // Write .atelier/.gitignore for machine-local files
-    let inner_gitignore = atelier_dir.join(".gitignore");
-    if !inner_gitignore.exists() || force {
-        fs::write(
-            &inner_gitignore,
-            "# Machine-local overrides (not committed)\nrules.local/\nhook-config.local.json\n.cache/\nagent.json\n.locks-cache/\n",
-        )
-        .context("Failed to write .atelier/.gitignore")?;
     }
 
     // Create .claude directory and hooks (or update if force)
@@ -221,12 +287,29 @@ mod tests {
 
         // Verify directories created
         assert!(dir.path().join(".atelier").exists());
+        assert!(dir.path().join(".atelier/config.toml").exists());
+        assert!(dir.path().join(".atelier/issues").exists());
+        assert!(dir.path().join(".atelier/missions").exists());
+        assert!(dir.path().join(".atelier/milestones").exists());
+        assert!(dir.path().join(".atelier/plans").exists());
+        assert!(dir.path().join(".atelier/evidence").exists());
         assert!(dir.path().join(".atelier/rules").exists());
         assert!(dir.path().join(".atelier/state.db").exists());
         assert!(dir.path().join(".claude").exists());
         assert!(dir.path().join(".claude/hooks").exists());
         assert!(dir.path().join(".claude/mcp").exists());
         assert!(dir.path().join(".atelier/hook-config.json").exists());
+        assert!(!dir.path().join(".atelier/.gitignore").exists());
+
+        let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(gitignore.contains("/.atelier/state.db"));
+        assert!(gitignore.contains("/.atelier/.locks-cache/"));
+        assert!(gitignore.contains("/.atelier/cache/"));
+        assert!(!gitignore.lines().any(|line| line.trim() == "/.atelier/"));
+
+        let config = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
+        assert!(config.contains("state_root = \".atelier\""));
+        assert!(config.contains("runtime_database = \".atelier/state.db\""));
     }
 
     #[test]
