@@ -15,7 +15,7 @@ and skill bindings were updated.
   `atelier-z1p.6`; `atelier issue update 43 --claim --status in_progress
   --append-notes ...` claimed and updated it; `atelier issue close 43
   --reason ...` closed it after this note was added.
-- Ready discovery: `atelier issue ready` listed `atelier-z1p.6` as ready after
+- Ready discovery: `atelier issue list --ready` listed `atelier-z1p.6` as ready after
   its blockers were closed.
 - Dependency workflow: `atelier issue block 43 44` added a blocker; `atelier
   issue show 43` displayed `Blocked by: #44`; `atelier issue unblock 43 44`

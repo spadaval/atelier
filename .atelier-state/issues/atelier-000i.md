@@ -17,9 +17,9 @@ parent: null
 priority: "P3"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide future session export and run metadata policy"
-updated_at: "2026-06-08T19:31:41+00:00"
+updated_at: "2026-06-11T13:14:54.372653798+00:00"
 ---
 
 

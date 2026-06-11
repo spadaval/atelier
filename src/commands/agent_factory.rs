@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::activity::{list_issue_activities, ActivityEventType};
@@ -19,6 +19,7 @@ pub struct IssueSummary {
     pub parent: Option<String>,
 }
 
+#[derive(Debug, Clone)]
 struct QueueRow {
     id: String,
     title: String,
@@ -26,7 +27,18 @@ struct QueueRow {
     issue_type: String,
     priority: String,
     parent: Option<String>,
-    open_blockers: usize,
+    open_blockers: Vec<String>,
+    depth: usize,
+}
+
+#[derive(Debug, Clone)]
+struct QueueGroup {
+    id: Option<String>,
+    title: String,
+    issue_type: Option<String>,
+    priority: Option<String>,
+    external_blockers: Vec<String>,
+    rows: Vec<QueueRow>,
 }
 
 struct DependencyListRow {
@@ -554,39 +566,29 @@ pub fn list(
     status: Option<&str>,
     label: Option<&str>,
     priority: Option<&str>,
+    ready: bool,
     quiet: bool,
 ) -> Result<()> {
-    let items = db
-        .list_issues(status, label, priority)?
+    if ready && !matches!(status, None | Some("open")) {
+        bail!("--ready can only be used with open issues");
+    }
+    let mut rows = db
+        .list_issues(Some(status.unwrap_or("open")), label, priority)?
         .into_iter()
         .map(|issue| issue_summary(db, issue))
+        .map(|summary| summary.and_then(|issue| queue_row(db, issue)))
         .collect::<Result<Vec<_>>>()?;
-    if items.is_empty() {
+    if ready {
+        rows = filter_ready_rows(db, rows)?;
+    }
+    if rows.is_empty() {
         println!("No issues found.");
         Ok(())
     } else if quiet {
-        render_issue_ids_quiet(items);
+        render_queue_ids_quiet(rows);
         Ok(())
     } else {
-        render_issue_queue_human(db, "Issue Queue", items, true)
-    }
-}
-
-pub fn ready(db: &Database, quiet: bool) -> Result<()> {
-    let items = db
-        .list_ready_issues()?
-        .into_iter()
-        .map(|issue| issue_summary(db, issue))
-        .collect::<Result<Vec<_>>>()?;
-    if items.is_empty() {
-        let blocked_count = db.list_blocked_issues()?.len();
-        println!("No issues ready to work on ({} blocked).", blocked_count);
-        Ok(())
-    } else if quiet {
-        render_issue_ids_quiet(items);
-        Ok(())
-    } else {
-        render_issue_queue_human(db, "Ready Issues", items, false)
+        render_issue_queue_human(db, "Issue Queue", rows, status == Some("all"))
     }
 }
 
@@ -611,7 +613,11 @@ pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
         render_issue_ids_quiet(items);
         Ok(())
     } else {
-        render_issue_queue_human(db, &format!("Search Results: {query}"), items, true)
+        let rows = items
+            .into_iter()
+            .map(|item| queue_row(db, item))
+            .collect::<Result<Vec<_>>>()?;
+        render_issue_queue_human(db, &format!("Search Results: {query}"), rows, true)
     }
 }
 
@@ -621,16 +627,19 @@ fn render_issue_ids_quiet(items: Vec<IssueSummary>) {
     }
 }
 
+fn render_queue_ids_quiet(items: Vec<QueueRow>) {
+    for item in items {
+        println!("{}", item.id);
+    }
+}
+
 fn render_issue_queue_human(
     db: &Database,
     title: &str,
-    items: Vec<IssueSummary>,
+    items: Vec<QueueRow>,
     show_status: bool,
 ) -> Result<()> {
-    let mut rows = items
-        .into_iter()
-        .map(|item| queue_row(db, item))
-        .collect::<Result<Vec<_>>>()?;
+    let mut rows = items;
     rows.sort_by(|a, b| {
         status_rank(&a.status)
             .cmp(&status_rank(&b.status))
@@ -644,42 +653,23 @@ fn render_issue_queue_human(
     println!("{}", "=".repeat(title.len()));
     println!("{}", queue_summary(&rows));
 
-    let mut grouped = BTreeMap::<(String, String), Vec<QueueRow>>::new();
-    for row in rows {
-        let status_group = if show_status {
-            row.status.clone()
-        } else {
-            "ready".to_string()
-        };
-        grouped
-            .entry((status_group, row.priority.clone()))
-            .or_default()
-            .push(row);
-    }
-
-    let group_order = ["open", "ready", "in_progress", "blocked", "closed"];
-    let priority_order = ["critical", "high", "medium", "low"];
-    for status in group_order {
-        for priority in priority_order {
-            if let Some(rows) = grouped.remove(&(status.to_string(), priority.to_string())) {
-                print_queue_group(status, priority, rows, show_status);
-            }
-        }
-    }
-    for ((status, priority), rows) in grouped {
-        print_queue_group(&status, &priority, rows, show_status);
+    let mut groups = queue_groups(db, rows)?;
+    groups.sort_by(|a, b| {
+        priority_rank(a.priority.as_deref().unwrap_or("low"))
+            .cmp(&priority_rank(b.priority.as_deref().unwrap_or("low")))
+            .then(a.id.cmp(&b.id))
+            .then(a.title.cmp(&b.title))
+    });
+    for group in groups {
+        print_queue_group(group, show_status);
     }
 
     Ok(())
 }
 
 fn queue_row(db: &Database, item: IssueSummary) -> Result<QueueRow> {
-    let open_blockers = db
-        .get_blockers(&item.id)?
-        .into_iter()
-        .filter_map(|id| db.require_issue(&id).ok())
-        .filter(|issue| issue.status == "open")
-        .count();
+    let open_blockers = open_blocker_ids(db, &item.id)?;
+    let depth = ancestry_depth(db, &item.id)?;
     Ok(QueueRow {
         id: item.id,
         title: item.title,
@@ -688,7 +678,171 @@ fn queue_row(db: &Database, item: IssueSummary) -> Result<QueueRow> {
         priority: item.priority,
         parent: item.parent,
         open_blockers,
+        depth,
     })
+}
+
+fn open_blocker_ids(db: &Database, issue_id: &str) -> Result<Vec<String>> {
+    let mut blockers = db
+        .get_blockers(issue_id)?
+        .into_iter()
+        .filter_map(|id| db.require_issue(&id).ok())
+        .filter(|issue| issue.status == "open")
+        .map(|issue| format_issue_id(&issue.id))
+        .collect::<Vec<_>>();
+    blockers.sort();
+    Ok(blockers)
+}
+
+fn filter_ready_rows(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueRow>> {
+    let children = children_by_parent(db)?;
+    rows.into_iter()
+        .map(|row| {
+            if has_descendants(&children, &row.id) {
+                let external = external_blockers_for_subtree(db, &children, &row.id)?;
+                Ok((row, external.is_empty()))
+            } else {
+                Ok((row.clone(), row.open_blockers.is_empty()))
+            }
+        })
+        .filter_map(|result: Result<(QueueRow, bool)>| match result {
+            Ok((row, true)) => Some(Ok(row)),
+            Ok((_row, false)) => None,
+            Err(err) => Some(Err(err)),
+        })
+        .collect()
+}
+
+fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
+    let row_ids = rows
+        .iter()
+        .map(|row| row.id.clone())
+        .collect::<BTreeSet<_>>();
+    let children = children_by_parent(db)?;
+    let mut grouped = BTreeMap::<String, Vec<QueueRow>>::new();
+    let mut standalone = Vec::new();
+
+    for row in rows {
+        if let Some(group_id) = row_root_parent(db, &row.id)? {
+            grouped.entry(group_id).or_default().push(row);
+        } else if has_descendants(&children, &row.id) {
+            grouped.entry(row.id.clone()).or_default().push(row);
+        } else {
+            standalone.push(row);
+        }
+    }
+
+    let mut groups = Vec::new();
+    for (group_id, mut rows) in grouped {
+        rows.sort_by(|a, b| {
+            ancestry_depth(db, &a.id)
+                .unwrap_or(0)
+                .cmp(&ancestry_depth(db, &b.id).unwrap_or(0))
+                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
+                .then(a.id.cmp(&b.id))
+        });
+        let issue = db.require_issue(&group_id)?;
+        let external_blockers = external_blockers_for_subtree(db, &children, &group_id)?;
+        let include_header_row = row_ids.contains(&group_id);
+        if include_header_row {
+            rows.retain(|row| row.id != group_id);
+        }
+        groups.push(QueueGroup {
+            id: Some(format_issue_id(&issue.id)),
+            title: issue.title,
+            issue_type: Some(issue.issue_type),
+            priority: Some(issue.priority),
+            external_blockers,
+            rows,
+        });
+    }
+
+    if !standalone.is_empty() {
+        standalone.sort_by(|a, b| {
+            status_rank(&a.status)
+                .cmp(&status_rank(&b.status))
+                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
+                .then(a.id.cmp(&b.id))
+        });
+        groups.push(QueueGroup {
+            id: None,
+            title: "Standalone".to_string(),
+            issue_type: None,
+            priority: None,
+            external_blockers: Vec::new(),
+            rows: standalone,
+        });
+    }
+
+    Ok(groups)
+}
+
+fn children_by_parent(db: &Database) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut children = BTreeMap::<String, Vec<String>>::new();
+    for issue in db.list_issues(Some("all"), None, None)? {
+        if let Some(parent_id) = issue.parent_id {
+            children.entry(parent_id).or_default().push(issue.id);
+        }
+    }
+    Ok(children)
+}
+
+fn has_descendants(children: &BTreeMap<String, Vec<String>>, issue_id: &str) -> bool {
+    children
+        .get(issue_id)
+        .map(|children| !children.is_empty())
+        .unwrap_or(false)
+}
+
+fn row_root_parent(db: &Database, issue_id: &str) -> Result<Option<String>> {
+    let mut current = db.require_issue(issue_id)?;
+    let mut root = None;
+    while let Some(parent_id) = current.parent_id.clone() {
+        root = Some(parent_id.clone());
+        current = db.require_issue(&parent_id)?;
+    }
+    Ok(root)
+}
+
+fn ancestry_depth(db: &Database, issue_id: &str) -> Result<usize> {
+    let mut current = db.require_issue(issue_id)?;
+    let mut depth = 0;
+    while let Some(parent_id) = current.parent_id.clone() {
+        depth += 1;
+        current = db.require_issue(&parent_id)?;
+    }
+    Ok(depth)
+}
+
+fn subtree_ids(children: &BTreeMap<String, Vec<String>>, root_id: &str) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    let mut stack = vec![root_id.to_string()];
+    while let Some(id) = stack.pop() {
+        if ids.insert(id.clone()) {
+            if let Some(child_ids) = children.get(&id) {
+                stack.extend(child_ids.iter().cloned());
+            }
+        }
+    }
+    ids
+}
+
+fn external_blockers_for_subtree(
+    db: &Database,
+    children: &BTreeMap<String, Vec<String>>,
+    root_id: &str,
+) -> Result<Vec<String>> {
+    let subtree = subtree_ids(children, root_id);
+    let mut blockers = BTreeSet::<String>::new();
+    for issue_id in &subtree {
+        for blocker_id in db.get_blockers(issue_id)? {
+            let blocker = db.require_issue(&blocker_id)?;
+            if blocker.status == "open" && !subtree.contains(&blocker_id) {
+                blockers.insert(format_issue_id(&blocker_id));
+            }
+        }
+    }
+    Ok(blockers.into_iter().collect())
 }
 
 fn queue_summary(rows: &[QueueRow]) -> String {
@@ -698,7 +852,7 @@ fn queue_summary(rows: &[QueueRow]) -> String {
     for row in rows {
         *statuses.entry(row.status.clone()).or_default() += 1;
         *priorities.entry(row.priority.clone()).or_default() += 1;
-        if row.open_blockers > 0 {
+        if !row.open_blockers.is_empty() {
             blocked += 1;
         }
     }
@@ -711,32 +865,63 @@ fn queue_summary(rows: &[QueueRow]) -> String {
     )
 }
 
-fn print_queue_group(status: &str, priority: &str, rows: Vec<QueueRow>, show_status: bool) {
-    let heading = format!("{status} {priority}");
+fn print_queue_group(group: QueueGroup, show_status: bool) {
+    let heading = match (&group.id, &group.issue_type, &group.priority) {
+        (Some(id), Some(issue_type), Some(priority)) => {
+            format!("[{issue_type}] {id} {priority} - {}", group.title)
+        }
+        _ => group.title,
+    };
     println!("\n{heading}");
     println!("{}", "-".repeat(heading.len()));
-    for row in rows {
+    if !group.external_blockers.is_empty() {
+        println!("  blocked by {}", compact_id_list(&group.external_blockers));
+    }
+    if group.rows.is_empty() {
+        return;
+    }
+    for row in group.rows {
         let status_text = if show_status {
-            format!("[{}] ", row.status)
+            format!("{} ", row.status)
         } else {
             String::new()
         };
-        let parent = row
-            .parent
-            .as_deref()
-            .map(|parent| format!(" (parent: {parent})"))
-            .unwrap_or_default();
-        let blockers = if row.open_blockers == 1 {
-            " - 1 open blocker".to_string()
-        } else if row.open_blockers > 1 {
-            format!(" - {} open blockers", row.open_blockers)
+        let parent = if group.id.is_none() {
+            row.parent
+                .as_deref()
+                .map(|parent| format!(" parent:{parent}"))
+                .unwrap_or_default()
         } else {
             String::new()
         };
+        let blockers = blocker_suffix(&row.open_blockers);
+        let indent = "  ".repeat(row.depth.max(1));
         println!(
-            "  {}{}{} {} - {}{}",
-            status_text, row.id, parent, row.issue_type, row.title, blockers
+            "  {}[{}] {}{} - {}{}",
+            format!("{indent}{status_text}"),
+            row.issue_type,
+            row.id,
+            parent,
+            row.title,
+            blockers
         );
+    }
+}
+
+fn blocker_suffix(blockers: &[String]) -> String {
+    if blockers.is_empty() {
+        String::new()
+    } else {
+        format!(" - blocked by {}", compact_id_list(blockers))
+    }
+}
+
+fn compact_id_list(ids: &[String]) -> String {
+    const LIMIT: usize = 3;
+    if ids.len() <= LIMIT {
+        ids.join(", ")
+    } else {
+        format!("{}, +{} more", ids[..LIMIT].join(", "), ids.len() - LIMIT)
     }
 }
 
@@ -830,6 +1015,7 @@ pub struct UpdateInput<'a> {
     pub description: Option<&'a str>,
     pub priority: Option<&'a str>,
     pub status: Option<&'a str>,
+    pub issue_type: Option<&'a str>,
     pub labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
     pub claim: bool,
@@ -910,6 +1096,19 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
         }
     }
 
+    if let Some(issue_type) = input.issue_type {
+        crate::db::validate_issue_type(issue_type)?;
+        if db.update_issue_type(&id, issue_type)? {
+            changed_fields.push("issue_type");
+            crate::commands::activity_log::record_field_changed(
+                &id,
+                "issue_type",
+                Some(&previous.issue_type),
+                Some(issue_type),
+            )?;
+        }
+    }
+
     for label in input.labels {
         db.add_label(&id, label)?;
         changed_fields.push("labels");
@@ -951,7 +1150,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     }
 
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --status, --label, --parent, --claim, or --append-notes");
+        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --parent, --claim, or --append-notes");
     }
     changed_fields.sort_unstable();
     changed_fields.dedup();
@@ -965,6 +1164,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     );
     println!("Status:   {}", object.status);
     println!("Priority: {}", object.priority);
+    println!("Type:     {}", object.issue_type);
     if let Some(assignee) = &object.assignee {
         println!("Assignee: {assignee}");
     }

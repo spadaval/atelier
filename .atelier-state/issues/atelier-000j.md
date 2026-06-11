@@ -9,7 +9,7 @@ depends_on:
 - "atelier-001f"
 evidence_required: []
 id: "atelier-000j"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "domain-model"
 - "epic"
@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Milestone 4: First-class records and typed links"
-updated_at: "2026-06-10T15:05:55.241389561+00:00"
+updated_at: "2026-06-11T14:41:58.783598154+00:00"
 ---
 
 Introduce first-class missions, milestone checkpoint records, plans, evidence, workflow validators, and typed links so generic issues stop carrying every durable concept. Preserve existing issue behavior where useful, but make mission intent, checkpoint state, execution plans, validation proof, workflow transition checks, and semantic links explicit records or commands.

@@ -34,7 +34,7 @@ cargo fmt -- --check
 cargo nextest run
 cargo nextest run --profile extended --run-ignored=only
 git diff --check
-atelier issue ready
+atelier issue list --ready
 atelier export --check
 atelier lint
 atelier doctor

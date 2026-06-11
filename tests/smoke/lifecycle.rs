@@ -267,20 +267,20 @@ fn test_dependency_chain_and_ready() {
     h.run_ok(&["issue", "block", "2", "3"]);
 
     // Only C should be ready
-    let ready = h.run_ok(&["issue", "ready"]);
+    let ready = h.run_ok(&["issue", "list", "--ready"]);
     assert!(ready.stdout.contains("Issue C"));
     assert!(!ready.stdout.contains("Issue A"));
     assert!(!ready.stdout.contains("Issue B"));
 
     // Close C, then B should become ready
     h.run_ok(&["issue", "close", "3"]);
-    let ready2 = h.run_ok(&["issue", "ready"]);
+    let ready2 = h.run_ok(&["issue", "list", "--ready"]);
     assert!(ready2.stdout.contains("Issue B"));
     assert!(!ready2.stdout.contains("Issue A"));
 
     // Close B, then A should become ready
     h.run_ok(&["issue", "close", "2"]);
-    let ready3 = h.run_ok(&["issue", "ready"]);
+    let ready3 = h.run_ok(&["issue", "list", "--ready"]);
     assert!(ready3.stdout.contains("Issue A"));
 }
 

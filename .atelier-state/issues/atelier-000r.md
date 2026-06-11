@@ -9,7 +9,7 @@ depends_on:
 - "atelier-001f"
 evidence_required: []
 id: "atelier-000r"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "epic"
 - "milestone"
@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Milestone 5: Workflow policy, validators, lint, and waivers"
-updated_at: "2026-06-09T19:41:43.938500035+00:00"
+updated_at: "2026-06-11T14:41:59.611734512+00:00"
 ---
 
 Add configurable workflow policy, workflow validators, lint severities, waivers, and action-aware guidance while keeping process risk-scaled and overrideable. This milestone owns strict versus lightweight process rules, not ad hoc command-specific behavior.

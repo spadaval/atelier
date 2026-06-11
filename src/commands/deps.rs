@@ -13,10 +13,16 @@ pub fn list_blocked(db: &Database) -> Result<()> {
 
     println!("Blocked issues:");
     for issue in issues {
-        let blockers = db.get_blockers(&issue.id)?;
-        let blocker_strs: Vec<String> = blockers.iter().map(|b| format_issue_id(b)).collect();
+        let mut blocker_strs: Vec<String> = db
+            .get_blockers(&issue.id)?
+            .into_iter()
+            .filter_map(|id| db.require_issue(&id).ok())
+            .filter(|blocker| blocker.status == "open")
+            .map(|blocker| format_issue_id(&blocker.id))
+            .collect();
+        blocker_strs.sort();
         println!(
-            "  {:<5} {} (blocked by: {})",
+            "  {:<5} {} - blocked by {}",
             format_issue_id(&issue.id),
             truncate(&issue.title, 40),
             blocker_strs.join(", ")

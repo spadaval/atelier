@@ -37,6 +37,9 @@
   RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
   durable writes, issue activity sidecars, rebuildable SQLite indexes, and
   local runtime data.
+- [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
+  local command telemetry storage, redaction defaults, opt-out controls,
+  retention behavior, event fields, and Mission Control export boundary.
 - [docs/architecture/mission-control-tui.md](architecture/mission-control-tui.md):
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.

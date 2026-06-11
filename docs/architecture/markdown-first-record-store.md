@@ -67,7 +67,7 @@ durable.
 
 Query commands use `ProjectionIndex` when they need global state:
 
-- `issue list`, `issue ready`, search, dependency views, and graph traversal;
+- `issue list`, `issue list --ready`, search, dependency views, and graph traversal;
 - workflow validator lookup and transition checks;
 - Mission Control projections and terminal UI inputs;
 - lint rules that need reverse links or whole-project consistency.
@@ -96,7 +96,7 @@ schema and subject references.
 
 During the staged migration, `atelier export` also refreshes this metadata after
 it writes canonical Markdown from SQLite so compatibility workflows remain
-queryable. Issue query surfaces (`issue list`, `issue ready`, `issue search`,
+queryable. Issue query surfaces (`issue list`, `issue list --ready`, `issue search`,
 `issue show`, `issue blocked`, `issue related`, `issue impact`, `issue next`,
 and `issue tree`) check the metadata before reading SQLite whenever
 `.atelier-state/` exists. If a canonical source changed, disappeared, appeared

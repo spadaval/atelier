@@ -9,7 +9,7 @@ depends_on:
 - "atelier-001f"
 evidence_required: []
 id: "atelier-000c"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "epic"
 - "milestone"
@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Milestone 6: Mission Control projection"
-updated_at: "2026-06-09T19:41:43.978343526+00:00"
+updated_at: "2026-06-11T14:41:58.428447610+00:00"
 ---
 
 Expose enough mechanical state through deterministic JSON projections to support a future dashboard or local UI before building any rich interface. The projection depends on worktree/branch state, first-class records, typed links, workflow policy, workflow validators, and evidence.

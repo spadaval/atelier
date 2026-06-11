@@ -9,12 +9,15 @@ mod projection_index;
 mod record_id;
 mod record_store;
 mod sync;
+mod telemetry;
 mod utils;
 
 use anyhow::{bail, Context, Result};
+use chrono::Utc;
 use clap::{Parser, Subcommand};
 use std::env;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use db::Database;
 
@@ -48,12 +51,13 @@ State management:
   import-beads  Import an external Beads JSONL backup
 
 Maintenance:
+  diagnostics   Inspect local command diagnostics
   lint          Validate tracker records
   doctor        Check runtime and exported-state health
 
 Common commands:
   atelier issue list
-  atelier issue ready
+  atelier issue list --ready
   atelier issue show <id>
   atelier issue update <id> --claim
   atelier mission list
@@ -174,6 +178,12 @@ enum Commands {
         action: WorktreeCommands,
     },
 
+    /// Local command diagnostics
+    Diagnostics {
+        #[command(subcommand)]
+        action: DiagnosticsCommands,
+    },
+
     /// Validate tracker records
     Lint {
         /// Optional issue ID or imported source ID
@@ -266,6 +276,9 @@ enum IssueCommands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
+        /// Show only ready work
+        #[arg(long)]
+        ready: bool,
     },
 
     /// Search issues by text
@@ -296,6 +309,9 @@ enum IssueCommands {
         /// New status (open, in_progress, closed)
         #[arg(short, long)]
         status: Option<String>,
+        /// New issue type (bug, closeout, decision, epic, feature, spike, task, validation)
+        #[arg(long)]
+        issue_type: Option<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
@@ -392,9 +408,6 @@ enum IssueCommands {
 
     /// List blocked issues
     Blocked,
-
-    /// List issues ready to work on (no open blockers)
-    Ready,
 
     /// Link two related issues
     Relate {
@@ -635,6 +648,19 @@ enum WorktreeCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum DiagnosticsCommands {
+    /// Summarize slow command telemetry as stable JSON
+    Slow {
+        /// Time window in UTC days, where 0 means today only
+        #[arg(long, default_value_t = 7)]
+        days: u64,
+        /// Minimum duration in milliseconds
+        #[arg(long, default_value_t = 1000)]
+        threshold_ms: u64,
+    },
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -818,6 +844,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             status,
             label,
             priority,
+            ready,
         } => {
             let db = get_fresh_projection_db()?;
             commands::agent_factory::list(
@@ -825,6 +852,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 Some(&status),
                 label.as_deref(),
                 priority.as_deref(),
+                ready,
                 quiet,
             )
         }
@@ -845,6 +873,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             description,
             priority,
             status,
+            issue_type,
             label,
             parent,
             no_parent,
@@ -860,6 +889,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     description: description.as_deref(),
                     priority: priority.as_deref(),
                     status: status.as_deref(),
+                    issue_type: issue_type.as_deref(),
                     labels: &label,
                     parent: if no_parent {
                         Some(None)
@@ -935,11 +965,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::deps::list_blocked(&db)
         }
 
-        IssueCommands::Ready => {
-            let db = get_fresh_projection_db()?;
-            commands::agent_factory::ready(&db, quiet)
-        }
-
         IssueCommands::Relate {
             id,
             related,
@@ -1004,6 +1029,9 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(&cli.log_level, &cli.log_format);
     let quiet = cli.quiet;
+    let command_name = command_identity(&cli.command);
+    let started_at = Utc::now();
+    let started = Instant::now();
 
     let result = match cli.command {
         Commands::Init { force } => {
@@ -1265,6 +1293,14 @@ fn run() -> Result<()> {
             }
         }
 
+        Commands::Diagnostics { action } => match action {
+            DiagnosticsCommands::Slow { days, threshold_ms } => {
+                let summary = telemetry::slow_command_summary(days, threshold_ms)?;
+                println!("{}", serde_json::to_string_pretty(&summary)?);
+                Ok(())
+            }
+        },
+
         Commands::Lint { id } => {
             let db = get_fresh_projection_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
@@ -1281,5 +1317,108 @@ fn run() -> Result<()> {
         }
     };
 
+    let success = result.is_ok();
+    telemetry::record_command_event(
+        command_name,
+        started_at,
+        started.elapsed(),
+        if success { Some(0) } else { Some(1) },
+        success,
+    );
     result
+}
+
+fn command_identity(command: &Commands) -> &'static str {
+    match command {
+        Commands::Init { .. } => "init",
+        Commands::Issue { action } => match action {
+            IssueCommands::Create { .. } => "issue create",
+            IssueCommands::Quick { .. } => "issue quick",
+            IssueCommands::Subissue { .. } => "issue subissue",
+            IssueCommands::List { .. } => "issue list",
+            IssueCommands::Search { .. } => "issue search",
+            IssueCommands::Show { .. } => "issue show",
+            IssueCommands::Update { .. } => "issue update",
+            IssueCommands::Close { .. } => "issue close",
+            IssueCommands::CloseAll { .. } => "issue close-all",
+            IssueCommands::Reopen { .. } => "issue reopen",
+            IssueCommands::Delete { .. } => "issue delete",
+            IssueCommands::Comment { .. } => "issue comment",
+            IssueCommands::Label { .. } => "issue label",
+            IssueCommands::Unlabel { .. } => "issue unlabel",
+            IssueCommands::Block { .. } => "issue block",
+            IssueCommands::Unblock { .. } => "issue unblock",
+            IssueCommands::Blocked => "issue blocked",
+            IssueCommands::Relate { .. } => "issue relate",
+            IssueCommands::Unrelate { .. } => "issue unrelate",
+            IssueCommands::Related { .. } => "issue related",
+            IssueCommands::Impact { .. } => "issue impact",
+            IssueCommands::Next => "issue next",
+            IssueCommands::Tree { .. } => "issue tree",
+            IssueCommands::Tested => "issue tested",
+        },
+        Commands::Export { check, .. } => {
+            if *check {
+                "export --check"
+            } else {
+                "export"
+            }
+        }
+        Commands::Rebuild { .. } => "rebuild",
+        Commands::ImportBeads { .. } => "import-beads",
+        Commands::Dep { action } => match action {
+            DepCommands::Add { .. } => "dep add",
+            DepCommands::Remove { .. } => "dep remove",
+            DepCommands::List { .. } => "dep list",
+        },
+        Commands::Mission { action } => match action {
+            MissionCommands::Create { .. } => "mission create",
+            MissionCommands::Show { .. } => "mission show",
+            MissionCommands::List { .. } => "mission list",
+            MissionCommands::Update { .. } => "mission update",
+        },
+        Commands::Plan { action } => match action {
+            PlanCommands::Create { .. } => "plan create",
+            PlanCommands::Show { .. } => "plan show",
+            PlanCommands::Apply { .. } => "plan apply",
+            PlanCommands::List { .. } => "plan list",
+            PlanCommands::Revise { .. } => "plan revise",
+            PlanCommands::Link { .. } => "plan link",
+        },
+        Commands::Link { action } => match action {
+            LinkCommands::Add { .. } => "link add",
+            LinkCommands::Remove { .. } => "link remove",
+            LinkCommands::List { .. } => "link list",
+        },
+        Commands::Evidence { action } => match action {
+            EvidenceCommands::Add { .. } => "evidence add",
+            EvidenceCommands::Show { .. } => "evidence show",
+            EvidenceCommands::List { .. } => "evidence list",
+        },
+        Commands::Workflow { action } => match action {
+            WorkflowCommands::Validate { .. } => "workflow validate",
+        },
+        Commands::Work { action } => match action {
+            WorkCommands::Start { .. } => "work start",
+            WorkCommands::Finish { .. } => "work finish",
+            WorkCommands::Status => "work status",
+            WorkCommands::Worktree { action } => match action {
+                WorktreeCommands::For { .. } => "work worktree for",
+                WorktreeCommands::Status => "work worktree status",
+                WorktreeCommands::Merge { .. } => "work worktree merge",
+                WorktreeCommands::Remove { .. } => "work worktree remove",
+            },
+        },
+        Commands::Worktree { action } => match action {
+            WorktreeCommands::For { .. } => "worktree for",
+            WorktreeCommands::Status => "worktree status",
+            WorktreeCommands::Merge { .. } => "worktree merge",
+            WorktreeCommands::Remove { .. } => "worktree remove",
+        },
+        Commands::Diagnostics { action } => match action {
+            DiagnosticsCommands::Slow { .. } => "diagnostics slow",
+        },
+        Commands::Lint { .. } => "lint",
+        Commands::Doctor => "doctor",
+    }
 }

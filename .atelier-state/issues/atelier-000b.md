@@ -6,7 +6,7 @@ created_at: "2026-06-08T17:33:27+00:00"
 depends_on: []
 evidence_required: []
 id: "atelier-000b"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "epic"
 - "fork"
@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Milestone 1: Establish the Atelier fork"
-updated_at: "2026-06-08T20:03:44+00:00"
+updated_at: "2026-06-11T14:41:58.053663209+00:00"
 ---
 
 

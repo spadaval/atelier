@@ -38,7 +38,9 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // DB should be consistent — listing should work
+    // Concurrent writers can leave the projection index stale; canonical state
+    // should still rebuild cleanly and list afterward.
+    h.run_ok(&["rebuild"]);
     let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }

@@ -109,7 +109,7 @@ pub fn status(db: &Database) -> Result<()> {
             println!("===========");
             println!("Active: no");
             print_heading("Next Commands");
-            println!("  atelier issue ready");
+            println!("  atelier issue list --ready");
             println!("  atelier work start <issue-id>");
         }
     }

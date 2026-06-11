@@ -288,6 +288,17 @@ impl Database {
         Ok(rows > 0)
     }
 
+    pub fn update_issue_type(&self, id: impl ToString, issue_type: &str) -> Result<bool> {
+        validate_issue_type(issue_type)?;
+        let id = id.to_string();
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE issues SET issue_type = ?1, updated_at = ?2 WHERE id = ?3",
+            params![issue_type, now, id],
+        )?;
+        Ok(rows > 0)
+    }
+
     pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();

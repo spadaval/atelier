@@ -209,6 +209,12 @@ may touch one issue, part of one issue, or several issues. Runs should record
 what happened mechanically enough for Mission Control without forcing agents
 into rigid accounting.
 
+Local command diagnostics are not run records. Command duration, exit status,
+redacted command family, workspace grouping, and phase timing events may be
+recorded in a user-local diagnostics store for performance analysis, but they
+must not be exported to `.atelier-state/` or treated as Mission Control run
+projection data until an explicit run/session projection contract exists.
+
 ## Links
 
 Links should be explicit and typed. Do not overload dependencies to represent
@@ -406,7 +412,7 @@ Representative commands:
 ```text
 atelier init
 atelier issue next
-atelier issue ready
+atelier issue list --ready
 atelier issue show atelier-z1p8
 atelier issue create
 atelier mission create
@@ -482,7 +488,8 @@ machine-readable source of truth, not command-result JSON.
 - Resolved for Milestone 1: `.atelier/state.db` is ignored local runtime state,
   while `.atelier-state/` is the committed rebuild source.
 - Should sessions be exported, partially exported, or treated as local runtime
-  metadata?
+  metadata? Command diagnostics are resolved separately as local-only telemetry
+  and do not answer this broader run/session policy.
 - Which external artifact backend should be implemented after metadata-only
   path/URI evidence records?
 - What shared or remote lock policy is needed after work association and

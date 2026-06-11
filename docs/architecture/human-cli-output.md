@@ -108,7 +108,7 @@ Next Commands
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
-`atelier issue list`, `atelier issue ready`, and `atelier issue search`.
+`atelier issue list`, `atelier issue list --ready`, and `atelier issue search`.
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -124,8 +124,8 @@ columns only for short fields. Titles and other free text should be the final
 column so they can wrap or truncate consistently.
 
 Empty queue output should say what was searched and what to try next. For
-example, `issue ready` may include the blocked count, while `issue search`
-should echo the search query.
+example, `issue list --ready` may include the blocked count, while
+`issue search` should echo the search query.
 
 Quiet mode remains the terse path. For read commands, quiet output should omit
 headings, footers, explanatory prose, and color while preserving the minimum
@@ -167,7 +167,7 @@ their need:
   noninteractive health checks for stale records, invalid tracker state, and
   broken runtime setup.
 - Use focused drill-down commands for targeted state. Prefer commands such as
-  `atelier issue show <id>`, `atelier mission show <id>`, `atelier issue ready`,
+  `atelier issue show <id>`, `atelier mission show <id>`, `atelier issue list --ready`,
   `atelier issue blocked`, `atelier issue children <id>`, and `atelier dep
   add/remove` over scraping broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a

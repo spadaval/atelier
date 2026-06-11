@@ -37,7 +37,7 @@ concrete files, commands, and product-specific skills.
   - `atelier link add mission <mission-id> issue <issue-id> --type advances`
   - `atelier workflow validate mission <id>`
 - Normal tracker commands:
-  - `atelier issue ready`
+  - `atelier issue list --ready`
   - `atelier issue list --status open`
   - `atelier issue show <id>`
   - `atelier mission show <id>`
@@ -48,7 +48,7 @@ concrete files, commands, and product-specific skills.
   automation contract. Inspect records with focused human output, use quiet
   output only for commands that naturally acknowledge one ID/count/status, and
   run explicit drill-down commands such as `atelier issue show <id>`,
-  `atelier mission show <id>`, `atelier issue ready`,
+  `atelier mission show <id>`, `atelier issue list --ready`,
   `atelier workflow validate mission <id>`, `atelier export --check`,
   `atelier lint`, and `atelier doctor` when more state is needed.
 - Sync and state commands:

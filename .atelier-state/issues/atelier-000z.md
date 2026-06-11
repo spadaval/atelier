@@ -5,7 +5,7 @@ created_at: "2026-06-08T19:39:14+00:00"
 depends_on: []
 evidence_required: []
 id: "atelier-000z"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "agent-factory"
 - "epic"
@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Mission: Replace Beads with Atelier for tracking and Agent Factory"
-updated_at: "2026-06-08T22:40:41.118784838+00:00"
+updated_at: "2026-06-11T14:42:00.084850403+00:00"
 ---
 
 

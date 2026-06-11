@@ -6,7 +6,7 @@ depends_on:
 - "atelier-a4ps"
 evidence_required: []
 id: "atelier-zd4d"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "architecture"
 - "epic"
@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Epic: Execute Markdown-first durable state architecture cutover"
-updated_at: "2026-06-10T23:57:22.329259929+00:00"
+updated_at: "2026-06-11T14:42:00.820251242+00:00"
 ---
 
 Rework Atelier toward a Markdown-first persistence architecture where canonical project state lives in record files and SQLite is a rebuildable projection/index plus clearly separated local runtime state, not a fully equivalent live copy of the canonical records.

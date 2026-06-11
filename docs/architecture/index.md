@@ -37,6 +37,9 @@ behavior, and examples.
 See [Markdown-First Record Store](markdown-first-record-store.md) for the
 RecordStore, ProjectionIndex, and RuntimeState boundaries that govern durable
 Markdown writes, rebuildable SQLite indexes, and local-only runtime data.
+See [Local Command Diagnostics](local-command-diagnostics.md) for the global
+local diagnostics store, command telemetry fields, redaction defaults, opt-out
+controls, retention behavior, and Mission Control export boundary.
 See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
 consumer contract, projection degradation rules, navigation model, and fixture
 expectations.
@@ -56,6 +59,9 @@ Accepted ADRs record cross-cutting product decisions:
 - `.atelier-state/` contains deterministic, mergeable Markdown records.
 - SQLite is the fast local ProjectionIndex and RuntimeState store for queries,
   locks, sessions, workflow checks, and Mission Control inputs.
+- Command diagnostics are local-only telemetry outside `.atelier-state/` and do
+  not create exported run/session records until a later projection contract
+  explicitly opts in.
 - Mutating commands are migrating toward Markdown-first writes through
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
 - `export --check` detects stale canonical records and derived projections.

@@ -8,7 +8,7 @@ depends_on:
 - "atelier-000b"
 evidence_required: []
 id: "atelier-0009"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "epic"
 - "milestone"
@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Milestone 2: Canonical export and rebuild"
-updated_at: "2026-06-08T21:39:07+00:00"
+updated_at: "2026-06-11T14:41:57.657636476+00:00"
 ---
 
 

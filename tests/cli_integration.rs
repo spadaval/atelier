@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
@@ -36,10 +38,75 @@ fn run_atelier_raw(dir: &Path, args: &[&str]) -> (bool, String, String) {
     (output.status.success(), stdout, stderr)
 }
 
+fn run_atelier_with_env(
+    dir: &Path,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> (bool, String, String) {
+    let translated_args = translate_issue_refs_owned(dir, args);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_atelier"));
+    command.current_dir(dir).args(&translated_args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    let output = command.output().expect("Failed to execute atelier");
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        register_issue_ids_from_stdout(dir, &stdout);
+        register_issue_ids_from_state(dir);
+    }
+
+    (output.status.success(), stdout, stderr)
+}
+
 /// Initialize atelier in a temp directory
 fn init_atelier(dir: &Path) {
     let (success, _, stderr) = run_atelier(dir, &["init"]);
     assert!(success, "Failed to init: {}", stderr);
+}
+
+fn init_atelier_with_telemetry_disabled(dir: &Path) {
+    let (success, _, stderr) =
+        run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);
+    assert!(success, "Failed to init: {}", stderr);
+}
+
+fn diagnostics_events(root: &Path) -> Vec<serde_json::Value> {
+    let commands_dir = root.join("commands");
+    if !commands_dir.exists() {
+        return Vec::new();
+    }
+    let mut paths = std::fs::read_dir(&commands_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    paths.sort();
+    let mut events = Vec::new();
+    for path in paths {
+        let content = fs::read_to_string(path).unwrap();
+        for line in content.lines().filter(|line| !line.trim().is_empty()) {
+            events.push(serde_json::from_str(line).unwrap());
+        }
+    }
+    events
+}
+
+fn write_diagnostics_event(root: &Path, date: &str, event: serde_json::Value) {
+    let commands_dir = root.join("commands");
+    fs::create_dir_all(&commands_dir).unwrap();
+    let path = commands_dir.join(format!("{date}.ndjson"));
+    let mut line = serde_json::to_string(&event).unwrap();
+    line.push('\n');
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap()
+        .write_all(line.as_bytes())
+        .unwrap();
 }
 
 fn registry() -> &'static Mutex<HashMap<PathBuf, Vec<String>>> {
@@ -274,6 +341,266 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
 }
 
 #[test]
+fn test_command_telemetry_records_success_event() {
+    let dir = tempdir().unwrap();
+    init_atelier_with_telemetry_disabled(dir.path());
+    let diagnostics_dir = dir.path().join("diagnostics");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["doctor"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "doctor failed: {stderr}");
+
+    let events = diagnostics_events(&diagnostics_dir);
+    assert_eq!(events.len(), 1);
+    let event = &events[0];
+    assert_eq!(event["schema"], "atelier.command_event");
+    assert_eq!(event["schema_version"], 1);
+    assert_eq!(event["command"], "doctor");
+    assert_eq!(event["result"], "success");
+    assert_eq!(event["exit_code"], 0);
+    assert_eq!(event["argv_capture"], "none");
+    assert_eq!(event["argv_redacted"].as_array().unwrap().len(), 0);
+    assert!(event["duration_ms"].as_u64().is_some());
+    assert!(event["workspace_id"].as_str().unwrap().len() >= 16);
+    assert!(event["workspace_root"].is_null());
+    assert_eq!(event["state_path"], ".atelier-state");
+}
+
+#[test]
+fn test_command_telemetry_records_failure_event() {
+    let dir = tempdir().unwrap();
+    init_atelier_with_telemetry_disabled(dir.path());
+    let diagnostics_dir = dir.path().join("diagnostics");
+
+    let (success, _, _) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "show", "missing"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(!success);
+
+    let events = diagnostics_events(&diagnostics_dir);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["command"], "issue show");
+    assert_eq!(events[0]["result"], "failure");
+    assert_eq!(events[0]["exit_code"], 1);
+}
+
+#[test]
+fn test_command_telemetry_respects_opt_out_controls() {
+    let dir = tempdir().unwrap();
+    init_atelier_with_telemetry_disabled(dir.path());
+    let diagnostics_dir = dir.path().join("diagnostics");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["doctor"],
+        &[
+            ("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap()),
+            ("ATELIER_TELEMETRY", "off"),
+        ],
+    );
+    assert!(success, "doctor failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["doctor"],
+        &[
+            ("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap()),
+            ("ATELIER_DIAGNOSTICS", "disabled"),
+        ],
+    );
+    assert!(success, "doctor failed: {stderr}");
+
+    assert!(diagnostics_events(&diagnostics_dir).is_empty());
+}
+
+#[test]
+fn test_command_telemetry_omits_sensitive_arguments_by_default() {
+    let dir = tempdir().unwrap();
+    init_atelier_with_telemetry_disabled(dir.path());
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let secret_title = "secret-token-should-not-appear";
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "create", secret_title],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "issue create failed: {stderr}");
+
+    let events = diagnostics_events(&diagnostics_dir);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["command"], "issue create");
+    let raw_event = serde_json::to_string(&events[0]).unwrap();
+    assert!(
+        !raw_event.contains(secret_title),
+        "telemetry event leaked raw issue title: {raw_event}"
+    );
+    assert_eq!(events[0]["argv_redacted"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn test_command_telemetry_ignores_relative_diagnostics_dir() {
+    let dir = tempdir().unwrap();
+    init_atelier_with_telemetry_disabled(dir.path());
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["doctor"],
+        &[("ATELIER_DIAGNOSTICS_DIR", "relative-diagnostics")],
+    );
+    assert!(success, "doctor failed: {stderr}");
+    assert!(!dir.path().join("relative-diagnostics").exists());
+}
+
+#[test]
+fn test_diagnostics_slow_handles_missing_telemetry_store() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["diagnostics", "slow"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "diagnostics slow failed: {stderr}");
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["schema"], "atelier.slow_commands");
+    assert_eq!(parsed["schema_version"], 1);
+    assert_eq!(parsed["window_days"], 7);
+    assert_eq!(parsed["threshold_ms"], 1000);
+    assert_eq!(parsed["rows"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn test_diagnostics_slow_summarizes_fixture_events() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let old = chrono::Utc::now()
+        .date_naive()
+        .checked_sub_days(chrono::Days::new(20))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &today,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "one",
+            "command": "issue show",
+            "started_at": format!("{today}T01:00:00.000Z"),
+            "finished_at": format!("{today}T01:00:01.200Z"),
+            "duration_ms": 1200,
+            "result": "success",
+            "workspace_id": "workspace-a"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &today,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "two",
+            "command": "issue show",
+            "started_at": format!("{today}T02:00:00.000Z"),
+            "finished_at": format!("{today}T02:00:02.400Z"),
+            "duration_ms": 2400,
+            "result": "failure",
+            "workspace_id": "workspace-a"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &today,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "fast",
+            "command": "issue show",
+            "started_at": format!("{today}T03:00:00.000Z"),
+            "finished_at": format!("{today}T03:00:00.100Z"),
+            "duration_ms": 100,
+            "result": "success",
+            "workspace_id": "workspace-a"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &today,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "three",
+            "command": "doctor",
+            "started_at": format!("{today}T04:00:00.000Z"),
+            "finished_at": format!("{today}T04:00:02.000Z"),
+            "duration_ms": 2000,
+            "result": "success",
+            "workspace_id": "workspace-b"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &old,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "old",
+            "command": "doctor",
+            "started_at": format!("{old}T04:00:00.000Z"),
+            "finished_at": format!("{old}T04:00:05.000Z"),
+            "duration_ms": 5000,
+            "result": "success",
+            "workspace_id": "workspace-z"
+        }),
+    );
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &[
+            "diagnostics",
+            "slow",
+            "--days",
+            "7",
+            "--threshold-ms",
+            "1000",
+        ],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "diagnostics slow failed: {stderr}");
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let rows = parsed["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+
+    assert_eq!(rows[0]["workspace_id"], "workspace-a");
+    assert_eq!(rows[0]["command"], "issue show");
+    assert_eq!(rows[0]["bucket"], today);
+    assert_eq!(rows[0]["count"], 2);
+    assert_eq!(rows[0]["failure_count"], 1);
+    assert_eq!(rows[0]["min_duration_ms"], 1200);
+    assert_eq!(rows[0]["max_duration_ms"], 2400);
+    assert_eq!(rows[0]["mean_duration_ms"], 1800.0);
+    assert_eq!(rows[0]["p50_duration_ms"], 1200);
+    assert_eq!(rows[0]["p95_duration_ms"], 2400);
+
+    assert_eq!(rows[1]["workspace_id"], "workspace-b");
+    assert_eq!(rows[1]["command"], "doctor");
+    assert_eq!(rows[1]["count"], 1);
+    assert_eq!(rows[1]["max_duration_ms"], 2000);
+}
+
+#[test]
 fn test_top_level_help_only_shows_core_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
@@ -315,7 +642,7 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for common in [
         "atelier issue list",
-        "atelier issue ready",
+        "atelier issue list --ready",
         "atelier issue show <id>",
         "atelier issue update <id> --claim",
         "atelier mission list",
@@ -497,9 +824,8 @@ fn test_list_issues() {
     assert!(success);
     assert!(stdout.contains("Issue Queue"));
     assert!(stdout.contains("2 total | Status: open=2"));
-    assert!(stdout.contains("open high"));
-    assert!(stdout.contains("open medium"));
-    assert!(stdout.contains("(parent: atelier-"));
+    assert!(stdout.contains("atelier-"));
+    assert!(stdout.contains("[task] atelier-"));
     assert!(stdout.contains("Issue 1"));
     assert!(stdout.contains("Issue 2"));
 
@@ -1369,15 +1695,123 @@ fn test_ready_issues() {
     run_atelier(dir.path(), &["issue", "create", "Ready issue"]);
     run_atelier(dir.path(), &["issue", "block", "1", "2"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
 
     assert!(success);
-    assert!(stdout.contains("Ready Issues"));
-    assert!(stdout.contains("ready medium"));
     assert!(stdout.contains("2 total"));
     assert!(stdout.contains("Ready issue"));
     assert!(stdout.contains("Blocker issue")); // Blocker is also ready
     assert!(!stdout.contains("Blocked issue"));
+}
+
+#[test]
+fn test_issue_ready_command_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+
+    assert!(!success);
+    assert!(
+        stderr.contains("unrecognized subcommand") || stderr.contains("unexpected argument"),
+        "expected clap unknown command error, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_quiet_issue_list_ready_outputs_ids_only() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Ready issue"]);
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["--quiet", "issue", "list", "--ready"]);
+
+    assert!(success, "quiet ready list failed: {stderr}");
+    assert_eq!(stdout.lines().count(), 1);
+    assert!(stdout.lines().all(|line| line.starts_with("atelier-")));
+    assert!(!stdout.contains("Ready issue"));
+}
+
+#[test]
+fn test_issue_list_ready_rejects_closed_status() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "list", "--ready", "--status", "closed"],
+    );
+
+    assert!(!success);
+    assert!(stderr.contains("--ready can only be used with open issues"));
+}
+
+#[test]
+fn test_issue_list_ready_treats_internal_epic_blockers_as_ready() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Ready child"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sequenced child"]);
+    run_atelier(dir.path(), &["issue", "block", "3", "2"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+
+    assert!(success, "ready list failed: {stderr}");
+    assert!(stdout.contains("Parent epic"));
+    assert!(stdout.contains("Ready child"));
+    assert!(!stdout.contains("Sequenced child"));
+}
+
+#[test]
+fn test_issue_list_marks_external_epic_blockers_by_id() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Blocked child"]);
+    run_atelier(dir.path(), &["issue", "create", "Outside blocker"]);
+    let blocker_id = issue_ref(dir.path(), 3);
+    run_atelier(dir.path(), &["issue", "block", "2", "3"]);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+
+    assert!(success, "issue list failed: {stderr}");
+    assert!(stdout.contains("Parent epic"));
+    assert!(stdout.contains(&format!("blocked by {blocker_id}")));
+    assert!(!stdout.contains("open blocker"));
+}
+
+#[test]
+fn test_issue_update_issue_type_persists_through_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Container work"]);
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", "1", "--issue-type", "epic"],
+    );
+    assert!(success, "issue type update failed: {stderr}");
+    assert!(stdout.contains("Type:     epic"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("[epic] open - Container work"));
 }
 
 // ==================== Session Tests ====================
@@ -1450,7 +1884,7 @@ fn test_search_issues() {
 
     assert!(success);
     assert!(stdout.contains("Search Results: auth"));
-    assert!(stdout.contains("open medium"));
+    assert!(stdout.contains("Standalone"));
     assert!(stdout.contains("2 total"));
     assert!(stdout.contains("Authentication") || stdout.contains("Auth"));
     assert!(!stdout.contains("Dark mode"));
@@ -2703,7 +3137,7 @@ fn test_dependency_chain() {
     run_atelier(dir.path(), &["issue", "block", "2", "3"]);
 
     // Only issue 3 should be ready
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success);
     assert!(stdout.contains("First task") || stdout.contains("#3"));
     assert!(!stdout.contains("Final task"));
@@ -2711,7 +3145,7 @@ fn test_dependency_chain() {
 
     // Close 3, now 2 should be ready
     run_atelier(dir.path(), &["issue", "close", "3"]);
-    let (_, stdout, _) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (_, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(stdout.contains("Middle task") || stdout.contains("#2"));
 }
 
@@ -3799,7 +4233,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("1 total"));
 
@@ -4325,7 +4759,7 @@ fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "fresh ready failed: {stderr}");
     assert!(ready_out.contains("Indexed title"));
 
@@ -4340,7 +4774,7 @@ fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(!success, "stale ready should fail, stdout: {stdout}");
     assert!(
         stderr.contains("Projection index is stale")
@@ -4351,7 +4785,7 @@ fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "repaired ready failed: {stderr}");
     assert!(ready_out.contains("Markdown title"));
 }
@@ -4450,10 +4884,10 @@ fn test_projection_index_guards_dep_list_and_lint_but_ignores_derived_files() {
 
     std::fs::write(dir.path().join(".atelier-state/manifest.json"), "{}\n").unwrap();
     std::fs::write(dir.path().join(".atelier-state/graph.json"), "{}\n").unwrap();
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(
         success,
-        "derived files should not stale issue ready: {stderr}"
+        "derived files should not stale issue list --ready: {stderr}"
     );
     assert!(ready_out.contains("Projection root"));
 
@@ -4745,7 +5179,7 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(success, "list failed: {stderr}");
     assert!(stdout.contains("validation"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("validation"));
 
@@ -4957,7 +5391,7 @@ fn test_unicode_in_dependencies() {
     assert!(success);
 
     // Ready list
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success);
 }
 

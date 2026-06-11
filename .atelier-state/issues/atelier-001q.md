@@ -9,6 +9,7 @@ evidence_required: []
 id: "atelier-001q"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "performance"
 - "task"
@@ -18,9 +19,9 @@ parent: "atelier-001m"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Instrument CLI commands with structured duration events"
-updated_at: "2026-06-09T19:47:13.601126452+00:00"
+updated_at: "2026-06-11T13:11:00.683840448+00:00"
 ---
 
 Add a shared command telemetry wrapper that records start, finish, duration, status, command identity, workspace identity, and optional phase timings for every agent-facing command.

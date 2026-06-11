@@ -18,9 +18,9 @@ parent: "atelier-000c"
 priority: "P2"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add local command telemetry and performance diagnostics"
-updated_at: "2026-06-09T19:46:52.912700093+00:00"
+updated_at: "2026-06-11T13:15:09.034591115+00:00"
 ---
 
 Record command interactions and timing in a global, local-only Atelier diagnostics store so slow commands can be identified without making run/session records part of committed durable state.

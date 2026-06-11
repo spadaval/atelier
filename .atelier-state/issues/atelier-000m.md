@@ -9,7 +9,7 @@ depends_on:
 - "atelier-001f"
 evidence_required: []
 id: "atelier-000m"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "epic"
 - "milestone"
@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "closed"
 title: "Milestone 3: Work, branch, and worktree ergonomics"
-updated_at: "2026-06-10T15:05:55.233884219+00:00"
+updated_at: "2026-06-11T14:41:59.247541613+00:00"
 ---
 
 Add Braid/Worktrunk-style work, branch, and Git worktree ergonomics while keeping Git as the underlying mechanism. This milestone creates the normal agent workflow surface around `atelier work start`, `atelier work finish`, `atelier work status`, and `atelier worktree for`, replacing scattered claim/session/timer behavior for normal tracked work.

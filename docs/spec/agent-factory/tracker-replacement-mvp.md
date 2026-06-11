@@ -51,13 +51,19 @@ supported replacements:
 - freshness and health commands such as `atelier export --check`,
   `atelier lint`, and `atelier doctor`;
 - focused drill-down commands such as `atelier issue show <id>`,
-  `atelier mission show <id>`, `atelier issue ready`, and dependency commands;
+  `atelier mission show <id>`, `atelier issue list --ready`, and dependency commands;
 - documented authored JSON inputs or derived projection files only when a
   specific spec defines the contract.
 
 Full human detail output is not a stable API. Automation must not scrape section
 headings, table layout, prose, or whole command reports as if they were a
 versioned machine-readable schema.
+
+Local command diagnostics are also not a replacement for the retired
+command-result JSON envelope. They may record redacted command families,
+durations, exit status, and phase timings for local performance analysis, but
+they must stay outside `.atelier-state/` and must not become the Agent Factory
+automation contract.
 
 Historical error codes from the replacement MVP remain useful vocabulary for
 human diagnostics and workflow validators:
@@ -117,7 +123,7 @@ JSON result from the command itself.
 | Update title/body/priority/status/labels/parent | `bd update <id> --title ... --description ... --priority ... --status ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags | Print changed fields and the ID. Invalid values are rejected with actionable text. | Quiet acknowledgement and canonical issue record; invalid values fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
 | Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Quiet acknowledgement and canonical close metadata; `atelier lint` or workflow validation owns machine-checkable closure defects. | Yes | `atelier-z1p.3` |
 | Reopen accidentally closed work | `bd reopen <id>` | `atelier issue reopen <id>` | Print reopened ID and previous close reason. | Quiet acknowledgement and canonical issue record with reopened state. | Yes | `atelier-z1p.3` |
-| Find ready executable work | `bd ready` | `atelier issue ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier-state/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
+| Find ready executable work | `bd ready` | `atelier issue list --ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier-state/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
 | List/filter work | `bd list --status=open` | `atelier issue list --status open` | Print compact rows with ID, status, priority, type, title, and assignee. | Focused queue command backed by ProjectionIndex; durable fields remain in canonical records. | Yes | `atelier-z1p.3` |
 | Search work by text | `bd search "<topic>"` | `atelier issue search "<topic>"` | Print ranked matches with ID, title, status, and short excerpt when available. | Focused search command backed by ProjectionIndex; scripts should use returned IDs for follow-up drill-down instead of parsing excerpts. | Yes | `atelier-z1p.3` |
 | Create normal task/feature/bug/validation/closeout beads | `bd create ...` | `atelier issue create ...` | Print new ID and title. All required fields must be accepted by flags or stdin, not an editor. | Quiet acknowledgement with new ID; canonical record is the durable created state. | Yes | `atelier-z1p.3` |
@@ -147,7 +153,7 @@ commands:
    --claim`, `git status --short --branch`, and tracker health checks must let
    an implement worker verify scope, claim ownership, and detect stale tracker
    state.
-2. Planning/orchestration: `atelier issue ready`, `atelier issue create`,
+2. Planning/orchestration: `atelier issue list --ready`, `atelier issue create`,
    parent updates, and dependency operations must let an orchestrator create and
    sequence child work without `bd`.
 3. Implementation handoff: notes, close, `atelier export --check`, lint, and
@@ -171,7 +177,7 @@ used by workers and orchestrators:
 | `bd update <id> --title ... --description ... --priority ...` | `atelier issue update <id> --title ... --description ... --priority ...` |
 | `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |
 | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` |
-| `bd ready` | `atelier issue ready` |
+| `bd ready` | `atelier issue list --ready` |
 | `bd list --status=open` | `atelier issue list --status open` |
 | `bd search "<topic>"` | `atelier issue search "<topic>"` |
 | `bd create ...` | `atelier issue create ...` |
