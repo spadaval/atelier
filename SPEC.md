@@ -40,7 +40,7 @@ Chainlink provides useful foundations:
 - Lock and sync concepts.
 - Agent identity and local runtime concepts.
 - Hooks, rules, and context-provider direction.
-- JSON output.
+- JSON handling in durable files, authored inputs, and diagnostics.
 
 Braid provides important product-shape ideas:
 
@@ -66,8 +66,8 @@ Atelier should not become:
 - A TUI-first product.
 - A system where every issue maps rigidly to one agent session.
 
-Interactive UI can come later. The foundation should be a crisp CLI with stable
-JSON output and durable file projections.
+Interactive UI can come later. The foundation should be a crisp human-first CLI
+with durable file projections.
 
 ## Storage Model
 
@@ -424,7 +424,10 @@ atelier rebuild
 atelier doctor
 ```
 
-Every command that agents call should support stable JSON output.
+Every command that agents call should provide focused human-readable output with
+the actionable identifiers, state, and next commands needed for the immediate
+workflow. Durable Markdown records and explicit projection files are the
+machine-readable source of truth, not command-result JSON.
 
 ## Initial Milestones
 

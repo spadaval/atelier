@@ -87,9 +87,9 @@ An agent tasked with a mission should be able to:
 configured branch/path policy, rebuilds local SQLite state from
 `.atelier-state/`, runs `worktree_setup` hooks from `atelier.workflow.yaml`, and
 records the issue/branch/worktree association in local runtime state.
-`atelier worktree status --json` reports path, branch, dirty paths,
-ahead/behind when an upstream exists, unpushed commit count, associated work, and
-canonical export freshness when available. `atelier worktree merge` and
+`atelier worktree status` reports path, branch, dirty paths, ahead/behind when
+an upstream exists, unpushed commit count, associated work, and canonical export
+freshness when available. `atelier worktree merge` and
 `atelier worktree remove` are thin Git wrappers for merging an associated branch
 and cleaning up the associated worktree.
 

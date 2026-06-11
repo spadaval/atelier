@@ -14,9 +14,9 @@ parent: "atelier-y571"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Improve detail views with bounded actionable context"
-updated_at: "2026-06-11T02:45:01.927227415+00:00"
+updated_at: "2026-06-11T03:50:58.356184726+00:00"
 ---
 
 Update selected show/status/detail commands to expose the right status, ownership, blocker, evidence, validation, and provenance context in readable sections. Acceptance: output stays bounded, avoids raw key/value dumps, and includes next commands for related information that should remain separate.

@@ -25,48 +25,25 @@ The cutover must prove:
 - `.atelier-state/` is current, deterministic, and rebuildable from a clean
   checkout-like state.
 - Agent-facing text output is usable without JSON parsing.
-- Agent-facing JSON output is stable enough for scripted orchestration.
+- Agent-facing workflows use focused text output plus committed tracker state
+  instead of command-result JSON.
 - Missing IDs, invalid dependencies, stale exports, and unhealthy tracker state
   fail with actionable diagnostics.
 - `AGENTFACTORY.md` routes normal repository tracker work through Atelier
   commands. Global Agent Factory procedure updates are tracked separately by
   `atelier-z1p.5`.
 
-## JSON Contract
+## Retired Command-Result JSON Contract
 
-Every required command that accepts `--json` must write only JSON to stdout on
-success. Human diagnostics, warnings, and progress belong on stderr or are
-represented inside the JSON payload.
+Earlier cutover work required a command-result `--json` envelope for Agent
+Factory parity. That contract is retired. Atelier command results are
+human-first, quiet output remains intentionally terse, and durable
+machine-readable state lives in `.atelier-state/`, rebuildable projection files,
+authored JSON inputs, and diagnostic logging surfaces such as
+`--log-format json`.
 
-Successful JSON responses must use this envelope unless the command explicitly
-returns a list as its whole payload for backward compatibility during migration:
-
-```json
-{
-  "ok": true,
-  "command": "issue.show",
-  "data": {},
-  "warnings": []
-}
-```
-
-Failures must exit non-zero and use this shape when `--json` is present:
-
-```json
-{
-  "ok": false,
-  "command": "issue.show",
-  "error": {
-    "code": "not_found",
-    "message": "Issue atelier-z1p.1 was not found",
-    "details": {
-      "id": "atelier-z1p.1"
-    }
-  }
-}
-```
-
-Required error codes for the replacement MVP:
+Historical error codes from the replacement MVP remain useful vocabulary for
+human diagnostics and workflow validators:
 
 | Code | Use |
 | --- | --- |
@@ -79,7 +56,9 @@ Required error codes for the replacement MVP:
 | `dirty_tracker` | Tracker state has unexported or unpushed changes that must be resolved before handoff. |
 | `storage_error` | SQLite, file IO, or manifest validation failed. |
 
-Issue JSON must include these fields for Agent Factory parity:
+Issue detail views should expose the high-value fields from this historical
+inventory when they are actionable in the current workflow, and should point to
+drill-down commands for related records instead of dumping every field:
 
 | Field | Rule |
 | --- | --- |
@@ -109,7 +88,7 @@ Rows marked required are blockers for repository cutover. Optional rows may be
 implemented earlier, but they are not allowed to delay the first Beads
 replacement unless they become necessary to satisfy a required row.
 
-| Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Required JSON behavior | Required | Owner |
+| Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Machine-readable boundary | Required | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Return one issue object with all required issue fields plus direct blocker/dependent summaries. Missing IDs use `not_found`. | Yes | `atelier-z1p.3` |
 | Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Return updated issue plus `previous_assignee`, `assignee`, and `changed`. | Yes | `atelier-z1p.3` |
@@ -143,13 +122,13 @@ replacement unless they become necessary to satisfy a required row.
 Agent Factory replacement requires these end-to-end workflows, not just isolated
 commands:
 
-1. Start gate: `atelier issue show <id> --json`, `atelier issue update <id>
+1. Start gate: `atelier issue show <id>`, `atelier issue update <id>
    --claim`, `git status --short --branch`, and tracker health checks must let
    an implement worker verify scope, claim ownership, and detect stale tracker
    state.
-2. Planning/orchestration: `atelier issue ready --json`, `atelier issue create
-   --json`, parent updates, and dependency operations must let an orchestrator
-   create and sequence child work without `bd`.
+2. Planning/orchestration: `atelier issue ready`, `atelier issue create`,
+   parent updates, and dependency operations must let an orchestrator create and
+   sequence child work without `bd`.
 3. Implementation handoff: notes, close, `atelier export --check`, lint, and
    Git status must produce enough durable evidence for the next agent to resume.
 4. Closeout: a closeout worker must be able to classify parent criteria in
@@ -183,8 +162,9 @@ used by workers and orchestrators:
 After identity cutover, every command in this mapping uses the single
 project-scoped random Atelier ID such as `atelier-z1p8`. Numeric IDs such as
 `#1` or `1`, typed-prefix IDs such as `ISS-0001`, and imported predecessor IDs
-are not maintained as alternate command references. Required commands accept
-`--json` and use the MVP response envelope.
+are not maintained as alternate command references. Required commands use
+focused human output; committed `.atelier-state/` records and projections are
+the machine-readable state boundary.
 
 ## Cutover Status
 
@@ -193,7 +173,7 @@ These cutover criteria define the repository switch to Atelier:
 | Blocker | Owning bead | Required proof |
 | --- | --- | --- |
 | Beads data import from `.beads/issues.manual.jsonl` preserves current records, relationships, statuses, labels, notes, and close metadata or reports precise loss. | `atelier-z1p.2` | Import report, count comparison, round-trip show/list/update/close validation, and fixture-based tests. |
-| Agent Factory command parity covers every required MVP matrix row with stable text and JSON behavior. | `atelier-z1p.3` | Focused CLI tests and manual command transcript for ready/show/create/update/close/dependency/lint/doctor/export/rebuild. |
+| Agent Factory command parity covers every required MVP matrix row with focused text behavior. | `atelier-z1p.3` | Focused CLI tests and manual command transcript for ready/show/create/update/close/dependency/lint/doctor/export/rebuild. |
 | Repository dogfood cutover proves Atelier is live for `/root/atelier`. | `atelier-z1p.4` | `AGENTFACTORY.md` uses Atelier commands, a real update and closeout happen through Atelier, normal repository work no longer needs `bd`, and the old archive is purged after validation. |
 | Agent Factory skill docs support tracker bindings instead of hard-coding Beads. | `atelier-z1p.5` | Follow-up outside this repository cutover; skill procedures route through repository-bound tracker commands and include Atelier examples. |
 

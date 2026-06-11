@@ -30,9 +30,10 @@ explicit rules when they affect diffs or rebuild.
 
 ## Operability
 
-Agent-facing commands should support stable JSON output when they are used for
-coordination, automation, validation, or Mission Control. Errors should identify
-the failed record, validator, transition, or file projection.
+Agent-facing commands should provide focused human output when they are used for
+coordination, validation, or Mission Control. Errors should identify the failed
+record, validator, transition, or file projection. Durable projections, not
+command-result JSON, are the machine-readable state boundary.
 
 ## Preservation
 

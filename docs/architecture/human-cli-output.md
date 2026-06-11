@@ -1,8 +1,8 @@
 # Human CLI Output
 
 Atelier human-readable CLI output is an operator interface, not a scripting
-contract. JSON output remains the stable automation boundary. Human output may
-change to become more scannable, but it must keep enough text context for
+contract. It is now the primary supported command-result surface. Human output
+may change to become more scannable, but it must keep enough text context for
 non-interactive logs, narrow terminals, and colorless environments.
 
 This document defines the visual and structural rules for default non-JSON
@@ -15,8 +15,8 @@ detail, list/ready/search queues, and compact hierarchy views.
   useful command without opening several follow-up views.
 - Use the same output grammar across mission, issue, queue, and hierarchy
   surfaces.
-- Preserve exact JSON schemas unless a separate migration explicitly changes
-  them.
+- Keep command output focused on the small set of fields needed for the current
+  workflow, with explicit next commands for drill-down state.
 - Keep output useful when copied from logs, pasted into handoffs, or viewed in a
   terminal without color.
 
@@ -127,8 +127,8 @@ should echo the search query.
 
 Quiet mode remains the terse path. For read commands, quiet output should omit
 headings, footers, explanatory prose, and color while preserving the minimum
-record identifiers needed to act on the result. JSON mode remains the automation
-path and must not be built by parsing human output.
+record identifiers needed to act on the result. Automation should use durable
+tracker state and explicit command workflows rather than command-result JSON.
 
 Example shape:
 
@@ -210,9 +210,8 @@ Recommended helper boundaries:
 - color/style decisions, once color is added.
 
 Command handlers should keep collecting domain data and call formatter helpers
-for presentation. JSON object construction should remain separate from human
-formatting so changing display text does not accidentally alter automation
-contracts.
+for presentation. Canonical state projection, authored JSON inputs, and
+diagnostic logging are separate from command-result rendering.
 
 ## Testing Expectations
 

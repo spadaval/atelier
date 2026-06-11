@@ -78,9 +78,10 @@ Accepted ADRs record cross-cutting product decisions:
 - Workflow validator evaluation should produce machine-readable results suitable
   for Mission Control.
 - Mission Control TUI code should consume only the documented projection fields
-  and keep CLI commands plus JSON output as the primary agent interface.
+  and keep CLI commands plus durable projections as the primary agent interface.
 - Human CLI rendering should use shared detail, queue, and hierarchy formatter
-  conventions while keeping JSON construction separate from display text.
+  conventions while keeping canonical projection logic separate from display
+  text.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.
 

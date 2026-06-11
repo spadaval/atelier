@@ -26,8 +26,9 @@ Install `cargo-nextest` before running the default Rust test command:
   or runtime-state migration proof as appropriate.
 - Export/rebuild changes should prove deterministic output and stale durable
   state or stale projection detection.
-- Workflow, validator, evidence, mission, milestone, or plan changes should include
-  machine-readable result examples when JSON output is involved.
+- Workflow, validator, evidence, mission, milestone, or plan changes should
+  include human-output transcript evidence and projection/rebuild proof when
+  machine-readable state is involved.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.
 

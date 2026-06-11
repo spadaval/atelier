@@ -48,8 +48,8 @@ model:
 - Missions, milestone checkpoint records, issues, plans, evidence, workflow
   validators, runs, typed links, and workflows become first-class Atelier
   concepts instead of only inherited issue-tracker fields.
-- Agent-facing commands keep stable JSON output where they support
-  coordination, validation, automation, or Mission Control.
+- Agent-facing commands keep focused human output for coordination and
+  validation while durable projections provide machine-readable state.
 
 Use "Chainlink" when documenting source provenance or current behavior that is
 still plainly inherited from the original project. Use "Atelier" when
@@ -61,8 +61,8 @@ Inherited behavior should be preserved until assigned tracker work or an ADR
 explicitly changes it:
 
 - Preserve useful CLI behavior, SQLite persistence invariants, sessions used by
-  current work association, hooks, JSON output, and practical test coverage
-  while rename and migration work is underway.
+  current work association, hooks, durable projection behavior, and practical
+  test coverage while rename and migration work is underway.
 - Do not replace working inherited modules with compatibility shims whose only
   purpose is hiding current names before target behavior exists.
 - Do not treat backup-oriented Chainlink export/import as the target canonical

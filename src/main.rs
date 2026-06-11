@@ -68,10 +68,6 @@ struct Cli {
     #[arg(short, long, global = true)]
     quiet: bool,
 
-    /// Output as JSON (supported by list, show, search, session status)
-    #[arg(long, global = true)]
-    json: bool,
-
     /// Log level for diagnostic output (error, warn, info, debug, trace)
     #[arg(long, global = true, default_value = "warn", env = "ATELIER_LOG")]
     log_level: String,
@@ -1038,7 +1034,7 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(&cli.log_level, &cli.log_format);
     let quiet = cli.quiet;
-    let json = cli.json;
+    let json = false;
 
     let result = match cli.command {
         Commands::Init { force } => {
@@ -1326,19 +1322,5 @@ fn run() -> Result<()> {
         }
     };
 
-    if json {
-        if let Err(error) = result {
-            let code = commands::agent_factory::classify_error(&error);
-            commands::agent_factory::print_error(
-                "atelier",
-                code,
-                &error.to_string(),
-                serde_json::json!({}),
-            )?;
-            std::process::exit(1);
-        }
-        Ok(())
-    } else {
-        result
-    }
+    result
 }

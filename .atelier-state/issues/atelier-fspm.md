@@ -15,9 +15,9 @@ parent: "atelier-esh8"
 priority: "P1"
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Decide JSON boundary exceptions before implementation"
-updated_at: "2026-06-11T02:45:00.234954408+00:00"
+updated_at: "2026-06-11T03:50:22.253595690+00:00"
 ---
 
 Resolve whether any JSON-labeled surface is outside command-result output mode, especially --log-format json, mission-control.json, export/check internals, import/export backup flows, and future API/projection files. Acceptance: the decision is recorded durably; implementation epics remain blocked until this issue is closed; unresolved human choices are escalated instead of guessed.

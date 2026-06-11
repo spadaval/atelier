@@ -996,14 +996,65 @@ fn dry_run_preview(plan: &BulkPlan) -> Value {
 fn print_apply_summary(summary: Value, json_output: bool) -> Result<()> {
     if json_output {
         println!("{}", serde_json::to_string_pretty(&summary)?);
-    } else if summary["validate_only"].as_bool().unwrap_or(false) {
-        println!("Bulk plan is valid.");
-    } else if summary["dry_run"].as_bool().unwrap_or(false) {
-        println!("Bulk plan preview is valid.");
     } else {
-        println!("Bulk plan applied.");
+        let validate_only = summary["validate_only"].as_bool().unwrap_or(false);
+        let dry_run = summary["dry_run"].as_bool().unwrap_or(false);
+        if validate_only {
+            println!("Bulk plan is valid.");
+        } else if dry_run {
+            println!("Bulk plan preview is valid.");
+        } else {
+            println!("Bulk plan applied.");
+        }
+
+        println!(
+            "Applied:       {}",
+            summary["applied"].as_bool().unwrap_or(false)
+        );
+        println!("Dry run:       {dry_run}");
+        println!("Validate only: {validate_only}");
+
+        if let Some(records) = summary["records"].as_object() {
+            println!();
+            println!("Records");
+            println!("-------");
+            for key in ["issues", "missions", "milestones", "plans", "evidence"] {
+                let count = records
+                    .get(key)
+                    .and_then(|value| value.as_array())
+                    .map(|items| items.len())
+                    .unwrap_or(0);
+                println!("  {key}: {count}");
+            }
+        }
+
+        let link_count = summary["links"]
+            .as_array()
+            .map(|links| links.len())
+            .unwrap_or(0);
+        println!("  links: {link_count}");
+
+        if let Some(id) = first_created_id(&summary, "missions") {
+            println!();
+            println!("Next Commands");
+            println!("-------------");
+            println!("  atelier mission show {id}");
+            println!("  atelier export --check");
+        } else if !validate_only && !dry_run {
+            println!();
+            println!("Next Commands");
+            println!("-------------");
+            println!("  atelier export --check");
+        }
     }
     Ok(())
+}
+
+fn first_created_id<'a>(summary: &'a Value, kind: &str) -> Option<&'a str> {
+    summary["records"][kind]
+        .as_array()
+        .and_then(|items| items.first())
+        .and_then(|item| item["id"].as_str())
 }
 
 fn sorted(mut values: Vec<String>) -> Vec<String> {

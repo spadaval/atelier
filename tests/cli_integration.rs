@@ -6,12 +6,6 @@ use tempfile::tempdir;
 
 static TEST_ISSUE_IDS: OnceLock<Mutex<HashMap<PathBuf, Vec<String>>>> = OnceLock::new();
 
-fn json_value(stdout: &str) -> serde_json::Value {
-    serde_json::from_str(stdout).unwrap_or_else(|error| {
-        panic!("expected valid JSON, got error {error}; stdout:\n{stdout}");
-    })
-}
-
 /// Helper to run atelier commands in a temp directory
 fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
     let translated_args = translate_issue_refs_owned(dir, args);
@@ -63,18 +57,28 @@ fn issue_ref(dir: &Path, ordinal: usize) -> String {
 }
 
 fn issue_id_by_title(dir: &Path, title: &str) -> String {
-    let (success, stdout, stderr) =
-        run_atelier(dir, &["--json", "issue", "list", "--status", "all"]);
-    assert!(success, "issue list failed: {stderr}");
-    let listed = json_value(&stdout);
-    listed["data"]["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|issue| issue["title"] == title)
-        .and_then(|issue| issue["id"].as_str())
-        .unwrap_or_else(|| panic!("issue with title {title:?} not found in {stdout}"))
-        .to_string()
+    record_id_by_title(dir, "issues", title)
+}
+
+fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
+    let record_dir = dir.join(".atelier-state").join(directory);
+    let entries = std::fs::read_dir(&record_dir)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()));
+    for entry in entries {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        if text.contains(&format!("title: {title:?}")) {
+            return path.file_stem().unwrap().to_string_lossy().to_string();
+        }
+    }
+    panic!(
+        "record with title {title:?} not found in {}",
+        record_dir.display()
+    );
 }
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
@@ -252,36 +256,21 @@ fn test_init_twice_warns() {
 }
 
 #[test]
-fn test_doctor_json_separates_projection_and_runtime_state_health() {
+fn test_doctor_human_separates_projection_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     run_atelier(dir.path(), &["issue", "create", "Health check"]);
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "doctor"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
-    let doctor = json_value(&stdout);
-    let sections = &doctor["data"]["sections"];
-
-    assert_eq!(
-        sections["canonical_projection"]["rebuild_ready"].as_bool(),
-        Some(true)
-    );
-    assert_eq!(
-        sections["canonical_projection"]["projection_fresh"].as_bool(),
-        Some(true)
-    );
-    assert_eq!(sections["runtime_state"]["directory"].as_bool(), Some(true));
-    assert_eq!(sections["runtime_state"]["database"].as_bool(), Some(true));
-    assert_eq!(
-        sections["runtime_state"]["local_tables"].as_bool(),
-        Some(true)
-    );
-    assert_eq!(
-        sections["compatibility"]["export_repair_current"].as_bool(),
-        Some(true)
-    );
+    assert!(stdout.contains("Canonical projection:"));
+    assert!(stdout.contains("rebuild_ready: ok"));
+    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("Runtime state:"));
+    assert!(stdout.contains("database: ok"));
+    assert!(stdout.contains("local_tables: ok"));
 }
 
 #[test]
@@ -623,7 +612,7 @@ fn test_show_issue_rich_human_output() {
 }
 
 #[test]
-fn test_issue_show_json_shape_stays_compatible() {
+fn test_issue_show_human_shape_exposes_actionable_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -632,18 +621,16 @@ fn test_issue_show_json_shape_stays_compatible() {
         &["issue", "create", "JSON issue", "-d", "JSON description"],
     );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
-    assert!(success, "json show failed: {stderr}");
-    let value = json_value(&stdout);
-    assert_eq!(value["ok"], true);
-    assert_eq!(value["command"], "issue.show");
-    assert_eq!(value["data"]["title"], "JSON issue");
-    assert_eq!(value["data"]["description"], "JSON description");
-    assert!(value["data"]["dependencies"].is_array());
-    assert!(value["data"]["dependents"].is_array());
-    assert!(value["data"]["notes"].is_array());
-    assert!(value["data"]["recent_activity"].is_null());
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains("[task] open - JSON issue"));
+    assert!(stdout.contains("Description"));
+    assert!(stdout.contains("JSON description"));
+    assert!(stdout.contains("Blocked by"));
+    assert!(stdout.contains("Blocking"));
+    assert!(stdout.contains("Recent Activity"));
+    assert!(stdout.contains("Next Commands"));
 }
 
 #[test]
@@ -755,21 +742,12 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
     assert!(stdout.contains("First comment"));
     assert!(!stdout.contains("Evidence attached"));
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "history", "--type", "evidence_attached"],
-    );
-    assert!(success, "json history failed: {stderr}");
-    let value = json_value(&stdout);
-    assert_eq!(value["ok"], true);
-    assert_eq!(value["command"], "history");
-    assert_eq!(value["data"]["count"], 1);
-    assert_eq!(value["data"]["items"][0]["issue"], second);
-    assert_eq!(value["data"]["items"][0]["event_type"], "evidence_attached");
-    assert!(value["data"]["items"][0]["body"]
-        .as_str()
-        .unwrap()
-        .contains("evidence_id"));
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["history", "--type", "evidence_attached"]);
+    assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains(&second));
+    assert!(stdout.contains("evidence_attached"));
+    assert!(stdout.contains("evidence_id"));
 }
 
 #[test]
@@ -795,10 +773,9 @@ fn test_evidence_issue_link_creates_history_activity() {
 
     run_atelier(dir.path(), &["issue", "create", "Evidence issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Evidence issue");
-    let (success, evidence_out, stderr) = run_atelier(
+    let (success, _evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "evidence",
             "add",
             "--kind",
@@ -809,8 +786,7 @@ fn test_evidence_issue_link_creates_history_activity() {
         ],
     );
     assert!(success, "evidence add failed: {stderr}");
-    let evidence = json_value(&evidence_out);
-    let evidence_id = evidence["id"].as_str().unwrap();
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "Cargo test passed");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -818,7 +794,7 @@ fn test_evidence_issue_link_creates_history_activity() {
             "link",
             "add",
             "evidence",
-            evidence_id,
+            &evidence_id,
             "issue",
             issue_id.as_str(),
             "--type",
@@ -958,13 +934,13 @@ fn test_import_beads_jsonl_fixture_round_trip() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["--json", "import-beads", fixture_path.to_str().unwrap()],
+        &["import-beads", fixture_path.to_str().unwrap()],
     );
     assert!(success, "import-beads failed: {stderr}");
-    assert!(stdout.contains("\"source_records\": 3"));
-    assert!(stdout.contains("\"imported_issues\": 3"));
-    assert!(stdout.contains("\"parent_child_links\": 2"));
-    assert!(stdout.contains("\"blocking_links\": 1"));
+    assert!(stdout.contains("source records: 3"));
+    assert!(stdout.contains("imported issues: 3"));
+    assert!(stdout.contains("parent-child links: 2"));
+    assert!(stdout.contains("blocking links: 1"));
     assert!(dir
         .path()
         .join(".atelier-state")
@@ -1234,15 +1210,13 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "show", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
-    let shown = json_value(&stdout);
-    let notes = shown["data"]["notes"].as_array().unwrap();
-    assert!(notes.iter().any(|note| note["body"] == "Canonical comment"));
-    assert!(notes.iter().any(|note| note["body"] == "Canonical handoff"));
-    assert_eq!(shown["data"]["close_reason"], "Canonical close");
-    assert!(shown["data"]["assignee"].as_str().is_some());
+    assert!(stdout.contains("Canonical comment"));
+    assert!(stdout.contains("Canonical handoff"));
+    assert!(stdout.contains("Close Reason"));
+    assert!(stdout.contains("Canonical close"));
+    assert!(stdout.contains("Assignee:"));
 }
 
 #[test]
@@ -1272,13 +1246,11 @@ fn test_issue_create_is_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "show", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed after rebuild: {stderr}");
-    let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["title"], "Create-only durable");
-    assert_eq!(shown["data"]["description"], "Created body");
-    assert_eq!(shown["data"]["priority"], "high");
+    assert!(stdout.contains("[task] open - Create-only durable"));
+    assert!(stdout.contains("Created body"));
+    assert!(stdout.contains("Priority: high"));
 }
 
 #[test]
@@ -1339,18 +1311,14 @@ fn test_issue_mutations_are_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "show", &source_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
-    let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["title"], "Mutation source updated");
-    assert_eq!(shown["data"]["description"], "Durable body");
-    assert_eq!(shown["data"]["priority"], "high");
-    assert_eq!(shown["data"]["status"], "open");
-    let labels = shown["data"]["labels"].as_array().unwrap();
-    assert!(labels.iter().any(|label| label == "keep-me"));
-    assert!(!labels.iter().any(|label| label == "remove-me"));
-    assert_eq!(shown["data"]["dependencies"][0]["id"], target_id);
+    assert!(stdout.contains("[task] open - Mutation source updated"));
+    assert!(stdout.contains("Durable body"));
+    assert!(stdout.contains("Priority: high"));
+    assert!(stdout.contains("keep-me"));
+    assert!(!stdout.contains("remove-me"));
+    assert!(stdout.contains(&target_id));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "related", &source_id]);
     assert!(success, "related failed: {stderr}");
@@ -3744,14 +3712,17 @@ fn test_integrity_export_import_roundtrip() {
 }
 
 #[test]
-fn test_agent_factory_json_command_subset() {
+fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier_raw(dir.path(), &["--json", "doctor"]);
+    assert!(!success, "--json should not be accepted");
+    assert!(stderr.contains("unexpected argument '--json'"));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "issue",
             "create",
             "Agent Factory task",
@@ -3762,17 +3733,14 @@ fn test_agent_factory_json_command_subset() {
         ],
     );
     assert!(success, "create failed: {stderr}");
-    let created = json_value(&stdout);
-    assert_eq!(created["ok"], true);
-    assert_eq!(created["command"], "issue.create");
-    let task_id = created["data"]["id"].as_str().unwrap().to_string();
-    assert!(task_id.starts_with("atelier-"));
-    assert_eq!(created["data"]["issue_type"], "feature");
+    assert!(stdout.contains("Created issue atelier-"));
+    assert!(stdout.contains("Type:     feature"));
+    assert!(stdout.contains("Next Commands"));
+    let task_id = issue_id_by_title(dir.path(), "Agent Factory task");
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "issue",
             "update",
             "1",
@@ -3784,73 +3752,53 @@ fn test_agent_factory_json_command_subset() {
         ],
     );
     assert!(success, "update failed: {stderr}");
-    let updated = json_value(&stdout);
-    assert_eq!(updated["ok"], true);
-    assert_eq!(updated["command"], "issue.update");
-    assert!(updated["data"]["changed_fields"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|field| field == "notes"));
-    assert_eq!(updated["data"]["issue"]["priority"], "high");
+    assert!(stdout.contains(&format!("Updated issue {task_id}")));
+    assert!(stdout.contains("Priority: high"));
+    assert!(stdout.contains("Assignee:"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "#1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "#1"]);
     assert!(success, "show failed: {stderr}");
-    let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["id"], task_id);
-    assert_eq!(shown["data"]["notes"][1]["body"], "handoff note");
+    assert!(stdout.contains(&task_id));
+    assert!(stdout.contains("handoff note"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
     assert!(success, "ready failed: {stderr}");
-    assert_eq!(json_value(&stdout)["data"]["count"], 1);
+    assert!(stdout.contains("1 total"));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Blocker"]);
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "add", "1", "2"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "add", "1", "2"]);
     assert!(success, "dep add failed: {stderr}");
-    let dep = json_value(&stdout);
-    assert_eq!(dep["command"], "dep.add");
-    assert_eq!(dep["data"]["action"], "add");
-    assert_eq!(dep["data"]["state"], "added");
-    assert_eq!(dep["data"]["blocked"], task_id);
-    assert_eq!(dep["data"]["blocker"], blocker_id);
+    assert!(stdout.contains(&task_id));
+    assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", "1"]);
     assert!(success, "dep list failed: {stderr}");
-    assert_eq!(json_value(&stdout)["data"]["count"], 1);
+    assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "remove", "1", "2"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "remove", "1", "2"]);
     assert!(success, "dep remove failed: {stderr}");
-    let removed = json_value(&stdout);
-    assert_eq!(removed["command"], "dep.remove");
-    assert_eq!(removed["data"]["action"], "remove");
-    assert_eq!(removed["data"]["state"], "removed");
-    assert_eq!(removed["data"]["changed"], true);
+    assert!(stdout.contains(&task_id));
+    assert!(stdout.contains(&blocker_id));
 
     for args in [
-        vec!["--json", "issue", "list", "--status", "all"],
-        vec!["--json", "issue", "search", "Factory"],
-        vec!["--json", "lint"],
-        vec!["--json", "export"],
-        vec!["--json", "export", "--check"],
-        vec!["--json", "doctor"],
-        vec!["--json", "rebuild"],
+        vec!["issue", "list", "--status", "all"],
+        vec!["issue", "search", "Factory"],
+        vec!["lint"],
+        vec!["export"],
+        vec!["export", "--check"],
+        vec!["doctor"],
+        vec!["rebuild"],
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
-        assert_eq!(json_value(&stdout)["ok"], true, "{args:?}");
+        assert!(!stdout.trim_start().starts_with('{'), "{args:?}");
     }
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["--json", "issue", "show", "missing"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", "missing"]);
     assert!(!success);
-    let error = json_value(&stdout);
-    assert_eq!(error["ok"], false);
-    assert_eq!(error["error"]["code"], "not_found");
-    assert!(error["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("missing"));
+    assert!(stderr.contains("missing"));
 }
 
 #[test]
@@ -3861,7 +3809,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, mission_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "mission",
             "create",
             "Ship records",
@@ -3872,28 +3819,22 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission = json_value(&mission_out);
-    let mission_id = mission["id"].as_str().unwrap();
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Ship records");
+    let mission_id = mission_id.as_str();
 
     let (success, plan_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "--json",
-            "plan",
-            "create",
-            "Execution plan",
-            "--body",
-            "Do the thing",
-        ],
+        &["plan", "create", "Execution plan", "--body", "Do the thing"],
     );
     assert!(success, "plan create failed: {stderr}");
-    let plan = json_value(&plan_out);
-    let plan_id = plan["id"].as_str().unwrap();
+    assert!(plan_out.contains("[plan] open - Execution plan"));
+    let plan_id = record_id_by_title(dir.path(), "plans", "Execution plan");
+    let plan_id = plan_id.as_str();
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "evidence",
             "add",
             "--kind",
@@ -3904,13 +3845,13 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "evidence add failed: {stderr}");
-    let evidence = json_value(&evidence_out);
-    let evidence_id = evidence["id"].as_str().unwrap();
+    assert!(evidence_out.contains("[evidence] pass - cargo test passed"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "cargo test passed");
+    let evidence_id = evidence_id.as_str();
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "link",
             "add",
             "mission",
@@ -3925,7 +3866,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "link",
             "add",
             "evidence",
@@ -3941,7 +3881,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "issue",
             "create",
             "Wire mission work",
@@ -3950,19 +3889,19 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "issue create failed: {stderr}");
-    let issue = json_value(&issue_out);
-    let issue_id = issue["data"]["id"].as_str().unwrap();
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Wire mission work");
+    let issue_id = issue_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json", "link", "add", "mission", mission_id, "issue", issue_id, "--type", "advances",
+            "link", "add", "mission", mission_id, "issue", issue_id, "--type", "advances",
         ],
     );
     assert!(success, "mission-work link failed: {stderr}");
     let (success, blocker_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "issue",
             "create",
             "Resolve mission blocker",
@@ -3971,12 +3910,12 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "blocker issue create failed: {stderr}");
-    let blocker = json_value(&blocker_out);
-    let blocker_id = blocker["data"]["id"].as_str().unwrap();
+    assert!(blocker_out.contains("Created issue atelier-"));
+    let blocker_id = issue_id_by_title(dir.path(), "Resolve mission blocker");
+    let blocker_id = blocker_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "link",
             "add",
             "mission",
@@ -4010,7 +3949,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, validate_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "workflow",
             "validate",
             "mission",
@@ -4022,10 +3960,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
         ],
     );
     assert!(success, "workflow validate failed: {stderr}");
-    let validation = json_value(&validate_out);
-    let results = validation["data"].as_array().unwrap();
-    assert_eq!(results.len(), 2);
-    assert!(results.iter().all(|result| result["passed"] == true));
+    assert!(validate_out.contains("pass  durable_state_current"));
+    assert!(validate_out.contains("pass  evidence_attached"));
 
     let (success, validate_human, stderr) = run_atelier(
         dir.path(),
@@ -4048,24 +3984,17 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(validate_human.contains("Reason: canonical export is current"));
     assert!(!validate_human.contains("pass durable_state_current:"));
 
-    let (success, view_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    let view = json_value(&view_out);
-    assert_eq!(view["plans"].as_array().unwrap().len(), 1);
-    assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
-    assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
-    assert_eq!(view["mission_blockers"].as_array().unwrap().len(), 1);
-    assert_eq!(view["mission_blockers"][0]["id"], blocker_id);
+    assert!(view_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(view_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
+    assert!(view_out.contains(&blocker_id));
 
-    let (success, show_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    let show = json_value(&show_out);
-    assert_eq!(show["plans"].as_array().unwrap().len(), 1);
-    assert_eq!(show["evidence"].as_array().unwrap().len(), 1);
-    assert_eq!(show["work"]["ready"].as_array().unwrap().len(), 1);
-    assert_eq!(show["mission_blockers"].as_array().unwrap().len(), 1);
+    assert!(show_out.contains("Plans"));
+    assert!(show_out.contains("Evidence"));
+    assert!(show_out.contains("Mission Blockers"));
 
     let (success, human_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "human mission show failed: {stderr}");
@@ -4127,63 +4056,59 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     init_atelier(dir.path());
 
     let (success, older_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "create", "Older open"]);
+        run_atelier(dir.path(), &["mission", "create", "Older open"]);
     assert!(success, "older mission create failed: {stderr}");
-    let older_id = json_value(&older_out)["id"].as_str().unwrap().to_string();
+    assert!(older_out.contains("Mission atelier-"));
+    let older_id = record_id_by_title(dir.path(), "missions", "Older open");
+    let older_id = older_id.as_str();
 
     std::thread::sleep(std::time::Duration::from_millis(5));
-    let (success, active_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "mission", "create", "Active mission"],
-    );
+    let (success, active_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Active mission"]);
     assert!(success, "active mission create failed: {stderr}");
-    let active_id = json_value(&active_out)["id"].as_str().unwrap().to_string();
+    assert!(active_out.contains("Mission atelier-"));
+    let active_id = record_id_by_title(dir.path(), "missions", "Active mission");
+    let active_id = active_id.as_str();
 
     std::thread::sleep(std::time::Duration::from_millis(5));
-    let (success, closed_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "mission", "create", "Newest closed"],
-    );
+    let (success, closed_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Newest closed"]);
     assert!(success, "closed mission create failed: {stderr}");
-    let closed_id = json_value(&closed_out)["id"].as_str().unwrap().to_string();
+    assert!(closed_out.contains("Mission atelier-"));
+    let closed_id = record_id_by_title(dir.path(), "missions", "Newest closed");
+    let closed_id = closed_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["mission", "update", &closed_id, "--status", "closed"],
     );
     assert!(success, "close mission failed: {stderr}");
 
-    let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Ready work"]);
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready work"]);
     assert!(success, "ready issue create failed: {stderr}");
-    let ready_id = json_value(&ready_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(ready_out.contains("Created issue atelier-"));
+    let ready_id = issue_id_by_title(dir.path(), "Ready work");
+    let ready_id = ready_id.as_str();
     let (success, blocked_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Blocked work"]);
+        run_atelier(dir.path(), &["issue", "create", "Blocked work"]);
     assert!(success, "blocked issue create failed: {stderr}");
-    let blocked_id = json_value(&blocked_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(blocked_out.contains("Created issue atelier-"));
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
+    let blocked_id = blocked_id.as_str();
     let (success, blocker_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Work blocker"]);
+        run_atelier(dir.path(), &["issue", "create", "Work blocker"]);
     assert!(success, "work blocker create failed: {stderr}");
-    let blocker_id = json_value(&blocker_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(blocker_out.contains("Created issue atelier-"));
+    let blocker_id = issue_id_by_title(dir.path(), "Work blocker");
+    let blocker_id = blocker_id.as_str();
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
     assert!(success, "block issue failed: {stderr}");
 
-    let (success, done_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Done work"]);
+    let (success, done_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Done work"]);
     assert!(success, "done issue create failed: {stderr}");
-    let done_id = json_value(&done_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(done_out.contains("Created issue atelier-"));
+    let done_id = issue_id_by_title(dir.path(), "Done work");
+    let done_id = done_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &done_id, "--reason", "done"],
@@ -4191,27 +4116,23 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(success, "close issue failed: {stderr}");
 
     let (success, backlog_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Backlog work"]);
+        run_atelier(dir.path(), &["issue", "create", "Backlog work"]);
     assert!(success, "backlog issue create failed: {stderr}");
-    let backlog_id = json_value(&backlog_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(backlog_out.contains("Created issue atelier-"));
+    let backlog_id = issue_id_by_title(dir.path(), "Backlog work");
+    let backlog_id = backlog_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "update", &backlog_id, "--status", "in_progress"],
     );
     assert!(success, "backlog issue update failed: {stderr}");
 
-    let (success, mission_blocker_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "issue", "create", "Mission blocker"],
-    );
+    let (success, mission_blocker_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Mission blocker"]);
     assert!(success, "mission blocker create failed: {stderr}");
-    let mission_blocker_id = json_value(&mission_blocker_out)["data"]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(mission_blocker_out.contains("Created issue atelier-"));
+    let mission_blocker_id = issue_id_by_title(dir.path(), "Mission blocker");
+    let mission_blocker_id = mission_blocker_id.as_str();
 
     for issue_id in [&ready_id, &blocked_id, &done_id, &backlog_id] {
         let (success, _, stderr) = run_atelier(
@@ -4240,7 +4161,6 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "evidence",
             "add",
             "--kind",
@@ -4251,10 +4171,9 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         ],
     );
     assert!(success, "evidence add failed: {stderr}");
-    let evidence_id = json_value(&evidence_out)["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(evidence_out.contains("[evidence] pass - older mission evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "older mission evidence");
+    let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -4317,13 +4236,9 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(empty_out.contains("(none)"));
     assert!(empty_out.contains("atelier mission create \"...\""));
 
-    let (success, json_out, stderr) = run_atelier(dir.path(), &["--json", "mission", "list"]);
-    assert!(success, "json mission list failed: {stderr}");
-    let json = json_value(&json_out);
-    assert!(json["data"].as_array().unwrap().iter().any(|mission| {
-        mission["id"].as_str() == Some(active_id.as_str())
-            && mission["title"].as_str() == Some("Active mission")
-    }));
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    assert!(success, "mission list failed: {stderr}");
+    assert!(list_out.contains(&active_row));
 }
 
 #[test]
@@ -4332,10 +4247,10 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     init_atelier(dir.path());
 
     let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "create", "Guard schema"]);
+        run_atelier(dir.path(), &["mission", "create", "Guard schema"]);
     assert!(success, "mission create failed: {stderr}");
-    let mission = json_value(&mission_out);
-    let mission_id = mission["id"].as_str().unwrap();
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Guard schema");
     let mission_path = dir
         .path()
         .join(".atelier-state")
@@ -4365,10 +4280,10 @@ fn test_projection_index_rejects_stale_issue_queries_until_rebuild() {
     init_atelier(dir.path());
 
     let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "create", "Indexed title"]);
+        run_atelier(dir.path(), &["issue", "create", "Indexed title"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue = json_value(&issue_out);
-    let issue_id = issue["data"]["id"].as_str().unwrap();
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Indexed title");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
@@ -4408,13 +4323,11 @@ fn test_projection_index_rejects_missing_and_unindexed_sources() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, first_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "issue", "create", "First indexed issue"],
-    );
+    let (success, first_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "First indexed issue"]);
     assert!(success, "first create failed: {stderr}");
-    let first = json_value(&first_out);
-    let first_id = first["data"]["id"].as_str().unwrap();
+    assert!(first_out.contains("Created issue atelier-"));
+    let first_id = issue_id_by_title(dir.path(), "First indexed issue");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
@@ -4482,21 +4395,17 @@ fn test_projection_index_guards_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, first_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "issue", "create", "Projection root"],
-    );
+    let (success, first_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Projection root"]);
     assert!(success, "first create failed: {stderr}");
-    let first = json_value(&first_out);
-    let first_id = first["data"]["id"].as_str().unwrap();
-    let (success, second_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "issue", "create", "Projection leaf"],
-    );
+    assert!(first_out.contains("Created issue atelier-"));
+    let first_id = issue_id_by_title(dir.path(), "Projection root");
+    let (success, second_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Projection leaf"]);
     assert!(success, "second create failed: {stderr}");
-    let second = json_value(&second_out);
-    let second_id = second["data"]["id"].as_str().unwrap();
-    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", second_id, first_id]);
+    assert!(second_out.contains("Created issue atelier-"));
+    let second_id = issue_id_by_title(dir.path(), "Projection leaf");
+    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &second_id, &first_id]);
     assert!(success, "dep add failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
@@ -4619,22 +4528,19 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     .unwrap();
     let bulk_arg = bulk_path.to_str().unwrap();
 
-    let (success, dry_run_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "plan", "apply", bulk_arg, "--dry-run"],
-    );
+    let (success, dry_run_out, stderr) =
+        run_atelier(dir.path(), &["plan", "apply", bulk_arg, "--dry-run"]);
     assert!(success, "bulk dry-run failed: {stderr}");
-    let dry_run = json_value(&dry_run_out);
-    assert_eq!(dry_run["applied"], false);
-    assert_eq!(dry_run["records"]["missions"].as_array().unwrap().len(), 1);
+    assert!(dry_run_out.contains("Bulk plan preview is valid."));
+    assert!(dry_run_out.contains("Applied:       false"));
+    assert!(dry_run_out.contains("missions: 1"));
 
-    let (success, apply_out, stderr) =
-        run_atelier(dir.path(), &["--json", "plan", "apply", bulk_arg]);
+    let (success, apply_out, stderr) = run_atelier(dir.path(), &["plan", "apply", bulk_arg]);
     assert!(success, "bulk apply failed: {stderr}");
-    let applied = json_value(&apply_out);
-    assert_eq!(applied["applied"], true);
-    let mission_id = applied["records"]["missions"][0]["id"].as_str().unwrap();
-    assert!(mission_id.starts_with("atelier-"));
+    assert!(apply_out.contains("Bulk plan applied."));
+    assert!(apply_out.contains("Applied:       true"));
+    assert!(apply_out.contains("atelier mission show"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Bulk mission");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check after bulk apply failed: {stderr}");
@@ -4643,18 +4549,14 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after bulk apply failed: {stderr}");
 
-    let (success, view_out, stderr) =
-        run_atelier(dir.path(), &["--json", "mission", "show", mission_id]);
+    let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
     assert!(success, "mission show after bulk apply failed: {stderr}");
-    let view = json_value(&view_out);
-    assert_eq!(view["plans"].as_array().unwrap().len(), 1);
-    assert_eq!(view["milestones"].as_array().unwrap().len(), 1);
-    assert_eq!(view["evidence"].as_array().unwrap().len(), 1);
-    assert_eq!(view["work"]["ready"].as_array().unwrap().len(), 1);
+    assert!(view_out.contains("Records: plans=1 milestones=1 evidence=1"));
+    assert!(view_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
 }
 
 #[test]
-fn test_work_lifecycle_json_and_guards() {
+fn test_work_lifecycle_human_output_and_guards() {
     let dir = tempdir().unwrap();
     Command::new("git")
         .current_dir(dir.path())
@@ -4713,16 +4615,15 @@ hooks:
         .status()
         .unwrap();
 
-    let (success, start_out, stderr) =
-        run_atelier(dir.path(), &["--json", "work", "start", &issue_id]);
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["work", "start", &issue_id]);
     assert!(success, "work start failed: {stderr}");
-    let started = json_value(&start_out);
-    assert_eq!(started["agent_launched"], false);
-    assert_eq!(started["issue"]["id"], issue_id);
+    assert!(start_out.contains(&format!("Started work on {issue_id}")));
+    assert!(start_out.contains("Branch:"));
+    assert!(start_out.contains("Worktree:"));
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["--json", "work", "status"]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["work", "status"]);
     assert!(success, "work status failed: {stderr}");
-    assert_eq!(json_value(&status_out)["active"]["issue_id"], issue_id);
+    assert!(status_out.contains(&format!("Issue:    {issue_id} - Work item")));
 
     let (success, status_human, stderr) = run_atelier(dir.path(), &["work", "status"]);
     assert!(success, "human work status failed: {stderr}");
@@ -4732,10 +4633,9 @@ hooks:
     assert!(status_human.contains("Branch:"));
     assert!(status_human.contains("Worktree:"));
 
-    let (success, finish_out, stderr) =
-        run_atelier(dir.path(), &["--json", "work", "finish", &issue_id]);
+    let (success, finish_out, stderr) = run_atelier(dir.path(), &["work", "finish", &issue_id]);
     assert!(success, "work finish failed: {stderr}");
-    assert_eq!(json_value(&finish_out)["finished"], true);
+    assert!(finish_out.contains(&format!("Finished work on {issue_id}")));
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
         &activities,
@@ -4748,30 +4648,17 @@ hooks:
     let worktree_arg = worktree_path.to_string_lossy().to_string();
     let (success, worktree_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "--json",
-            "worktree",
-            "for",
-            &issue_id,
-            "--path",
-            &worktree_arg,
-        ],
+        &["worktree", "for", &issue_id, "--path", &worktree_arg],
     );
     assert!(success, "worktree for failed: {stderr}");
-    assert_eq!(
-        json_value(&worktree_out)["worktree_path"],
-        serde_json::Value::String(worktree_arg.clone())
-    );
+    assert!(worktree_out.contains(&worktree_arg));
     assert!(worktree_path.join(".atelier/state.db").exists());
     assert!(worktree_path.join(".atelier/setup-marker").exists());
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["--json", "worktree", "status"]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
-    let status = json_value(&status_out);
-    let worktrees = status["data"].as_array().unwrap();
-    assert!(worktrees.iter().any(|entry| entry["path"]
-        == serde_json::Value::String(worktree_arg.clone())
-        && entry["associated_work"][0]["issue_id"] == issue_id));
+    assert!(status_out.contains(&worktree_arg));
+    assert!(status_out.contains(&format!("{issue_id} [active]")));
 
     let (success, status_human, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "human worktree status failed: {stderr}");
@@ -4784,12 +4671,10 @@ hooks:
     assert!(!status_human.contains("work:"));
     assert!(!status_human.contains("export:"));
 
-    let (success, remove_out, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "worktree", "remove", &issue_id, "--force"],
-    );
+    let (success, remove_out, stderr) =
+        run_atelier(dir.path(), &["worktree", "remove", &issue_id, "--force"]);
     assert!(success, "worktree remove failed: {stderr}");
-    assert_eq!(json_value(&remove_out)["removed"], true);
+    assert!(remove_out.contains("Removed worktree"));
     assert!(!worktree_path.exists());
 }
 
@@ -4801,7 +4686,6 @@ fn test_issue_type_is_canonical_not_label_derived() {
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
-            "--json",
             "issue",
             "create",
             "Typed issue",
@@ -4812,32 +4696,27 @@ fn test_issue_type_is_canonical_not_label_derived() {
         ],
     );
     assert!(success, "create failed: {stderr}");
-    let created = json_value(&stdout);
-    assert_eq!(created["data"]["issue_type"], "validation");
-    assert_eq!(created["data"]["labels"][0], "epic");
+    assert!(stdout.contains("Type:     validation"));
+    let issue_id = issue_id_by_title(dir.path(), "Typed issue");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success, "show failed: {stderr}");
-    let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["issue_type"], "validation");
+    assert!(stdout.contains("[validation] open - Typed issue"));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["--json", "issue", "list", "--status", "all"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "list failed: {stderr}");
-    let listed = json_value(&stdout);
-    assert_eq!(listed["data"]["items"][0]["issue_type"], "validation");
+    assert!(stdout.contains("validation"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
     assert!(success, "ready failed: {stderr}");
-    let ready = json_value(&stdout);
-    assert_eq!(ready["data"]["items"][0]["issue_type"], "validation");
+    assert!(stdout.contains("validation"));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
     let issue_record = std::fs::read_to_string(
         dir.path()
             .join(".atelier-state/issues")
-            .join(format!("{}.md", issue_ref(dir.path(), 1))),
+            .join(format!("{issue_id}.md")),
     )
     .unwrap();
     assert!(issue_record.contains("issue_type: \"validation\"\n"));
@@ -4851,32 +4730,24 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/beads/issues.manual.jsonl");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["--json", "import-beads", fixture.to_str().unwrap()],
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["import-beads", fixture.to_str().unwrap()]);
     assert!(success, "import-beads failed: {stderr}");
-    assert!(stdout.contains("\"atelier-z1p.4\": \"atelier-0003\""));
+    assert!(stdout.contains("imported issues: 3"));
+    assert!(stdout.contains("blocking links: 1"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "issue", "show", "3"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "3"]);
     assert!(success, "mapped show failed: {stderr}");
-    let shown = json_value(&stdout);
-    assert_eq!(shown["data"]["id"], "atelier-0003");
-    assert_eq!(shown["data"]["parent"], "atelier-0001");
-    assert_eq!(shown["data"]["issue_type"], "task");
-    assert!(shown["data"]["owner"].is_null());
-    assert_eq!(shown["data"]["dependencies"][0]["id"], "atelier-0002");
-    assert!(!shown["data"]["labels"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|label| label.as_str().unwrap().starts_with("beads:")));
+    assert!(stdout.contains("atelier-0003"));
+    assert!(stdout.contains("[task]"));
+    assert!(stdout.contains("Parent: atelier-0001"));
+    assert!(stdout.contains("atelier-0002"));
+    assert!(!stdout.contains("beads:"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["--json", "dep", "list", "3"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", "3"]);
     assert!(success, "mapped dep list failed: {stderr}");
-    let deps = json_value(&stdout);
-    assert_eq!(deps["data"]["items"][0]["blocked"], "atelier-0003");
-    assert_eq!(deps["data"]["items"][0]["blocker"], "atelier-0002");
+    assert!(stdout.contains("atelier-0003"));
+    assert!(stdout.contains("atelier-0002"));
 }
 
 // ============================================================

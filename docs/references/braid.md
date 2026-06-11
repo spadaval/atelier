@@ -55,7 +55,8 @@ on 2026-06-08.
   Atelier should use Git for mergeable durable state, while local SQLite indexes
   support fast queries, locks, workflow checks, and Mission Control projection.
 - Do not copy editor-driven mutation as the main agent interface. Agents need
-  stable noninteractive commands and JSON output.
+  stable noninteractive commands with focused human output and durable
+  projection files.
 
 ## Follow-Up Decisions
 

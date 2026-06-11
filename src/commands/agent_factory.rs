@@ -944,6 +944,13 @@ pub fn create(db: &Database, input: CreateInput<'_>, json_output: bool) -> Resul
         print_success("issue.create", serde_json::to_value(object)?)
     } else {
         println!("Created issue {}: {}", object.id, object.title);
+        println!("Type:     {}", object.issue_type);
+        println!("Priority: {}", object.priority);
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier issue show {}", object.id);
+        println!("  atelier work start {}", object.id);
         Ok(())
     }
 }
@@ -1099,6 +1106,18 @@ pub fn update(db: &Database, input: UpdateInput<'_>, json_output: bool) -> Resul
             object.id,
             changed_fields.join(", ")
         );
+        println!("Status:   {}", object.status);
+        println!("Priority: {}", object.priority);
+        if let Some(assignee) = &object.assignee {
+            println!("Assignee: {assignee}");
+        }
+        if let Some(parent) = &object.parent {
+            println!("Parent:   {parent}");
+        }
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier issue show {}", object.id);
         Ok(())
     }
 }
@@ -1471,7 +1490,8 @@ pub fn export_canonical(
                     json!({ "fresh": true, "state_path": state_dir, "stale": [] }),
                 )
             } else {
-                eprintln!("Canonical export is current");
+                println!("Canonical export is current");
+                println!("State: {}", state_dir.display());
                 Ok(())
             }
         } else if json_output {
@@ -1493,6 +1513,12 @@ pub fn export_canonical(
                 json!({ "state_path": state_dir, "written": true }),
             )
         } else {
+            println!("Canonical export written");
+            println!("State: {}", state_dir.display());
+            println!();
+            println!("Next Commands");
+            println!("-------------");
+            println!("  atelier export --check");
             Ok(())
         }
     }
@@ -1506,6 +1532,14 @@ pub fn rebuild(state_dir: &Path, db_path: &Path, json_output: bool) -> Result<()
             json!({ "state_path": state_dir, "database_path": db_path, "rebuilt": true }),
         )
     } else {
+        println!("Runtime state rebuilt");
+        println!("State:    {}", state_dir.display());
+        println!("Database: {}", db_path.display());
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier doctor");
+        println!("  atelier export --check");
         Ok(())
     }
 }

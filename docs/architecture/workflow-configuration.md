@@ -102,8 +102,8 @@ Closure rules should be expressed through `required_fields`, `evidence`, and
 ## Invalid Configuration Errors
 
 Configuration loading must report stable error names. Human-readable text may
-change, but these names are the API contract for JSON output, diagnostics, lint,
-and Mission Control projections.
+change, but these names are the API contract for diagnostics, lint, workflow
+evidence, and Mission Control projections.
 
 | Error name | Meaning |
 | --- | --- |
@@ -201,7 +201,7 @@ hooks are not allowed because the record mutation has already happened.
 
 Hook stdin receives the same context shape used by workflow validators plus the
 hook identifier and event. Hook stdout and stderr are captured, truncated for
-display, and available in JSON output.
+display, and available to diagnostics and Mission Control projections.
 
 Schema version 1 examples still use `export_current` for compatibility with the
 existing Mission Control projection vocabulary. New schema work should prefer

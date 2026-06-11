@@ -91,9 +91,17 @@ pub fn remove(
             serde_json::to_string_pretty(&json!({ "removed": removed }))?
         );
     } else if removed {
-        println!("Removed link");
+        println!(
+            "Removed link: {source_kind} {source_id} {relation_type} {target_kind} {target_id}"
+        );
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier link list {source_kind} {source_id}");
     } else {
-        println!("No such link");
+        println!(
+            "No such link: {source_kind} {source_id} {relation_type} {target_kind} {target_id}"
+        );
     }
     Ok(())
 }

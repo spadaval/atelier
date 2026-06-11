@@ -290,20 +290,18 @@ then link tuple. Proposed durable IDs may be placeholder strings such as
 `"<allocated:issue.bulk-contract>"`; they are preview-only and must not be
 treated as reservations.
 
-Validation failure under dry run returns `ok: false`, exits non-zero, includes
-`command: "bulk-plan.apply"`, and lists validation errors in
-`error.details.validation_errors`.
+Validation failure under dry run exits non-zero and lists validation errors in
+human-readable diagnostics.
 
 ## Apply Summary
 
 The staged `atelier plan apply` implementation accepts this v1 input contract
-and returns a compact summary. In JSON mode, mutating apply currently emits
-`applied`, `dry_run`, `validate_only`, `title`, optional `description`, grouped
-`records` containing `client_ref` to durable `id` mappings, and a numeric
-`links` count. Dry-run output uses the same shape with `applied: false` and
-record previews without reserved IDs. Validate-only output reports
-`validate_only: true` and does not allocate a preview. The richer target
-envelope below remains the contract for follow-up reporting work.
+and prints a compact human summary with `applied`, `dry_run`, `validate_only`,
+record counts by kind, link count, and next commands. Mutating apply persists
+durable records under `.atelier-state/`, where `client_ref` to durable `id`
+mappings can be audited. Dry-run output reports preview counts without reserved
+IDs. Validate-only output reports that validation completed without allocating a
+preview.
 
 A successful mutating apply returns:
 
