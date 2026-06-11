@@ -20,6 +20,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use db::Database;
+use record_store::RecordStore;
 
 #[derive(Parser)]
 #[command(name = "atelier")]
@@ -716,9 +717,56 @@ fn get_fresh_projection_db() -> Result<Database> {
     Ok(db)
 }
 
-fn export_current_state(db: &Database) -> Result<()> {
+fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
     let root = find_repo_root_for_rebuild()?;
-    commands::export::write_canonical_from_db(db, &root.join(".atelier-state"))
+    Ok((
+        root.join(".atelier-state"),
+        root.join(".atelier").join("state.db"),
+    ))
+}
+
+fn issue_create_parts(
+    priority: &str,
+    description: Option<&str>,
+    template: Option<&str>,
+    labels: &[String],
+) -> Result<(String, Option<String>, Vec<String>, &'static str)> {
+    let mut labels = labels.to_vec();
+    let (final_priority, final_description) = if let Some(template_name) = template {
+        let template = commands::create::get_template(template_name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Unknown template '{}'. Available: {}",
+                template_name,
+                commands::create::list_templates().join(", ")
+            )
+        })?;
+        if !labels.iter().any(|label| label == template.label) {
+            labels.push(template.label.to_string());
+        }
+        let priority = if priority != "medium" {
+            priority
+        } else {
+            template.priority
+        };
+        let description = match (template.description_prefix, description) {
+            (Some(prefix), Some(user_description)) => {
+                Some(format!("{prefix}\n\n{user_description}"))
+            }
+            (Some(prefix), None) => Some(prefix.to_string()),
+            (None, description) => description.map(str::to_string),
+        };
+        (priority.to_string(), description)
+    } else {
+        (priority.to_string(), description.map(str::to_string))
+    };
+
+    if !commands::create::validate_priority(&final_priority) {
+        bail!(
+            "Invalid priority '{}'. Must be one of: low, medium, high, critical",
+            final_priority
+        );
+    }
+    Ok((final_priority, final_description, labels, "task"))
 }
 
 fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
@@ -765,37 +813,50 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             parent,
             work,
         } => {
-            let db = get_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let atelier_dir = find_atelier_dir().ok();
             if issue_type.is_some() || parent.is_some() {
-                commands::agent_factory::create(
-                    &db,
-                    commands::agent_factory::CreateInput {
+                commands::agent_factory::create_lifecycle(
+                    &state_dir,
+                    &db_path,
+                    commands::agent_factory::LifecycleCreateInput {
                         title: &title,
                         description: description.as_deref(),
                         priority: &priority,
-                        issue_type: issue_type.as_deref().or(template.as_deref()),
+                        issue_type: issue_type
+                            .as_deref()
+                            .or(template.as_deref())
+                            .unwrap_or("task"),
                         labels: &label,
                         parent: parent.as_deref(),
+                        work,
+                        quiet,
+                        atelier_dir: atelier_dir.as_deref(),
                     },
+                )
+            } else {
+                let (final_priority, final_description, labels, issue_type) = issue_create_parts(
+                    &priority,
+                    description.as_deref(),
+                    template.as_deref(),
+                    &label,
                 )?;
-                return export_current_state(&db);
+                commands::agent_factory::create_lifecycle(
+                    &state_dir,
+                    &db_path,
+                    commands::agent_factory::LifecycleCreateInput {
+                        title: &title,
+                        description: final_description.as_deref(),
+                        priority: &final_priority,
+                        issue_type,
+                        labels: &labels,
+                        parent: None,
+                        work,
+                        quiet,
+                        atelier_dir: atelier_dir.as_deref(),
+                    },
+                )
             }
-            let atelier_dir = find_atelier_dir().ok();
-            let opts = commands::create::CreateOpts {
-                labels: &label,
-                work,
-                quiet,
-                atelier_dir: atelier_dir.as_deref(),
-            };
-            commands::create::run(
-                &db,
-                &title,
-                description.as_deref(),
-                &priority,
-                template.as_deref(),
-                &opts,
-            )?;
-            export_current_state(&db)
         }
 
         IssueCommands::Quick {
@@ -805,23 +866,29 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             template,
             label,
         } => {
-            let db = get_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
             let atelier_dir = find_atelier_dir().ok();
-            let opts = commands::create::CreateOpts {
-                labels: &label,
-                work: true,
-                quiet,
-                atelier_dir: atelier_dir.as_deref(),
-            };
-            commands::create::run(
-                &db,
-                &title,
-                description.as_deref(),
+            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
+                description.as_deref(),
                 template.as_deref(),
-                &opts,
+                &label,
             )?;
-            export_current_state(&db)
+            commands::agent_factory::create_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::agent_factory::LifecycleCreateInput {
+                    title: &title,
+                    description: final_description.as_deref(),
+                    priority: &final_priority,
+                    issue_type,
+                    labels: &labels,
+                    parent: None,
+                    work: true,
+                    quiet,
+                    atelier_dir: atelier_dir.as_deref(),
+                },
+            )
         }
 
         IssueCommands::Subissue {
@@ -832,24 +899,23 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             work,
         } => {
-            let db = get_db()?;
-            let parent = resolve_issue_arg(&db, &parent)?;
+            let (state_dir, db_path) = state_and_db_paths()?;
             let atelier_dir = find_atelier_dir().ok();
-            let opts = commands::create::CreateOpts {
-                labels: &label,
-                work,
-                quiet,
-                atelier_dir: atelier_dir.as_deref(),
-            };
-            commands::create::run_subissue(
-                &db,
-                &parent,
-                &title,
-                description.as_deref(),
-                &priority,
-                &opts,
-            )?;
-            export_current_state(&db)
+            commands::agent_factory::create_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::agent_factory::LifecycleCreateInput {
+                    title: &title,
+                    description: description.as_deref(),
+                    priority: &priority,
+                    issue_type: "task",
+                    labels: &label,
+                    parent: Some(&parent),
+                    work,
+                    quiet,
+                    atelier_dir: atelier_dir.as_deref(),
+                },
+            )
         }
 
         IssueCommands::List {
@@ -892,9 +958,10 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             claim,
             append_notes,
         } => {
-            let db = get_db()?;
-            commands::agent_factory::update(
-                &db,
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::agent_factory::update_lifecycle(
+                &state_dir,
+                &db_path,
                 commands::agent_factory::UpdateInput {
                     issue_ref: &id,
                     title: title.as_deref(),
@@ -911,68 +978,80 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     claim,
                     append_notes: append_notes.as_deref(),
                 },
-            )?;
-            export_current_state(&db)
+            )
         }
 
         IssueCommands::Close { id, reason } => {
-            let db = get_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
             let _ = quiet;
-            commands::agent_factory::close(&db, &id, reason.as_deref())?;
-            export_current_state(&db)
+            commands::agent_factory::close_lifecycle(&state_dir, &db_path, &id, reason.as_deref())
         }
 
         IssueCommands::CloseAll { label, priority } => {
-            let db = get_db()?;
-            commands::status::close_all(&db, label.as_deref(), priority.as_deref())?;
-            export_current_state(&db)
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::status::close_all_lifecycle(
+                &state_dir,
+                &db_path,
+                label.as_deref(),
+                priority.as_deref(),
+            )
         }
 
         IssueCommands::Reopen { id } => {
-            let db = get_db()?;
-            commands::agent_factory::reopen(&db, &id)?;
-            export_current_state(&db)
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::agent_factory::reopen_lifecycle(&state_dir, &db_path, &id)
         }
 
         IssueCommands::Delete { id, force } => {
+            let (state_dir, db_path) = state_and_db_paths()?;
             let db = get_db()?;
             let id = resolve_issue_arg(&db, &id)?;
-            commands::delete::run(&db, &id, force)?;
-            export_current_state(&db)
+            drop(db);
+            commands::delete::run_lifecycle(&state_dir, &db_path, &id, force)
         }
 
         IssueCommands::Comment { id, text, kind } => {
-            let db = get_db()?;
+            let db = get_fresh_projection_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            export_current_state(&db)?;
-            commands::comment::run(&db, &resolved, &text, &kind)?;
-            export_current_state(&db)
+            commands::comment::run_canonical(&db, &resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
-            let db = get_db()?;
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::add(&db, &resolved, &label)?;
-            export_current_state(&db)
+            commands::label::add_canonical(&db, &store, &resolved, &label)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Unlabel { id, label } => {
-            let db = get_db()?;
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::remove(&db, &resolved, &label)?;
-            export_current_state(&db)
+            commands::label::remove_canonical(&db, &store, &resolved, &label)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Block { id, blocker } => {
-            let db = get_db()?;
-            commands::agent_factory::dep_add(&db, &id, &blocker)?;
-            export_current_state(&db)
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
+            commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Unblock { id, blocker } => {
-            let db = get_db()?;
-            commands::agent_factory::dep_remove(&db, &id, &blocker)?;
-            export_current_state(&db)
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
+            commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Blocked => {
@@ -985,11 +1064,14 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            let db = get_db()?;
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
             let id = resolve_issue_arg(&db, &id)?;
             let related = resolve_issue_arg(&db, &related)?;
-            commands::relate::add_typed(&db, &id, &related, &relation_type)?;
-            export_current_state(&db)
+            commands::relate::add_typed_canonical(&db, &store, &id, &related, &relation_type)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Unrelate {
@@ -997,11 +1079,14 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            let db = get_db()?;
+            let db = get_fresh_projection_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
             let id = resolve_issue_arg(&db, &id)?;
             let related = resolve_issue_arg(&db, &related)?;
-            commands::relate::remove_typed(&db, &id, &related, &relation_type)?;
-            export_current_state(&db)
+            commands::relate::remove_typed_canonical(&db, &store, &id, &related, &relation_type)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Related { id } => {
@@ -1100,14 +1185,20 @@ fn run() -> Result<()> {
 
         Commands::Dep { action } => match action {
             DepCommands::Add { blocked, blocker } => {
-                let db = get_db()?;
-                commands::agent_factory::dep_add(&db, &blocked, &blocker)?;
-                export_current_state(&db)
+                let db = get_fresh_projection_db()?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let store = RecordStore::new(&state_dir);
+                commands::agent_factory::dep_add_canonical(&db, &store, &blocked, &blocker)?;
+                drop(db);
+                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
             }
             DepCommands::Remove { blocked, blocker } => {
-                let db = get_db()?;
-                commands::agent_factory::dep_remove(&db, &blocked, &blocker)?;
-                export_current_state(&db)
+                let db = get_fresh_projection_db()?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let store = RecordStore::new(&state_dir);
+                commands::agent_factory::dep_remove_canonical(&db, &store, &blocked, &blocker)?;
+                drop(db);
+                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
             }
             DepCommands::List { issue } => {
                 let db = get_fresh_projection_db()?;
@@ -1116,7 +1207,12 @@ fn run() -> Result<()> {
         },
 
         Commands::Mission { action } => {
-            let db = get_db()?;
+            let atelier_dir = find_atelier_dir()?;
+            let db_path = atelier_dir.join("state.db");
+            let repo_root = atelier_dir
+                .parent()
+                .context("Atelier directory has no repository root")?;
+            let state_dir = repo_root.join(".atelier-state");
             match action {
                 MissionCommands::Create {
                     title,
@@ -1124,19 +1220,23 @@ fn run() -> Result<()> {
                     constraint,
                     risk,
                     validation,
-                } => {
-                    commands::mission::create(
-                        &db,
-                        &title,
-                        body.as_deref(),
-                        constraint,
-                        risk,
-                        validation,
-                    )?;
-                    export_current_state(&db)
+                } => commands::mission::create(
+                    &state_dir,
+                    &db_path,
+                    &title,
+                    body.as_deref(),
+                    constraint,
+                    risk,
+                    validation,
+                ),
+                MissionCommands::Show { id } => {
+                    let db = get_db()?;
+                    commands::mission::show(&db, &id)
                 }
-                MissionCommands::Show { id } => commands::mission::show(&db, &id),
-                MissionCommands::List { status } => commands::mission::list(&db, status.as_deref()),
+                MissionCommands::List { status } => {
+                    let db = get_db()?;
+                    commands::mission::list(&db, status.as_deref())
+                }
                 MissionCommands::Update {
                     id,
                     title,
@@ -1145,53 +1245,69 @@ fn run() -> Result<()> {
                     constraint,
                     risk,
                     validation,
-                } => {
-                    commands::mission::update(
-                        &db,
-                        &id,
-                        title.as_deref(),
-                        status.as_deref(),
-                        body.as_deref(),
-                        constraint,
-                        risk,
-                        validation,
-                    )?;
-                    export_current_state(&db)
-                }
+                } => commands::mission::update(
+                    &state_dir,
+                    &db_path,
+                    &id,
+                    title.as_deref(),
+                    status.as_deref(),
+                    body.as_deref(),
+                    constraint,
+                    risk,
+                    validation,
+                ),
                 MissionCommands::AddWork { id, issue } => {
+                    let db = get_db()?;
                     let issue = resolve_issue_arg(&db, &issue)?;
-                    commands::mission::add_work(&db, &id, &issue)?;
-                    export_current_state(&db)
+                    drop(db);
+                    commands::mission::add_work(&state_dir, &db_path, &id, &issue)
                 }
                 MissionCommands::AddBlocker { id, issue } => {
+                    let db = get_db()?;
                     let issue = resolve_issue_arg(&db, &issue)?;
-                    commands::mission::add_blocker(&db, &id, &issue)?;
-                    export_current_state(&db)
+                    drop(db);
+                    commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
                 }
             }
         }
 
         Commands::Plan { action } => {
-            let db = get_db()?;
+            let atelier_dir = find_atelier_dir()?;
+            let db_path = atelier_dir.join("state.db");
+            let repo_root = atelier_dir
+                .parent()
+                .context("Atelier directory has no repository root")?;
+            let state_dir = repo_root.join(".atelier-state");
             match action {
                 PlanCommands::Create {
                     title,
                     body,
                     reason,
-                } => {
-                    commands::plan::create(&db, &title, body.as_deref(), reason.as_deref())?;
-                    export_current_state(&db)
+                } => commands::plan::create(
+                    &state_dir,
+                    &db_path,
+                    &title,
+                    body.as_deref(),
+                    reason.as_deref(),
+                ),
+                PlanCommands::Show { id } => {
+                    let db = get_db()?;
+                    commands::plan::show(&db, &id)
                 }
-                PlanCommands::Show { id } => commands::plan::show(&db, &id),
                 PlanCommands::Apply {
                     input,
                     dry_run,
                     validate_only,
-                } => commands::plan::apply(&db, &input, dry_run, validate_only),
-                PlanCommands::List { status } => commands::plan::list(&db, status.as_deref()),
+                } => {
+                    let db = get_db()?;
+                    commands::plan::apply(&db, &state_dir, &db_path, &input, dry_run, validate_only)
+                }
+                PlanCommands::List { status } => {
+                    let db = get_db()?;
+                    commands::plan::list(&db, status.as_deref())
+                }
                 PlanCommands::Revise { id, body, reason } => {
-                    commands::plan::revise(&db, &id, &body, reason.as_deref())?;
-                    export_current_state(&db)
+                    commands::plan::revise(&state_dir, &db_path, &id, &body, reason.as_deref())
                 }
                 PlanCommands::Link {
                     id,
@@ -1199,15 +1315,28 @@ fn run() -> Result<()> {
                     target_id,
                     relation_type,
                 } => {
+                    let db = get_db()?;
                     let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
-                    commands::plan::link(&db, &id, &target_kind, &target_id, &relation_type)?;
-                    export_current_state(&db)
+                    drop(db);
+                    commands::plan::link(
+                        &state_dir,
+                        &db_path,
+                        &id,
+                        &target_kind,
+                        &target_id,
+                        &relation_type,
+                    )
                 }
             }
         }
 
         Commands::Evidence { action } => {
-            let db = get_db()?;
+            let atelier_dir = find_atelier_dir()?;
+            let db_path = atelier_dir.join("state.db");
+            let repo_root = atelier_dir
+                .parent()
+                .context("Atelier directory has no repository root")?;
+            let state_dir = repo_root.join(".atelier-state");
             match action {
                 EvidenceCommands::Add {
                     evidence_kind,
@@ -1216,30 +1345,40 @@ fn run() -> Result<()> {
                     path,
                     uri,
                     producer,
-                } => {
-                    commands::evidence::add(
-                        &db,
-                        &evidence_kind,
-                        &result,
-                        &summary,
-                        path.as_deref(),
-                        uri.as_deref(),
-                        producer.as_deref(),
-                    )?;
-                    export_current_state(&db)
+                } => commands::evidence::add(
+                    &state_dir,
+                    &db_path,
+                    &evidence_kind,
+                    &result,
+                    &summary,
+                    path.as_deref(),
+                    uri.as_deref(),
+                    producer.as_deref(),
+                ),
+                EvidenceCommands::Show { id } => {
+                    let db = get_db()?;
+                    commands::evidence::show(&db, &id)
                 }
-                EvidenceCommands::Show { id } => commands::evidence::show(&db, &id),
                 EvidenceCommands::Attach {
                     id,
                     target_kind,
                     target_id,
                     role,
                 } => {
+                    let db = get_db()?;
                     let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
-                    commands::evidence::attach(&db, &id, &target_kind, &target_id, &role)?;
-                    export_current_state(&db)
+                    drop(db);
+                    commands::evidence::attach(
+                        &state_dir,
+                        &db_path,
+                        &id,
+                        &target_kind,
+                        &target_id,
+                        &role,
+                    )
                 }
                 EvidenceCommands::List { result } => {
+                    let db = get_db()?;
                     commands::evidence::list(&db, result.as_deref())
                 }
             }

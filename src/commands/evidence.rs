@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::db::Database;
 use crate::models::DomainRecord;
@@ -9,7 +9,8 @@ use crate::record_store::RecordStore;
 const KIND: &str = "evidence";
 
 pub fn add(
-    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     evidence_kind: &str,
     result: &str,
     summary: &str,
@@ -25,8 +26,12 @@ pub fn add(
         "producer": producer,
         "captured_at": chrono::Utc::now().to_rfc3339()
     });
-    let id = db.create_record(KIND, summary, result, Some(summary), &data.to_string())?;
-    let record = db.require_record(KIND, &id)?;
+    let store = RecordStore::new(state_dir);
+    let created =
+        store.create_domain_record(KIND, summary, result, Some(summary), &data.to_string())?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let record = db.require_record(KIND, &created.record.id)?;
     print_record(&record)
 }
 
@@ -36,15 +41,22 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 }
 
 pub fn attach(
-    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     id: &str,
     target_kind: &str,
     target_id: &str,
     role: &str,
 ) -> Result<()> {
+    let db = Database::open(db_path)?;
     db.require_record(KIND, id)?;
-    let inserted = db.add_record_link(KIND, id, target_kind, target_id, role)?;
+    validate_record_ref(&db, target_kind, target_id)?;
+    drop(db);
+    let store = RecordStore::new(state_dir);
+    let inserted = store.add_attachment_relationship(KIND, id, target_kind, target_id, role)?;
+    refresh_projection(state_dir, db_path)?;
     if inserted && target_kind == "issue" {
+        let db = Database::open(db_path)?;
         let evidence = db.require_record(KIND, id)?;
         super::activity_log::record_evidence_attached(target_id, id, Some(&evidence.status))?;
     }
@@ -54,6 +66,20 @@ pub fn attach(
         println!("Evidence {id} is already attached to {target_kind} {target_id} ({role})");
     }
     Ok(())
+}
+
+fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
+    crate::db::validate_record_kind(kind)?;
+    if kind == "issue" {
+        db.require_issue(id)?;
+    } else {
+        db.require_record(kind, id)?;
+    }
+    Ok(())
+}
+
+fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
+    super::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 pub fn list(db: &Database, result: Option<&str>) -> Result<()> {

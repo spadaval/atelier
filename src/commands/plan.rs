@@ -6,12 +6,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
-use crate::models::DomainRecord;
-use crate::record_store::RecordStore;
+use crate::models::{DomainRecord, Issue};
+use crate::record_store::{
+    AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, RecordStore,
+    RelatesRelationship, RelationshipTarget, Relationships,
+};
 
 const KIND: &str = "plan";
 
-pub fn create(db: &Database, title: &str, body: Option<&str>, reason: Option<&str>) -> Result<()> {
+pub fn create(
+    state_dir: &Path,
+    db_path: &Path,
+    title: &str,
+    body: Option<&str>,
+    reason: Option<&str>,
+) -> Result<()> {
     let data = json!({
         "revision": 1,
         "revisions": [{
@@ -20,14 +29,17 @@ pub fn create(db: &Database, title: &str, body: Option<&str>, reason: Option<&st
             "body": body.unwrap_or("")
         }]
     });
-    let id = db.create_record(KIND, title, "open", body, &data.to_string())?;
-    let record = db.require_record(KIND, &id)?;
-    print_record(db, &record)
+    let store = RecordStore::new(state_dir);
+    let created = store.create_domain_record(KIND, title, "open", body, &data.to_string())?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let record = db.require_record(KIND, &created.record.id)?;
+    print_record(&db, &record)
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
     let record = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
-    print_record(db, &record)
+    print_record(&db, &record)
 }
 
 pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
@@ -45,9 +57,16 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-pub fn revise(db: &Database, id: &str, body: &str, reason: Option<&str>) -> Result<()> {
-    let current = db.require_record(KIND, id)?;
-    let mut data: Value = serde_json::from_str(&current.data_json)?;
+pub fn revise(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    body: &str,
+    reason: Option<&str>,
+) -> Result<()> {
+    let store = RecordStore::new(state_dir);
+    let mut current = store.load_domain_record_by_id(KIND, id)?;
+    let mut data: Value = serde_json::from_str(&current.record.data_json)?;
     let next_revision = data["revision"].as_i64().unwrap_or(1) + 1;
     data["revision"] = json!(next_revision);
     let revision = json!({
@@ -59,32 +78,64 @@ pub fn revise(db: &Database, id: &str, body: &str, reason: Option<&str>) -> Resu
         .as_array_mut()
         .expect("plan revisions must be an array")
         .push(revision);
-    db.update_record(
-        KIND,
-        id,
-        None,
-        None,
-        Some(body),
-        Some(&serde_json::to_string(&data)?),
-    )?;
+    current.record.body = Some(body.to_string());
+    current.record.data_json = serde_json::to_string(&data)?;
+    current.record.updated_at = chrono::Utc::now();
+    store.write_domain_record_atomic(&current)?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
     let record = db.require_record(KIND, id)?;
-    print_record(db, &record)
+    print_record(&db, &record)
 }
 
 pub fn link(
-    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     id: &str,
     target_kind: &str,
     target_id: &str,
     relation_type: &str,
 ) -> Result<()> {
-    db.add_record_link(KIND, id, target_kind, target_id, relation_type)?;
+    let db = Database::open(db_path)?;
+    db.require_record(KIND, id)?;
+    validate_record_ref(&db, target_kind, target_id)?;
+    drop(db);
+    let store = RecordStore::new(state_dir);
+    if is_attachment_role(relation_type) {
+        store.add_attachment_relationship(KIND, id, target_kind, target_id, relation_type)?;
+    } else {
+        store.add_relates_relationship(KIND, id, target_kind, target_id, relation_type)?;
+    }
+    refresh_projection(state_dir, db_path)?;
     println!("Linked plan {id} {relation_type} {target_kind} {target_id}");
     Ok(())
 }
 
+fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
+    crate::db::validate_record_kind(kind)?;
+    if kind == "issue" {
+        db.require_issue(id)?;
+    } else {
+        db.require_record(kind, id)?;
+    }
+    Ok(())
+}
+
+fn is_attachment_role(relation_type: &str) -> bool {
+    matches!(
+        relation_type,
+        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
+    )
+}
+
+fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
+    super::projection::refresh_after_canonical_write(state_dir, db_path)
+}
+
 pub fn apply(
     db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     input: &str,
     dry_run_override: bool,
     validate_only_override: bool,
@@ -113,11 +164,14 @@ pub fn apply(
         return Ok(());
     }
 
-    let summary = db.transaction(|| apply_bulk_plan(db, &plan))?;
+    let summary = apply_bulk_plan(db, state_dir, &plan)?;
     match options.export.as_str() {
-        "auto" => crate::commands::export::run_canonical(db, &find_state_dir()?, false)?,
-        "check_only" => crate::commands::export::run_canonical(db, &find_state_dir()?, true)?,
-        "skip" => {}
+        "auto" => refresh_projection(state_dir, db_path)?,
+        "check_only" => {
+            super::rebuild::validate_canonical_state(state_dir)?;
+            refresh_projection(state_dir, db_path)?;
+        }
+        "skip" => refresh_projection(state_dir, db_path)?,
         other => bail!("Invalid export option '{other}'"),
     }
 
@@ -453,34 +507,42 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
     Ok(())
 }
 
-fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
+fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
+    let store = RecordStore::new(state_dir);
 
     for issue in &plan.records.issues {
         let description = issue_description(issue);
-        let id = db.create_issue_with_type(
-            &issue.title,
-            description.as_deref(),
-            &issue.priority,
-            &issue.issue_type,
-        )?;
-        for label in sorted(issue.labels.clone()) {
-            db.add_label(&id, &label)?;
-        }
+        let now = chrono::Utc::now();
+        let id = store.allocate_issue_id()?;
+        let status = issue.status.as_deref().unwrap_or("open").to_string();
+        let record = CanonicalIssueRecord {
+            issue: Issue {
+                id: id.clone(),
+                title: issue.title.clone(),
+                description,
+                status: status.clone(),
+                issue_type: issue.issue_type.clone(),
+                priority: issue.priority.clone(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: (status == "closed").then_some(now),
+            },
+            labels: sorted(issue.labels.clone()),
+            acceptance: issue.acceptance.clone(),
+            evidence_required: issue.evidence_required.clone(),
+            relationships: Relationships::default(),
+        };
+        store.write_issue_atomic(&record)?;
         for note in &issue.notes {
             let body = match &note.author {
                 Some(author) if !author.trim().is_empty() => format!("[{author}] {}", note.body),
                 _ => note.body.clone(),
             };
-            if let Some(created_at) = &note.created_at {
-                db.add_comment_at(&id, &body, "note", created_at)?;
-            } else {
-                db.add_comment(&id, &body, "note")?;
-            }
-        }
-        if issue.status.as_deref() == Some("closed") {
-            db.close_issue(&id)?;
+            let _ = &note.created_at;
+            super::activity_log::record_note(&id, &body)?;
         }
         resolved.insert(
             issue.client_ref.clone(),
@@ -510,7 +572,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
             "labels": sorted(mission.labels.clone()),
         });
         create_bulk_record(
-            db,
+            &store,
             &mut resolved,
             &mut created,
             &mission.client_ref,
@@ -527,7 +589,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
             "validation_criteria": milestone.validation_criteria,
         });
         create_bulk_record(
-            db,
+            &store,
             &mut resolved,
             &mut created,
             &milestone.client_ref,
@@ -548,7 +610,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
             }]
         });
         create_bulk_record(
-            db,
+            &store,
             &mut resolved,
             &mut created,
             &record.client_ref,
@@ -565,7 +627,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
             "artifact": evidence.artifact,
         });
         create_bulk_record(
-            db,
+            &store,
             &mut resolved,
             &mut created,
             &evidence.client_ref,
@@ -586,7 +648,7 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
                     issue.client_ref
                 );
             }
-            db.update_parent(&source.id, Some(&parent.id))?;
+            add_issue_child(&store, &parent.id, &source.id)?;
         }
         for blocker in &issue.depends_on {
             let blocker = resolved_ref(db, plan, &resolved, blocker)?;
@@ -596,14 +658,14 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
                     issue.client_ref
                 );
             }
-            db.add_dependency(&source.id, &blocker.id)?;
+            add_issue_block(&store, &blocker.id, &source.id)?;
         }
         for blocked in &issue.blocks {
             let blocked = resolved_ref(db, plan, &resolved, blocked)?;
             if blocked.kind != "issue" {
                 bail!("blocks for {} must resolve to an issue", issue.client_ref);
             }
-            db.add_dependency(&blocked.id, &source.id)?;
+            add_issue_block(&store, &source.id, &blocked.id)?;
         }
     }
 
@@ -611,51 +673,53 @@ fn apply_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<Value> {
     for mission in &plan.records.missions {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&mission.client_ref))?;
         for target in &mission.work {
-            add_resolved_link(db, plan, &resolved, &source, target, "advances")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "advances")?;
             relationship_count += 1;
         }
         for target in &mission.plans {
-            add_resolved_link(db, plan, &resolved, &source, target, "planned_by")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "planned_by")?;
             relationship_count += 1;
         }
         for target in &mission.milestones {
-            add_resolved_link(db, plan, &resolved, &source, target, "has_checkpoint")?;
+            add_resolved_link(
+                db,
+                &store,
+                plan,
+                &resolved,
+                &source,
+                target,
+                "has_checkpoint",
+            )?;
             relationship_count += 1;
         }
     }
     for milestone in &plan.records.milestones {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&milestone.client_ref))?;
         for target in &milestone.missions {
-            add_resolved_link(db, plan, &resolved, &source, target, "advances")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "advances")?;
             relationship_count += 1;
         }
         for target in &milestone.contributing_work {
             let contributor = resolved_ref(db, plan, &resolved, target)?;
-            db.add_record_link(
-                &contributor.kind,
-                &contributor.id,
-                &source.kind,
-                &source.id,
-                "contributes_to",
-            )?;
+            add_relationship(&store, &contributor, &source, "contributes_to")?;
             relationship_count += 1;
         }
     }
     for record in &plan.records.plans {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&record.client_ref))?;
         for target in &record.applies_to {
-            add_resolved_link(db, plan, &resolved, &source, target, "planned_by")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "planned_by")?;
             relationship_count += 1;
         }
         for target in &record.supersedes {
-            add_resolved_link(db, plan, &resolved, &source, target, "supersedes")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "supersedes")?;
             relationship_count += 1;
         }
     }
     for evidence in &plan.records.evidence {
         let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&evidence.client_ref))?;
         for target in &evidence.validates {
-            add_resolved_link(db, plan, &resolved, &source, target, "validates")?;
+            add_resolved_link(db, &store, plan, &resolved, &source, target, "validates")?;
             relationship_count += 1;
         }
     }
@@ -833,7 +897,7 @@ fn resolved_ref(
 }
 
 fn create_bulk_record(
-    db: &Database,
+    store: &RecordStore,
     resolved: &mut BTreeMap<String, ResolvedRef>,
     created: &mut BTreeMap<String, Vec<Value>>,
     client_ref: &str,
@@ -842,7 +906,9 @@ fn create_bulk_record(
     body: Option<&str>,
     data: Value,
 ) -> Result<()> {
-    let id = db.create_record(kind, title, "open", body, &serde_json::to_string(&data)?)?;
+    let record =
+        store.create_domain_record(kind, title, "open", body, &serde_json::to_string(&data)?)?;
+    let id = record.record.id;
     resolved.insert(
         client_ref.to_string(),
         ResolvedRef {
@@ -859,6 +925,7 @@ fn create_bulk_record(
 
 fn add_resolved_link(
     db: &Database,
+    store: &RecordStore,
     plan: &BulkPlan,
     resolved: &BTreeMap<String, ResolvedRef>,
     source: &ResolvedRef,
@@ -866,14 +933,107 @@ fn add_resolved_link(
     relation_type: &str,
 ) -> Result<()> {
     let target = resolved_ref(db, plan, resolved, target)?;
-    db.add_record_link(
-        &source.kind,
-        &source.id,
-        &target.kind,
-        &target.id,
-        relation_type,
-    )?;
+    add_relationship(store, source, &target, relation_type)?;
     Ok(())
+}
+
+fn add_relationship(
+    store: &RecordStore,
+    source: &ResolvedRef,
+    target: &ResolvedRef,
+    relation_type: &str,
+) -> Result<()> {
+    if source.kind == "issue" {
+        let mut record = store.load_issue_by_id(&source.id)?;
+        add_relationship_to_issue(&mut record, target, relation_type);
+        record.issue.updated_at = chrono::Utc::now();
+        store.write_issue_atomic(&record)
+    } else {
+        let mut record = store.load_domain_record_by_id(&source.kind, &source.id)?;
+        add_relationship_to_domain(&mut record, target, relation_type);
+        record.record.updated_at = chrono::Utc::now();
+        store.write_domain_record_atomic(&record)
+    }
+}
+
+fn add_issue_child(store: &RecordStore, parent_id: &str, child_id: &str) -> Result<()> {
+    let mut parent = store.load_issue_by_id(parent_id)?;
+    let child = RelationshipTarget {
+        kind: "issue".to_string(),
+        id: child_id.to_string(),
+    };
+    if !parent.relationships.children.contains(&child) {
+        parent.relationships.children.push(child);
+        parent.issue.updated_at = chrono::Utc::now();
+        store.write_issue_atomic(&parent)?;
+    }
+    Ok(())
+}
+
+fn add_issue_block(store: &RecordStore, blocker_id: &str, blocked_id: &str) -> Result<()> {
+    let mut blocker = store.load_issue_by_id(blocker_id)?;
+    let blocked = RelationshipTarget {
+        kind: "issue".to_string(),
+        id: blocked_id.to_string(),
+    };
+    if !blocker.relationships.blocks.contains(&blocked) {
+        blocker.relationships.blocks.push(blocked);
+        blocker.issue.updated_at = chrono::Utc::now();
+        store.write_issue_atomic(&blocker)?;
+    }
+    Ok(())
+}
+
+fn add_relationship_to_issue(
+    record: &mut CanonicalIssueRecord,
+    target: &ResolvedRef,
+    relation_type: &str,
+) {
+    if is_attachment_role(relation_type) {
+        let attachment = AttachmentRelationship {
+            kind: target.kind.clone(),
+            id: target.id.clone(),
+            role: relation_type.to_string(),
+        };
+        if !record.relationships.attachments.contains(&attachment) {
+            record.relationships.attachments.push(attachment);
+        }
+    } else {
+        let relation = RelatesRelationship {
+            kind: target.kind.clone(),
+            id: target.id.clone(),
+            relation_type: relation_type.to_string(),
+        };
+        if !record.relationships.relates.contains(&relation) {
+            record.relationships.relates.push(relation);
+        }
+    }
+}
+
+fn add_relationship_to_domain(
+    record: &mut CanonicalDomainRecord,
+    target: &ResolvedRef,
+    relation_type: &str,
+) {
+    if is_attachment_role(relation_type) {
+        let attachment = AttachmentRelationship {
+            kind: target.kind.clone(),
+            id: target.id.clone(),
+            role: relation_type.to_string(),
+        };
+        if !record.relationships.attachments.contains(&attachment) {
+            record.relationships.attachments.push(attachment);
+        }
+    } else {
+        let relation = RelatesRelationship {
+            kind: target.kind.clone(),
+            id: target.id.clone(),
+            relation_type: relation_type.to_string(),
+        };
+        if !record.relationships.relates.contains(&relation) {
+            record.relationships.relates.push(relation);
+        }
+    }
 }
 
 fn issue_description(issue: &BulkIssue) -> Option<String> {
@@ -1004,11 +1164,6 @@ fn created_key(kind: &str) -> &str {
     }
 }
 
-fn find_state_dir() -> Result<PathBuf> {
-    let root = find_repo_root(&std::env::current_dir()?)?;
-    Ok(root.join(".atelier-state"))
-}
-
 fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
         return Ok(None);
@@ -1029,18 +1184,6 @@ fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
         }
         if !current.pop() {
             return Ok(None);
-        }
-    }
-}
-
-fn find_repo_root(start: &Path) -> Result<PathBuf> {
-    let mut current = start.to_path_buf();
-    loop {
-        if current.join(".atelier-state").is_dir() || current.join(".atelier").is_dir() {
-            return Ok(current);
-        }
-        if !current.pop() {
-            bail!("Not an Atelier repository (or any parent). Run from a checkout with .atelier-state/.");
         }
     }
 }

@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
@@ -11,7 +11,8 @@ use crate::record_store::RecordStore;
 const KIND: &str = "mission";
 
 pub fn create(
-    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     title: &str,
     body: Option<&str>,
     constraints: Vec<String>,
@@ -27,8 +28,11 @@ pub fn create(
         "evidence": [],
         "work": []
     });
-    let id = db.create_record(KIND, title, "open", body, &data.to_string())?;
-    let record = db.require_record(KIND, &id)?;
+    let store = RecordStore::new(state_dir);
+    let created = store.create_domain_record(KIND, title, "open", body, &data.to_string())?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let record = db.require_record(KIND, &created.record.id)?;
     print_record(&record)
 }
 
@@ -148,7 +152,8 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
 }
 
 pub fn update(
-    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
     id: &str,
     title: Option<&str>,
     status: Option<&str>,
@@ -166,27 +171,38 @@ pub fn update(
     {
         bail!("Nothing to update");
     }
-    let current = db.require_record(KIND, id)?;
-    let mut data: Value = serde_json::from_str(&current.data_json)?;
+    let store = RecordStore::new(state_dir);
+    let mut current = store.load_domain_record_by_id(KIND, id)?;
+    let mut data: Value = serde_json::from_str(&current.record.data_json)?;
     replace_array(&mut data, "constraints", constraints);
     replace_array(&mut data, "risks", risks);
     replace_array(&mut data, "validation", validation);
-    db.update_record(
-        KIND,
-        id,
-        title,
-        status,
-        body,
-        Some(&serde_json::to_string(&data)?),
-    )?;
+    if let Some(title) = title {
+        current.record.title = title.to_string();
+    }
+    if let Some(status) = status {
+        current.record.status = status.to_string();
+    }
+    if let Some(body) = body {
+        current.record.body = Some(body.to_string());
+    }
+    current.record.data_json = serde_json::to_string(&data)?;
+    current.record.updated_at = Utc::now();
+    store.write_domain_record_atomic(&current)?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
     let record = db.require_record(KIND, id)?;
     print_record(&record)
 }
 
-pub fn add_work(db: &Database, id: &str, issue_id: &str) -> Result<()> {
+pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
+    let db = Database::open(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
-    let inserted = db.add_record_link(KIND, id, "issue", &issue.id, "advances")?;
+    drop(db);
+    let store = RecordStore::new(state_dir);
+    let inserted = store.add_attachment_relationship(KIND, id, "issue", &issue.id, "advances")?;
+    refresh_projection(state_dir, db_path)?;
     if inserted {
         println!("Added work {} to mission {}", issue.id, id);
     } else {
@@ -195,16 +211,24 @@ pub fn add_work(db: &Database, id: &str, issue_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn add_blocker(db: &Database, id: &str, issue_id: &str) -> Result<()> {
+pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
+    let db = Database::open(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
-    let inserted = db.add_record_link(KIND, id, "issue", &issue.id, "blocked_by")?;
+    drop(db);
+    let store = RecordStore::new(state_dir);
+    let inserted = store.add_attachment_relationship(KIND, id, "issue", &issue.id, "blocked_by")?;
+    refresh_projection(state_dir, db_path)?;
     if inserted {
         println!("Added blocker {} to mission {}", issue.id, id);
     } else {
         println!("Blocker {} is already on mission {}", issue.id, id);
     }
     Ok(())
+}
+
+fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
+    super::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 fn print_record(record: &DomainRecord) -> Result<()> {

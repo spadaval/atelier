@@ -33,13 +33,13 @@ SQLite after freshness checks.
 
 First-class mission, milestone, plan, evidence, relationship, workflow validation,
 and work lifecycle commands are now core as a staged implementation. Mission,
-milestone, plan, and evidence mutations persist through SQLite and immediately
-refresh deterministic Markdown projection under `.atelier-state/`; rebuild
+milestone, plan, evidence, and issue lifecycle mutations write canonical
+Markdown through RecordStore before refreshing the SQLite projection; rebuild
 restores those records from Markdown. `atelier plan apply` validates authored
 bulk-plan JSON, supports dry-run and validate-only previews, creates issue and
-record graphs atomically, normalizes issue dependency fields, writes canonical
-relationship buckets, and refreshes or checks canonical export according to the input's
-`apply.export` option. `atelier mission show` is the single rich mission read:
+record graphs in canonical Markdown, normalizes issue dependency fields, writes
+canonical relationship buckets, and refreshes the projection after successful
+canonical writes. `atelier mission show` is the single rich mission read:
 it summarizes linked plans, milestones, evidence, and work grouped by ready,
 blocked, done, and backlog state.
 Work lifecycle commands store local work association in runtime state and

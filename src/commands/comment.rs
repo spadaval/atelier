@@ -34,6 +34,20 @@ pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<(
     Ok(())
 }
 
+pub fn run_canonical(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
+    db.require_issue(issue_id)?;
+    if !validate_comment_kind(kind) {
+        tracing::warn!(
+            "unknown comment kind '{}'. Known kinds: {}",
+            kind,
+            KNOWN_COMMENT_KINDS.join(", ")
+        );
+    }
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
+    println!("Added comment to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

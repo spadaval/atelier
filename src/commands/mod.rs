@@ -12,6 +12,7 @@ pub mod label;
 pub mod mission;
 pub mod next;
 pub mod plan;
+pub mod projection;
 pub mod rebuild;
 pub mod relate;
 pub mod status;

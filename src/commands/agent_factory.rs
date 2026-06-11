@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
-use crate::record_store::{CanonicalIssueRecord, RecordStore};
+use crate::record_store::{CanonicalIssueRecord, RecordStore, RelationshipTarget, Relationships};
 use crate::utils::format_issue_id;
 
 #[derive(Debug, Clone)]
@@ -559,7 +559,7 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
             return Ok(activities
                 .iter()
                 .rev()
-                .take(5)
+                .take(8)
                 .map(|activity| {
                     let body = human_activity_body(&activity.body).replace('\n', "\n  ");
                     let timestamp = format_human_datetime(activity.created_at);
@@ -583,7 +583,7 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
         .notes
         .iter()
         .rev()
-        .take(5)
+        .take(8)
         .map(|note| {
             format!(
                 "[{}] {}: {}",
@@ -1076,6 +1076,114 @@ pub struct CreateInput<'a> {
     pub parent: Option<&'a str>,
 }
 
+pub struct LifecycleCreateInput<'a> {
+    pub title: &'a str,
+    pub description: Option<&'a str>,
+    pub priority: &'a str,
+    pub issue_type: &'a str,
+    pub labels: &'a [String],
+    pub parent: Option<&'a str>,
+    pub work: bool,
+    pub quiet: bool,
+    pub atelier_dir: Option<&'a Path>,
+}
+
+pub fn create_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    input: LifecycleCreateInput<'_>,
+) -> Result<()> {
+    validate_priority(input.priority)?;
+    crate::db::validate_issue_type(input.issue_type)?;
+    let db = Database::open(db_path)?;
+    let parent_id = input
+        .parent
+        .map(|parent| resolve_id(&db, parent))
+        .transpose()?;
+    let session = if input.work {
+        db.get_current_session().ok().flatten()
+    } else {
+        None
+    };
+    if input.work {
+        if let (Some(dir), Some(_)) = (input.atelier_dir, session.as_ref()) {
+            // The issue does not exist yet, so the lock can only be enforced after
+            // projection refresh. Keep the existing warning behavior otherwise.
+            let _ = dir;
+        }
+    }
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    let now = Utc::now();
+    let id = store.allocate_issue_id()?;
+    let record = CanonicalIssueRecord {
+        issue: Issue {
+            id: id.clone(),
+            title: input.title.to_string(),
+            description: input.description.map(str::to_string),
+            status: "open".to_string(),
+            issue_type: input.issue_type.to_string(),
+            priority: input.priority.to_string(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        },
+        labels: input.labels.to_vec(),
+        acceptance: Vec::new(),
+        evidence_required: Vec::new(),
+        relationships: Relationships::default(),
+    };
+    store.write_issue_atomic(&record)?;
+    if let Some(parent_id) = &parent_id {
+        let mut parent = store.load_issue_by_id(parent_id)?;
+        add_child_relationship(&mut parent, &id);
+        parent.issue.updated_at = now;
+        store.write_issue_atomic(&parent)?;
+    }
+
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    let refreshed = Database::open(db_path)?;
+    if input.work {
+        if let Some(session) = &session {
+            if let Some(dir) = input.atelier_dir {
+                crate::lock_check::enforce_lock(dir, &id, &refreshed)?;
+            }
+            refreshed.set_session_issue(session.id, &id)?;
+        } else if !input.quiet {
+            tracing::warn!("--work specified but no active session");
+        }
+    }
+    let issue = refreshed.require_issue(&id)?;
+    let object = issue_object(&refreshed, issue)?;
+    if input.quiet {
+        println!("{}", object.id);
+    } else if parent_id.is_some() {
+        println!(
+            "Created subissue {} under {}",
+            object.id,
+            format_issue_id(parent_id.as_deref().unwrap_or_default())
+        );
+        if input.work && session.is_some() {
+            println!("Now working on: {} {}", object.id, object.title);
+        }
+    } else {
+        println!("Created issue {} - {}", object.id, object.title);
+        println!("Type:     {}", object.issue_type);
+        println!("Priority: {}", object.priority);
+        if input.work && session.is_some() {
+            println!("Now working on: {} {}", object.id, object.title);
+        }
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  atelier issue show {}", object.id);
+        println!("  atelier work start {}", object.id);
+    }
+    Ok(())
+}
+
 pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
     validate_priority(input.priority)?;
     let issue_type = input.issue_type.unwrap_or("task");
@@ -1281,6 +1389,166 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     Ok(())
 }
 
+pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>) -> Result<()> {
+    let db = Database::open(db_path)?;
+    let id = resolve_id(&db, input.issue_ref)?;
+    let previous = db.require_issue(&id)?;
+    let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
+    let parent_id = input
+        .parent
+        .map(|parent| parent.map(|parent| resolve_id(&db, parent)).transpose())
+        .transpose()?
+        .flatten();
+    drop(db);
+
+    let mut changed_fields = Vec::new();
+    let store = RecordStore::new(state_dir);
+    let mut record = store.load_issue_by_id(&id)?;
+    let now = Utc::now();
+
+    if let Some(title) = input.title {
+        record.issue.title = title.to_string();
+        changed_fields.push("title");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "title",
+            Some(&previous.title),
+            Some(title),
+        )?;
+    }
+    if let Some(description) = input.description {
+        record.issue.description = Some(description.to_string());
+        changed_fields.push("description");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "description",
+            previous.description.as_deref(),
+            Some(description),
+        )?;
+    }
+    if let Some(priority) = input.priority {
+        validate_priority(priority)?;
+        record.issue.priority = priority.to_string();
+        changed_fields.push("priority");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "priority",
+            Some(&previous.priority),
+            Some(priority),
+        )?;
+    }
+    if let Some(status) = input.status {
+        match status {
+            "open" => {
+                record.issue.status = "open".to_string();
+                record.issue.closed_at = None;
+            }
+            "closed" => {
+                record.issue.status = "closed".to_string();
+                record.issue.closed_at = Some(now);
+            }
+            "in_progress" => {
+                push_unique(&mut record.labels, "status:in_progress".to_string());
+            }
+            other => bail!("Invalid status '{other}'. Valid values: open, in_progress, closed"),
+        }
+        changed_fields.push("status");
+        crate::commands::activity_log::record_status_changed(&id, &previous.status, status)?;
+    }
+    if let Some(issue_type) = input.issue_type {
+        crate::db::validate_issue_type(issue_type)?;
+        record.issue.issue_type = issue_type.to_string();
+        changed_fields.push("issue_type");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "issue_type",
+            Some(&previous.issue_type),
+            Some(issue_type),
+        )?;
+    }
+    for label in input.labels {
+        push_unique(&mut record.labels, label.to_string());
+        changed_fields.push("labels");
+        crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
+    }
+    if input.parent.is_some() {
+        let old_parent = parent_record_containing_child(&store, &id)?;
+        if old_parent.as_deref() != parent_id.as_deref() {
+            if let Some(old_parent) = old_parent {
+                let mut parent = store.load_issue_by_id(&old_parent)?;
+                remove_child_relationship(&mut parent, &id);
+                parent.issue.updated_at = now;
+                store.write_issue_atomic(&parent)?;
+            }
+            if let Some(parent_id) = &parent_id {
+                let mut parent = store.load_issue_by_id(parent_id)?;
+                add_child_relationship(&mut parent, &id);
+                parent.issue.updated_at = now;
+                store.write_issue_atomic(&parent)?;
+            }
+        }
+        changed_fields.push("parent");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "parent",
+            previous.parent_id.as_deref(),
+            parent_id.as_deref(),
+        )?;
+    }
+    if input.claim {
+        let assignee = current_actor();
+        if let Some(previous_assignee) = &previous_assignee {
+            record
+                .labels
+                .retain(|label| label != &format!("assignee:{previous_assignee}"));
+        }
+        push_unique(&mut record.labels, format!("assignee:{assignee}"));
+        changed_fields.push("assignee");
+        crate::commands::activity_log::record_field_changed(
+            &id,
+            "assignee",
+            previous_assignee.as_deref(),
+            Some(&assignee),
+        )?;
+        crate::commands::activity_log::record_note(&id, &format!("Claimed by {assignee}"))?;
+    }
+    if let Some(note) = input.append_notes {
+        changed_fields.push("notes");
+        crate::commands::activity_log::record_note(&id, note)?;
+    }
+    if changed_fields.is_empty() {
+        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --parent, --claim, or --append-notes");
+    }
+    record.issue.updated_at = now;
+    store.write_issue_atomic(&record)?;
+
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    changed_fields.sort_unstable();
+    changed_fields.dedup();
+    let issue = db.require_issue(&id)?;
+    let object = issue_object(&db, issue)?;
+    println!(
+        "Updated issue {} ({})",
+        object.id,
+        changed_fields.join(", ")
+    );
+    println!("Status:   {}", object.status);
+    println!("Priority: {}", object.priority);
+    println!("Type:     {}", object.issue_type);
+    if let Some(assignee) = &object.assignee {
+        println!("Assignee: {assignee}");
+    }
+    if let Some(parent) = &object.parent {
+        println!("Parent:   {parent}");
+    }
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier issue show {}", object.id);
+    Ok(())
+}
+
 pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let open_blockers = db
@@ -1317,6 +1585,57 @@ pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()>
     Ok(())
 }
 
+pub fn close_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    reason: Option<&str>,
+) -> Result<()> {
+    let db = Database::open(db_path)?;
+    let id = resolve_id(&db, issue_ref)?;
+    let open_blockers = db
+        .get_blockers(&id)?
+        .into_iter()
+        .filter_map(|blocker_id| db.get_issue(&blocker_id).ok().flatten())
+        .filter(|issue| issue.status == "open")
+        .collect::<Vec<_>>();
+    if !open_blockers.is_empty() {
+        bail!(
+            "Issue {} cannot be closed because it has open blockers: {}",
+            issue_ref,
+            open_blockers
+                .iter()
+                .map(|issue| format_issue_id(&issue.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    let previous = db.require_issue(&id)?;
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    let mut record = store.load_issue_by_id(&id)?;
+    let now = Utc::now();
+    record.issue.status = "closed".to_string();
+    record.issue.closed_at = Some(now);
+    record.issue.updated_at = now;
+    store.write_issue_atomic(&record)?;
+    crate::commands::activity_log::record_status_changed(&id, &previous.status, "closed")?;
+    if let Some(reason) = reason {
+        crate::commands::activity_log::record_close_reason(&id, reason)?;
+    }
+
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let object = issue_object(&db, db.require_issue(&id)?)?;
+    println!(
+        "Closed issue {}{}",
+        object.id,
+        reason.map(|r| format!(": {r}")).unwrap_or_default()
+    );
+    Ok(())
+}
+
 pub fn reopen(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let previous = db.require_issue(&id)?;
@@ -1327,6 +1646,124 @@ pub fn reopen(db: &Database, issue_ref: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn reopen_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<()> {
+    let db = Database::open(db_path)?;
+    let id = resolve_id(&db, issue_ref)?;
+    let previous = db.require_issue(&id)?;
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    let mut record = store.load_issue_by_id(&id)?;
+    let now = Utc::now();
+    record.issue.status = "open".to_string();
+    record.issue.closed_at = None;
+    record.issue.updated_at = now;
+    store.write_issue_atomic(&record)?;
+    crate::commands::activity_log::record_status_changed(&id, &previous.status, "open")?;
+
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let object = issue_object(&db, db.require_issue(&id)?)?;
+    println!("Reopened issue {}", object.id);
+    Ok(())
+}
+
+pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<String> {
+    let db = Database::open(db_path)?;
+    let id = resolve_id(&db, issue_ref)?;
+    db.require_issue(&id)?;
+    let descendants = descendant_issue_ids(&db, &id)?;
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    for parent_id in parent_records_containing_any_child(&store, &descendants)? {
+        if descendants.contains(&parent_id) {
+            continue;
+        }
+        let mut parent = store.load_issue_by_id(&parent_id)?;
+        parent
+            .relationships
+            .children
+            .retain(|child| !descendants.contains(&child.id));
+        parent.issue.updated_at = Utc::now();
+        store.write_issue_atomic(&parent)?;
+    }
+    for issue_id in &descendants {
+        store.delete_issue_atomic(issue_id)?;
+    }
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    Ok(id)
+}
+
+fn descendant_issue_ids(db: &Database, root: &str) -> Result<Vec<String>> {
+    let mut ids = vec![root.to_string()];
+    let mut index = 0;
+    while index < ids.len() {
+        let current = ids[index].clone();
+        for child in db.get_subissues(&current)? {
+            ids.push(child.id);
+        }
+        index += 1;
+    }
+    Ok(ids)
+}
+
+fn parent_record_containing_child(store: &RecordStore, child_id: &str) -> Result<Option<String>> {
+    Ok(store
+        .load_issues()?
+        .into_iter()
+        .find(|record| {
+            record
+                .relationships
+                .children
+                .iter()
+                .any(|child| child.kind == "issue" && child.id == child_id)
+        })
+        .map(|record| record.issue.id))
+}
+
+fn parent_records_containing_any_child(
+    store: &RecordStore,
+    child_ids: &[String],
+) -> Result<Vec<String>> {
+    let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
+    Ok(store
+        .load_issues()?
+        .into_iter()
+        .filter(|record| {
+            record
+                .relationships
+                .children
+                .iter()
+                .any(|child| child.kind == "issue" && child_ids.contains(&child.id))
+        })
+        .map(|record| record.issue.id)
+        .collect())
+}
+
+fn add_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
+    let child = RelationshipTarget {
+        kind: "issue".to_string(),
+        id: child_id.to_string(),
+    };
+    if !record.relationships.children.contains(&child) {
+        record.relationships.children.push(child);
+    }
+}
+
+fn remove_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
+    record
+        .relationships
+        .children
+        .retain(|child| !(child.kind == "issue" && child.id == child_id));
+}
+
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
 pub fn dep_add(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
@@ -1334,10 +1771,41 @@ pub fn dep_add(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()
     dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
 }
 
+pub fn dep_add_canonical(
+    db: &Database,
+    store: &RecordStore,
+    blocked_ref: &str,
+    blocker_ref: &str,
+) -> Result<()> {
+    let blocked_id = resolve_id(db, blocked_ref)?;
+    let blocker_id = resolve_id(db, blocker_ref)?;
+    let changed = store.add_issue_block(&blocked_id, &blocker_id)?;
+    dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
+}
+
 pub fn dep_remove(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
     let blocked_id = resolve_id(db, blocked_ref)?;
     let blocker_id = resolve_id(db, blocker_ref)?;
     let changed = db.remove_dependency(&blocked_id, &blocker_id)?;
+    dep_result(
+        db,
+        "dep.remove",
+        "remove",
+        &blocked_id,
+        &blocker_id,
+        changed,
+    )
+}
+
+pub fn dep_remove_canonical(
+    db: &Database,
+    store: &RecordStore,
+    blocked_ref: &str,
+    blocker_ref: &str,
+) -> Result<()> {
+    let blocked_id = resolve_id(db, blocked_ref)?;
+    let blocker_id = resolve_id(db, blocker_ref)?;
+    let changed = store.remove_issue_block(&blocked_id, &blocker_id)?;
     dep_result(
         db,
         "dep.remove",

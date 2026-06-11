@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::db::Database;
+use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
 
 pub fn add(db: &Database, issue_id: &str, label: &str) -> Result<()> {
@@ -22,10 +23,58 @@ pub fn add(db: &Database, issue_id: &str, label: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn add_canonical(
+    db: &Database,
+    store: &RecordStore,
+    issue_id: &str,
+    label: &str,
+) -> Result<()> {
+    db.require_issue(issue_id)?;
+
+    if store.add_issue_label(issue_id, label)? {
+        println!(
+            "Added label '{}' to issue {}",
+            label,
+            format_issue_id(issue_id)
+        );
+    } else {
+        println!(
+            "Label '{}' already exists on issue {}",
+            label,
+            format_issue_id(issue_id)
+        );
+    }
+    Ok(())
+}
+
 pub fn remove(db: &Database, issue_id: &str, label: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
     if db.remove_label(issue_id, label)? {
+        println!(
+            "Removed label '{}' from issue {}",
+            label,
+            format_issue_id(issue_id)
+        );
+    } else {
+        println!(
+            "Label '{}' not found on issue {}",
+            label,
+            format_issue_id(issue_id)
+        );
+    }
+    Ok(())
+}
+
+pub fn remove_canonical(
+    db: &Database,
+    store: &RecordStore,
+    issue_id: &str,
+    label: &str,
+) -> Result<()> {
+    db.require_issue(issue_id)?;
+
+    if store.remove_issue_label(issue_id, label)? {
         println!(
             "Removed label '{}' from issue {}",
             label,

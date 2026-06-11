@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::db::{validate_relation_type, Database};
+use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
 
 pub fn add_typed(
@@ -32,6 +33,36 @@ pub fn add_typed(
     Ok(())
 }
 
+pub fn add_typed_canonical(
+    db: &Database,
+    store: &RecordStore,
+    issue_id: &str,
+    related_id: &str,
+    relation_type: &str,
+) -> Result<()> {
+    validate_relation_type(relation_type)?;
+    db.require_issue(issue_id)?;
+    db.require_issue(related_id)?;
+
+    if store.add_issue_relation(issue_id, related_id, relation_type)? {
+        println!(
+            "Linked {} ↔ {} ({})",
+            format_issue_id(issue_id),
+            format_issue_id(related_id),
+            relation_type
+        );
+    } else {
+        println!(
+            "Issues {} and {} already have a '{}' relation",
+            format_issue_id(issue_id),
+            format_issue_id(related_id),
+            relation_type
+        );
+    }
+
+    Ok(())
+}
+
 pub fn remove_typed(
     db: &Database,
     issue_id: &str,
@@ -41,6 +72,36 @@ pub fn remove_typed(
     validate_relation_type(relation_type)?;
 
     if db.remove_typed_relation(&issue_id, &related_id, relation_type)? {
+        println!(
+            "Unlinked {} ↔ {} ({})",
+            format_issue_id(issue_id),
+            format_issue_id(related_id),
+            relation_type
+        );
+    } else {
+        println!(
+            "No '{}' relation found between {} and {}",
+            relation_type,
+            format_issue_id(issue_id),
+            format_issue_id(related_id)
+        );
+    }
+
+    Ok(())
+}
+
+pub fn remove_typed_canonical(
+    db: &Database,
+    store: &RecordStore,
+    issue_id: &str,
+    related_id: &str,
+    relation_type: &str,
+) -> Result<()> {
+    validate_relation_type(relation_type)?;
+    db.require_issue(issue_id)?;
+    db.require_issue(related_id)?;
+
+    if store.remove_issue_relation(issue_id, related_id, relation_type)? {
         println!(
             "Unlinked {} ↔ {} ({})",
             format_issue_id(issue_id),

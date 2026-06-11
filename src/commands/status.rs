@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use std::path::Path;
+
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
 
@@ -18,6 +20,33 @@ pub fn close_all(
     let mut closed_count = 0;
     for issue in &issues {
         match commands::agent_factory::close(db, &issue.id.to_string(), None) {
+            Ok(()) => closed_count += 1,
+            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
+        }
+    }
+
+    println!("Closed {} issue(s).", closed_count);
+    Ok(())
+}
+
+pub fn close_all_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    label_filter: Option<&str>,
+    priority_filter: Option<&str>,
+) -> Result<()> {
+    let db = Database::open(db_path)?;
+    let issues = db.list_issues(Some("open"), label_filter, priority_filter)?;
+    drop(db);
+
+    if issues.is_empty() {
+        println!("No matching open issues found.");
+        return Ok(());
+    }
+
+    let mut closed_count = 0;
+    for issue in &issues {
+        match commands::agent_factory::close_lifecycle(state_dir, db_path, &issue.id, None) {
             Ok(()) => closed_count += 1,
             Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
         }

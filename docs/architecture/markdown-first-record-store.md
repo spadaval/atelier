@@ -186,25 +186,44 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 
 | Path | Classification | Notes |
 | --- | --- | --- |
-| `RecordStore::write_issue_atomic` | Markdown-first through `RecordStore` | Implemented file API for known issue records. It validates and atomically replaces canonical Markdown, but most public commands have not yet moved onto it. |
-| Issue create/update/close/reopen/comment/label/unlabel/block/unblock/relate/unrelate/subissue/quick | Compatibility SQLite-first | Public commands mutate SQLite, write issue activity sidecars where applicable, then call `export_current_state` so `.atelier-state/` is recoverable without a later manual export. |
-| Issue delete and close-all | Compatibility SQLite-first | These commands now call `export_current_state` after successful mutation so removed or closed records are reflected in `.atelier-state/` before the command exits. |
-| `dep add` and `dep remove` | Compatibility SQLite-first | The top-level Agent Factory dependency aliases now call `export_current_state`; `dep list` is query-only and checks projection freshness. |
-| Mission create/update/add-work/add-blocker | Compatibility SQLite-first | Mission records and cross-record links write SQLite first and export canonical mission Markdown plus relationships before returning. |
-| Plan create/revise/link | Compatibility SQLite-first | Plan records and typed links write SQLite first and export canonical plan Markdown plus relationships before returning. |
-| Plan apply | Compatibility SQLite-first by default | `apply.export = "auto"` writes `.atelier-state/` before returning. `check_only` validates freshness, and `skip` is an explicit compatibility escape hatch for callers that take responsibility for a later export. |
-| Evidence add/attach | Compatibility SQLite-first | Evidence records and attachment links write SQLite first and export canonical evidence Markdown plus relationships before returning. Issue evidence attachments also write issue activity sidecars. |
-| Typed record links | Compatibility SQLite-first | Mission, plan, evidence, milestone, and issue relationship commands currently use `record_links`, issue dependencies, parent edges, or issue relation tables, then export relationship front matter. |
-| Labels and dependencies | Compatibility SQLite-first | Issue labels and blocker edges remain SQLite mutations followed by canonical export. Rebuild derives labels and dependency edges from issue Markdown. |
+| `RecordStore` issue and domain APIs | Markdown-first through `RecordStore` | Issue and first-class record helpers allocate IDs, validate, render, atomically replace canonical Markdown, remove canonical files for deletes, and mutate canonical relationship front matter. |
+| Issue create/update/close/reopen/comment/label/unlabel/block/unblock/relate/unrelate/subissue/quick | RecordStore-owned Markdown-first | Public commands write canonical issue Markdown or activity sidecars first, then refresh the SQLite projection. Compatibility SQLite issue mutation helpers remain only for legacy tests/import internals. |
+| Issue delete and close-all | RecordStore-owned Markdown-first | Delete removes canonical issue Markdown before projection refresh. Close-all rewrites matching canonical issues through the lifecycle close path. |
+| `dep add` and `dep remove` | RecordStore-owned Markdown-first | Top-level Agent Factory dependency aliases mutate canonical issue relationship front matter before projection refresh. `dep list` is query-only and checks projection freshness. |
+| Mission create/update/add-work/add-blocker | RecordStore-owned Markdown-first | Mission records and cross-record links write canonical mission Markdown and relationships before projection refresh. |
+| Plan create/revise/link | RecordStore-owned Markdown-first | Plan records and typed links write canonical plan Markdown and relationships before projection refresh. |
+| Plan apply | RecordStore-owned Markdown-first | Bulk apply writes issue, mission, milestone, plan, evidence, and relationship records through `RecordStore`, then refreshes projection. `apply.export` no longer controls durability; `auto`, `check_only`, and `skip` all leave the projection refreshed after successful canonical writes. |
+| Evidence add/attach | RecordStore-owned Markdown-first | Evidence records and attachment links write canonical evidence Markdown and relationships before projection refresh. Issue evidence attachments also write issue activity sidecars. |
+| Typed record links, labels, and dependencies | RecordStore-owned Markdown-first | Rebuild derives labels, dependency edges, typed relations, hierarchy, and record links from canonical relationship front matter. |
 | Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |
 | Work start/finish and worktree helpers | Runtime plus activity sidecars | Work associations and sessions are local runtime state in `.atelier/`. The durable part is the issue activity sidecar, which is written directly under `.atelier-state/issues/<id>.activity/` when the issue Markdown file exists. |
-| Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, or compatibility repair | Telemetry and work markers are local/runtime. `import-beads` is an external import that writes SQLite and immediately exports canonical state. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
+| Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, import, or repair | Telemetry and work markers are local/runtime. `import-beads` is an external import bridge that still renders canonical state from imported SQLite rows. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
 
-The remaining architectural gap is ownership, not recoverability: public durable
-commands still depend on SQLite as the mutation engine and use export as the
-compatibility writer. A future slice must move issue lifecycle, first-class
-record, and cross-record relationship mutations onto `RecordStore` before
-projection refresh.
+The remaining compatibility residue is internal: several inherited SQLite
+mutation helpers are still compiled for unit tests, imports, and repair flows,
+but normal public durable commands no longer call export to become recoverable.
+
+## Projection Refresh After Canonical Writes
+
+For RecordStore-owned mutations, Atelier uses a runtime-preserving projection
+refresh after each successful canonical write. Mutation commands write
+`.atelier-state/` first through `RecordStore`, then call
+`refresh_projection_after_canonical_write` to validate canonical Markdown and
+replace projection rows from that source while copying valid local session and
+work-association rows forward. This preserves the clear ownership boundary:
+Markdown is the durable write target, while SQLite is the disposable projection
+used by subsequent query commands plus local RuntimeState.
+
+The refresh helper deliberately runs canonical validation before replacing the
+projection. If a command writes invalid Markdown, the command must fail before
+answering from stale SQLite. If projection replacement fails after a successful
+canonical write, the canonical files remain durable and ordinary query commands
+can recover through the existing stale-projection rebuild path once the operator
+fixes the reported problem.
+
+`atelier export` remains available as an explicit repair/sync command. New
+durable mutation paths must not use export as the normal step that makes command
+output recoverable.
 
 The explicit one-off migration path for old local SQLite comments is
 `scripts/migrate_sqlite_comments_to_activity.py`. Operators run it manually with
@@ -248,7 +267,7 @@ but their normal mutation path still uses SQLite followed by projection refresh.
 This is an accepted intermediate state until the `RecordStore` write path owns
 all record mutations directly.
 
-The migration should proceed in small slices:
+The migration proceeded in small slices:
 
 1. Introduce a `RecordStore` module that can load, validate, render, and write
    issue Markdown records using the existing canonical layout.
@@ -263,7 +282,9 @@ The migration should proceed in small slices:
    milestones, plans, evidence, and workflow validator records as those command
    surfaces land.
 7. Retire the compatibility requirement that normal mutations write SQLite first
-   and then call export to become durable.
+   and then call export to become durable. This is complete for normal public
+   durable commands; export remains an explicit repair/sync surface and imports
+   may still use export as an import bridge.
 
 Each slice must preserve `atelier rebuild`, `atelier export --check`,
 `atelier lint`, `atelier doctor`, and the agent-facing issue workflow, or state

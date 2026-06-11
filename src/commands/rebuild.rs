@@ -2,6 +2,8 @@ use anyhow::{anyhow, bail, Context, Result};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::activity::IssueActivity;
 use crate::db::Database;
@@ -28,8 +30,19 @@ struct RebuildProjection {
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(state_dir, db_path, &rebuild)?;
+    write_rebuilt_database(state_dir, db_path, &rebuild, None)?;
     eprintln!("Rebuilt {} from {}", db_path.display(), state_dir.display());
+    Ok(())
+}
+
+pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -> Result<()> {
+    let rebuild = load_projection(state_dir)?;
+    write_rebuilt_database(state_dir, db_path, &rebuild, Some(db_path))?;
+    eprintln!(
+        "Refreshed projection in {} from {}",
+        db_path.display(),
+        state_dir.display()
+    );
     Ok(())
 }
 
@@ -221,6 +234,9 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
                 .strip_prefix(root)
                 .context("Failed to relativize canonical issue path")?
                 .to_path_buf();
+            if is_transient_record_path(&relative) {
+                continue;
+            }
             if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
                 bail!(
                     "Unsupported canonical issue file {}; expected Markdown .md record",
@@ -298,7 +314,13 @@ fn ensure_no_unsupported_canonical_files(
         let in_canonical_dir = record_store::canonical_record_dirs()
             .iter()
             .any(|dir| relative.starts_with(dir));
+        if in_canonical_dir && is_transient_record_path(&relative) {
+            continue;
+        }
         if in_canonical_dir && expected.contains(&relative) {
+            continue;
+        }
+        if in_canonical_dir && relative.extension().and_then(|ext| ext.to_str()) == Some("md") {
             continue;
         }
         if relative == Path::new("mission-control.json") {
@@ -339,6 +361,7 @@ fn write_rebuilt_database(
     state_dir: &Path,
     db_path: &Path,
     rebuild: &RebuildProjection,
+    preserve_runtime_from: Option<&Path>,
 ) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
         anyhow!(
@@ -348,7 +371,7 @@ fn write_rebuilt_database(
     })?;
     fs::create_dir_all(parent).with_context(|| format!("Failed to create {}", parent.display()))?;
 
-    let tmp_path = db_path.with_extension("rebuild-tmp");
+    let tmp_path = unique_rebuild_path(db_path)?;
     if tmp_path.exists() {
         fs::remove_file(&tmp_path)
             .with_context(|| format!("Failed to remove stale {}", tmp_path.display()))?;
@@ -396,15 +419,14 @@ fn write_rebuilt_database(
                     relation_type,
                 )?;
             }
+            if let Some(source_db_path) = preserve_runtime_from.filter(|path| path.exists()) {
+                copy_runtime_state(&db, source_db_path)?;
+            }
             Ok(())
         })?;
         projection_index::refresh(&db, state_dir)?;
     }
 
-    if db_path.exists() {
-        fs::remove_file(db_path)
-            .with_context(|| format!("Failed to replace {}", db_path.display()))?;
-    }
     fs::rename(&tmp_path, db_path).with_context(|| {
         format!(
             "Failed to move rebuilt database from {} to {}",
@@ -412,6 +434,63 @@ fn write_rebuilt_database(
             db_path.display()
         )
     })?;
+    Ok(())
+}
+
+fn is_transient_record_path(relative: &Path) -> bool {
+    relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.') && name.ends_with(".tmp"))
+}
+
+fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
+    let file_name = db_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("Database path has no file name: {}", db_path.display()))?;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("System clock is before UNIX epoch")?
+        .as_nanos();
+    Ok(db_path.with_file_name(format!(
+        ".{file_name}.{}.{}.rebuild-tmp",
+        process::id(),
+        nanos
+    )))
+}
+
+fn copy_runtime_state(db: &Database, source_db_path: &Path) -> Result<()> {
+    let source = source_db_path.to_string_lossy();
+    db.conn
+        .execute("ATTACH DATABASE ?1 AS runtime_src", [&source.as_ref()])
+        .with_context(|| {
+            format!(
+                "Failed to attach runtime state {}",
+                source_db_path.display()
+            )
+        })?;
+    let copy_result = (|| -> Result<()> {
+        db.conn.execute(
+            "INSERT OR IGNORE INTO sessions
+             (id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id)
+             SELECT id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id
+             FROM runtime_src.sessions
+             WHERE active_issue_id IS NULL
+                OR EXISTS (SELECT 1 FROM issues WHERE issues.id = runtime_src.sessions.active_issue_id)",
+            [],
+        )?;
+        db.conn.execute(
+            "INSERT OR IGNORE INTO work_associations
+             (issue_id, status, branch, worktree_path, started_at, finished_at)
+             SELECT issue_id, status, branch, worktree_path, started_at, finished_at
+             FROM runtime_src.work_associations
+             WHERE EXISTS (SELECT 1 FROM issues WHERE issues.id = runtime_src.work_associations.issue_id)",
+            [],
+        )?;
+        Ok(())
+    })();
+    copy_result?;
     Ok(())
 }
 
@@ -862,6 +941,44 @@ mod tests {
         assert!(rebuilt.runtime_state_tables_available().unwrap());
         assert!(rebuilt.get_current_session().unwrap().is_none());
         assert!(rebuilt.get_active_work_association().unwrap().is_none());
+    }
+
+    #[test]
+    fn refresh_projection_preserves_valid_runtime_state() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join(".atelier/state.db");
+        fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        let db = Database::open(&db_path).unwrap();
+        let id = db
+            .create_issue("Runtime preserved", None, "medium")
+            .unwrap();
+        let state_dir = dir.path().join(".atelier-state");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let session_id = db.start_session().unwrap();
+        db.set_session_issue(session_id, &id).unwrap();
+        db.start_work_association(&id, Some("branch"), Some("/tmp/worktree"))
+            .unwrap();
+        drop(db);
+
+        refresh_projection_preserving_runtime(&state_dir, &db_path).unwrap();
+        let refreshed = Database::open(&db_path).unwrap();
+
+        assert!(refreshed.require_issue(&id).is_ok());
+        assert_eq!(
+            refreshed
+                .get_current_session()
+                .unwrap()
+                .and_then(|session| session.active_issue_id),
+            Some(id.clone())
+        );
+        assert_eq!(
+            refreshed
+                .get_active_work_association()
+                .unwrap()
+                .map(|work| work.issue_id),
+            Some(id)
+        );
     }
 
     #[test]

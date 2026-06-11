@@ -4,6 +4,8 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{DomainRecord, Issue};
 use crate::record_id;
@@ -248,6 +250,10 @@ impl RecordStore {
         record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
     }
 
+    pub fn allocate_domain_record_id(&self) -> Result<String> {
+        record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
+    }
+
     pub fn canonical_id_exists(&self, id: &str) -> Result<bool> {
         for relative in canonical_record_dirs()
             .into_iter()
@@ -264,14 +270,238 @@ impl RecordStore {
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
         validate_issue_record(record, Path::new("<record>"))?;
         let relative = issue_record_path(&record.issue.id);
-        let path = self.state_dir.join(&relative);
+        self.write_atomic(&relative, render_issue_record(record)?)
+    }
+
+    pub fn create_domain_record(
+        &self,
+        kind: &str,
+        title: &str,
+        status: &str,
+        body: Option<&str>,
+        data_json: &str,
+    ) -> Result<CanonicalDomainRecord> {
+        let _: Value = serde_json::from_str(data_json)?;
+        let now = Utc::now();
+        let record = CanonicalDomainRecord {
+            record: DomainRecord {
+                id: self.allocate_domain_record_id()?,
+                kind: kind.to_string(),
+                title: title.to_string(),
+                status: status.to_string(),
+                body: body.map(str::to_string),
+                data_json: data_json.to_string(),
+                created_at: now,
+                updated_at: now,
+            },
+            relationships: Relationships::default(),
+        };
+        self.write_domain_record_atomic(&record)?;
+        Ok(record)
+    }
+
+    pub fn write_domain_record_atomic(&self, record: &CanonicalDomainRecord) -> Result<()> {
+        let spec = canonical_record_kind(&record.record.kind)?;
+        validate_domain_record(record, Path::new("<record>"), spec)?;
+        let relative = canonical_record_path(spec, &record.record.id)?;
+        self.write_atomic(&relative, render_domain_record(record)?)
+    }
+
+    pub fn add_attachment_relationship(
+        &self,
+        source_kind: &str,
+        source_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        role: &str,
+    ) -> Result<bool> {
+        crate::db::validate_link_type(role)?;
+        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+        let attachment = AttachmentRelationship {
+            kind: target_kind.to_string(),
+            id: target_id.to_string(),
+            role: role.to_string(),
+        };
+        if record.relationships.attachments.contains(&attachment) {
+            return Ok(false);
+        }
+        record.relationships.attachments.push(attachment);
+        record.record.updated_at = Utc::now();
+        self.write_domain_record_atomic(&record)?;
+        Ok(true)
+    }
+
+    pub fn add_relates_relationship(
+        &self,
+        source_kind: &str,
+        source_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_type: &str,
+    ) -> Result<bool> {
+        crate::db::validate_relationship_type(relation_type)?;
+        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+        let relation = RelatesRelationship {
+            kind: target_kind.to_string(),
+            id: target_id.to_string(),
+            relation_type: relation_type.to_string(),
+        };
+        if record.relationships.relates.contains(&relation) {
+            return Ok(false);
+        }
+        record.relationships.relates.push(relation);
+        record.record.updated_at = Utc::now();
+        self.write_domain_record_atomic(&record)?;
+        Ok(true)
+    }
+
+    pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
+        if label.len() > crate::db::MAX_LABEL_LEN {
+            bail!(
+                "Label exceeds maximum length of {} characters",
+                crate::db::MAX_LABEL_LEN
+            );
+        }
+        let mut record = self.load_issue_by_id(issue_id)?;
+        if record.labels.iter().any(|existing| existing == label) {
+            return Ok(false);
+        }
+        record.labels.push(label.to_string());
+        self.write_issue_atomic(&record)?;
+        Ok(true)
+    }
+
+    pub fn remove_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
+        let mut record = self.load_issue_by_id(issue_id)?;
+        let original_len = record.labels.len();
+        record.labels.retain(|existing| existing != label);
+        if record.labels.len() == original_len {
+            return Ok(false);
+        }
+        self.write_issue_atomic(&record)?;
+        Ok(true)
+    }
+
+    pub fn add_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+        if blocked_id == blocker_id {
+            bail!("An issue cannot block itself");
+        }
+        self.load_issue_by_id(blocked_id)?;
+        if self.would_create_block_cycle(blocked_id, blocker_id)? {
+            bail!("Adding this dependency would create a circular dependency chain");
+        }
+
+        let target = issue_relationship_target(blocked_id);
+        let mut blocker = self.load_issue_by_id(blocker_id)?;
+        if blocker.relationships.blocks.contains(&target) {
+            return Ok(false);
+        }
+        blocker.relationships.blocks.push(target);
+        self.write_issue_atomic(&blocker)?;
+        Ok(true)
+    }
+
+    pub fn remove_issue_block(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+        self.load_issue_by_id(blocked_id)?;
+        let target = issue_relationship_target(blocked_id);
+        let mut blocker = self.load_issue_by_id(blocker_id)?;
+        let original_len = blocker.relationships.blocks.len();
+        blocker
+            .relationships
+            .blocks
+            .retain(|existing| existing != &target);
+        if blocker.relationships.blocks.len() == original_len {
+            return Ok(false);
+        }
+        self.write_issue_atomic(&blocker)?;
+        Ok(true)
+    }
+
+    pub fn add_issue_relation(
+        &self,
+        issue_id: &str,
+        related_id: &str,
+        relation_type: &str,
+    ) -> Result<bool> {
+        crate::db::validate_relation_type(relation_type)?;
+        if issue_id == related_id {
+            bail!("Cannot relate an issue to itself");
+        }
+        let mut issue = self.load_issue_by_id(issue_id)?;
+        let mut related = self.load_issue_by_id(related_id)?;
+        let issue_target = issue_relates_relationship(issue_id, relation_type);
+        let related_target = issue_relates_relationship(related_id, relation_type);
+        let issue_changed = !issue.relationships.relates.contains(&related_target);
+        let related_changed = !related.relationships.relates.contains(&issue_target);
+        if !issue_changed && !related_changed {
+            return Ok(false);
+        }
+        if issue_changed {
+            issue.relationships.relates.push(related_target);
+            self.write_issue_atomic(&issue)?;
+        }
+        if related_changed {
+            related.relationships.relates.push(issue_target);
+            self.write_issue_atomic(&related)?;
+        }
+        Ok(true)
+    }
+
+    pub fn remove_issue_relation(
+        &self,
+        issue_id: &str,
+        related_id: &str,
+        relation_type: &str,
+    ) -> Result<bool> {
+        crate::db::validate_relation_type(relation_type)?;
+        let mut issue = self.load_issue_by_id(issue_id)?;
+        let mut related = self.load_issue_by_id(related_id)?;
+        let issue_target = issue_relates_relationship(issue_id, relation_type);
+        let related_target = issue_relates_relationship(related_id, relation_type);
+        let issue_original_len = issue.relationships.relates.len();
+        let related_original_len = related.relationships.relates.len();
+        issue
+            .relationships
+            .relates
+            .retain(|existing| existing != &related_target);
+        related
+            .relationships
+            .relates
+            .retain(|existing| existing != &issue_target);
+        let issue_changed = issue.relationships.relates.len() != issue_original_len;
+        let related_changed = related.relationships.relates.len() != related_original_len;
+        if !issue_changed && !related_changed {
+            return Ok(false);
+        }
+        if issue_changed {
+            self.write_issue_atomic(&issue)?;
+        }
+        if related_changed {
+            self.write_issue_atomic(&related)?;
+        }
+        Ok(true)
+    }
+
+    pub fn delete_issue_atomic(&self, id: &str) -> Result<()> {
+        record_id::validate_record_id(id)?;
+        self.delete_atomic(&issue_record_path(id))
+    }
+
+    pub fn delete_domain_record_atomic(&self, kind: &str, id: &str) -> Result<()> {
+        record_id::validate_record_id(id)?;
+        let spec = canonical_record_kind(kind)?;
+        self.delete_atomic(&canonical_record_path(spec, id)?)
+    }
+
+    fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {
+        let path = self.state_dir.join(relative);
         let parent = path
             .parent()
-            .ok_or_else(|| anyhow!("Issue path has no parent: {}", path.display()))?;
+            .ok_or_else(|| anyhow!("Record path has no parent: {}", path.display()))?;
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to create {}", parent.display()))?;
-        let tmp_path = path.with_extension("md.tmp");
-        fs::write(&tmp_path, render_issue_record(record)?)
+        let tmp_path = unique_temp_path(&path, "tmp")?;
+        fs::write(&tmp_path, contents)
             .with_context(|| format!("Failed to write {}", tmp_path.display()))?;
         fs::rename(&tmp_path, &path).with_context(|| {
             let _ = fs::remove_file(&tmp_path);
@@ -282,6 +512,76 @@ impl RecordStore {
             )
         })?;
         Ok(())
+    }
+
+    fn delete_atomic(&self, relative: &Path) -> Result<()> {
+        let path = self.state_dir.join(relative);
+        if path.exists() {
+            fs::remove_file(&path)
+                .with_context(|| format!("Failed to remove {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    fn would_create_block_cycle(&self, blocked_id: &str, blocker_id: &str) -> Result<bool> {
+        let issues = self.load_issues()?;
+        let mut blocking_by_blocker: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for issue in issues {
+            for blocked in issue.relationships.blocks {
+                if blocked.kind == ISSUE_KIND.kind {
+                    blocking_by_blocker
+                        .entry(issue.issue.id.clone())
+                        .or_default()
+                        .push(blocked.id);
+                }
+            }
+        }
+
+        let mut visited = BTreeSet::new();
+        let mut stack = vec![blocked_id.to_string()];
+        while let Some(current) = stack.pop() {
+            if current == blocker_id {
+                return Ok(true);
+            }
+            if visited.insert(current.clone()) {
+                if let Some(blocking) = blocking_by_blocker.get(&current) {
+                    stack.extend(blocking.iter().cloned());
+                }
+            }
+        }
+        Ok(false)
+    }
+}
+
+fn unique_temp_path(path: &Path, suffix: &str) -> Result<PathBuf> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("Record path has no file name: {}", path.display()))?;
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("System clock is before UNIX epoch")?
+        .as_nanos();
+    Ok(path.with_file_name(format!(
+        ".{file_name}.{}.{}.{}",
+        process::id(),
+        nanos,
+        suffix
+    )))
+}
+
+fn issue_relationship_target(id: &str) -> RelationshipTarget {
+    RelationshipTarget {
+        kind: ISSUE_KIND.kind.to_string(),
+        id: id.to_string(),
+    }
+}
+
+fn issue_relates_relationship(id: &str, relation_type: &str) -> RelatesRelationship {
+    RelatesRelationship {
+        kind: ISSUE_KIND.kind.to_string(),
+        id: id.to_string(),
+        relation_type: relation_type.to_string(),
     }
 }
 
@@ -323,6 +623,37 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     output.push_str(&normalize_body(
         record.issue.description.as_deref().unwrap_or(""),
     ));
+    output.push('\n');
+    Ok(output)
+}
+
+pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
+    let spec = canonical_record_kind(&record.record.kind)?;
+    validate_domain_record(record, Path::new("<record>"), spec)?;
+    let mut relationships = record.relationships.clone();
+    sort_relationships(&mut relationships);
+
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.record.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_json_scalar(&mut output, "data", &record.record.data_json)?;
+    write_yaml_relationships(&mut output, &relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.record.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n\n");
+    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
     output.push('\n');
     Ok(output)
 }
@@ -495,6 +826,33 @@ fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Resu
     Ok(())
 }
 
+fn validate_domain_record(
+    record: &CanonicalDomainRecord,
+    relative: &Path,
+    spec: &RecordKindSpec,
+) -> Result<()> {
+    if record.record.kind != spec.kind {
+        bail!(
+            "Record kind '{}' does not match expected kind '{}' in {}",
+            record.record.kind,
+            spec.kind,
+            display_state_path(relative)
+        );
+    }
+    record_id::validate_record_id(&record.record.id).with_context(|| {
+        format!(
+            "Invalid {} id '{}' in {}",
+            spec.kind,
+            record.record.id,
+            display_state_path(relative)
+        )
+    })?;
+    let _: Value = serde_json::from_str(&record.record.data_json)
+        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
+    validate_relationships(&record.relationships, relative)?;
+    Ok(())
+}
+
 fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
@@ -513,6 +871,9 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
                 .strip_prefix(root)
                 .context("Failed to relativize canonical issue path")?
                 .to_path_buf();
+            if is_transient_record_path(&relative) {
+                continue;
+            }
             if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
                 bail!(
                     "Unsupported canonical issue file {}; expected Markdown .md record",
@@ -523,6 +884,13 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
         }
     }
     Ok(())
+}
+
+fn is_transient_record_path(relative: &Path) -> bool {
+    relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.') && name.ends_with(".tmp"))
 }
 
 fn split_front_matter<'a>(
@@ -889,6 +1257,15 @@ fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Res
     Ok(())
 }
 
+fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> {
+    let _: Value = serde_json::from_str(value)?;
+    output.push_str(key);
+    output.push_str(": ");
+    output.push_str(&serde_json::to_string(value)?);
+    output.push('\n');
+    Ok(())
+}
+
 fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result<()> {
     output.push_str(key);
     if values.is_empty() {
@@ -1176,19 +1553,176 @@ mod tests {
     }
 
     #[test]
-    fn write_issue_atomic_preserves_existing_file_when_temp_write_fails() {
+    fn record_store_label_unlabel_mutates_issue_front_matter() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let mut record = issue_record("atelier-abcd");
+        record.labels.clear();
+        store.write_issue_atomic(&record).unwrap();
+
+        assert!(store.add_issue_label("atelier-abcd", "graph").unwrap());
+        assert!(!store.add_issue_label("atelier-abcd", "graph").unwrap());
+        assert_eq!(
+            store.load_issue_by_id("atelier-abcd").unwrap().labels,
+            vec!["graph".to_string()]
+        );
+        assert!(store.remove_issue_label("atelier-abcd", "graph").unwrap());
+        assert!(!store.remove_issue_label("atelier-abcd", "graph").unwrap());
+        assert!(store
+            .load_issue_by_id("atelier-abcd")
+            .unwrap()
+            .labels
+            .is_empty());
+    }
+
+    #[test]
+    fn record_store_block_unblock_mutates_blocker_relationships() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let mut blocked = issue_record("atelier-abcd");
+        blocked.relationships = Relationships::default();
+        let mut blocker = issue_record("atelier-efgh");
+        blocker.relationships = Relationships::default();
+        store.write_issue_atomic(&blocked).unwrap();
+        store.write_issue_atomic(&blocker).unwrap();
+
+        assert!(store
+            .add_issue_block("atelier-abcd", "atelier-efgh")
+            .unwrap());
+        assert!(!store
+            .add_issue_block("atelier-abcd", "atelier-efgh")
+            .unwrap());
+        assert_eq!(
+            store
+                .load_issue_by_id("atelier-efgh")
+                .unwrap()
+                .relationships
+                .blocks,
+            vec![RelationshipTarget {
+                kind: "issue".to_string(),
+                id: "atelier-abcd".to_string(),
+            }]
+        );
+        assert!(store
+            .remove_issue_block("atelier-abcd", "atelier-efgh")
+            .unwrap());
+        assert!(!store
+            .remove_issue_block("atelier-abcd", "atelier-efgh")
+            .unwrap());
+        assert!(store
+            .load_issue_by_id("atelier-efgh")
+            .unwrap()
+            .relationships
+            .blocks
+            .is_empty());
+    }
+
+    #[test]
+    fn record_store_block_rejects_cycles_and_self_blocks() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        for id in ["atelier-abcd", "atelier-efgh", "atelier-ijkl"] {
+            let mut record = issue_record(id);
+            record.relationships = Relationships::default();
+            store.write_issue_atomic(&record).unwrap();
+        }
+
+        store
+            .add_issue_block("atelier-efgh", "atelier-abcd")
+            .unwrap();
+        store
+            .add_issue_block("atelier-ijkl", "atelier-efgh")
+            .unwrap();
+
+        let cycle = store
+            .add_issue_block("atelier-abcd", "atelier-ijkl")
+            .unwrap_err();
+        assert!(cycle.to_string().contains("circular dependency"));
+        let self_block = store
+            .add_issue_block("atelier-abcd", "atelier-abcd")
+            .unwrap_err();
+        assert!(self_block.to_string().contains("cannot block itself"));
+    }
+
+    #[test]
+    fn record_store_relate_unrelate_mutates_both_issue_records() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let mut first = issue_record("atelier-abcd");
+        first.relationships = Relationships::default();
+        let mut second = issue_record("atelier-efgh");
+        second.relationships = Relationships::default();
+        store.write_issue_atomic(&first).unwrap();
+        store.write_issue_atomic(&second).unwrap();
+
+        assert!(store
+            .add_issue_relation("atelier-abcd", "atelier-efgh", "derived")
+            .unwrap());
+        assert!(!store
+            .add_issue_relation("atelier-abcd", "atelier-efgh", "derived")
+            .unwrap());
+        assert_eq!(
+            store
+                .load_issue_by_id("atelier-abcd")
+                .unwrap()
+                .relationships
+                .relates,
+            vec![RelatesRelationship {
+                kind: "issue".to_string(),
+                id: "atelier-efgh".to_string(),
+                relation_type: "derived".to_string(),
+            }]
+        );
+        assert_eq!(
+            store
+                .load_issue_by_id("atelier-efgh")
+                .unwrap()
+                .relationships
+                .relates,
+            vec![RelatesRelationship {
+                kind: "issue".to_string(),
+                id: "atelier-abcd".to_string(),
+                relation_type: "derived".to_string(),
+            }]
+        );
+
+        assert!(store
+            .remove_issue_relation("atelier-abcd", "atelier-efgh", "derived")
+            .unwrap());
+        assert!(!store
+            .remove_issue_relation("atelier-abcd", "atelier-efgh", "derived")
+            .unwrap());
+        assert!(store
+            .load_issue_by_id("atelier-abcd")
+            .unwrap()
+            .relationships
+            .relates
+            .is_empty());
+        assert!(store
+            .load_issue_by_id("atelier-efgh")
+            .unwrap()
+            .relationships
+            .relates
+            .is_empty());
+    }
+
+    #[test]
+    fn write_issue_atomic_ignores_stale_fixed_temp_artifact() {
         let dir = tempdir().unwrap();
         let store = RecordStore::new(dir.path().join(".atelier-state"));
         let record = issue_record("atelier-abcd");
         store.write_issue_atomic(&record).unwrap();
         let path = store.state_dir.join(issue_record_path("atelier-abcd"));
-        let original = fs::read_to_string(&path).unwrap();
         let tmp_path = path.with_extension("md.tmp");
         fs::create_dir_all(&tmp_path).unwrap();
 
-        let error = store.write_issue_atomic(&record).unwrap_err();
-        assert!(error.to_string().contains("Failed to write"));
-        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        store.write_issue_atomic(&record).unwrap();
+        assert!(path.exists());
+        assert!(tmp_path.is_dir());
+        assert_eq!(
+            store.discover_issue_paths().unwrap(),
+            vec![issue_record_path("atelier-abcd")]
+        );
     }
 
     #[test]

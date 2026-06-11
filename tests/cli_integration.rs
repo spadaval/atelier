@@ -4687,6 +4687,19 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(plan_out.contains("[plan] open - Execution plan"));
     let plan_id = record_id_by_title(dir.path(), "plans", "Execution plan");
     let plan_id = plan_id.as_str();
+    let (success, revise_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "plan",
+            "revise",
+            plan_id,
+            "Do the thing, then verify the projection.",
+            "--reason",
+            "projection-first",
+        ],
+    );
+    assert!(success, "plan revise failed: {stderr}");
+    assert!(revise_out.contains("Revision: 2"));
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
@@ -4775,8 +4788,27 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(mission_markdown.contains("data: "));
     assert!(mission_markdown.contains("relationships:"));
     assert!(mission_markdown.contains(&format!("id: \"{issue_id}\"")));
-    assert!(mission_markdown.contains(&format!("id: \"{plan_id}\"")));
-    assert!(mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
+    assert!(mission_markdown.contains(&format!("id: \"{blocker_id}\"")));
+
+    let plan_path = dir
+        .path()
+        .join(".atelier-state")
+        .join("plans")
+        .join(format!("{plan_id}.md"));
+    let plan_markdown = std::fs::read_to_string(&plan_path).unwrap();
+    assert!(plan_markdown.contains("schema: \"atelier.plan\""));
+    assert!(plan_markdown.contains("Do the thing, then verify the projection."));
+    assert!(plan_markdown.contains("\\\"revision\\\":2"));
+    assert!(plan_markdown.contains(&format!("id: \"{mission_id}\"")));
+
+    let evidence_path = dir
+        .path()
+        .join(".atelier-state")
+        .join("evidence")
+        .join(format!("{evidence_id}.md"));
+    let evidence_markdown = std::fs::read_to_string(&evidence_path).unwrap();
+    assert!(evidence_markdown.contains("schema: \"atelier.evidence\""));
+    assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
 
     std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
@@ -4858,9 +4890,9 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, plan_show, stderr) = run_atelier(dir.path(), &["plan", "show", plan_id]);
     assert!(success, "human plan show failed: {stderr}");
     assert!(plan_show.contains(&format!("{plan_id} [plan] open - Execution plan")));
-    assert!(plan_show.contains("Revision: 1"));
+    assert!(plan_show.contains("Revision: 2"));
     assert!(plan_show.contains("Body"));
-    assert!(plan_show.contains("Do the thing"));
+    assert!(plan_show.contains("Do the thing, then verify the projection."));
     assert!(plan_show.contains("Links:"));
 
     let (success, plan_list, stderr) = run_atelier(dir.path(), &["plan", "list"]);
