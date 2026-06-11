@@ -26,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Centralize projection freshness and command access modes"
-updated_at: "2026-06-11T20:10:00.310771857+00:00"
+updated_at: "2026-06-11T23:59:23.651878444+00:00"
 ---
 
 Centralize projection access and freshness so commands do not make ad hoc choices between stale SQLite, fresh projection, or canonical Markdown reads.
