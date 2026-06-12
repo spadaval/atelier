@@ -105,14 +105,14 @@ Blockers
 
 Next Commands
 -------------
-  atelier issue comment atelier-1234 "..."
+  atelier note add issue atelier-1234 "..."
   atelier issue close atelier-1234 --reason "..."
 ```
 
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
-`atelier issue list`, `atelier issue list --ready`, and `atelier issue search`.
+`atelier issue list`, `atelier issue list --ready`, and `atelier search`.
 
 Queue views should be grouped before they are tabulated. Preferred grouping
 order is:
@@ -173,8 +173,9 @@ their need:
   diagnostic tools, not normal script workflow.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
-  `atelier issue list --ready`, `atelier issue blocked`, `atelier issue children <id>`,
-  and `atelier dep add/remove` over scraping broad human reports.
+  `atelier issue list --ready`, `atelier issue list --blocked`,
+  `atelier graph tree --compact`, and `atelier dep add/remove` over scraping
+  broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bulk-plan input JSON or a
   future Mission Control projection.

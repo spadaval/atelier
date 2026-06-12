@@ -353,6 +353,16 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
             index == offset + 2 || index == offset + 3
         }
         ["issue", "subissue", ..] => index == offset + 2,
+        ["link", "add" | "remove", source_kind, _, target_kind, ..] => {
+            (*source_kind == "issue" && index == offset + 3)
+                || (*target_kind == "issue" && index == offset + 5)
+        }
+        ["link", "list", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
+        ["graph", "impact", ..] => index == offset + 2,
+        ["note", "add", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
+        ["maintenance", "delete", target_kind, ..] => {
+            *target_kind == "issue" && index == offset + 3
+        }
         ["dep", "list", ..] => index == offset + 2,
         ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
         _ => false,
@@ -997,6 +1007,144 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
             "folded or moved command {hidden} is still visible:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_non_lifecycle_issue_flows_use_explicit_homes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source graph item"]);
+    run_atelier(dir.path(), &["issue", "create", "Target graph item"]);
+    run_atelier(dir.path(), &["issue", "create", "Disposable item"]);
+    let source_id = issue_ref(dir.path(), 1);
+    let target_id = issue_ref(dir.path(), 2);
+    let disposable_id = issue_ref(dir.path(), 3);
+
+    let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "Source"]);
+    assert!(success, "search failed: {stderr}");
+    assert!(search_out.contains("Source graph item"));
+
+    let (success, link_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "link", "add", "issue", &source_id, "issue", &target_id, "--type", "derived",
+        ],
+    );
+    assert!(success, "link add failed: {stderr}");
+    assert!(link_out.contains("Linked"));
+
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["link", "list", "issue", &source_id]);
+    assert!(success, "link list failed: {stderr}");
+    assert!(list_out.contains("derived"));
+    assert!(list_out.contains("Target graph item"));
+
+    let (success, impact_out, stderr) = run_atelier(dir.path(), &["graph", "impact", &source_id]);
+    assert!(success, "graph impact failed: {stderr}");
+    assert!(impact_out.contains("downstream impact"));
+    assert!(impact_out.contains("Target graph item"));
+
+    let (success, tree_out, stderr) = run_atelier(dir.path(), &["graph", "tree", "--compact"]);
+    assert!(success, "graph tree failed: {stderr}");
+    assert!(tree_out.contains("Compact Issue Hierarchy"));
+
+    let (success, note_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "note",
+            "add",
+            "issue",
+            &source_id,
+            "Explicit note body",
+            "--kind",
+            "observation",
+        ],
+    );
+    assert!(success, "note add failed: {stderr}");
+    assert!(note_out.contains("Added comment"));
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show_out.contains("Explicit note body"));
+
+    let (success, unlink_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "link", "remove", "issue", &source_id, "issue", &target_id, "--type", "derived",
+        ],
+    );
+    assert!(success, "link remove failed: {stderr}");
+    assert!(unlink_out.contains("Unlinked"));
+
+    let (success, delete_out, stderr) = run_atelier(
+        dir.path(),
+        &["maintenance", "delete", "issue", &disposable_id, "--force"],
+    );
+    assert!(success, "maintenance delete failed: {stderr}");
+    assert!(delete_out.contains("Deleted issue"));
+}
+
+#[test]
+fn test_hidden_issue_helpers_print_replacement_guidance() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Old surface source"]);
+    run_atelier(dir.path(), &["issue", "create", "Old surface target"]);
+
+    for (args, replacement) in [
+        (vec!["issue", "search", "Old"], "atelier search <query>"),
+        (
+            vec!["issue", "comment", "1", "compat note"],
+            "atelier note add issue <id>",
+        ),
+        (
+            vec!["issue", "block", "1", "2"],
+            "atelier dep add <blocked> <blocker>",
+        ),
+        (
+            vec!["issue", "relate", "1", "2"],
+            "atelier link add issue <id> issue <related>",
+        ),
+        (vec!["issue", "impact", "1"], "atelier graph impact <id>"),
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "{args:?} failed: {stderr}");
+        assert!(
+            stderr.contains("Compatibility") && stderr.contains(replacement),
+            "{args:?} did not print replacement guidance:\n{stderr}"
+        );
+    }
+}
+
+#[test]
+fn test_explicit_homes_reject_non_issue_targets_until_supported() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Target issue"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["link", "add", "mission", "atelier-none", "issue", "1"],
+    );
+    assert!(!success, "link add unexpectedly accepted a mission target");
+    assert!(stderr.contains("supports issue records only"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "maintenance",
+            "delete",
+            "mission",
+            "atelier-none",
+            "--force",
+        ],
+    );
+    assert!(
+        !success,
+        "maintenance delete unexpectedly accepted a mission target"
+    );
+    assert!(stderr.contains("supports issue records only"));
 }
 
 #[test]

@@ -18,6 +18,10 @@ in normal Agent Factory workflows:
 - `atelier status`
 - `atelier issue ...`
 - `atelier dep add/remove/list`
+- `atelier search <query>`
+- `atelier link add/remove/list`
+- `atelier graph impact/tree`
+- `atelier note add`
 - `atelier mission create/show/list/status/update`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
@@ -25,6 +29,7 @@ in normal Agent Factory workflows:
 - `atelier start`
 - `atelier finish`
 - `atelier worktree for/status/merge/remove`
+- `atelier maintenance delete`
 - `atelier import-beads`
 - `atelier lint`
 - `atelier doctor`
@@ -53,8 +58,8 @@ configured close transition validators. Reopening with
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
-such as list, ready, search, impact, lint, and Mission Control views may use
-SQLite after freshness checks.
+such as issue list, ready queues, search, graph impact/tree, lint, and Mission
+Control views may use SQLite after freshness checks.
 Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier lint <id>`, and focused
@@ -145,13 +150,15 @@ command groups.
   current project layout and does not copy the bundled `resources/atelier/rules`
   tree into each repository.
 
-Generic replacements should use domain language. `atelier issue impact <id>` is
-the visible relation-impact command. Impact follows hierarchy plus the
+Generic replacements should use domain language. `atelier graph impact <id>` is
+the visible relation-impact command. `atelier link add/remove/list` owns typed
+links, `atelier note add issue <id> "..."` owns issue activity notes, and
+`atelier search <query>` owns text search. Impact follows hierarchy plus the
 impact-bearing relation types `derived`, `caused-by`, and `falsifies`
 transitively, and `assumption` one hop from the source. The inherited `cascade`
 and `falsify` commands are removed so reassessment stays an explicit operator
-action through `issue impact`, `issue label`, `issue comment`, or `issue close`
-instead of an assumption-specific command path.
+action through graph, link, note, and lifecycle commands instead of an
+assumption-specific command path.
 
 ## Removed Or Deferred Behavior
 

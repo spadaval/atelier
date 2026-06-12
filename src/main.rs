@@ -36,8 +36,12 @@ Orientation:
   finish        Finish tracked work, defaulting to active work
 
 Issues:
-  issue         Create, list, show, update, close, and relate issues
+  issue         Create, list, show, update, and close issues
   dep           Manage issue blockers with add, remove, and list
+  search        Search issue text
+  link          Manage typed issue links
+  graph         Inspect issue hierarchy and impact
+  note          Add issue activity notes
 
 Missions and planning:
   mission       Create, list, show, status, and update durable missions
@@ -58,6 +62,7 @@ Integrations:
   integrations  Install optional integrations such as Claude hooks
 
 Maintenance:
+  maintenance   Run explicit destructive maintenance commands
   diagnostics   Inspect local command diagnostics
   lint          Validate tracker records
   doctor        Check runtime and exported-state health
@@ -120,6 +125,30 @@ enum Commands {
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
+    },
+
+    /// Search issue text
+    Search {
+        /// Search query
+        query: String,
+    },
+
+    /// Typed issue link commands
+    Link {
+        #[command(subcommand)]
+        action: LinkCommands,
+    },
+
+    /// Issue graph and hierarchy commands
+    Graph {
+        #[command(subcommand)]
+        action: GraphCommands,
+    },
+
+    /// Issue activity note commands
+    Note {
+        #[command(subcommand)]
+        action: NoteCommands,
     },
 
     /// Export canonical state
@@ -202,6 +231,12 @@ enum Commands {
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,
+    },
+
+    /// Destructive maintenance commands
+    Maintenance {
+        #[command(subcommand)]
+        action: MaintenanceCommands,
     },
 
     /// Validate tracker records
@@ -541,6 +576,78 @@ enum DepCommands {
     Remove { blocked: String, blocker: String },
     /// List blocking dependencies
     List { issue: Option<String> },
+}
+
+#[derive(Subcommand)]
+enum LinkCommands {
+    /// Add a typed link between two records
+    Add {
+        source_kind: String,
+        source_id: String,
+        target_kind: String,
+        target_id: String,
+        /// Relation type
+        #[arg(short = 't', long = "type", default_value = "related")]
+        relation_type: String,
+    },
+    /// Remove a typed link between two records
+    Remove {
+        source_kind: String,
+        source_id: String,
+        target_kind: String,
+        target_id: String,
+        /// Relation type
+        #[arg(short = 't', long = "type", default_value = "related")]
+        relation_type: String,
+    },
+    /// List typed links for a record
+    List {
+        target_kind: String,
+        target_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GraphCommands {
+    /// Show downstream impact from hierarchy and impact-bearing links
+    Impact {
+        /// Issue ID
+        id: String,
+    },
+    /// Show issues as a tree hierarchy
+    Tree {
+        /// Filter by status (open, closed, all)
+        #[arg(short, long, default_value = "all")]
+        status: String,
+        /// Show a bounded, scan-friendly hierarchy instead of the full tree
+        #[arg(long)]
+        compact: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum NoteCommands {
+    /// Add an activity note to a target
+    Add {
+        target_kind: String,
+        target_id: String,
+        text: String,
+        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
+        #[arg(long, default_value = "note")]
+        kind: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum MaintenanceCommands {
+    /// Delete a record with an explicit target kind
+    Delete {
+        target_kind: String,
+        target_id: String,
+        /// Skip confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -952,6 +1059,17 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
+fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
+    if kind != "issue" {
+        bail!("{command} currently supports issue records only; got '{kind}'");
+    }
+    Ok(())
+}
+
+fn issue_compat_guidance(replacement: &str) {
+    eprintln!("Compatibility: this hidden issue helper remains callable; use `{replacement}`.");
+}
+
 fn init_tracing(log_level: &str, log_format: &str) {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     let filter = EnvFilter::try_new(log_level).unwrap_or_else(|_| EnvFilter::new("warn"));
@@ -1037,6 +1155,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             template,
             label,
         } => {
+            issue_compat_guidance("atelier issue create <title> --work");
             let (state_dir, db_path) = state_and_db_paths()?;
             let atelier_dir = find_atelier_dir().ok();
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
@@ -1070,6 +1189,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             work,
         } => {
+            issue_compat_guidance("atelier issue create <title> --parent <id>");
             let (state_dir, db_path) = state_and_db_paths()?;
             let atelier_dir = find_atelier_dir().ok();
             commands::agent_factory::create_lifecycle(
@@ -1118,6 +1238,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Search { query } => {
+            issue_compat_guidance("atelier search <query>");
             let db = projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
@@ -1178,6 +1299,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::CloseAll { label, priority } => {
+            issue_compat_guidance("atelier issue close <id> --reason \"...\"");
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::status::close_all_lifecycle(
                 &state_dir,
@@ -1188,11 +1310,13 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Reopen { id } => {
+            issue_compat_guidance("atelier issue update <id> --status open");
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::agent_factory::reopen_lifecycle(&state_dir, &db_path, &id)
         }
 
         IssueCommands::Delete { id, force } => {
+            issue_compat_guidance("atelier maintenance delete issue <id> --force");
             let (state_dir, db_path) = state_and_db_paths()?;
             let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
@@ -1201,12 +1325,14 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Comment { id, text, kind } => {
+            issue_compat_guidance("atelier note add issue <id> \"...\" --kind <kind>");
             let db = canonical_mutation_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
             commands::comment::run_canonical(&db, &resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
+            issue_compat_guidance("atelier issue update <id> --label <label>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1217,6 +1343,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unlabel { id, label } => {
+            issue_compat_guidance("atelier issue update <id> --remove-label <label>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1227,6 +1354,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Block { id, blocker } => {
+            issue_compat_guidance("atelier dep add <blocked> <blocker>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1236,6 +1364,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unblock { id, blocker } => {
+            issue_compat_guidance("atelier dep remove <blocked> <blocker>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1245,6 +1374,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Blocked => {
+            issue_compat_guidance("atelier issue list --blocked");
             let db = projection_query_db()?;
             commands::deps::list_blocked(&db)
         }
@@ -1254,6 +1384,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
+            issue_compat_guidance("atelier link add issue <id> issue <related> --type <type>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1269,6 +1400,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
+            issue_compat_guidance("atelier link remove issue <id> issue <related> --type <type>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1280,24 +1412,28 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Related { id } => {
+            issue_compat_guidance("atelier link list issue <id>");
             let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::list(&db, &id)
         }
 
         IssueCommands::Impact { id } => {
+            issue_compat_guidance("atelier graph impact <id>");
             let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::impact(&db, &id)
         }
 
         IssueCommands::Next => {
+            issue_compat_guidance("atelier status");
             let db = projection_query_db()?;
             let atelier_dir = find_atelier_dir()?;
             commands::next::run(&db, &atelier_dir)
         }
 
         IssueCommands::Tree { status, compact } => {
+            issue_compat_guidance("atelier graph tree");
             let db = projection_query_db()?;
             if compact {
                 commands::tree::run_compact(&db, Some(&status))
@@ -1307,6 +1443,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Tested => {
+            issue_compat_guidance("atelier evidence add --kind validation --result pass \"...\"");
             let atelier_dir = find_atelier_dir()?;
             commands::tested::run(&atelier_dir)
         }
@@ -1361,6 +1498,101 @@ fn run() -> Result<()> {
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
+
+        Commands::Search { query } => {
+            let db = projection_query_db()?;
+            commands::agent_factory::search(&db, &query, quiet)
+        }
+
+        Commands::Link { action } => match action {
+            LinkCommands::Add {
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                relation_type,
+            } => {
+                require_issue_kind(&source_kind, "atelier link add")?;
+                require_issue_kind(&target_kind, "atelier link add")?;
+                let db = canonical_mutation_db()?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let store = RecordStore::new(&state_dir);
+                let source_id = resolve_issue_arg(&db, &source_id)?;
+                let target_id = resolve_issue_arg(&db, &target_id)?;
+                commands::relate::add_typed_canonical(
+                    &db,
+                    &store,
+                    &source_id,
+                    &target_id,
+                    &relation_type,
+                )?;
+                drop(db);
+                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            }
+            LinkCommands::Remove {
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                relation_type,
+            } => {
+                require_issue_kind(&source_kind, "atelier link remove")?;
+                require_issue_kind(&target_kind, "atelier link remove")?;
+                let db = canonical_mutation_db()?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let store = RecordStore::new(&state_dir);
+                let source_id = resolve_issue_arg(&db, &source_id)?;
+                let target_id = resolve_issue_arg(&db, &target_id)?;
+                commands::relate::remove_typed_canonical(
+                    &db,
+                    &store,
+                    &source_id,
+                    &target_id,
+                    &relation_type,
+                )?;
+                drop(db);
+                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            }
+            LinkCommands::List {
+                target_kind,
+                target_id,
+            } => {
+                require_issue_kind(&target_kind, "atelier link list")?;
+                let db = projection_query_db()?;
+                let target_id = resolve_issue_arg(&db, &target_id)?;
+                commands::relate::list(&db, &target_id)
+            }
+        },
+
+        Commands::Graph { action } => match action {
+            GraphCommands::Impact { id } => {
+                let db = projection_query_db()?;
+                let id = resolve_issue_arg(&db, &id)?;
+                commands::relate::impact(&db, &id)
+            }
+            GraphCommands::Tree { status, compact } => {
+                let db = projection_query_db()?;
+                if compact {
+                    commands::tree::run_compact(&db, Some(&status))
+                } else {
+                    commands::tree::run(&db, Some(&status))
+                }
+            }
+        },
+
+        Commands::Note { action } => match action {
+            NoteCommands::Add {
+                target_kind,
+                target_id,
+                text,
+                kind,
+            } => {
+                require_issue_kind(&target_kind, "atelier note add")?;
+                let db = canonical_mutation_db()?;
+                let target_id = resolve_issue_arg(&db, &target_id)?;
+                commands::comment::run_canonical(&db, &target_id, &text, &kind)
+            }
+        },
 
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
@@ -1686,6 +1918,21 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Maintenance { action } => match action {
+            MaintenanceCommands::Delete {
+                target_kind,
+                target_id,
+                force,
+            } => {
+                require_issue_kind(&target_kind, "atelier maintenance delete")?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let db = canonical_mutation_db()?;
+                let target_id = resolve_issue_arg(&db, &target_id)?;
+                drop(db);
+                commands::delete::run_lifecycle(&state_dir, &db_path, &target_id, force)
+            }
+        },
+
         Commands::Lint { id } => {
             let db = lint_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
@@ -1746,6 +1993,19 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Tree { .. } => "issue tree",
             IssueCommands::Tested => "issue tested",
         },
+        Commands::Search { .. } => "search",
+        Commands::Link { action } => match action {
+            LinkCommands::Add { .. } => "link add",
+            LinkCommands::Remove { .. } => "link remove",
+            LinkCommands::List { .. } => "link list",
+        },
+        Commands::Graph { action } => match action {
+            GraphCommands::Impact { .. } => "graph impact",
+            GraphCommands::Tree { .. } => "graph tree",
+        },
+        Commands::Note { action } => match action {
+            NoteCommands::Add { .. } => "note add",
+        },
         Commands::Export { check, .. } => {
             if *check {
                 "export --check"
@@ -1805,6 +2065,9 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",
+        },
+        Commands::Maintenance { action } => match action {
+            MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
         Commands::Lint { .. } => "lint",
         Commands::Doctor => "doctor",

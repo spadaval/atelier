@@ -74,6 +74,14 @@ This file binds Agent Factory to this repository.
   - `atelier issue transition <id> --options`
   - `atelier mission show <id>`
   - `atelier issue update <id> --claim`
+  - `atelier search <query>`
+  - `atelier link add issue <id> issue <related-id> --type <type>`
+  - `atelier link remove issue <id> issue <related-id> --type <type>`
+  - `atelier link list issue <id>`
+  - `atelier graph impact <id>`
+  - `atelier graph tree --compact`
+  - `atelier note add issue <id> "..."`
+  - `atelier maintenance delete issue <id> --force`
   - `atelier issue update <id> --append-notes "..."`
   - `atelier issue close <id> --reason "..."`
 - Do not use command-result `--json` as the Agent Factory automation contract.
