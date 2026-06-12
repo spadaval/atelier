@@ -5899,6 +5899,89 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
 }
 
 #[test]
+fn test_markdown_first_migration_moves_legacy_records_and_preserves_runtime_ignores() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Legacy migration issue"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let legacy_dir = dir.path().join(".atelier-state");
+    std::fs::create_dir_all(&legacy_dir).unwrap();
+    std::fs::rename(
+        dir.path().join(".atelier/issues"),
+        legacy_dir.join("issues"),
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.path().join(".atelier/cache")).unwrap();
+    std::fs::write(dir.path().join(".atelier/cache/runtime.cache"), "cache\n").unwrap();
+    assert!(dir.path().join(".atelier/state.db").is_file());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["migrate", "markdown-first"]);
+    assert!(success, "markdown-first migration failed: {stderr}");
+    assert!(stdout.contains("Migrated canonical records"));
+    assert!(stdout.contains("Moved: issues"));
+    assert!(stdout.contains("State:"));
+    assert!(stdout.contains(".atelier"));
+    assert!(stdout.contains("Database:"));
+
+    assert!(!legacy_dir.exists());
+    assert!(dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"))
+        .is_file());
+    assert!(dir.path().join(".atelier/config.toml").is_file());
+    assert!(dir.path().join(".atelier/state.db").is_file());
+    assert!(dir.path().join(".atelier/cache/runtime.cache").is_file());
+
+    let gitignore = std::fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+    assert!(gitignore.contains("/.atelier/state.db"));
+    assert!(gitignore.contains("/.atelier/cache/"));
+    assert!(!gitignore.lines().any(|line| line.trim() == "/.atelier/"));
+
+    let check_ignored = Command::new("git")
+        .current_dir(dir.path())
+        .args([
+            "check-ignore",
+            ".atelier/state.db",
+            ".atelier/cache/runtime.cache",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        check_ignored.status.success(),
+        "runtime/cache paths should be ignored: {}",
+        String::from_utf8_lossy(&check_ignored.stderr)
+    );
+    let ignored_stdout = String::from_utf8_lossy(&check_ignored.stdout);
+    assert!(ignored_stdout.contains(".atelier/state.db"));
+    assert!(ignored_stdout.contains(".atelier/cache/runtime.cache"));
+
+    let canonical_ignored = Command::new("git")
+        .current_dir(dir.path())
+        .args(["check-ignore", &format!(".atelier/issues/{issue_id}.md")])
+        .status()
+        .unwrap();
+    assert!(
+        !canonical_ignored.success(),
+        "canonical issue records must remain tracked"
+    );
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "show after migration failed: {stderr}");
+    assert!(show_out.contains("Legacy migration issue"));
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export --check after migration failed: {stderr}");
+}
+
+#[test]
 fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
