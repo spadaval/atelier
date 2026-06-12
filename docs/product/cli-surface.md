@@ -123,9 +123,12 @@ states must be reported as record or workflow repair problems rather than cache
 maintenance chores.
 
 Low-level debug and repair commands may expose cache mechanics when diagnosing
-Atelier itself. Those commands should not appear as ordinary next actions from
-core workflow surfaces, and their output should make clear that they are
-diagnostic tools rather than required user workflow.
+Atelier itself. `atelier export`, `atelier rebuild`, and similar repair checks
+should not appear as ordinary next actions from core workflow surfaces, and
+their output should make clear that they are diagnostic tools rather than
+required user workflow. `atelier diagnostics slow` summarizes local command
+telemetry for command-performance investigations; it is visible help, but it is
+not a normal mission or issue workflow step.
 
 ## Removed Behavior
 

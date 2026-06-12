@@ -88,7 +88,9 @@ Install `cargo-nextest` before running the default Rust test command:
 
 `atelier workflow validate` failures are command failures by default. Mission
 completion is valid only when all linked work is closed, required evidence is
-attached, workflow validators pass, and the Git worktree is clean.
+attached, workflow validators pass, docs/help/Agent Factory command guidance has
+no drift, stale obsolete-command tests are explicitly owned or deferred, and the
+Git worktree is clean.
 
 ## Scenario Proof
 

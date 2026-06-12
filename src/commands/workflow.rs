@@ -93,6 +93,7 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
             "evidence_attached",
             "no_open_blockers",
             "no_blocking_lints",
+            "command_surface_current",
             "ignored_tests_reviewed",
             "git_worktree_clean",
         ],
@@ -105,6 +106,7 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
         ("tracker", "health") => &[
             "durable_state_current",
             "no_blocking_lints",
+            "command_surface_current",
             "ignored_tests_reviewed",
             "git_worktree_clean",
         ],
@@ -238,6 +240,7 @@ fn evaluate_builtin(
             }
         }
         "ignored_tests_reviewed" => ignored_tests_reviewed(),
+        "command_surface_current" => command_surface_current(),
         "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
         "validation_criteria_satisfied" => Ok((
             false,
@@ -464,6 +467,10 @@ fn git_worktree_clean() -> Result<(bool, String)> {
 fn ignored_tests_reviewed() -> Result<(bool, String)> {
     let inventory = crate::test_inventory::IgnoredTestInventory::scan_repo(&repo_root()?)?;
     Ok(inventory.status_reason())
+}
+
+fn command_surface_current() -> Result<(bool, String)> {
+    crate::command_surface::status_reason(&repo_root()?)
 }
 
 fn repo_root() -> Result<PathBuf> {

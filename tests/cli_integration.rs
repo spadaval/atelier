@@ -181,6 +181,50 @@ fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
     format!("#[test]\n#[{ignore_attribute}]\nfn {test_name}() {{}}\n")
 }
 
+fn valid_command_surface_doc() -> &'static str {
+    r#"# CLI Surface Tiers
+
+## Core
+
+- `atelier init`
+- `atelier prime`
+- `atelier status`
+- `atelier start`
+- `atelier finish`
+- `atelier issue ...`
+- `atelier dep add/remove/list`
+- `atelier search <query>`
+- `atelier link add/remove/list`
+- `atelier graph impact/tree`
+- `atelier note add`
+- `atelier mission create/show/list/status/update`
+- `atelier mission add-work/add-blocker`
+- `atelier plan create/show/list/revise/link/apply`
+- `atelier evidence add/capture/show/list/attach`
+- `atelier history`
+- `atelier worktree for/status/merge/remove`
+- `atelier export`
+- `atelier rebuild`
+- `atelier import-beads`
+- `atelier integrations claude install`
+- `atelier maintenance delete`
+- `atelier diagnostics slow`
+- `atelier lint`
+- `atelier doctor`
+"#
+}
+
+fn write_valid_command_guidance(dir: &Path) {
+    let docs_dir = dir.join("docs/product");
+    fs::create_dir_all(&docs_dir).unwrap();
+    fs::write(docs_dir.join("cli-surface.md"), valid_command_surface_doc()).unwrap();
+    fs::write(
+        dir.join("AGENTFACTORY.md"),
+        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier issue show <id>`\n",
+    )
+    .unwrap();
+}
+
 fn remove_issue_section(markdown: &str, heading: &str) -> String {
     let marker = format!("## {heading}\n");
     let start = markdown.find(&marker).expect("section heading missing");
@@ -211,6 +255,60 @@ fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
         "record with title {title:?} not found in {}",
         record_dir.display()
     );
+}
+
+fn resolve_test_issue_ref(dir: &Path, issue_ref_value: &str) -> String {
+    issue_ref_value
+        .parse::<usize>()
+        .ok()
+        .map(|ordinal| issue_ref(dir, ordinal))
+        .unwrap_or_else(|| issue_ref_value.to_string())
+}
+
+fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {
+    let (success, evidence_out, stderr) = run_atelier(
+        dir,
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            summary,
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass"), "{evidence_out}");
+    let evidence_id = record_id_by_title(dir, "evidence", summary);
+    let (success, _, stderr) = run_atelier(
+        dir,
+        &["evidence", "attach", &evidence_id, target_kind, target_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    evidence_id
+}
+
+fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
+    attach_pass_evidence(
+        dir,
+        "issue",
+        issue_id,
+        &format!("issue close proof for {issue_id}"),
+    )
+}
+
+fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
+    let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
+    attach_issue_pass_evidence(dir, &issue_id);
+    let mut args = vec!["issue", "close", issue_ref_value];
+    if let Some(reason) = reason {
+        args.push("--reason");
+        args.push(reason);
+    }
+    let (success, _, stderr) = run_atelier(dir, &args);
+    assert!(success, "issue close failed: {stderr}");
+    issue_id
 }
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
@@ -1831,6 +1929,8 @@ fn test_show_closed_issue_includes_close_reason() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
+    attach_issue_pass_evidence(dir.path(), &issue_id);
     run_atelier(
         dir.path(),
         &["issue", "close", "1", "--reason", "Done enough"],
@@ -2273,6 +2373,8 @@ fn test_close_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
+    attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "close", "1"]);
 
     assert!(success);
@@ -2290,9 +2392,11 @@ fn test_close_all_is_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all one"]);
     assert!(success, "first create failed: {stderr}");
     let first_id = issue_ref(dir.path(), 1);
+    attach_issue_pass_evidence(dir.path(), &first_id);
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all two"]);
     assert!(success, "second create failed: {stderr}");
     let second_id = issue_ref(dir.path(), 2);
+    attach_issue_pass_evidence(dir.path(), &second_id);
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "close-all"]);
     assert!(success, "close-all failed: {stderr}");
@@ -2316,7 +2420,7 @@ fn test_reopen_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
     let (success, stdout, _) =
         run_atelier(dir.path(), &["issue", "update", "1", "--status", "open"]);
 
@@ -3639,7 +3743,7 @@ fn test_tree_compact_summarizes_mixed_open_closed_subtrees() {
     run_atelier(dir.path(), &["issue", "subissue", &parent, "Open child"]);
     run_atelier(dir.path(), &["issue", "subissue", &parent, "Closed child"]);
     let closed = issue_id_by_title(dir.path(), "Closed child");
-    run_atelier(dir.path(), &["issue", "close", &closed]);
+    close_issue_with_evidence(dir.path(), &closed, None);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
     assert!(success, "compact tree failed: {stderr}");
@@ -4008,7 +4112,7 @@ fn test_next_all_closed() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
@@ -6176,6 +6280,7 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", mission_id, work_id]);
     assert!(success, "mission add-work failed: {stderr}");
+    attach_issue_pass_evidence(dir.path(), work_id);
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "close", work_id, "--reason", "done"]);
     assert!(success, "close work failed: {stderr}");
@@ -6234,6 +6339,140 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     assert!(!status_out.contains(&format!(
         "atelier mission update {mission_id} --status closed"
     )));
+}
+
+#[test]
+fn test_workflow_validate_reports_agent_factory_command_drift() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+    fs::write(
+        dir.path().join("AGENTFACTORY.md"),
+        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission view <id>`\n",
+    )
+    .unwrap();
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Agent Factory drift"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Agent Factory drift");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "command_surface_current",
+        ],
+    );
+
+    assert!(!success, "stale Agent Factory guidance should fail");
+    assert!(stdout.contains("fail  command_surface_current"));
+    assert!(stdout.contains("AGENTFACTORY.md"));
+    assert!(stdout.contains("atelier mission view"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_workflow_validate_reports_docs_help_root_surface_drift() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+    let stale_doc = valid_command_surface_doc().replace("- `atelier diagnostics slow`\n", "");
+    fs::write(dir.path().join("docs/product/cli-surface.md"), stale_doc).unwrap();
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Docs help drift"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Docs help drift");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "command_surface_current",
+        ],
+    );
+
+    assert!(!success, "docs/help drift should fail");
+    assert!(stdout.contains("fail  command_surface_current"));
+    assert!(stdout.contains("docs/product/cli-surface.md"));
+    assert!(stdout.contains("help command `atelier diagnostics`"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    fs::create_dir_all(dir.path().join("tests")).unwrap();
+    fs::write(
+        dir.path().join("tests/legacy_session.rs"),
+        concat!(
+            "#[test]\n",
+            "fn legacy_session_still_works() {\n",
+            "    let (success, _, _) = run_atelier(dir.path(), &[\"session\", \"start\"]);\n",
+            "    assert!(success);\n",
+            "}\n"
+        ),
+    )
+    .unwrap();
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Stale test closeout"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Stale test closeout");
+
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "stale test evidence",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - stale test evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "stale test evidence");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "mission", &mission_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    commit_all(dir.path(), "stale test closeout baseline");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "closed"],
+    );
+
+    assert!(
+        !success,
+        "mission closeout should block undeferred obsolete-command tests"
+    );
+    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("validator command_surface_current failed"));
+    assert!(stdout.contains("tests/legacy_session.rs"));
+    assert!(stdout.contains("legacy_session_still_works"));
+    assert!(stdout.contains("atelier session start"));
+    assert!(stderr.contains("mission closeout blocked"));
 }
 
 #[test]
@@ -6833,6 +7072,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     );
     assert!(stderr.contains("mission closeout blocked"));
 
+    attach_issue_pass_evidence(dir.path(), &work_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &work_id, "--reason", "done"],
@@ -7318,6 +7558,7 @@ fn test_mission_status_cli_reports_control_state() {
         &["mission", "add-work", closeout_mission, work_id],
     );
     assert!(success, "closeout mission add work failed: {stderr}");
+    attach_issue_pass_evidence(dir.path(), work_id);
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "close", work_id, "--reason", "done"]);
     assert!(success, "closeout work close failed: {stderr}");

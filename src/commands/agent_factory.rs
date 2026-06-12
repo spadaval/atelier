@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
-use crate::models::{Comment, Issue};
+use crate::models::{Comment, DomainRecord, Issue};
 use crate::record_store::{
     issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
     IssueSections, RecordStore, RelationshipTarget, Relationships,
@@ -559,6 +559,112 @@ fn validating_evidence_attached(db: &Database, issue_id: &str) -> Result<bool> {
             link.relation_type == "validates"
                 && (link.source_kind == "evidence" || link.target_kind == "evidence")
         }))
+}
+
+fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<DomainRecord>> {
+    let mut evidence = Vec::new();
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        let evidence_id = if link.source_kind == "evidence" {
+            Some(link.source_id)
+        } else if link.target_kind == "evidence" {
+            Some(link.target_id)
+        } else {
+            None
+        };
+        if let Some(evidence_id) = evidence_id {
+            evidence.push(db.require_record("evidence", &evidence_id)?);
+        }
+    }
+    evidence.sort_by(|a, b| a.id.cmp(&b.id));
+    evidence.dedup_by(|a, b| a.id == b.id);
+    Ok(evidence)
+}
+
+fn evidence_section_allows_note_proof(evidence: &str) -> bool {
+    let lower = evidence.to_lowercase();
+    (lower.contains("durable note") || lower.contains("issue note"))
+        && (lower.contains("no separate proof")
+            || lower.contains("no separate artifact")
+            || lower.contains("no separate evidence")
+            || lower.contains("no first-class evidence")
+            || lower.contains("note proof"))
+}
+
+fn observable_note_proof_exists(state_dir: &Path, issue_id: &str) -> Result<bool> {
+    Ok(list_issue_activities(state_dir, issue_id)?
+        .into_iter()
+        .filter(|activity| {
+            matches!(
+                activity.event_type,
+                ActivityEventType::Note | ActivityEventType::Handoff | ActivityEventType::Comment
+            )
+        })
+        .any(|activity| evidence_entry_names_observable_target(&activity.body)))
+}
+
+fn ensure_issue_closeout_proof(
+    db: &Database,
+    state_dir: &Path,
+    issue_id: &str,
+    record: &CanonicalIssueRecord,
+) -> Result<()> {
+    let evidence = linked_validating_evidence(db, issue_id)?;
+    if evidence.iter().any(|record| record.status == "pass") {
+        return Ok(());
+    }
+    if !evidence.is_empty() {
+        let statuses = evidence
+            .iter()
+            .map(|record| format!("{} [{}]", record.id, record.status))
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "Issue {} cannot be closed because linked validating evidence is not passing: {}. Attach passing proof with `atelier evidence attach <evidence-id> issue {}` or capture it with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>`.",
+            format_issue_id(issue_id),
+            statuses,
+            format_issue_id(issue_id),
+            format_issue_id(issue_id)
+        );
+    }
+
+    if evidence_section_allows_note_proof(&record.sections.evidence) {
+        if observable_note_proof_exists(state_dir, issue_id)? {
+            return Ok(());
+        }
+        bail!(
+            "Issue {} cannot be closed because durable note proof is allowed but no issue note names an observable proof target. Add proof with `atelier note add issue {} \"...\"` or attach evidence with `atelier evidence attach <evidence-id> issue {}`.",
+            format_issue_id(issue_id),
+            format_issue_id(issue_id),
+            format_issue_id(issue_id)
+        );
+    }
+
+    bail!(
+        "Issue {} cannot be closed because no validating evidence is linked. Capture proof with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>` or attach existing proof with `atelier evidence attach <evidence-id> issue {}`. Durable note proof is accepted only when the issue Evidence section explicitly says no separate proof artifact is meaningful.",
+        format_issue_id(issue_id),
+        format_issue_id(issue_id),
+        format_issue_id(issue_id)
+    );
+}
+
+fn ensure_issue_closeout_ready(
+    db: &Database,
+    state_dir: &Path,
+    issue_id: &str,
+    record: &CanonicalIssueRecord,
+) -> Result<()> {
+    let open_blockers = open_blocker_ids(db, issue_id)?;
+    if !open_blockers.is_empty() {
+        bail!(
+            "Issue {} cannot be closed because it has open blockers: {}",
+            format_issue_id(issue_id),
+            open_blockers.join(", ")
+        );
+    }
+    ensure_issue_closeout_proof(db, state_dir, issue_id, record)
 }
 
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
@@ -1484,6 +1590,19 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
                 )?;
             }
             "closed" => {
+                if let Some(state_dir) = find_state_dir_from_cwd()? {
+                    let record = RecordStore::new(&state_dir).load_issue_by_id(&id)?;
+                    ensure_issue_closeout_ready(db, &state_dir, &id, &record)?;
+                } else {
+                    let open_blockers = open_blocker_ids(db, &id)?;
+                    if !open_blockers.is_empty() {
+                        bail!(
+                            "Issue {} cannot be closed because it has open blockers: {}",
+                            format_issue_id(&id),
+                            open_blockers.join(", ")
+                        );
+                    }
+                }
                 db.close_issue(&id)?;
                 changed_fields.push("status");
                 crate::commands::activity_log::record_status_changed(
@@ -1648,6 +1767,10 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
                 record.issue.closed_at = None;
             }
             "closed" => {
+                if previous.status != "closed" {
+                    let db = Database::open(db_path)?;
+                    ensure_issue_closeout_ready(&db, state_dir, &id, &record)?;
+                }
                 record.issue.status = "closed".to_string();
                 record.issue.closed_at = Some(now);
             }
@@ -1760,25 +1883,23 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
 
 pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
-    ensure_canonical_issue_sections_valid(&id)?;
-    let open_blockers = db
-        .get_blockers(&id)?
-        .into_iter()
-        .filter_map(|blocker_id| db.get_issue(&blocker_id).ok().flatten())
-        .filter(|issue| issue.status == "open")
-        .collect::<Vec<_>>();
-    if !open_blockers.is_empty() {
-        bail!(
-            "Issue {} cannot be closed because it has open blockers: {}",
-            issue_ref,
-            open_blockers
-                .iter()
-                .map(|issue| format_issue_id(&issue.id))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
     let previous = db.require_issue(&id)?;
+    if previous.status != "closed" {
+        if let Some(state_dir) = find_state_dir_from_cwd()? {
+            let record = RecordStore::new(&state_dir).load_issue_by_id(&id)?;
+            ensure_issue_closeout_ready(db, &state_dir, &id, &record)?;
+        } else {
+            ensure_canonical_issue_sections_valid(&id)?;
+            let open_blockers = open_blocker_ids(db, &id)?;
+            if !open_blockers.is_empty() {
+                bail!(
+                    "Issue {} cannot be closed because it has open blockers: {}",
+                    issue_ref,
+                    open_blockers.join(", ")
+                );
+            }
+        }
+    }
     db.close_issue(&id)?;
     crate::commands::activity_log::record_status_changed(&id, &previous.status, "closed")?;
     if let Some(reason) = reason {
@@ -1803,29 +1924,14 @@ pub fn close_lifecycle(
 ) -> Result<()> {
     let db = Database::open(db_path)?;
     let id = resolve_id(&db, issue_ref)?;
-    RecordStore::new(state_dir).load_issue_by_id(&id)?;
-    let open_blockers = db
-        .get_blockers(&id)?
-        .into_iter()
-        .filter_map(|blocker_id| db.get_issue(&blocker_id).ok().flatten())
-        .filter(|issue| issue.status == "open")
-        .collect::<Vec<_>>();
-    if !open_blockers.is_empty() {
-        bail!(
-            "Issue {} cannot be closed because it has open blockers: {}",
-            issue_ref,
-            open_blockers
-                .iter()
-                .map(|issue| format_issue_id(&issue.id))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
     let previous = db.require_issue(&id)?;
-    drop(db);
-
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(&id)?;
+    if previous.status != "closed" {
+        ensure_issue_closeout_ready(&db, state_dir, &id, &record)?;
+    }
+    drop(db);
+
     let now = Utc::now();
     record.issue.status = "closed".to_string();
     record.issue.closed_at = Some(now);

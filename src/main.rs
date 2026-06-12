@@ -1,4 +1,5 @@
 mod activity;
+mod command_surface;
 mod commands;
 mod db;
 mod identity;
