@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Enforce required issue sections in lint and workflow gates"
-updated_at: "2026-06-12T04:51:43.133985401+00:00"
+updated_at: "2026-06-12T05:30:04.421251321+00:00"
 ---
 
 ## Description
