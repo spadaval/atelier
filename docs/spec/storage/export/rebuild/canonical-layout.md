@@ -184,10 +184,7 @@ Example issue:
 
 ```markdown
 ---
-acceptance:
-  - "Document the operator-visible behavior."
 created_at: "2026-06-11T20:00:00Z"
-evidence_required: []
 id: atelier-z1p8
 issue_type: task
 labels:
@@ -205,7 +202,21 @@ title: "Define direct edit behavior"
 updated_at: "2026-06-11T20:00:00Z"
 ---
 
-The body contains the durable issue description.
+## Description
+
+Document the operator-visible behavior.
+
+## Outcome
+
+Operators can edit canonical issue Markdown directly and validate the result.
+
+## Evidence
+
+- `atelier lint atelier-z1p8` reports no findings.
+
+## Notes
+
+Migration context and handoff notes live here when needed.
 ```
 
 Example issue activity sidecar:
@@ -251,8 +262,9 @@ For a single Markdown record conflict:
   the timestamp of the resolving edit when the correct source timestamp is
   ambiguous.
 - Preserve labels and other set-like arrays in deterministic sorted order.
-- Preserve ordered user-authored arrays, such as acceptance criteria, in the
-  order that best preserves meaning.
+- Preserve user-authored issue body sections in the order defined by the issue
+  section contract. When two versions edit the same section, merge the prose
+  that best preserves useful intent.
 
 For relationship conflicts:
 
@@ -299,8 +311,43 @@ Issue front matter adds:
 | --- | --- | --- |
 | `priority` | string | Stable priority value, such as `P1`. |
 | `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
-| `acceptance` | array | Acceptance criteria strings in user-defined order. |
-| `evidence_required` | array | Evidence requirements in user-defined order. |
+
+Issue front matter does not carry large human-authored acceptance or proof
+text. The canonical issue schema removes the legacy `acceptance` and
+`evidence_required` arrays; canonical readers must reject those keys once the
+section parser enforcement slice lands. Acceptance intent is authored in the
+`Outcome` body section, and proof requirements are authored in the `Evidence`
+body section.
+
+Issue bodies are structured Markdown. The only recognized top-level issue body
+headings are `## Description`, `## Outcome`, `## Evidence`, and `## Notes`.
+Heading matching is exact and case-sensitive after trimming surrounding
+whitespace from the heading text; headings such as `## Outcomes`,
+`## evidence`, or `### Evidence` are not recognized section boundaries.
+Subheadings below level two are allowed inside a section as ordinary body
+content. Unknown level-two headings are rejected so durable issue records do not
+hide workflow-significant authoring under unmodeled section names.
+
+The required section policy is:
+
+- `Description` is required for every issue and describes the current problem,
+  context, or work request.
+- `Outcome` is required for every issue and describes the desired finished
+  world in observable terms.
+- `Evidence` is required for every issue and describes the proof artifacts,
+  commands, file contents, rejected commands, screenshots, lint/export checks,
+  or evidence records needed to show the outcome was met. When no proof artifact
+  is meaningful, the section must explicitly say why it is not applicable.
+- `Notes` is optional and carries handoff context, sequencing notes, caveats,
+  or non-contract background.
+
+Every present recognized section must contain non-whitespace content before the
+next recognized section or end of file. Empty required sections are rebuild and
+lint errors; an empty `Notes` section is also an error and should be omitted
+instead. Duplicate recognized headings are rebuild and lint errors. Any content
+before the first recognized heading is rejected, including comments, prose,
+lists, or blank-looking non-whitespace content. Blank lines immediately after
+front matter and before `## Description` are allowed.
 
 ## Missions
 

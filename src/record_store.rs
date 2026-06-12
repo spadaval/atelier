@@ -1435,6 +1435,32 @@ mod tests {
         }
     }
 
+    fn sectioned_issue_text(id: &str, body: &str) -> String {
+        format!(
+            r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "{id}"
+issue_type: "task"
+labels:
+  - "record-store"
+priority: "P1"
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Write RecordStore"
+updated_at: "2026-06-10T13:00:00+00:00"
+---
+
+{body}
+"#
+        )
+    }
+
     #[test]
     fn registered_first_class_record_kinds_have_canonical_contracts() {
         let contracts = FIRST_CLASS_RECORD_KINDS
@@ -1510,6 +1536,81 @@ mod tests {
         assert!(path_error
             .to_string()
             .contains("does not match canonical path .atelier/issues/atelier-abcd.md"));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_accepts_sectioned_body_without_legacy_arrays() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
+
+        assert_eq!(parsed.acceptance, Vec::<String>::new());
+        assert_eq!(parsed.evidence_required, Vec::<String>::new());
+        assert_eq!(parsed.issue.description.as_deref(), Some(body));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_rejects_legacy_acceptance_and_evidence_front_matter() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body).replace(
+            "created_at:",
+            "acceptance:\n  - \"legacy acceptance\"\nevidence_required:\n  - \"legacy proof\"\ncreated_at:",
+        );
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("acceptance"));
+        assert!(message.contains("evidence_required"));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_rejects_missing_required_sections() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Missing required issue body section 'Outcome'"));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_rejects_duplicate_recognized_headings() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Outcome\n\nA second outcome.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Duplicate issue body section 'Outcome'"));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_rejects_content_before_first_recognized_heading() {
+        let body = "Preamble is not part of the issue contract.\n\n## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Content before first recognized issue body section"));
+    }
+
+    #[test]
+    #[ignore = "contract test for the upcoming issue body section parser"]
+    fn issue_parser_contract_rejects_unknown_top_level_sections() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Unknown issue body section 'Acceptance'"));
     }
 
     #[test]

@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-4eot"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "lint"
 - "markdown"
 priority: "P1"
@@ -21,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Define issue section contract"
-updated_at: "2026-06-12T04:51:30.558747929+00:00"
+updated_at: "2026-06-12T04:58:45.165718245+00:00"
 ---
 
 ## Description
