@@ -20,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define issue section contract"
-updated_at: "2026-06-12T04:58:45.165718245+00:00"
+updated_at: "2026-06-12T05:02:21.466001699+00:00"
 ---
 
 ## Description
