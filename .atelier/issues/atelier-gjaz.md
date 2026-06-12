@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Replace escaped mission data JSON with readable mission records"
-updated_at: "2026-06-12T19:29:26.567235806+00:00"
+updated_at: "2026-06-12T23:12:35.020218917+00:00"
 ---
 
 ## Description
