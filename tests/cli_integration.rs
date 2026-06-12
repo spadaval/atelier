@@ -1503,7 +1503,7 @@ fn test_show_issue_rich_human_output() {
     );
     run_atelier(dir.path(), &["issue", "block", "2", "4"]);
     run_atelier(dir.path(), &["issue", "block", "5", "2"]);
-    run_atelier(dir.path(), &["issue", "comment", "2", "Recent note"]);
+    run_atelier(dir.path(), &["note", "add", "issue", "2", "Recent note"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "2"]);
 
@@ -1522,7 +1522,8 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Recent Activity"));
     assert!(stdout.contains("Recent note"));
     assert!(stdout.contains("Next Commands"));
-    assert!(stdout.contains("atelier issue comment"));
+    assert!(stdout.contains("atelier note add issue"));
+    assert!(!stdout.contains("atelier issue comment"));
     assert!(stdout.contains("atelier issue transition"));
     assert!(stdout.contains("atelier start"));
 }

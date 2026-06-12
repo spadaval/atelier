@@ -726,7 +726,7 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         println!("  Edit issue Markdown: {}", path.display());
     }
     println!("  Validate this issue: atelier lint {}", object.id);
-    println!("  Add a note: atelier issue comment {} \"...\"", object.id);
+    println!("  Add a note: atelier note add issue {} \"...\"", object.id);
     println!(
         "  Show transition options: atelier issue transition {} --options",
         object.id
