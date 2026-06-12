@@ -1016,15 +1016,40 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Active work:"));
     assert!(stdout.contains("Active mission:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout.contains("atelier mission status"));
-    assert!(stdout.contains("atelier issue list --ready"));
-    assert!(stdout.contains("atelier start <issue-id>"));
+    assert!(
+        stdout.contains("Inspect mission readiness (no mission is active): atelier mission status")
+    );
+    assert!(stdout
+        .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
+    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
+    assert!(stdout.contains("Check runtime health (tracker export is current): atelier doctor"));
+    assert!(!stdout.contains("workflow validate"));
+    assert!(!stdout.contains("issue next"));
+    assert!(!stdout.contains("session"));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
     assert!(success, "quiet status failed: {stderr}");
     assert!(quiet.contains("work="));
     assert!(quiet.contains("ready="));
     assert!(quiet.contains("tracker="));
+}
+
+#[test]
+fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains(
+        "Inspect blocked work (no ready work is available): atelier issue list --blocked"
+    ));
+    assert!(!stdout.contains("workflow validate"));
+    assert!(!stdout.contains("issue blocked"));
+
+    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+    assert!(success, "suggested blocked-list command failed: {stderr}");
+    assert!(blocked_out.contains("No blocked issues."));
 }
 
 #[test]
@@ -7524,7 +7549,21 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Validators"));
     assert!(status_out.contains("closeout validator failure detected."));
     assert!(status_out.contains("Next Commands"));
-    assert!(status_out.contains(&format!("atelier mission show {mission_id}")));
+    assert!(status_out.contains(&format!(
+        "Inspect mission record (durable intent and linked work): atelier mission show {mission_id}"
+    )));
+    assert!(status_out.contains(&format!(
+        "Refresh mission status (current blockers and closeout gates): atelier mission status {mission_id}"
+    )));
+    assert!(status_out.contains("Choose ready work ("));
+    assert!(status_out.contains("ready item(s)): atelier issue list --ready"));
+    assert!(status_out.contains(
+        "Record validation proof (1 evidence gap(s)): atelier evidence add --kind validation --result pass \"...\""
+    ));
+    assert!(
+        !status_out.contains("workflow validate"),
+        "normal mission next commands must not route to raw workflow validators:\n{status_out}"
+    );
 
     let (success, quiet_out, stderr) =
         run_atelier(dir.path(), &["--quiet", "mission", "status", mission_id]);
@@ -7597,7 +7636,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(closeout_status.contains("Health:   closeout"));
     assert!(closeout_status.contains("Closeout: ready"));
     assert!(closeout_status.contains(&format!(
-        "atelier mission update {closeout_mission} --status closed"
+        "Close mission (all closeout gates pass): atelier mission update {closeout_mission} --status closed"
     )));
 
     let mission_path = dir

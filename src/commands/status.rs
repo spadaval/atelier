@@ -60,7 +60,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         None => println!("Active work:   none"),
     }
 
-    match active_mission {
+    match &active_mission {
         Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
         None if open_missions.is_empty() => println!("Active mission: none"),
         None => println!("Active mission: none ({} open)", open_missions.len()),
@@ -73,18 +73,38 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!();
     println!("Next Actions");
     println!("------------");
-    println!("  Inspect mission readiness: atelier mission status");
+    match &active_mission {
+        Some(mission) => println!(
+            "  Inspect active mission ({} is active): atelier mission status {}",
+            mission.id, mission.id
+        ),
+        None if open_missions.is_empty() => {
+            println!("  Inspect mission readiness (no mission is active): atelier mission status")
+        }
+        None => println!(
+            "  Inspect mission choices ({} open mission(s), none active): atelier mission status",
+            open_missions.len()
+        ),
+    }
     if ready.is_empty() {
-        println!("  Find blocked work: atelier issue list --blocked");
+        println!(
+            "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
+        );
     } else {
-        println!("  Choose ready work: atelier issue list --ready");
-        println!("  Start selected work: atelier start <issue-id>");
+        println!(
+            "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
+            ready.len()
+        );
+        println!("  Start selected work (ready work exists): atelier start <issue-id>");
     }
     if export_stale.is_empty() {
-        println!("  Check runtime health: atelier doctor");
+        println!("  Check runtime health (tracker export is current): atelier doctor");
     } else {
-        println!("  Refresh canonical export: atelier export");
-        println!("  Check tracker records: atelier lint");
+        println!(
+            "  Refresh canonical export ({} stale record(s)): atelier export",
+            export_stale.len()
+        );
+        println!("  Check tracker records (export is stale): atelier lint");
     }
     Ok(())
 }

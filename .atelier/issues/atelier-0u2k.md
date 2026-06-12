@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Make CLI next actions context-aware and testable"
-updated_at: "2026-06-12T05:12:35.030572941+00:00"
+updated_at: "2026-06-12T23:11:41.000674030+00:00"
 ---
 
 ## Description

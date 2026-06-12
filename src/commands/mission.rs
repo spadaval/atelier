@@ -307,18 +307,33 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     }
 
     print_mission_heading("Next Commands");
-    println!("  atelier mission show {}", mission.id);
-    println!("  atelier mission status {}", mission.id);
+    println!(
+        "  Inspect mission record (durable intent and linked work): atelier mission show {}",
+        mission.id
+    );
+    println!(
+        "  Refresh mission status (current blockers and closeout gates): atelier mission status {}",
+        mission.id
+    );
     if summary.total_work().ready > 0 {
-        println!("  atelier issue list --ready");
+        println!(
+            "  Choose ready work ({} ready item(s)): atelier issue list --ready",
+            summary.total_work().ready
+        );
     }
     if summary.evidence_gap_count() > 0 {
-        println!("  atelier evidence add --kind validation --result pass \"...\"");
+        println!(
+            "  Record validation proof ({} evidence gap(s)): atelier evidence add --kind validation --result pass \"...\"",
+            summary.evidence_gap_count()
+        );
     }
     if mission_lifecycle_status(&mission) != "closed" && closeout.ready() {
-        println!("  atelier mission update {} --status closed", mission.id);
+        println!(
+            "  Close mission (all closeout gates pass): atelier mission update {} --status closed",
+            mission.id
+        );
     }
-    println!("  atelier doctor");
+    println!("  Check runtime health (tracker and projection state): atelier doctor");
     Ok(())
 }
 
