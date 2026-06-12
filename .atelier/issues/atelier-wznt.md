@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Collapse Atelier project state into one .atelier directory"
-updated_at: "2026-06-11T18:55:24.517430677+00:00"
+updated_at: "2026-06-12T00:18:34.520571163+00:00"
 ---
 
 Problem: Atelier currently splits durable tracker records into .atelier-state while .atelier mixes local SQLite runtime state, generated rule files, hook config, locks, and local overrides. This makes the product model hard to explain and leaves config untracked.
