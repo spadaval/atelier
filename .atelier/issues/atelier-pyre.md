@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate closeout proof gates through domain commands"
-updated_at: "2026-06-12T20:29:57.173649956+00:00"
+updated_at: "2026-06-12T23:53:41.853912369+00:00"
 ---
 
 ## Description
