@@ -45,4 +45,5 @@ process, not a code review of one implementation slice.
 - Focused tests or transcripts for each validation failure scenario.
 - Evidence record attached to this validation issue with the scenario matrix
   and result classifications.
-- Links to follow-up items for any scenario that still fails or is deferred.
+- `atelier link list` or `atelier issue show` transcripts identify follow-up
+  items for any scenario that still fails or is deferred.

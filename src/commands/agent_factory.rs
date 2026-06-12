@@ -8,8 +8,8 @@ use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
 use crate::record_store::{
-    issue_record_path, CanonicalIssueRecord, IssueSections, RecordStore, RelationshipTarget,
-    Relationships,
+    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
+    IssueSections, RecordStore, RelationshipTarget, Relationships,
 };
 use crate::utils::format_issue_id;
 
@@ -2127,6 +2127,129 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     }
 }
 
+const EVIDENCE_PROOF_TARGET_HINT: &str = "command, transcript, evidence record, test, \
+review artifact, file change, or manual check";
+
+const CONCRETE_EVIDENCE_MARKERS: &[&str] = &[
+    "command",
+    "transcript",
+    "evidence record",
+    "evidence id",
+    "test",
+    "tests",
+    "nextest",
+    "lint",
+    "doctor",
+    "export",
+    "review artifact",
+    "review",
+    "artifact",
+    "file change",
+    "file diff",
+    "manual check",
+    "manual validation",
+    "screenshot",
+    "stdout",
+    "stderr",
+    "command output",
+    "help text",
+    "atelier ",
+    "`atelier ",
+    "cargo ",
+    "git diff",
+    "target/debug/atelier",
+    ".rs",
+    ".md",
+    ".toml",
+    ".json",
+    ".yaml",
+    ".yml",
+];
+
+const VAGUE_EVIDENCE_MARKERS: &[&str] = &[
+    "not specified",
+    "to be determined",
+    "tbd",
+    "todo",
+    "none yet",
+    "will be added",
+    "add later",
+    "later",
+];
+
+fn issue_requires_concrete_evidence(issue: &Issue) -> bool {
+    issue.status == "open" && issue.issue_type != "epic"
+}
+
+fn evidence_entries(evidence: &str) -> Vec<String> {
+    if evidence
+        .lines()
+        .any(|line| strip_markdown_list_marker(line.trim()).is_some())
+    {
+        let mut entries = Vec::new();
+        let mut current = String::new();
+        for line in evidence.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(item) = strip_markdown_list_marker(trimmed) {
+                if !current.trim().is_empty() {
+                    entries.push(current.trim().to_string());
+                }
+                current = item.trim().to_string();
+            } else if current.trim().is_empty() {
+                current = trimmed.to_string();
+            } else {
+                current.push(' ');
+                current.push_str(trimmed);
+            }
+        }
+        if !current.trim().is_empty() {
+            entries.push(current.trim().to_string());
+        }
+        entries
+    } else {
+        evidence
+            .split("\n\n")
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+fn strip_markdown_list_marker(line: &str) -> Option<&str> {
+    for prefix in ["- ", "* ", "+ "] {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            return Some(rest);
+        }
+    }
+
+    let (digits, rest) = line.split_once('.')?;
+    if !digits.is_empty()
+        && digits.chars().all(|character| character.is_ascii_digit())
+        && rest.starts_with(' ')
+    {
+        Some(rest.trim_start())
+    } else {
+        None
+    }
+}
+
+fn evidence_entry_names_observable_target(entry: &str) -> bool {
+    let lower = entry.to_lowercase();
+    if VAGUE_EVIDENCE_MARKERS
+        .iter()
+        .any(|marker| lower.contains(marker))
+    {
+        return false;
+    }
+    CONCRETE_EVIDENCE_MARKERS
+        .iter()
+        .any(|marker| lower.contains(marker))
+}
+
 pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     let issues = if let Some(issue_ref) = issue_ref {
         let id = resolve_id(db, issue_ref)?;
@@ -2143,7 +2266,18 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
             let id = resolve_id(db, issue_ref)?;
             vec![issue_record_path(&id)]
         } else {
-            store.discover_issue_paths()?
+            match store.discover_issue_paths() {
+                Ok(paths) => paths,
+                Err(error) => {
+                    findings.push(json!({
+                        "id": "(canonical)",
+                        "code": "invalid_canonical_state",
+                        "path": state_dir.display().to_string(),
+                        "message": format!("Canonical tracker Markdown is invalid: {error:#}")
+                    }));
+                    Vec::new()
+                }
+            }
         };
         for relative in paths {
             match store.load_issue(&relative) {
@@ -2163,9 +2297,19 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
                                 .to_string()),
                         "code": "invalid_canonical_issue",
                         "path": state_dir.join(&relative).display().to_string(),
-                        "message": error.to_string()
+                        "message": format!("Canonical tracker Markdown is invalid: {error:#}")
                     }));
                 }
+            }
+        }
+        if findings.is_empty() {
+            if let Err(error) = super::rebuild::validate_canonical_state(state_dir) {
+                findings.push(json!({
+                    "id": "(canonical)",
+                    "code": "invalid_canonical_state",
+                    "path": state_dir.display().to_string(),
+                    "message": format!("Canonical tracker Markdown is invalid: {error:#}")
+                }));
             }
         }
         (records, findings)
@@ -2217,6 +2361,39 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
                             state.name.title()
                         )
                     }));
+                }
+            }
+            if issue_requires_concrete_evidence(&issue) {
+                for (index, entry) in evidence_entries(&record.sections.evidence)
+                    .iter()
+                    .enumerate()
+                {
+                    if !evidence_entry_names_observable_target(entry) {
+                        let relative = issue_record_path(&issue.id);
+                        findings.push(json!({
+                            "id": issue_id_for_agent(db, &issue)?,
+                            "code": "vague_evidence",
+                            "section": IssueSectionName::Evidence.title(),
+                            "path": canonical_state_dir
+                                .as_ref()
+                                .map(|state_dir| {
+                                    canonical_issue_path_from_state(state_dir, &issue.id)
+                                        .display()
+                                        .to_string()
+                                })
+                                .unwrap_or_default(),
+                            "message": issue_section_diagnostic(
+                                Some(&issue.id),
+                                IssueSectionName::Evidence.title(),
+                                &relative,
+                                &format!(
+                                    "Issue section Evidence entry {} must name an observable proof target ({})",
+                                    index + 1,
+                                    EVIDENCE_PROOF_TARGET_HINT
+                                )
+                            )
+                        }));
+                    }
                 }
             }
         }

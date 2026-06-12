@@ -20,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Enforce concrete Evidence sections in lint"
-updated_at: "2026-06-12T05:11:53.903149935+00:00"
+updated_at: "2026-06-12T22:43:06.996294620+00:00"
 ---
 
 ## Description
@@ -41,10 +41,12 @@ vague to guide validation.
 
 ## Evidence
 
-- Lint tests cover missing Evidence, empty Evidence, vague Evidence, and concrete
+- Evidence record `atelier-evks` captures focused lint tests for missing
+  Evidence, empty Evidence, vague Evidence, and concrete Evidence.
 
-Evidence.
+- CLI transcript tests show actionable lint diagnostics with issue ID, section,
+  and file path.
 
-- CLI transcript tests show actionable lint diagnostics.
-
-- Run focused lint tests.
+- Evidence record `atelier-evks` captures `cargo fmt -- --check`,
+  `git diff --check`, `target/debug/atelier lint atelier-u6ax`,
+  `target/debug/atelier lint`, and `target/debug/atelier export --check`.

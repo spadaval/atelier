@@ -42,7 +42,7 @@ history, prime, and workflow-validator public-surface repairs land.
 ## Evidence
 
 - Positive and negative CLI transcripts for the major signpost surfaces.
-- Docs/help/Agent Factory parity check.
+- Manual docs/help/Agent Factory parity check transcript or evidence record.
 - Focused CLI integration tests for status, start/finish, transition, history,
   prime, and raw-workflow-validator absence from normal guidance.
 - `atelier lint` and `atelier export --check`.

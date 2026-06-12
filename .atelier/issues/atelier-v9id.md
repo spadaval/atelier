@@ -60,9 +60,11 @@ repairs are still missing, misleading, or only partially wired.
 - Record stale or ignored test inventory results and the linked owner for each
   unresolved item.
 
-- Record docs/help/Agent Factory guidance parity results.
+- Record docs/help/Agent Factory guidance parity results in the mission
+  contract-audit evidence record.
 
-- Record validation-system failure scenario results.
+- Record validation-system failure scenario results in an attached evidence
+  record.
 
 - Run focused integration tests for the repaired surfaces.
 
