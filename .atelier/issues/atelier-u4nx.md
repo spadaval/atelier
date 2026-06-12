@@ -3,6 +3,7 @@ created_at: "2026-06-12T20:29:41.674600364+00:00"
 id: "atelier-u4nx"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "history"
 - "prime"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair history and prime signpost surfaces"
-updated_at: "2026-06-12T20:29:41.674600364+00:00"
+updated_at: "2026-06-12T22:34:58.063491602+00:00"
 ---
 
 ## Description

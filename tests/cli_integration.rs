@@ -815,12 +815,14 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for command in [
         "init",
+        "prime",
         "status",
         "issue",
         "dep",
         "mission",
         "plan",
         "evidence",
+        "history",
         "worktree",
         "export",
         "rebuild",
@@ -832,11 +834,14 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for common in [
+        "atelier prime",
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
         "atelier mission list",
         "atelier mission show <id>",
+        "atelier history --mission <id>",
+        "atelier history --issue <id>",
         "atelier start <issue-id>",
         "atelier finish [issue-id]",
         "atelier doctor",
@@ -863,7 +868,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "agent",
         "locks",
         "sync",
-        "history",
         "work",
         "workflow",
     ] {
@@ -913,6 +917,77 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(quiet.contains("work="));
     assert!(quiet.contains("ready="));
     assert!(quiet.contains("tracker="));
+}
+
+#[test]
+fn test_prime_guides_empty_checkout_without_repeating_status() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
+    assert!(success, "prime failed: {stderr}");
+    assert!(stdout.contains("Atelier Prime"));
+    assert!(stdout.contains("Context Recovery"));
+    assert!(stdout.contains("Active mission: none"));
+    assert!(stdout.contains("Active work: none"));
+    assert!(stdout.contains("Core Rules"));
+    assert!(stdout.contains("Essential Commands"));
+    assert!(stdout.contains("Common Workflows"));
+    assert!(stdout.contains("Validation/Closeout Checklist"));
+    assert!(stdout.contains("Repository Notes"));
+    assert!(stdout.contains(
+        "`atelier status` - Check active work, active mission, ready count, and tracker freshness."
+    ));
+    assert!(stdout.contains(
+        "`atelier history --issue <id>` - Inspect full canonical activity instead of relying on chat memory."
+    ));
+    assert!(!stdout.contains("Atelier Status"));
+    assert!(!stdout.contains("Generic"));
+    assert!(!stdout.contains("etc."));
+}
+
+#[test]
+fn test_prime_names_active_mission() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Prime mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Prime mission");
+    let mission_id = mission_id.as_str();
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id]);
+    assert!(success, "mission start failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
+    assert!(success, "prime failed: {stderr}");
+    assert!(stdout.contains(&format!("Active mission: {mission_id} - Prime mission")));
+    assert!(stdout.contains(&format!(
+        "`atelier mission status {mission_id}` - Drill into the active mission named above."
+    )));
+    assert!(stdout.contains("`atelier history --mission <id>`"));
+}
+
+#[test]
+fn test_prime_names_active_work() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Prime work"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Prime work");
+    let issue_id = issue_id.as_str();
+    commit_all(dir.path(), "prime work setup");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
+    assert!(success, "prime failed: {stderr}");
+    assert!(stdout.contains(&format!("Active work: {issue_id} - Prime work")));
+    assert!(stdout.contains(&format!(
+        "`atelier issue show {issue_id}` - Reopen the active work contract named above."
+    )));
+    assert!(stdout.contains("`atelier finish [issue-id]` - Finish active local work"));
 }
 
 #[test]
@@ -1803,8 +1878,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_history_reads_activity_sidecars_with_filters_and_json() {
+fn test_history_repo_wide_supports_filters_bounded_output_and_drill_downs() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1828,11 +1902,36 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
         "Evidence attached",
         "evidence_id: \"ev-1\"\nresult: \"pass\"",
     );
+    write_activity_fixture(
+        dir.path(),
+        &second,
+        "20260610T181922123456Z",
+        "comment",
+        "Second comment",
+        "Second body",
+    );
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--limit", "1"]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--event-kind",
+            "evidence_attached",
+            "--limit",
+            "1",
+        ],
+    );
     assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains("History"));
+    assert!(stdout.contains("Scope:          repository"));
+    assert!(stdout.contains("Source:         canonical .atelier"));
+    assert!(stdout.contains("Ordering:       newest first"));
+    assert!(stdout.contains("Showing:        1 of 1 matching events"));
     assert!(stdout.contains("Evidence attached"));
     assert!(!stdout.contains("First comment"));
+    assert!(stdout.contains("Next Commands"));
+    assert!(stdout.contains("atelier issue show <id>"));
+    assert!(stdout.contains("atelier history --mission <id>"));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -1840,7 +1939,7 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
             "history",
             "--issue",
             first.as_str(),
-            "--type",
+            "--event-kind",
             "comment",
             "--since",
             "2026-06-10",
@@ -1850,37 +1949,47 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
     assert!(stdout.contains("First comment"));
     assert!(!stdout.contains("Evidence attached"));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["history", "--type", "evidence_attached"]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["history", "--event-kind", "comment", "--limit", "1"],
+    );
     assert!(success, "history failed: {stderr}");
-    assert!(stdout.contains(&second));
-    assert!(stdout.contains("evidence_attached"));
-    assert!(stdout.contains("evidence_id"));
+    assert!(stdout.contains("Second comment"));
+    assert!(!stdout.contains("First comment"));
+    assert!(stdout.contains("Omitted:"));
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_history_empty_and_invalid_limit() {
+fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
-    assert!(success, "empty history failed: {stderr}");
-    assert!(stdout.contains("No history found."));
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "History mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "History mission");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["history", "--limit", "0"]);
-    assert!(!success, "zero limit should fail");
-    assert!(stderr.contains("--limit must be greater than 0"));
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_evidence_issue_link_creates_history_activity() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "Evidence issue"]);
-    let issue_id = issue_id_by_title(dir.path(), "Evidence issue");
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "History epic", "--issue-type", "epic"],
+    );
+    let epic_id = issue_id_by_title(dir.path(), "History epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "subissue", &epic_id, "History child"],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "History child");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+    write_activity_fixture(
+        dir.path(),
+        &child_id,
+        "20260610T191920123456Z",
+        "note",
+        "Child note",
+        "Child body",
+    );
     let (success, _evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -1903,7 +2012,7 @@ fn test_evidence_issue_link_creates_history_activity() {
             "attach",
             &evidence_id,
             "issue",
-            issue_id.as_str(),
+            child_id.as_str(),
         ],
     );
     assert!(success, "evidence attach failed: {stderr}");
@@ -1912,16 +2021,136 @@ fn test_evidence_issue_link_creates_history_activity() {
         dir.path(),
         &[
             "history",
-            "--issue",
-            issue_id.as_str(),
-            "--type",
+            "--mission",
+            mission_id.as_str(),
+            "--event-kind",
             "evidence_attached",
         ],
     );
 
     assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains(&format!("Scope:          mission {mission_id}")));
     assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
-    assert!(stdout.contains("result: \"pass\""));
+    assert!(stdout.contains(&child_id));
+    assert!(stdout.contains(&format!("atelier mission show {mission_id}")));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--mission",
+            mission_id.as_str(),
+            "--event-kind",
+            "note",
+        ],
+    );
+    assert!(success, "mission note history failed: {stderr}");
+    assert!(stdout.contains("Child note"));
+    assert!(stdout.contains(&child_id));
+}
+
+#[test]
+fn test_history_issue_scope_defaults_single_issue_and_can_include_descendants() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Parent history"]);
+    let parent_id = issue_id_by_title(dir.path(), "Parent history");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "subissue", &parent_id, "Child history"],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Child history");
+    write_activity_fixture(
+        dir.path(),
+        &parent_id,
+        "20260610T181920123456Z",
+        "note",
+        "Parent note",
+        "Parent body",
+    );
+    write_activity_fixture(
+        dir.path(),
+        &child_id,
+        "20260610T181921123456Z",
+        "note",
+        "Child note",
+        "Child body",
+    );
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--issue",
+            parent_id.as_str(),
+            "--event-kind",
+            "note",
+        ],
+    );
+    assert!(success, "issue history failed: {stderr}");
+    assert!(stdout.contains(&format!("Scope:          issue {parent_id}")));
+    assert!(stdout.contains("Parent note"));
+    assert!(!stdout.contains("Child note"));
+    assert!(stdout.contains(&format!(
+        "atelier history --issue {parent_id} --include-descendants"
+    )));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--issue",
+            parent_id.as_str(),
+            "--include-descendants",
+            "--event-kind",
+            "note",
+        ],
+    );
+    assert!(success, "descendant issue history failed: {stderr}");
+    assert!(stdout.contains("Parent note"));
+    assert!(stdout.contains("Child note"));
+}
+
+#[test]
+fn test_history_empty_states_and_invalid_limit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["history"]);
+    assert!(success, "empty history failed: {stderr}");
+    assert!(stdout.contains("No canonical history found for repository."));
+    assert!(stdout.contains("Source:"));
+    assert!(stdout.contains("Next Commands"));
+
+    run_atelier(dir.path(), &["issue", "create", "Filtered history"]);
+    let issue_id = issue_id_by_title(dir.path(), "Filtered history");
+    write_activity_fixture(
+        dir.path(),
+        &issue_id,
+        "20260610T181920123456Z",
+        "note",
+        "Filter note",
+        "Filter body",
+    );
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "history",
+            "--issue",
+            issue_id.as_str(),
+            "--event-kind",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "filtered empty history failed: {stderr}");
+    assert!(stdout.contains("History exists for"));
+    assert!(stdout.contains("no events matched the current filters"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["history", "--limit", "0"]);
+    assert!(!success, "zero limit should fail");
+    assert!(stderr.contains("--limit must be greater than 0"));
 }
 
 #[test]

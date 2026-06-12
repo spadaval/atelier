@@ -15,6 +15,7 @@ Core commands are stable enough to appear in `atelier --help` and are expected
 in normal Agent Factory workflows:
 
 - `atelier init`
+- `atelier prime`
 - `atelier status`
 - `atelier issue ...`
 - `atelier dep add/remove/list`
@@ -26,6 +27,7 @@ in normal Agent Factory workflows:
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence add/capture/show/list/attach`
+- `atelier history`
 - `atelier start`
 - `atelier finish`
 - `atelier worktree for/status/merge/remove`
@@ -37,6 +39,14 @@ in normal Agent Factory workflows:
 `atelier init` is core tracker setup only. It creates `.atelier/` records,
 `.atelier/config.toml`, local runtime storage, and root ignore rules; it does
 not install editor or assistant hooks.
+
+`atelier prime` is the recovery and onboarding signpost. It explains how an
+agent should operate in this repository, where durable tracker state lives, what
+local runtime/cache state is ignored, and which command families matter. It is
+mostly static guidance with a small dynamic header for repository path, active
+mission, active work, ready work, and tracker freshness. It is not a live status
+dashboard, full command reference, or implementation tutorial; every command it
+prints must have a concrete reason.
 
 `atelier status` is the root checkout signpost. It summarizes active work,
 active mission focus, ready work count, tracker freshness, and the next
@@ -82,6 +92,15 @@ projection or UI is required.
 `atelier evidence capture` runs a command and stores bounded stdout/stderr
 summaries with command, exit status, result, timestamp, and optional target
 metadata so validation proof does not require manual transcript copy/paste.
+`atelier history` is the canonical project-history view. Repo-wide history and
+scoped forms such as `atelier history --mission <id>`, `atelier history --issue
+<id>`, and `atelier history --epic <id>` read canonical activity sidecars,
+first-class records, evidence, and record links. History defaults to newest
+first with bounded output, supports event kind, actor, time, and scope filters,
+and separates canonical tracker history from local runtime diagnostics. Issue
+and mission show surfaces may include compact recent activity or record context,
+but they point to scoped history for full activity instead of expanding
+unbounded logs.
 Root `atelier start <issue-id>` and `atelier finish [issue-id]` are the normal
 work lifecycle commands. They store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow

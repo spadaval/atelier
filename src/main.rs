@@ -32,6 +32,7 @@ use record_store::RecordStore;
   init          Initialize Atelier in the current repository
 
 Orientation:
+  prime         Show repository operating guidance for recovery and onboarding
   status        Show checkout, mission, work, and tracker signposts
   start         Start tracked work on an issue
   finish        Finish tracked work, defaulting to active work
@@ -50,6 +51,7 @@ Missions and planning:
 
 Records:
   evidence      Capture validation evidence
+  history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
   worktree      Create, inspect, merge, and remove issue worktrees
@@ -69,6 +71,7 @@ Maintenance:
   doctor        Check runtime and exported-state health
 
 Common commands:
+  atelier prime
   atelier status
   atelier issue list
   atelier issue list --ready
@@ -76,6 +79,8 @@ Common commands:
   atelier mission list
   atelier mission show <id>
   atelier mission status
+  atelier history --mission <id>
+  atelier history --issue <id>
   atelier start <issue-id>
   atelier finish [issue-id]
   atelier doctor
@@ -112,6 +117,9 @@ enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Show repository operating guidance for recovery and onboarding
+    Prime,
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
@@ -206,6 +214,34 @@ enum Commands {
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
+    },
+
+    /// Inspect canonical repo, mission, issue, or epic activity
+    History {
+        /// Scope to one mission and linked work
+        #[arg(long)]
+        mission: Option<String>,
+        /// Scope to one issue
+        #[arg(long)]
+        issue: Option<String>,
+        /// Scope to one epic and its descendants
+        #[arg(long)]
+        epic: Option<String>,
+        /// Include subissues when using --issue
+        #[arg(long)]
+        include_descendants: bool,
+        /// Filter by event kind, such as note or evidence_attached
+        #[arg(long)]
+        event_kind: Option<String>,
+        /// Filter by actor exactly as recorded
+        #[arg(long)]
+        actor: Option<String>,
+        /// Filter to events since a duration like 7d, a YYYY-MM-DD date, or RFC3339
+        #[arg(long)]
+        since: Option<String>,
+        /// Maximum number of matching events to print
+        #[arg(long, default_value_t = commands::history::DEFAULT_LIMIT)]
+        limit: usize,
     },
 
     /// Workflow policy and validator helpers
@@ -1504,6 +1540,12 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force)
         }
 
+        Commands::Prime => {
+            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let repo_root = storage.repo_root().to_path_buf();
+            commands::prime::run(storage.db(), &storage.state_dir(), &repo_root)
+        }
+
         Commands::Status => {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
@@ -1925,6 +1967,45 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::History {
+            mission,
+            issue,
+            epic,
+            include_descendants,
+            event_kind,
+            actor,
+            since,
+            limit,
+        } => {
+            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let mission = mission
+                .as_deref()
+                .map(|id| resolve_record_arg(storage.db(), "mission", id))
+                .transpose()?;
+            let issue = issue
+                .as_deref()
+                .map(|id| resolve_issue_arg(storage.db(), id))
+                .transpose()?;
+            let epic = epic
+                .as_deref()
+                .map(|id| resolve_issue_arg(storage.db(), id))
+                .transpose()?;
+            commands::history::run(
+                storage.db(),
+                &storage.state_dir(),
+                commands::history::HistoryOptions {
+                    mission,
+                    issue,
+                    epic,
+                    include_descendants,
+                    event_kind,
+                    actor,
+                    since,
+                    limit,
+                },
+            )
+        }
+
         Commands::Workflow { action } => {
             let db = projection_query_db()?;
             match action {
@@ -2033,6 +2114,7 @@ fn run() -> Result<()> {
 fn command_identity(command: &Commands) -> &'static str {
     match command {
         Commands::Init { .. } => "init",
+        Commands::Prime => "prime",
         Commands::Status => "status",
         Commands::Start { .. } => "start",
         Commands::Finish { .. } => "finish",
@@ -2120,6 +2202,7 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
         },
+        Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
             WorkflowCommands::Validate { .. } => "workflow validate",
         },
