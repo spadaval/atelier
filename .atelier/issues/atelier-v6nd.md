@@ -4,6 +4,7 @@ id: "atelier-v6nd"
 issue_type: "task"
 labels:
 - "agent-factory"
+- "assignee:root"
 - "process"
 - "validation"
 priority: "P1"
@@ -18,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Teach Agent Factory proof escalation rules"
-updated_at: "2026-06-12T19:39:54.111802532+00:00"
+updated_at: "2026-06-12T21:25:55.304932055+00:00"
 ---
 
 ## Description
