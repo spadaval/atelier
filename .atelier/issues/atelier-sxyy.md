@@ -3,6 +3,7 @@ created_at: "2026-06-12T19:29:06.182335463+00:00"
 id: "atelier-sxyy"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "docs"
 - "mission"
 - "records"
@@ -18,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define readable mission record contract"
-updated_at: "2026-06-12T19:29:06.182335463+00:00"
+updated_at: "2026-06-12T21:01:52.055672292+00:00"
 ---
 
 ## Description
