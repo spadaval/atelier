@@ -198,6 +198,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier graph impact/tree`
 - `atelier note add`
 - `atelier mission create/show/list/status/update`
+- `atelier mission audit`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence add/capture/show/list/attach`
@@ -220,7 +221,7 @@ fn write_valid_command_guidance(dir: &Path) {
     fs::write(docs_dir.join("cli-surface.md"), valid_command_surface_doc()).unwrap();
     fs::write(
         dir.join("AGENTFACTORY.md"),
-        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier issue show <id>`\n",
+        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission audit <id>`\n- `atelier issue show <id>`\n",
     )
     .unwrap();
 }
@@ -6497,6 +6498,125 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
     assert!(stdout.contains("tests/legacy_session.rs"));
     assert!(stdout.contains("legacy_session_still_works"));
     assert!(stdout.contains("atelier session start"));
+    assert!(stderr.contains("mission closeout blocked"));
+}
+
+#[test]
+fn test_mission_audit_reports_missing_partial_and_ready_proof() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "create",
+            "Audit proof",
+            "--validation",
+            "Mission audit validates authored outcomes.",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Audit proof");
+    let mission_id = mission_id.as_str();
+
+    let (success, missing_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
+    assert!(!success, "audit without work should fail");
+    assert!(missing_out.contains("Mission Contract Audit"));
+    assert!(missing_out.contains("[fail]"));
+    assert!(missing_out.contains("No linked mission work exists"));
+    assert!(stderr.contains("mission contract audit failed"));
+
+    let epic_body = "## Description\n\nAudit epic body.\n\n## Outcome\n\n- Linked epic outcome is proven.\n\n## Evidence\n\n- Attached validation evidence proves the epic outcome.";
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Audit epic",
+            "--issue-type",
+            "epic",
+            "--description",
+            epic_body,
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Audit epic");
+    let epic_id = epic_id.as_str();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, epic_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    attach_issue_pass_evidence(dir.path(), epic_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", epic_id, "--reason", "epic proof"],
+    );
+    assert!(success, "epic close failed: {stderr}");
+
+    let (success, partial_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
+    assert!(!success, "audit without mission evidence should fail");
+    assert!(partial_out.contains("pass"));
+    assert!(partial_out.contains(epic_id));
+    assert!(partial_out.contains("Linked epic outcome is proven."));
+    assert!(partial_out.contains("No validation evidence is attached to the mission."));
+    assert!(stderr.contains("mission contract audit failed"));
+
+    attach_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "mission audit proof evidence",
+    );
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
+    assert!(success, "ready audit should pass: {stderr}");
+    assert!(ready_out.contains("[pass]"));
+    assert!(ready_out.contains("Summary: 2 pass, 0 fail, 2 total"));
+    assert!(ready_out.contains(&format!(
+        "Close mission when other gates pass: atelier mission update {mission_id} --status closed"
+    )));
+}
+
+#[test]
+fn test_mission_closeout_uses_contract_audit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "create",
+            "Audit closeout",
+            "--validation",
+            "Authored validation must map to linked work.",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Audit closeout");
+    let mission_id = mission_id.as_str();
+    attach_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "mission evidence without work",
+    );
+    commit_all(dir.path(), "audit closeout baseline");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "closed"],
+    );
+    assert!(
+        !success,
+        "mission closeout should fail when contract audit fails"
+    );
+    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("contract audit failed"));
+    assert!(stdout.contains(&format!("atelier mission audit {mission_id}")));
     assert!(stderr.contains("mission closeout blocked"));
 }
 

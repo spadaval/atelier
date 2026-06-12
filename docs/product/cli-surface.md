@@ -88,7 +88,10 @@ it summarizes linked plans, milestones, evidence, and work grouped by ready,
 blocked, done, and backlog state. `atelier mission status [<id>]` is the
 mission-control CLI surface for active mission health, evidence gaps, blockers,
 validator freshness, closeout readiness, and next actions before any separate
-projection or UI is required.
+projection or UI is required. `atelier mission audit <id>` is the closeout
+contract surface: it maps authored mission validation expectations and linked
+epic outcomes to current work, blockers, and attached evidence before a mission
+can close.
 `atelier evidence capture` runs a command and stores bounded stdout/stderr
 summaries with command, exit status, result, timestamp, and optional target
 metadata so validation proof does not require manual transcript copy/paste.

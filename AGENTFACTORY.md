@@ -56,6 +56,7 @@ This file binds Agent Factory to this repository.
   - `atelier mission list`
   - `atelier mission show <id>`
   - `atelier mission status [<id>]`
+  - `atelier mission audit <id>`
   - `atelier mission create "..."`
   - `atelier mission update <id> --status <draft|ready|active|closed>`
   - `atelier mission add-work <mission-id> <issue-id>`
@@ -104,9 +105,9 @@ This file binds Agent Factory to this repository.
   - `atelier lint <id>`
   - `atelier doctor`
 - Mission completion requires all linked work closed, required evidence
-  attached, required advanced policy checks passing, a contract audit mapping
-  each mission Outcome line to linked work and attached evidence, and a clean
-  Git worktree.
+  attached, required advanced policy checks passing, `atelier mission audit
+  <id>` mapping mission validation expectations and linked epic outcomes to
+  work and evidence, and a clean Git worktree.
 - Do not preserve old command names, status aliases, output shims, or fallback
   readers unless a human explicitly asks for a compatibility window.
 

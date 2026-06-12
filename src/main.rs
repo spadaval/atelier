@@ -713,6 +713,8 @@ enum MissionCommands {
     },
     /// Show mission-control status for one mission or all current missions
     Status { id: Option<String> },
+    /// Audit mission validation and linked epic outcomes against proof
+    Audit { id: String },
     /// List missions
     List {
         /// Filter missions by status (default: current; use all to include closed/history)
@@ -1769,6 +1771,10 @@ fn run() -> Result<()> {
                 let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
                 commands::mission::status(storage.db(), &storage.state_dir(), id.as_deref(), quiet)
             }
+            MissionCommands::Audit { id } => {
+                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
+            }
             MissionCommands::List { status } => {
                 let db = projection_query_db()?;
                 commands::mission::list(&db, status.as_deref())
@@ -2187,6 +2193,7 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Show { .. } => "mission show",
             MissionCommands::Start { .. } => "mission start",
             MissionCommands::Status { .. } => "mission status",
+            MissionCommands::Audit { .. } => "mission audit",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
             MissionCommands::AddWork { .. } => "mission add-work",

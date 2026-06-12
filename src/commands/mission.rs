@@ -177,7 +177,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
     let active_work = active_work_for_mission(db, &mission.id)?;
-    let closeout = mission_closeout_status(db, &mission, &summary)?;
+    let closeout = mission_closeout_status(db, state_dir, &mission, &summary)?;
     let validator_failures = closeout.validator_failure_count();
 
     if quiet {
@@ -315,6 +315,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         "  Refresh mission status (current blockers and closeout gates): atelier mission status {}",
         mission.id
     );
+    if mission_lifecycle_status(&mission) != "closed" {
+        println!(
+            "  Run contract audit (mission validation and linked epic outcomes): atelier mission audit {}",
+            mission.id
+        );
+    }
     if summary.total_work().ready > 0 {
         println!(
             "  Choose ready work ({} ready item(s)): atelier issue list --ready",
@@ -558,7 +564,7 @@ pub fn update(
         let status = normalize_mission_status(status)?;
         if status == "closed" && current.record.status != "closed" {
             let db = Database::open(db_path)?;
-            enforce_closeout(&db, id)?;
+            enforce_closeout(&db, state_dir, id)?;
         }
         current.record.status = status.to_string();
     }
@@ -591,11 +597,119 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
     Ok(())
 }
 
+pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<()> {
+    let mission = db.require_record(KIND, id)?;
+    let audit = mission_contract_audit(db, state_dir, &mission)?;
+    if quiet {
+        println!(
+            "{} audit={} items={} failures={}",
+            mission.id,
+            if audit.passed() { "pass" } else { "fail" },
+            audit.items.len(),
+            audit.failure_count()
+        );
+    } else {
+        audit.print_human(&mission);
+    }
+    if audit.passed() {
+        Ok(())
+    } else {
+        bail!(
+            "mission contract audit failed; resolve failing items or attach proof before closing {}",
+            mission.id
+        )
+    }
+}
+
 struct MissionCloseoutStatus {
+    mission_id: String,
     open_work: Vec<String>,
     open_blockers: Vec<String>,
     evidence_missing: bool,
+    contract_audit: MissionContractAudit,
     validator_results: Vec<crate::commands::workflow::ValidatorResult>,
+}
+
+#[derive(Debug, Clone)]
+struct MissionContractAudit {
+    items: Vec<MissionContractAuditItem>,
+}
+
+#[derive(Debug, Clone)]
+struct MissionContractAuditItem {
+    group: String,
+    target: String,
+    text: String,
+    passed: bool,
+    reason: String,
+}
+
+impl MissionContractAudit {
+    fn passed(&self) -> bool {
+        self.items.iter().all(|item| item.passed)
+    }
+
+    fn failure_count(&self) -> usize {
+        self.items.iter().filter(|item| !item.passed).count()
+    }
+
+    fn pass_count(&self) -> usize {
+        self.items.iter().filter(|item| item.passed).count()
+    }
+
+    fn print_human(&self, mission: &DomainRecord) {
+        let status = if self.passed() { "pass" } else { "fail" };
+        let identity = format!(
+            "Mission Contract Audit {} [{}] - {}",
+            mission.id, status, mission.title
+        );
+        println!("{identity}");
+        println!("{}", "=".repeat(identity.len()));
+        println!(
+            "Summary: {} pass, {} fail, {} total",
+            self.pass_count(),
+            self.failure_count(),
+            self.items.len()
+        );
+        if self.items.is_empty() {
+            println!("No authored mission validation or linked epic outcome items.");
+        }
+
+        let groups = self
+            .items
+            .iter()
+            .map(|item| item.group.as_str())
+            .collect::<BTreeSet<_>>();
+        for group in groups {
+            println!();
+            println!("{group}");
+            println!("{}", "-".repeat(group.len()));
+            for item in self.items.iter().filter(|item| item.group == group) {
+                let status = if item.passed { "pass" } else { "fail" };
+                println!("  {status} {} - {}", item.target, item.text);
+                println!("    {}", item.reason);
+            }
+        }
+
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        if self.passed() {
+            println!(
+                "  Close mission when other gates pass: atelier mission update {} --status closed",
+                mission.id
+            );
+        } else {
+            println!(
+                "  Inspect closeout gates: atelier mission status {}",
+                mission.id
+            );
+            println!(
+                "  Attach missing proof: atelier evidence attach <evidence-id> mission {}",
+                mission.id
+            );
+        }
+    }
 }
 
 impl MissionCloseoutStatus {
@@ -603,6 +717,7 @@ impl MissionCloseoutStatus {
         self.open_work.is_empty()
             && self.open_blockers.is_empty()
             && !self.evidence_missing
+            && self.contract_audit.passed()
             && self.validator_results.iter().all(|result| result.passed)
     }
 
@@ -624,6 +739,13 @@ impl MissionCloseoutStatus {
         if self.evidence_missing {
             messages
                 .push("missing evidence: attach validation evidence to the mission".to_string());
+        }
+        if !self.contract_audit.passed() {
+            messages.push(format!(
+                "contract audit failed: {} unresolved item(s); run `atelier mission audit {}`",
+                self.contract_audit.failure_count(),
+                self.mission_id
+            ));
         }
         for result in self
             .validator_results
@@ -662,6 +784,15 @@ impl MissionCloseoutStatus {
         } else {
             println!("Evidence: attached");
         }
+        if self.contract_audit.passed() {
+            println!("Contract Audit: pass");
+        } else {
+            println!(
+                "Contract Audit: fail - {} unresolved item(s)",
+                self.contract_audit.failure_count()
+            );
+            println!("  Next: atelier mission audit {}", self.mission_id);
+        }
         for result in &self.validator_results {
             if result.passed {
                 println!("Validator {}: pass", result.validator);
@@ -672,10 +803,187 @@ impl MissionCloseoutStatus {
     }
 }
 
-fn enforce_closeout(db: &Database, mission_id: &str) -> Result<()> {
+fn mission_contract_audit(
+    db: &Database,
+    state_dir: &Path,
+    mission: &DomainRecord,
+) -> Result<MissionContractAudit> {
+    let mut items = Vec::new();
+    let sections = record_store::mission_sections_from_domain_record(mission)?;
+    let mission_evidence = validating_evidence_ids(db, KIND, &mission.id)?;
+    let mission_work = mission_issue_ids(db, &mission.id)?;
+    let open_work = open_mission_work(db, &mission.id)?;
+    let open_blockers = open_mission_blockers(db, &mission.id)?;
+
+    for item in contract_items_from_text(&sections.validation) {
+        let (passed, reason) = if mission_work.is_empty() {
+            (
+                false,
+                "No linked mission work exists for this validation expectation.".to_string(),
+            )
+        } else if !open_work.is_empty() {
+            (
+                false,
+                format!("Open linked work remains: {}", compact_strings(&open_work)),
+            )
+        } else if !open_blockers.is_empty() {
+            (
+                false,
+                format!("Open blockers remain: {}", compact_strings(&open_blockers)),
+            )
+        } else if mission_evidence.is_empty() {
+            (
+                false,
+                "No validation evidence is attached to the mission.".to_string(),
+            )
+        } else {
+            (
+                true,
+                format!(
+                    "Mission has closed linked work and validation evidence: {}",
+                    compact_strings(&mission_evidence)
+                ),
+            )
+        };
+        items.push(MissionContractAuditItem {
+            group: "Mission Validation".to_string(),
+            target: mission.id.clone(),
+            text: item,
+            passed,
+            reason,
+        });
+    }
+
+    let store = RecordStore::new(state_dir);
+    for epic in mission_linked_epics(db, &mission.id)? {
+        match store.load_issue_by_id(&epic.id) {
+            Ok(record) => {
+                let evidence = validating_evidence_ids(db, "issue", &epic.id)?;
+                for item in contract_items_from_text(&record.sections.outcome) {
+                    let (passed, reason) = if epic.status != "closed" {
+                        (false, format!("Linked epic is still {}.", epic.status))
+                    } else if evidence.is_empty() {
+                        (
+                            false,
+                            "No validation evidence is attached to this linked epic.".to_string(),
+                        )
+                    } else {
+                        (
+                            true,
+                            format!(
+                                "Linked epic is closed with validation evidence: {}",
+                                compact_strings(&evidence)
+                            ),
+                        )
+                    };
+                    items.push(MissionContractAuditItem {
+                        group: "Linked Epic Outcomes".to_string(),
+                        target: epic.id.clone(),
+                        text: item,
+                        passed,
+                        reason,
+                    });
+                }
+            }
+            Err(error) => items.push(MissionContractAuditItem {
+                group: "Linked Epic Outcomes".to_string(),
+                target: epic.id.clone(),
+                text: epic.title.clone(),
+                passed: false,
+                reason: format!("Linked epic record is malformed: {error}"),
+            }),
+        }
+    }
+
+    Ok(MissionContractAudit { items })
+}
+
+fn mission_linked_epics(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
+    let mut epics = mission_issue_ids(db, mission_id)?
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| issue.issue_type == "epic")
+        .collect::<Vec<_>>();
+    epics.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(epics)
+}
+
+fn validating_evidence_ids(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<String>> {
+    let mut ids = db
+        .list_record_links(target_kind, target_id)?
+        .into_iter()
+        .filter(|link| link.relation_type == "validates")
+        .filter_map(|link| {
+            if link.source_kind == "evidence" {
+                Some(link.source_id)
+            } else if link.target_kind == "evidence" {
+                Some(link.target_id)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+fn contract_items_from_text(text: &str) -> Vec<String> {
+    let mut items = text
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("- ")
+                .or_else(|| trimmed.strip_prefix("* "))
+                .map(str::trim)
+                .filter(|item| !is_placeholder_contract_item(item))
+                .map(ToOwned::to_owned)
+        })
+        .collect::<Vec<_>>();
+    if items.is_empty() {
+        let paragraph = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !paragraph.is_empty() && !is_placeholder_contract_item(&paragraph) {
+            items.push(paragraph);
+        }
+    }
+    items
+}
+
+fn is_placeholder_contract_item(item: &str) -> bool {
+    let normalized = item.trim().trim_end_matches('.').to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "none" | "validation was not specified" | "outcome was not specified"
+    )
+}
+
+fn compact_strings(values: &[String]) -> String {
+    const LIMIT: usize = 8;
+    if values.len() <= LIMIT {
+        values.join(", ")
+    } else {
+        format!(
+            "{}, ... and {} more",
+            values[..LIMIT].join(", "),
+            values.len() - LIMIT
+        )
+    }
+}
+
+fn enforce_closeout(db: &Database, state_dir: &Path, mission_id: &str) -> Result<()> {
     let mission = db.require_record(KIND, mission_id)?;
     let summary = mission_list_summary(db, mission_id)?;
-    let closeout = mission_closeout_status(db, &mission, &summary)?;
+    let closeout = mission_closeout_status(db, state_dir, &mission, &summary)?;
     if closeout.ready() {
         return Ok(());
     }
@@ -690,17 +998,21 @@ fn enforce_closeout(db: &Database, mission_id: &str) -> Result<()> {
 
 fn mission_closeout_status(
     db: &Database,
+    state_dir: &Path,
     mission: &DomainRecord,
     summary: &MissionListSummary,
 ) -> Result<MissionCloseoutStatus> {
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
+    let contract_audit = mission_contract_audit(db, state_dir, mission)?;
     let validator_results =
         crate::commands::workflow::evaluate(db, KIND, &mission.id, "close", Vec::new())?;
     Ok(MissionCloseoutStatus {
+        mission_id: mission.id.clone(),
         open_work,
         open_blockers,
         evidence_missing: summary.evidence_count == 0,
+        contract_audit,
         validator_results,
     })
 }
