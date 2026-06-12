@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Require independent epic and mission closeout audits"
-updated_at: "2026-06-12T05:12:21.600979854+00:00"
+updated_at: "2026-06-12T23:22:02.887038668+00:00"
 ---
 
 ## Description
