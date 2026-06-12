@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define validation subagent proof protocol"
-updated_at: "2026-06-12T05:12:17.327797507+00:00"
+updated_at: "2026-06-12T22:21:11.246588741+00:00"
 ---
 
 ## Description
