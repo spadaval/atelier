@@ -6247,6 +6247,145 @@ fn test_focused_lint_validates_dependency_cycles() {
 }
 
 #[test]
+fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
+    assert_lint_rejects_issue_edit(
+        "Invalid status fixture",
+        |markdown, _issue_id| markdown.replace("status: \"open\"", "status: \"bogus\""),
+        &["Invalid status", "Invalid status 'bogus'"],
+    );
+    assert_lint_rejects_issue_edit(
+        "Invalid type fixture",
+        |markdown, _issue_id| markdown.replace("issue_type: \"task\"", "issue_type: \"bogus\""),
+        &["Invalid issue_type", "Invalid issue_type 'bogus'"],
+    );
+    assert_lint_rejects_issue_edit(
+        "Invalid priority fixture",
+        |markdown, _issue_id| markdown.replace("priority: \"P2\"", "priority: \"urgent\""),
+        &[
+            "Invalid priority",
+            "unsupported canonical priority 'urgent'",
+        ],
+    );
+    assert_lint_rejects_issue_edit(
+        "Invalid schema fixture",
+        |markdown, _issue_id| {
+            markdown.replace("schema: \"atelier.issue\"", "schema: \"atelier.graph\"")
+        },
+        &["Unsupported schema 'atelier.graph'"],
+    );
+    assert_lint_rejects_issue_edit(
+        "Invalid schema version fixture",
+        |markdown, _issue_id| markdown.replace("schema_version: 1", "schema_version: 99"),
+        &["Unsupported schema_version 99"],
+    );
+    assert_lint_rejects_issue_edit(
+        "ID path mismatch fixture",
+        |markdown, issue_id| {
+            markdown.replace(&format!("id: \"{issue_id}\""), "id: \"atelier-zzzz\"")
+        },
+        &["does not match canonical path"],
+    );
+
+    assert_lint_rejects_canonical_mutation(
+        "Malformed activity sidecar fixture",
+        |dir, issue_id| {
+            let activity_path = dir
+                .join(".atelier/issues")
+                .join(format!("{issue_id}.activity"))
+                .join("bad.md");
+            std::fs::create_dir_all(activity_path.parent().unwrap()).unwrap();
+            std::fs::write(activity_path, "not front matter\n").unwrap();
+        },
+        &["Missing YAML front matter", ".activity/bad.md"],
+    );
+    assert_lint_rejects_canonical_mutation(
+        "Unsupported committed file fixture",
+        |dir, _issue_id| {
+            std::fs::write(dir.join(".atelier/issues/junk.txt"), "junk\n").unwrap();
+        },
+        &[
+            "Unsupported canonical issue file",
+            ".atelier-state/issues/junk.txt",
+        ],
+    );
+    assert_lint_rejects_canonical_mutation(
+        "Duplicate ID fixture",
+        |dir, issue_id| {
+            let (success, mission_out, stderr) =
+                run_atelier(dir, &["mission", "create", "Duplicate ID mission"]);
+            assert!(success, "mission create failed: {stderr}");
+            let mission_id = mission_out
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("Mission ")
+                        .and_then(|rest| rest.split(':').next())
+                })
+                .expect("mission create output should include an id")
+                .to_string();
+            let old_path = dir
+                .join(".atelier/missions")
+                .join(format!("{mission_id}.md"));
+            let new_path = dir.join(".atelier/missions").join(format!("{issue_id}.md"));
+            let mission_markdown = std::fs::read_to_string(&old_path).unwrap().replace(
+                &format!("id: \"{mission_id}\""),
+                &format!("id: \"{issue_id}\""),
+            );
+            std::fs::write(&new_path, mission_markdown).unwrap();
+            std::fs::remove_file(old_path).unwrap();
+        },
+        &["Duplicate record ID in canonical projection"],
+    );
+}
+
+fn assert_lint_rejects_issue_edit(
+    title: &str,
+    edit: impl FnOnce(&str, &str) -> String,
+    expected: &[&str],
+) {
+    assert_lint_rejects_canonical_mutation(
+        title,
+        |dir, issue_id| {
+            let issue_path = dir.join(".atelier/issues").join(format!("{issue_id}.md"));
+            let markdown = std::fs::read_to_string(&issue_path).unwrap();
+            std::fs::write(&issue_path, edit(&markdown, issue_id)).unwrap();
+        },
+        expected,
+    );
+}
+
+fn assert_lint_rejects_canonical_mutation(
+    title: &str,
+    mutate: impl FnOnce(&Path, &str),
+    expected: &[&str],
+) {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+
+    mutate(dir.path(), &issue_id);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(
+        !success,
+        "lint should reject {title}, stdout: {stdout}, stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("Canonical tracker Markdown is invalid"),
+        "lint should identify canonical markdown failure for {title}: {stderr}"
+    );
+    for needle in expected {
+        assert!(
+            stderr.contains(needle),
+            "lint diagnostic for {title} missing {needle:?}: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
