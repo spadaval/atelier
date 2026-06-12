@@ -3,6 +3,7 @@ created_at: "2026-06-12T20:29:11.166739249+00:00"
 id: "atelier-64ea"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "command-surface"
 - "implementation"
@@ -18,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Fold issue helper flows into lifecycle commands"
-updated_at: "2026-06-12T20:29:11.166739249+00:00"
+updated_at: "2026-06-12T21:07:19.655220456+00:00"
 ---
 
 ## Description
