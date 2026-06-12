@@ -32,6 +32,8 @@ use record_store::RecordStore;
 
 Orientation:
   status        Show checkout, mission, work, and tracker signposts
+  start         Start tracked work on an issue
+  finish        Finish tracked work, defaulting to active work
 
 Issues:
   issue         Create, list, show, update, close, and relate issues
@@ -44,10 +46,8 @@ Missions and planning:
 Records:
   evidence      Capture validation evidence
 
-Work:
-  work          Start, finish, and inspect tracked work
+Advanced work:
   worktree      Create, inspect, merge, and remove issue worktrees
-  workflow      Validate workflow policy for records
 
 State management:
   export        Write or check canonical tracker records
@@ -70,9 +70,8 @@ Common commands:
   atelier mission list
   atelier mission show <id>
   atelier mission status
-  atelier work start <issue-id>
-  atelier work finish <issue-id>
-  atelier work status
+  atelier start <issue-id>
+  atelier finish [issue-id]
   atelier doctor
   atelier help <command>
 ")]
@@ -110,6 +109,12 @@ enum Commands {
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
+
+    /// Start tracked work on an issue
+    Start { id: String },
+
+    /// Finish tracked work, defaulting to active work
+    Finish { id: Option<String> },
 
     /// Issue lifecycle commands (create, show, list, close, ...)
     Issue {
@@ -174,12 +179,14 @@ enum Commands {
     },
 
     /// Workflow policy and validator helpers
+    #[command(hide = true)]
     Workflow {
         #[command(subcommand)]
         action: WorkflowCommands,
     },
 
     /// Work lifecycle helpers
+    #[command(hide = true)]
     Work {
         #[command(subcommand)]
         action: WorkCommands,
@@ -260,6 +267,7 @@ enum IssueCommands {
     },
 
     /// Quick-create an issue and start working on it (create + label + session work)
+    #[command(hide = true)]
     Quick {
         /// Issue title
         title: String,
@@ -278,6 +286,7 @@ enum IssueCommands {
     },
 
     /// Create a subissue under a parent issue
+    #[command(hide = true)]
     Subissue {
         /// Parent issue ID
         parent: String,
@@ -314,6 +323,7 @@ enum IssueCommands {
     },
 
     /// Search issues by text
+    #[command(hide = true)]
     Search {
         /// Search query
         query: String,
@@ -323,6 +333,15 @@ enum IssueCommands {
     Show {
         /// Issue ID
         id: String,
+    },
+
+    /// Show issue transition options and blockers
+    Transition {
+        /// Issue ID
+        id: String,
+        /// Show the full option list
+        #[arg(long)]
+        options: bool,
     },
 
     /// Update an issue
@@ -347,6 +366,9 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
+        /// Remove labels from the issue
+        #[arg(long = "remove-label")]
+        remove_label: Vec<String>,
         /// Set parent issue ID or imported source ID
         #[arg(long)]
         parent: Option<String>,
@@ -371,6 +393,7 @@ enum IssueCommands {
     },
 
     /// Close all issues matching filters
+    #[command(hide = true)]
     CloseAll {
         /// Filter by label
         #[arg(short, long)]
@@ -387,6 +410,7 @@ enum IssueCommands {
     },
 
     /// Delete an issue
+    #[command(hide = true)]
     Delete {
         /// Issue ID
         id: String,
@@ -396,6 +420,7 @@ enum IssueCommands {
     },
 
     /// Add a comment to an issue
+    #[command(hide = true)]
     Comment {
         /// Issue ID
         id: String,
@@ -407,6 +432,7 @@ enum IssueCommands {
     },
 
     /// Add a label to an issue
+    #[command(hide = true)]
     Label {
         /// Issue ID
         id: String,
@@ -415,6 +441,7 @@ enum IssueCommands {
     },
 
     /// Remove a label from an issue
+    #[command(hide = true)]
     Unlabel {
         /// Issue ID
         id: String,
@@ -423,6 +450,7 @@ enum IssueCommands {
     },
 
     /// Mark an issue as blocked by another
+    #[command(hide = true)]
     Block {
         /// Issue ID that is blocked
         id: String,
@@ -431,6 +459,7 @@ enum IssueCommands {
     },
 
     /// Remove a blocking relationship
+    #[command(hide = true)]
     Unblock {
         /// Issue ID that was blocked
         id: String,
@@ -439,9 +468,11 @@ enum IssueCommands {
     },
 
     /// List blocked issues
+    #[command(hide = true)]
     Blocked,
 
     /// Link two related issues
+    #[command(hide = true)]
     Relate {
         /// First issue ID
         id: String,
@@ -453,6 +484,7 @@ enum IssueCommands {
     },
 
     /// Remove a relation between issues
+    #[command(hide = true)]
     Unrelate {
         /// First issue ID
         id: String,
@@ -464,21 +496,25 @@ enum IssueCommands {
     },
 
     /// List related issues
+    #[command(hide = true)]
     Related {
         /// Issue ID
         id: String,
     },
 
     /// Show downstream issue impact from hierarchy and impact-bearing links
+    #[command(hide = true)]
     Impact {
         /// Issue ID to check impact from
         id: String,
     },
 
     /// Suggest the next issue to work on
+    #[command(hide = true)]
     Next,
 
     /// Show issues as a tree hierarchy
+    #[command(hide = true)]
     Tree {
         /// Filter by status (open, closed, all)
         #[arg(short, long, default_value = "all")]
@@ -489,6 +525,7 @@ enum IssueCommands {
     },
 
     /// Mark tests as run (resets test reminder)
+    #[command(hide = true)]
     Tested,
 }
 
@@ -1048,6 +1085,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::agent_factory::show(&db, &id)
         }
 
+        IssueCommands::Transition { id, options } => {
+            let db = projection_query_db()?;
+            let _ = options;
+            commands::agent_factory::transition_options(&db, &id)
+        }
+
         IssueCommands::Update {
             id,
             title,
@@ -1056,6 +1099,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             status,
             issue_type,
             label,
+            remove_label,
             parent,
             no_parent,
             claim,
@@ -1073,6 +1117,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     status: status.as_deref(),
                     issue_type: issue_type.as_deref(),
                     labels: &label,
+                    remove_labels: &remove_label,
                     parent: if no_parent {
                         Some(None)
                     } else {
@@ -1251,6 +1296,26 @@ fn run() -> Result<()> {
         Commands::Status => {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
+        }
+
+        Commands::Start { id } => {
+            let db = runtime_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
+            commands::work::start(&db, &id)
+        }
+
+        Commands::Finish { id } => {
+            let db = runtime_db()?;
+            let id = match id {
+                Some(id) => resolve_issue_arg(&db, &id)?,
+                None => db
+                    .get_active_work_association()?
+                    .map(|work| work.issue_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("No active work. Use `atelier start <issue-id>` first.")
+                    })?,
+            };
+            commands::work::finish(&db, &id)
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -1605,6 +1670,8 @@ fn command_identity(command: &Commands) -> &'static str {
     match command {
         Commands::Init { .. } => "init",
         Commands::Status => "status",
+        Commands::Start { .. } => "start",
+        Commands::Finish { .. } => "finish",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::Quick { .. } => "issue quick",
@@ -1612,6 +1679,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Search { .. } => "issue search",
             IssueCommands::Show { .. } => "issue show",
+            IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Close { .. } => "issue close",
             IssueCommands::CloseAll { .. } => "issue close-all",

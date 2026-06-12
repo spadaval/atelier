@@ -46,19 +46,18 @@ This file binds Agent Factory to this repository.
   - `atelier mission create "..."`
   - `atelier mission update <id> --status <draft|ready|active|closed>`
   - `atelier mission add-work <mission-id> <issue-id>`
-  - `atelier workflow validate mission <id>`
 - Work/evidence:
   - `atelier worktree for <issue-id>`
-  - `atelier work start <issue-id>`
-  - `atelier work status`
-  - `atelier work finish <issue-id>`
+  - `atelier start <issue-id>`
+  - `atelier status`
+  - `atelier finish [issue-id]`
   - `atelier evidence add --kind <kind> --result <result> "summary"`
   - `atelier evidence attach <evidence-id> issue <issue-id>`
-  - `atelier workflow validate issue <issue-id>`
 - Issues:
   - `atelier issue list --ready`
   - `atelier issue list --status open`
   - `atelier issue show <id>`
+  - `atelier issue transition <id> --options`
   - `atelier mission show <id>`
   - `atelier issue update <id> --claim`
   - `atelier issue update <id> --append-notes "..."`

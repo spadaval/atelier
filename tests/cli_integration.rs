@@ -769,7 +769,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "Issues:",
         "Missions and planning:",
         "Records:",
-        "Work:",
+        "Advanced work:",
         "State management:",
         "Maintenance:",
         "Common commands:",
@@ -786,8 +786,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "mission",
         "plan",
         "evidence",
-        "workflow",
-        "work",
         "worktree",
         "export",
         "rebuild",
@@ -804,9 +802,8 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier mission list",
         "atelier mission show <id>",
-        "atelier work start <issue-id>",
-        "atelier work finish <issue-id>",
-        "atelier work status",
+        "atelier start <issue-id>",
+        "atelier finish [issue-id]",
         "atelier doctor",
     ] {
         assert!(
@@ -832,11 +829,14 @@ fn test_top_level_help_only_shows_core_commands() {
         "locks",
         "sync",
         "history",
+        "work",
+        "workflow",
     ] {
         assert!(
-            !stdout
-                .lines()
-                .any(|line| line.starts_with(&format!("  {removed}"))),
+            !stdout.lines().any(|line| {
+                let command = line.trim_start();
+                command == removed || command.starts_with(&format!("{removed} "))
+            }),
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
@@ -871,7 +871,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Next Actions"));
     assert!(stdout.contains("atelier mission status"));
     assert!(stdout.contains("atelier issue list --ready"));
-    assert!(stdout.contains("atelier work start <issue-id>"));
+    assert!(stdout.contains("atelier start <issue-id>"));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
     assert!(success, "quiet status failed: {stderr}");
@@ -894,12 +894,50 @@ fn test_issue_next_uses_current_workflow_commands() {
     assert!(success, "issue next failed: {stderr}");
     assert!(stdout.contains("Next Actions"));
     assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
-    assert!(stdout.contains(&format!("atelier work start {issue_id}")));
+    assert!(stdout.contains(&format!("atelier start {issue_id}")));
     assert!(stdout.contains("atelier status"));
     assert!(
         !stdout.contains("session work"),
         "issue next must not suggest removed session workflow:\n{stdout}"
     );
+}
+
+#[test]
+fn test_root_start_finish_and_issue_transition_surface() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Root workflow item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("atelier start"));
+    let issue_id = issue_id_by_title(dir.path(), "Root workflow item");
+    commit_all(dir.path(), "tracker setup");
+
+    let (success, transition_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition failed: {stderr}");
+    assert!(transition_out.contains("Issue Transitions"));
+    assert!(transition_out.contains("Allowed Actions"));
+    assert!(transition_out.contains("start"));
+    assert!(transition_out.contains(&format!("atelier start {issue_id}")));
+    assert!(transition_out.contains("Blocked Actions"));
+    assert!(transition_out.contains("no validating evidence linked"));
+
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "root start failed: {stderr}");
+    assert!(start_out.contains(&format!("Started work on {issue_id}")));
+
+    let (success, active_transition, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "active transition failed: {stderr}");
+    assert!(active_transition.contains("Work:     active on this issue"));
+    assert!(active_transition.contains(&format!("atelier finish {issue_id}")));
+
+    let (success, finish_out, stderr) = run_atelier(dir.path(), &["finish"]);
+    assert!(success, "root finish failed: {stderr}");
+    assert!(finish_out.contains(&format!("Finished work on {issue_id}")));
 }
 
 #[test]
@@ -910,7 +948,6 @@ fn test_removed_aliases_fail_as_unknown_commands() {
     for args in [
         vec!["show"],
         vec!["ready"],
-        vec!["start"],
         vec!["sync"],
         vec!["mission", "view"],
         vec!["work", "worktree"],
@@ -1279,7 +1316,8 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Recent note"));
     assert!(stdout.contains("Next Commands"));
     assert!(stdout.contains("atelier issue comment"));
-    assert!(stdout.contains("atelier work start"));
+    assert!(stdout.contains("atelier issue transition"));
+    assert!(stdout.contains("atelier start"));
 }
 
 #[test]
@@ -5152,7 +5190,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("Evidence Gaps"));
     assert!(human_out.contains("(none)"));
     assert!(human_out.contains("Next Commands"));
-    assert!(human_out.contains("atelier workflow validate mission"));
+    assert!(human_out.contains("atelier mission status"));
 
     let (success, plan_show, stderr) = run_atelier(dir.path(), &["plan", "show", plan_id]);
     assert!(success, "human plan show failed: {stderr}");

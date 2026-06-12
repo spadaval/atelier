@@ -3,6 +3,7 @@ created_at: "2026-06-12T05:06:28.483421954+00:00"
 id: "atelier-f3p6"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "rework"
 - "work"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Explode work command group into domain start finish and status surfaces"
-updated_at: "2026-06-12T05:06:28.483421954+00:00"
+updated_at: "2026-06-12T21:03:14.689647967+00:00"
 ---
 
 ## Description

@@ -317,7 +317,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
 
     print_mission_heading("Next Commands");
     println!("  atelier mission show {}", mission.id);
-    println!("  atelier workflow validate mission {}", mission.id);
+    println!("  atelier mission status {}", mission.id);
     if summary.total_work().ready > 0 {
         println!("  atelier issue list --ready");
     }
@@ -1420,7 +1420,7 @@ fn print_mission_next_commands(mission: &DomainRecord) {
         println!("  atelier mission update {} --status ready", mission.id);
     } else {
         println!("  atelier mission add-work {} <issue-id>", mission.id);
-        println!("  atelier workflow validate mission {}", mission.id);
+        println!("  atelier mission status {}", mission.id);
     }
 }
 

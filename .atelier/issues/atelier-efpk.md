@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Repair and consolidate CLI command surfaces"
-updated_at: "2026-06-12T20:29:22.966441834+00:00"
+updated_at: "2026-06-12T20:57:40.978332368+00:00"
 ---
 
 ## Description

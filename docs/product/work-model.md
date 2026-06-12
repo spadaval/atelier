@@ -78,10 +78,16 @@ An agent tasked with a mission should be able to:
    pursued and the validation criteria that must eventually be proven.
 3. Select a ready issue or epic slice that advances the mission and contributes
    to the milestone.
-4. Follow the issue workflow: claim, implement or validate, record notes, attach
-   evidence, and close only when validators allow the transition.
+4. Follow the issue workflow: claim, start with `atelier start <issue-id>`,
+   implement or validate, record notes, attach evidence, inspect transition
+   options with `atelier issue transition <id> --options`, and close only when
+   validators allow the transition.
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
+
+`atelier status` is the normal current-work orientation surface. Root `atelier
+finish [issue-id]` completes tracked work without requiring operators to
+discover the hidden `atelier work` command group.
 
 `atelier worktree for <issue-id>` creates or locates a Git worktree using the
 configured branch/path policy, rebuilds local SQLite state from

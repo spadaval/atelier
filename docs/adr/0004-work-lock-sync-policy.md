@@ -20,7 +20,7 @@ default coordination mechanism.
 
 Normal tracked work uses explicit work association, not inherited lock sync.
 
-`atelier work start`, `atelier work finish`, `atelier work status`, and
+Root `atelier start`, root `atelier finish`, root `atelier status`, and
 `atelier worktree for` own the default ergonomic path:
 
 - record the issue, branch, and worktree association in local runtime state;
@@ -29,6 +29,9 @@ Normal tracked work uses explicit work association, not inherited lock sync.
   repository;
 - check canonical export freshness before finish;
 - never launch or supervise coding agents.
+
+The lower-level `atelier work start/finish/status` helpers are implementation
+or compatibility surfaces, not the normal operator workflow.
 
 Inherited lock and sync commands are removed from the CLI surface. Internal
 lock-checking helpers may remain only where core workflow code still needs

@@ -78,7 +78,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Find blocked work: atelier issue blocked");
     } else {
         println!("  Choose ready work: atelier issue list --ready");
-        println!("  Start selected work: atelier work start <issue-id>");
+        println!("  Start selected work: atelier start <issue-id>");
     }
     if export_stale.is_empty() {
         println!("  Check runtime health: atelier doctor");

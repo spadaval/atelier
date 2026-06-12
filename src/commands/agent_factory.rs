@@ -339,6 +339,7 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     }
 
     render_parent_context(db, canonical_id)?;
+    render_transition_readiness(db, canonical_id, object)?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -356,6 +357,208 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct TransitionAction {
+    name: &'static str,
+    allowed: bool,
+    reason: String,
+    command: String,
+}
+
+pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
+    let id = resolve_id(db, issue_ref)?;
+    let issue = db.require_issue(&id)?;
+    let actions = transition_actions(db, &issue)?;
+    let identity = format!(
+        "Issue Transitions {} - {}",
+        format_issue_id(&id),
+        issue.title
+    );
+    println!("{identity}");
+    println!("{}", "=".repeat(identity.len()));
+
+    println!("State");
+    println!("-----");
+    println!("Status:   {}", issue.status);
+    if let Some(active) = db.get_active_work_association()? {
+        if active.issue_id == id {
+            println!("Work:     active on this issue");
+        } else {
+            println!("Work:     active on {}", format_issue_id(&active.issue_id));
+        }
+    } else {
+        println!("Work:     none active");
+    }
+
+    print_action_group(
+        "Allowed Actions",
+        actions.iter().filter(|action| action.allowed),
+    );
+    print_action_group(
+        "Blocked Actions",
+        actions.iter().filter(|action| !action.allowed),
+    );
+    Ok(())
+}
+
+fn render_transition_readiness(
+    db: &Database,
+    canonical_id: &str,
+    object: &IssueObject,
+) -> Result<()> {
+    let issue = db.require_issue(canonical_id)?;
+    let actions = transition_actions(db, &issue)?;
+    println!("\nTransition Readiness");
+    println!("--------------------");
+    for action in actions
+        .iter()
+        .filter(|action| matches!(action.name, "start" | "finish" | "close" | "reopen"))
+    {
+        if action.name == "finish" && !action.allowed {
+            continue;
+        }
+        if action.name == "reopen" && object.status != "closed" {
+            continue;
+        }
+        let state = if action.allowed { "ready" } else { "blocked" };
+        println!("  {}: {} - {}", action.name, state, action.reason);
+        if action.allowed {
+            println!("    {}", action.command);
+        }
+    }
+    println!(
+        "  options: atelier issue transition {} --options",
+        object.id
+    );
+    Ok(())
+}
+
+fn print_action_group<'a>(title: &str, actions: impl Iterator<Item = &'a TransitionAction>) {
+    println!();
+    println!("{title}");
+    println!("{}", "-".repeat(title.len()));
+    let actions = actions.collect::<Vec<_>>();
+    if actions.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for action in actions {
+        println!("  {}", action.name);
+        println!("    Reason:  {}", action.reason);
+        println!("    Command: {}", action.command);
+    }
+}
+
+fn transition_actions(db: &Database, issue: &Issue) -> Result<Vec<TransitionAction>> {
+    let id = format_issue_id(&issue.id);
+    let active_work = db.get_active_work_association()?;
+    let section_blockers = issue_section_blockers(&issue.id);
+    let open_blockers = open_blocker_ids(db, &issue.id)?;
+    let evidence_attached = validating_evidence_attached(db, &issue.id)?;
+    let mut close_blockers = Vec::new();
+    close_blockers.extend(open_blockers.iter().map(|id| format!("open blocker {id}")));
+    close_blockers.extend(section_blockers.iter().cloned());
+    if !evidence_attached {
+        close_blockers.push("no validating evidence linked".to_string());
+    }
+
+    let start_blocker = if issue.status == "closed" {
+        Some("issue is closed".to_string())
+    } else if let Some(active) = &active_work {
+        if active.issue_id == issue.id {
+            Some("work is already active on this issue".to_string())
+        } else {
+            Some(format!("active work already exists on {}", active.issue_id))
+        }
+    } else if let Some(blocker) = section_blockers.first() {
+        Some(blocker.clone())
+    } else {
+        None
+    };
+
+    let finish_allowed = active_work
+        .as_ref()
+        .map(|active| active.issue_id == issue.id)
+        .unwrap_or(false);
+    let finish_reason = if finish_allowed {
+        "work is active on this issue".to_string()
+    } else {
+        "no active work is associated with this issue".to_string()
+    };
+
+    Ok(vec![
+        TransitionAction {
+            name: "start",
+            allowed: start_blocker.is_none(),
+            reason: start_blocker
+                .unwrap_or_else(|| "issue is open and required sections parse".to_string()),
+            command: format!("atelier start {id}"),
+        },
+        TransitionAction {
+            name: "finish",
+            allowed: finish_allowed,
+            reason: finish_reason,
+            command: format!("atelier finish {id}"),
+        },
+        TransitionAction {
+            name: "close",
+            allowed: issue.status != "closed" && close_blockers.is_empty(),
+            reason: if issue.status == "closed" {
+                "issue is already closed".to_string()
+            } else if close_blockers.is_empty() {
+                "required sections, blockers, and validating evidence gates pass".to_string()
+            } else {
+                close_blockers.join("; ")
+            },
+            command: format!("atelier issue close {id} --reason \"...\""),
+        },
+        TransitionAction {
+            name: "reopen",
+            allowed: issue.status == "closed",
+            reason: if issue.status == "closed" {
+                "closed issue can be reopened for follow-up work".to_string()
+            } else {
+                "issue is already open".to_string()
+            },
+            command: format!("atelier issue reopen {id}"),
+        },
+        TransitionAction {
+            name: "repair sections",
+            allowed: !section_blockers.is_empty(),
+            reason: if section_blockers.is_empty() {
+                "required sections parse".to_string()
+            } else {
+                section_blockers.join("; ")
+            },
+            command: format!("atelier lint {id}"),
+        },
+    ])
+}
+
+fn issue_section_blockers(issue_id: &str) -> Vec<String> {
+    match canonical_issue_detail(issue_id) {
+        Ok(Some(record)) => record
+            .sections
+            .section_states()
+            .into_iter()
+            .filter(|state| state.required && (!state.present || state.empty))
+            .map(|state| format!("missing or empty {} section", state.name.title()))
+            .collect(),
+        Ok(None) => Vec::new(),
+        Err(error) => vec![format!("malformed issue sections: {error}")],
+    }
+}
+
+fn validating_evidence_attached(db: &Database, issue_id: &str) -> Result<bool> {
+    Ok(db
+        .list_record_links("issue", issue_id)?
+        .into_iter()
+        .any(|link| {
+            link.relation_type == "validates"
+                && (link.source_kind == "evidence" || link.target_kind == "evidence")
+        }))
 }
 
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
@@ -524,10 +727,14 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
     }
     println!("  Validate this issue: atelier lint {}", object.id);
     println!("  Add a note: atelier issue comment {} \"...\"", object.id);
+    println!(
+        "  Show transition options: atelier issue transition {} --options",
+        object.id
+    );
     if object.status == "closed" {
         println!("  Reopen this issue: atelier issue reopen {}", object.id);
     } else {
-        println!("  Start tracked work: atelier work start {}", object.id);
+        println!("  Start tracked work: atelier start {}", object.id);
         println!(
             "  Close when complete: atelier issue close {} --reason \"...\"",
             object.id
@@ -1147,6 +1354,7 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Start tracked work: atelier start {}", object.id);
     } else {
         println!("Created issue {} - {}", object.id, object.title);
         println!("Type:     {}", object.issue_type);
@@ -1161,7 +1369,7 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
-        println!("  Start tracked work: atelier work start {}", object.id);
+        println!("  Start tracked work: atelier start {}", object.id);
     }
     Ok(())
 }
@@ -1198,7 +1406,7 @@ pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
     println!("Next Commands");
     println!("-------------");
     println!("  atelier issue show {}", object.id);
-    println!("  atelier work start {}", object.id);
+    println!("  atelier start {}", object.id);
     Ok(())
 }
 
@@ -1210,6 +1418,7 @@ pub struct UpdateInput<'a> {
     pub status: Option<&'a str>,
     pub issue_type: Option<&'a str>,
     pub labels: &'a [String],
+    pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
     pub claim: bool,
     pub append_notes: Option<&'a str>,
@@ -1307,6 +1516,11 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
         changed_fields.push("labels");
         crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
     }
+    for label in input.remove_labels {
+        db.remove_label(&id, label)?;
+        changed_fields.push("labels");
+        crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
+    }
 
     if let Some(parent) = input.parent {
         let parent_id = parent.map(|parent| resolve_id(db, parent)).transpose()?;
@@ -1343,7 +1557,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     }
 
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --parent, --claim, or --append-notes");
+        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes");
     }
     changed_fields.sort_unstable();
     changed_fields.dedup();
@@ -1368,6 +1582,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     println!("Next Commands");
     println!("-------------");
     println!("  atelier issue show {}", object.id);
+    println!("  atelier issue transition {} --options", object.id);
     Ok(())
 }
 
@@ -1453,6 +1668,11 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         changed_fields.push("labels");
         crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
     }
+    for label in input.remove_labels {
+        record.labels.retain(|existing| existing != label);
+        changed_fields.push("labels");
+        crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
+    }
     if input.parent.is_some() {
         let old_parent = parent_record_containing_child(&store, &id)?;
         if old_parent.as_deref() != parent_id.as_deref() {
@@ -1499,7 +1719,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_note(&id, note)?;
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --parent, --claim, or --append-notes");
+        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes");
     }
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;

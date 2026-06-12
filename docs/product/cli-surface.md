@@ -22,8 +22,8 @@ in normal Agent Factory workflows:
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence add/show/list/attach`
-- `atelier workflow validate`
-- `atelier work start/finish/status`
+- `atelier start`
+- `atelier finish`
 - `atelier worktree for/status/merge/remove`
 - `atelier import-beads`
 - `atelier lint`
@@ -60,8 +60,8 @@ Issue creation and issue detail output print the canonical Markdown path under
 footers point to editing that Markdown file, `atelier lint <id>`, and focused
 drill-down commands rather than generic command dumps.
 
-First-class mission, milestone, plan, evidence, relationship, workflow validation,
-and work lifecycle commands are now core as a staged implementation. Mission,
+First-class mission, milestone, plan, evidence, relationship, and work lifecycle
+commands are now core as a staged implementation. Mission,
 milestone, plan, evidence, and issue lifecycle mutations write canonical
 Markdown through RecordStore before refreshing the SQLite projection; rebuild
 restores those records from Markdown. `atelier plan apply` validates authored
@@ -74,9 +74,13 @@ blocked, done, and backlog state. `atelier mission status [<id>]` is the
 mission-control CLI surface for active mission health, evidence gaps, blockers,
 validator freshness, closeout readiness, and next actions before any separate
 projection or UI is required.
-Work lifecycle commands store local work association in runtime state and
+Root `atelier start <issue-id>` and `atelier finish [issue-id]` are the normal
+work lifecycle commands. They store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow
-transitions. Worktree helpers expose scan-friendly JSON status, create/remove
+transitions. Root `atelier status`, `atelier mission status`, and `atelier issue
+transition <id> --options` expose current-work orientation, so operators should
+not need the hidden `atelier work start/finish/status` command group for normal
+workflow. Worktree helpers expose scan-friendly JSON status, create/remove
 associated Git worktrees, prepare local runtime state in new worktrees, and run
 `worktree_setup` hooks from the configured workflow policy.
 Mission closeout is ready only when all linked work is closed, required evidence
@@ -105,10 +109,12 @@ surface is `delete` unless it is in the core list above.
 Removed command surfaces:
 
 - `mission view`; use `mission show`.
+- The normal `work start/finish/status` group; use root `start`, root `finish`,
+  and `status`.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
   `update`, `block`, `unblock`, `search`, `relate`, `related`, and `tree`; use
   `atelier issue ...`.
-- Flat timer aliases `start` and `stop`, and the `timer` group.
+- Flat timer aliases such as `stop`, and the `timer` group.
 - Legacy groups `archive`, `milestone`, `session`, `daemon`, `cpitd`, `usage`,
   `agent`, `locks`, and `sync`.
 - Backup `import` and `export --format json|markdown`; use `import-beads` for

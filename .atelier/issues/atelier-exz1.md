@@ -3,6 +3,7 @@ created_at: "2026-06-12T20:29:04.870070382+00:00"
 id: "atelier-exz1"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "command-surface"
 - "planning"
@@ -18,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Classify current issue subcommands against lifecycle contract"
-updated_at: "2026-06-12T20:29:04.870070382+00:00"
+updated_at: "2026-06-12T20:59:21.370723616+00:00"
 ---
 
 ## Description
