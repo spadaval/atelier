@@ -8,7 +8,9 @@ labels:
 - "work"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-trr2"
   children: []
   attachments: []
   relates: []

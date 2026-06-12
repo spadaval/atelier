@@ -7,7 +7,9 @@ labels:
 - "validation"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-40ou"
   children: []
   attachments: []
   relates: []

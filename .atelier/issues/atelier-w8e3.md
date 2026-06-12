@@ -12,7 +12,11 @@ relationships:
   - kind: "issue"
     id: "atelier-1p83"
   - kind: "issue"
+    id: "atelier-9pkx"
+  - kind: "issue"
     id: "atelier-k9m8"
+  - kind: "issue"
+    id: "atelier-pyre"
   children: []
   attachments: []
   relates: []

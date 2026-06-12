@@ -10,7 +10,9 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
-    id: "atelier-n1ys"
+    id: "atelier-pyre"
+  - kind: "issue"
+    id: "atelier-trr2"
   - kind: "issue"
     id: "atelier-ymfl"
   children: []
@@ -36,8 +38,8 @@ closeout, issue transition options, start, close, lint, and evidence commands.
   `atelier workflow validate` as a normal command.
 - Mission and issue next-action output routes operators to domain surfaces
   instead of raw validator commands.
-- The command is either removed, hidden, or explicitly scoped as an internal
-  diagnostic according to the final CLI-surface decision.
+- Any remaining `atelier workflow validate` command is hidden or clearly scoped
+  as an advanced/internal diagnostic, not a normal workflow command.
 - Domain commands expose the useful answers previously expected from workflow
   validation: what is blocked, why, and which user-facing command fixes it.
 - Tests prove normal help, mission status, issue show/transition, and closeout
@@ -46,21 +48,17 @@ closeout, issue transition options, start, close, lint, and evidence commands.
 ## Evidence
 
 - CLI transcript tests cover top-level help, mission status, mission closeout
-
-blockers, and issue transition/options output.
+  blockers, and issue transition/options output.
 
 - Docs updates remove `workflow validate` from normal Agent Factory command
-
-lists.
+  lists.
 
 - If an internal diagnostic remains, tests prove it is hidden or clearly marked
-
-non-normal.
+  non-normal.
 
 - Run focused CLI/help tests plus `atelier lint`.
 
 ## Notes
 
 The underlying validator functions may still exist as implementation details.
-
 The product failure is exposing them as the normal mental model.

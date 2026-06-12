@@ -9,18 +9,22 @@ labels:
 - "validation"
 priority: "P1"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "atelier-n1ys"
+  blocks: []
   children:
   - kind: "issue"
     id: "atelier-0u2k"
   - kind: "issue"
     id: "atelier-1p83"
   - kind: "issue"
+    id: "atelier-6w0u"
+  - kind: "issue"
     id: "atelier-7yen"
   - kind: "issue"
     id: "atelier-8o34"
+  - kind: "issue"
+    id: "atelier-9pkx"
+  - kind: "issue"
+    id: "atelier-diom"
   - kind: "issue"
     id: "atelier-fx9r"
   - kind: "issue"
@@ -45,7 +49,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Overhaul mission validation and reliability system"
-updated_at: "2026-06-12T17:07:36.333322708+00:00"
+updated_at: "2026-06-12T19:39:59.450087808+00:00"
 ---
 
 ## Description
@@ -58,7 +62,12 @@ audits, and drift detection.
 ## Outcome
 
 - Executable work has clear Outcome and Evidence sections.
+- Validation routing is explicit: ordinary issues carry their own proof, while
+  review, independent validation, and parent closeout audits are used when risk
+  or scope requires them.
 - Lint catches vague or missing evidence expectations before work starts.
+- Issue closeout cannot pass on valid sections alone when required proof is
+  missing, unrelated, or only recorded as confidence.
 - Mission closeout maps every mission outcome to linked work and attached
   evidence.
 - Validators are target-aware and use domain-specific closeout policy.
@@ -78,24 +87,25 @@ audits, and drift detection.
   they are reported as bounded, actionable degraded-state blockers.
 - Projection-backed commands rebuild or fail with bounded, actionable diagnostics
   instead of dumping stale index internals or rebuild races.
+- The validation system is tested against seeded failure scenarios that broad
+  green checks would otherwise miss.
 
 ## Evidence
 
-- Child issues cover lint, validators, evidence capture, validation process,
-  closeout audit, adversarial mission validation, malformed-record recovery,
-  projection freshness, drift detection, ignored tests, next actions, and
-  reliability status.
+- Child issues cover validation routing policy, issue closeout proof gates,
+  lint, validators, evidence capture, validation process, closeout audit,
+  adversarial mission validation, malformed-record recovery, projection
+  freshness, drift detection, ignored tests, next actions, and reliability
+  status.
 
 - Final validation attaches evidence records for command transcripts, focused
-  tests, docs/help parity checks, stale-test inventory, and mission contract
-  audit results.
+  tests, seeded validation-failure scenarios, docs/help parity checks,
+  stale-test inventory, and mission contract audit results.
 
 - Mission `atelier-tcmr` cannot close until this reliability work is validated.
 
 ## Notes
 
 This epic is intentionally broader than one command. The failure mode was
-
 systemic: agents could close work without proof because tracker structure,
-
 commands, docs, validators, and skill process all allowed it.

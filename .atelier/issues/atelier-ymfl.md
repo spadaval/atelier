@@ -11,6 +11,8 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-v6nd"
+  - kind: "issue"
     id: "atelier-wws5"
   attachments: []
   relates: []
@@ -18,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Align docs tests and Agent Factory process with enforced proof"
-updated_at: "2026-06-12T05:10:04.339881237+00:00"
+updated_at: "2026-06-12T19:39:54.111802532+00:00"
 ---
 
 ## Description
@@ -34,6 +36,9 @@ unrelated green tests.
 - The global Agent Factory skill procedures are updated so planning,
   orchestration, implementation, validation, review, docs, and closeout all
   require Outcome/Evidence discipline and attached proof.
+- Agent Factory guidance teaches a simple proof rule: ordinary work closes with
+  proof on the issue, while risky, broad, or parent-level claims require an
+  independent check.
 - Planning and closeout guidance require Outcome and Evidence sections on new
   work items once the section parser lands.
 - Tests that preserve obsolete behavior are removed, rewritten, or explicitly
@@ -50,27 +55,19 @@ unrelated green tests.
 ## Evidence
 
 - Docs updates cover Agent Factory workflow, repository guidance, and CLI
-
-surface documentation.
-
+  surface documentation.
 - Skill updates cover Agent Factory procedure files, not only repository-local
-
-instructions.
-
+  instructions.
+- Process review demonstrates the proof rule on representative issue, epic, and
+  mission work.
 - Test updates remove stale assertions that old commands are normal behavior.
-
 - A closeout checklist or validator transcript demonstrates each mission
-
-outcome has evidence.
-
+  outcome has evidence.
 - Run focused docs/tests, `atelier export --check`, `atelier lint`, and
-
-`atelier doctor`.
+  `atelier doctor`.
 
 ## Notes
 
 This is process repair, not a substitute for command implementation. It should
-
 block mission closeout if documentation and tests still allow the old failure
-
 mode.

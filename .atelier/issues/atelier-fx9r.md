@@ -1,5 +1,5 @@
 ---
-created_at: "2026-06-12T05:45:00.000000000+00:00"
+created_at: "2026-06-12T05:45:00+00:00"
 id: "atelier-fx9r"
 issue_type: "task"
 labels:
@@ -11,22 +11,20 @@ relationships:
   blocks:
   - kind: "issue"
     id: "atelier-k9m8"
-  - kind: "issue"
-    id: "atelier-n1ys"
   children: []
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-ncog"
+    id: "atelier-eprw"
     type: "related"
   - kind: "issue"
-    id: "atelier-eprw"
+    id: "atelier-ncog"
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Fix projection stale rebuild races and diagnostics"
-updated_at: "2026-06-12T05:45:00.000000000+00:00"
+updated_at: "2026-06-12T05:45:00+00:00"
 ---
 
 ## Description

@@ -9,6 +9,10 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-diom"
+  - kind: "issue"
+    id: "atelier-pvuz"
+  - kind: "issue"
     id: "atelier-w8e3"
   children: []
   attachments: []

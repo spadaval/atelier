@@ -8,14 +8,22 @@ labels:
 priority: "P1"
 relationships:
   blocks: []
-  children: []
+  children:
+  - kind: "issue"
+    id: "atelier-64ea"
+  - kind: "issue"
+    id: "atelier-auqt"
+  - kind: "issue"
+    id: "atelier-drfm"
+  - kind: "issue"
+    id: "atelier-exz1"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Repair and consolidate CLI command surfaces"
-updated_at: "2026-06-12T04:58:49.384211183+00:00"
+updated_at: "2026-06-12T20:29:22.966441834+00:00"
 ---
 
 ## Description
@@ -23,17 +31,19 @@ updated_at: "2026-06-12T04:58:49.384211183+00:00"
 Repair the CLI command hierarchy cleanup that the previous mission claimed but
 did not complete. The issue command group still exposes lifecycle, graph,
 search, comments, destructive maintenance, and legacy helper commands together.
+Use the closed command-surface decisions in `atelier-9jbu` and `atelier-o2a4`
+as the starting point, then validate the current implementation against them.
 
 ## Outcome
 
 - `atelier issue --help` exposes only issue lifecycle commands for creating,
-  inspecting, editing compact metadata, claiming or starting where applicable,
-  and closing or reopening where retained.
+  inspecting, editing compact metadata, starting through the approved start
+  surface, and closing or reopening through approved lifecycle commands.
 - Redundant issue creation paths are folded into `issue create` options or
-  removed/hidden according to the new sectioned issue contract.
+  removed/hidden according to the active command classification.
 - Dependency, link, search, history/activity, hierarchy/impact, deletion, and
   bulk operations have explicit homes outside the primary issue lifecycle group
-  where retained.
+  when retained.
 - Replacement flags such as parented create, active-work create, remove-label,
   and blocked listing exist where the contract says they should.
 - Obsolete commands either fail clearly with a replacement or are hidden during
@@ -46,9 +56,8 @@ search, comments, destructive maintenance, and legacy helper commands together.
   and omits graph, search, history, impact, destructive maintenance, and legacy
   helper commands.
 
-- CLI transcript tests prove retained replacement workflows exist for parented
-  create, active-work create, remove-label, and blocked-list behavior when those
-  behaviors remain in the target surface.
+- CLI transcript tests prove replacement workflows exist for retained parented
+  create, active-work create, remove-label, and blocked-list behavior.
 
 - Removed or hidden commands have explicit tests for failure, hidden-help
   behavior, or replacement guidance.
@@ -64,5 +73,4 @@ search, comments, destructive maintenance, and legacy helper commands together.
 ## Notes
 
 This is new repair work. Do not reopen the old closed command-cleanup issue
-
 unless a human wants its historical record changed.

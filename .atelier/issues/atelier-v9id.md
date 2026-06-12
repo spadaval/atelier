@@ -1,5 +1,5 @@
 ---
-created_at: "2026-06-12T06:05:00.000000000+00:00"
+created_at: "2026-06-12T06:05:00+00:00"
 id: "atelier-v9id"
 issue_type: "validation"
 labels:
@@ -8,7 +8,9 @@ labels:
 - "reliability"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-zue4"
   children: []
   attachments: []
   relates: []
@@ -16,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Adversarially validate repair mission outcomes"
-updated_at: "2026-06-12T06:05:00.000000000+00:00"
+updated_at: "2026-06-12T06:05:00+00:00"
 ---
 
 ## Description
@@ -38,6 +40,9 @@ repairs are still missing, misleading, or only partially wired.
 - The validator checks docs, help output, Agent Factory skill text, stale tests,
   ignored tests, projection freshness behavior, and tracker lint/doctor/export
   health instead of only running broad tests.
+- The validator checks that the validation process itself caught seeded
+  missing-proof and independence failures before relying on mission closeout
+  evidence.
 - Findings create or identify follow-up tracker items before mission closeout.
 - The validation pass is performed by an agent that did not implement the
   slices being validated.
@@ -56,6 +61,8 @@ repairs are still missing, misleading, or only partially wired.
   unresolved item.
 
 - Record docs/help/Agent Factory guidance parity results.
+
+- Record validation-system failure scenario results.
 
 - Run focused integration tests for the repaired surfaces.
 

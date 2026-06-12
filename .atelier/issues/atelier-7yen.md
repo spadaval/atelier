@@ -8,7 +8,11 @@ labels:
 - "reliability"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-diom"
+  - kind: "issue"
+    id: "atelier-pvuz"
   children: []
   attachments: []
   relates: []

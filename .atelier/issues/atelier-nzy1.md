@@ -12,13 +12,17 @@ relationships:
   children:
   - kind: "issue"
     id: "atelier-a4sn"
+  - kind: "issue"
+    id: "atelier-pvuz"
+  - kind: "issue"
+    id: "atelier-pyre"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Harden mission closeout validators and evidence requirements"
-updated_at: "2026-06-12T05:04:31.932494248+00:00"
+updated_at: "2026-06-12T20:29:57.173649956+00:00"
 ---
 
 ## Description
@@ -39,27 +43,20 @@ claimed command behaviors were absent.
   attached to the records they validate.
 - Mission status reports closeout blockers in user-facing language and does not
   require operators to understand a workflow-validator subsystem.
-- `atelier workflow validate` is removed from the normal public workflow,
-  hidden as an internal diagnostic, or replaced by domain-specific commands.
+- Any remaining raw workflow validation command is hidden or scoped as an
+  advanced/internal diagnostic; domain commands own normal closeout guidance.
 
 ## Evidence
 
 - Tests prove a mission with missing command behavior/evidence cannot close.
-
 - Tests prove section lint failures in linked work block mission closeout.
-
 - Tests prove attached evidence can satisfy declared closeout requirements.
-
 - Transcript coverage shows mission status and closeout commands agree on
-
-closeout blockers without recommending raw workflow validation.
-
+  closeout blockers without recommending raw workflow validation.
 - Run focused validator tests, `atelier export --check`, `atelier lint`, and
-
-`atelier doctor`.
+  `atelier doctor`.
 
 ## Notes
 
 This epic should use the parsed issue-section integration work from
-
 `atelier-40ou` instead of inventing separate closeout parsing.

@@ -7,7 +7,11 @@ labels:
 - "reliability"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-9pkx"
+  - kind: "issue"
+    id: "atelier-pyre"
   children: []
   attachments: []
   relates: []

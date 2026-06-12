@@ -13,7 +13,7 @@ relationships:
   - kind: "issue"
     id: "atelier-hah9"
   - kind: "issue"
-    id: "atelier-n1ys"
+    id: "atelier-ymfl"
   children: []
   attachments: []
   relates: []
@@ -39,6 +39,11 @@ audits.
   parser lands.
 - Agent Factory guidance explains how to write good mission, epic, executable
   issue, validation item, Outcome, Evidence, and Notes text.
+- Agent Factory guidance includes a simple proof rule: ordinary work closes
+  with proof on the issue, while risky, broad, or parent-level claims require an
+  independent check.
+- Orchestrator guidance requires assignments to name expected proof and whether
+  independence is required.
 - The orchestrate procedure requires a mission contract audit before closeout:
   each mission Outcome line maps to linked work and attached evidence.
 - The implement procedure requires agents to update evidence or record exact
@@ -69,12 +74,12 @@ audits.
 - Demonstrate the new authoring and closeout guidance on mission `atelier-tcmr`
   before that mission closes.
 
+- Demonstrate the proof rule on representative ordinary, risky, broad, and
+  parent-level examples.
+
 ## Notes
 
 This task intentionally changes global skill behavior, not only this
-
 repository's local instructions. Keep the guidance general enough for Agent
-
 Factory, but use Atelier-specific command examples where the tracker binding
-
 requires them.
