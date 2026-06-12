@@ -6164,6 +6164,89 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
 }
 
 #[test]
+fn test_focused_lint_validates_missing_relationship_targets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Focused lint missing target"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+
+    let issue_path = dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace(
+            "  blocks: []",
+            "  blocks:\n  - kind: \"issue\"\n    id: \"atelier-missing\"",
+        ),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(
+        !success,
+        "focused lint should reject missing relationship target, stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("has blocks reference to missing issue atelier-missing")
+            && stderr.contains(&issue_id)
+            && stderr.contains("Canonical tracker Markdown is invalid"),
+        "unexpected focused lint error: {stderr}"
+    );
+}
+
+#[test]
+fn test_focused_lint_validates_dependency_cycles() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, first_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Focused lint cycle root"]);
+    assert!(success, "first issue create failed: {stderr}");
+    assert!(first_out.contains("Created issue atelier-"));
+    let first_id = issue_ref(dir.path(), 1);
+    let (success, second_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Focused lint cycle leaf"]);
+    assert!(success, "second issue create failed: {stderr}");
+    assert!(second_out.contains("Created issue atelier-"));
+    let second_id = issue_ref(dir.path(), 2);
+
+    for (issue_id, blocked_id) in [(&first_id, &second_id), (&second_id, &first_id)] {
+        let issue_path = dir
+            .path()
+            .join(".atelier/issues")
+            .join(format!("{issue_id}.md"));
+        let markdown = std::fs::read_to_string(&issue_path).unwrap();
+        std::fs::write(
+            &issue_path,
+            markdown.replace(
+                "  blocks: []",
+                &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{blocked_id}\""),
+            ),
+        )
+        .unwrap();
+    }
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &first_id]);
+    assert!(
+        !success,
+        "focused lint should reject dependency cycle, stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("relationships.blocks contains a cycle"),
+        "unexpected focused lint cycle error: {stderr}"
+    );
+}
+
+#[test]
 fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
