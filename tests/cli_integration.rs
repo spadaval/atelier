@@ -5224,6 +5224,248 @@ fn test_first_class_records_export_rebuild_and_validate() {
 }
 
 #[test]
+fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Capture issue", "--issue-type", "task"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Capture issue");
+    let issue_id = issue_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Capture epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Capture epic");
+    let epic_id = epic_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Capture mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Capture mission");
+    let mission_id = mission_id.as_str();
+
+    let (success, issue_capture, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "capture",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--summary",
+            "issue command proof",
+            "--target-kind",
+            "issue",
+            "--target-id",
+            issue_id,
+            "--",
+            "sh",
+            "-c",
+            "printf 'pass stdout\\n'; printf 'pass stderr\\n' >&2",
+        ],
+    );
+    assert!(success, "issue capture failed: {stderr}");
+    assert!(issue_capture.contains("[evidence] pass - issue command proof"));
+    assert!(issue_capture.contains("Command:     sh -c"));
+    assert!(issue_capture.contains("Exit Status: 0"));
+    assert!(issue_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    assert!(issue_capture.contains("Captured:"));
+    assert!(issue_capture.contains("pass stdout"));
+    assert!(issue_capture.contains("pass stderr"));
+    let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
+
+    let (success, issue_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            issue_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "issue workflow validate failed: {stderr}");
+    assert!(issue_validate.contains("pass  evidence_attached"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "capture",
+            "--kind",
+            "validation",
+            "--result",
+            "fail",
+            "--summary",
+            "epic failing command proof",
+            "--target-kind",
+            "epic",
+            "--target-id",
+            epic_id,
+            "--",
+            "sh",
+            "-c",
+            "printf 'failing stdout\\n'; printf 'failing stderr\\n' >&2; exit 7",
+        ],
+    );
+    assert!(success, "epic capture failed: {stderr}");
+    let epic_evidence_id = record_id_by_title(dir.path(), "evidence", "epic failing command proof");
+    let (success, epic_show, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &epic_evidence_id]);
+    assert!(success, "epic evidence show failed: {stderr}");
+    assert!(epic_show.contains("Result:      fail"));
+    assert!(epic_show.contains("Exit Status: 7"));
+    assert!(epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+    assert!(epic_show.contains("failing stdout"));
+    assert!(epic_show.contains("failing stderr"));
+
+    let (success, epic_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            epic_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "epic workflow validate failed: {stderr}");
+    assert!(epic_validate.contains("pass  evidence_attached"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "manual epic attach proof",
+        ],
+    );
+    assert!(success, "manual evidence add failed: {stderr}");
+    let manual_epic_evidence_id =
+        record_id_by_title(dir.path(), "evidence", "manual epic attach proof");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "attach",
+            &manual_epic_evidence_id,
+            "epic",
+            epic_id,
+        ],
+    );
+    assert!(success, "manual epic evidence attach failed: {stderr}");
+    let (success, manual_epic_show, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &manual_epic_evidence_id]);
+    assert!(success, "manual epic evidence show failed: {stderr}");
+    assert!(manual_epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "capture",
+            "--kind",
+            "validation",
+            "--result",
+            "blocked",
+            "--summary",
+            "mission blocked command proof",
+            "--target-kind",
+            "mission",
+            "--target-id",
+            mission_id,
+            "--",
+            "sh",
+            "-c",
+            "i=0; while [ $i -lt 350 ]; do printf 'blocked-line-%03d\\n' \"$i\"; i=$((i + 1)); done; printf 'blocked stderr\\n' >&2; exit 2",
+        ],
+    );
+    assert!(success, "mission blocked capture failed: {stderr}");
+    let mission_evidence_id =
+        record_id_by_title(dir.path(), "evidence", "mission blocked command proof");
+    let (success, mission_show, stderr) =
+        run_atelier(dir.path(), &["evidence", "show", &mission_evidence_id]);
+    assert!(success, "mission evidence show failed: {stderr}");
+    assert!(mission_show.contains("Result:      blocked"));
+    assert!(mission_show.contains("Exit Status: 2"));
+    assert!(mission_show.contains(&format!("Target:      mission/{mission_id} (validates)")));
+    assert!(mission_show.contains("blocked-line-000"));
+    assert!(!mission_show.contains("blocked-line-349"));
+    assert!(mission_show.contains("Stdout: "));
+    assert!(mission_show.contains("truncated: yes"));
+
+    let (success, mission_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            mission_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "mission workflow validate failed: {stderr}");
+    assert!(mission_validate.contains("pass  evidence_attached"));
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains(&issue_evidence_id));
+    assert!(evidence_list.contains("exit=0"));
+    assert!(evidence_list.contains(&format!("target=issue/{issue_id}")));
+    assert!(evidence_list.contains("command=sh -c"));
+    assert!(evidence_list.contains(&epic_evidence_id));
+    assert!(evidence_list.contains("exit=7"));
+    assert!(evidence_list.contains(&format!("target=epic/{epic_id}")));
+    assert!(evidence_list.contains(&manual_epic_evidence_id));
+    assert!(evidence_list.contains(&mission_evidence_id));
+    assert!(evidence_list.contains("exit=2"));
+    assert!(evidence_list.contains(&format!("target=mission/{mission_id}")));
+}
+
+#[test]
+fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "capture",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--summary",
+            "bad pass proof",
+            "--",
+            "sh",
+            "-c",
+            "printf 'not a pass\\n'; exit 3",
+        ],
+    );
+    assert!(!success, "nonzero command cannot become pass evidence");
+    assert!(stderr.contains("cannot record pass evidence"));
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(evidence_list.contains("(none)"));
+}
+
+#[test]
 fn test_workflow_validate_fails_without_required_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

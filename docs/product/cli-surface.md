@@ -21,7 +21,7 @@ in normal Agent Factory workflows:
 - `atelier mission create/show/list/status/update`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
-- `atelier evidence add/show/list/attach`
+- `atelier evidence add/capture/show/list/attach`
 - `atelier start`
 - `atelier finish`
 - `atelier worktree for/status/merge/remove`
@@ -74,6 +74,9 @@ blocked, done, and backlog state. `atelier mission status [<id>]` is the
 mission-control CLI surface for active mission health, evidence gaps, blockers,
 validator freshness, closeout readiness, and next actions before any separate
 projection or UI is required.
+`atelier evidence capture` runs a command and stores bounded stdout/stderr
+summaries with command, exit status, result, timestamp, and optional target
+metadata so validation proof does not require manual transcript copy/paste.
 Root `atelier start <issue-id>` and `atelier finish [issue-id]` are the normal
 work lifecycle commands. They store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow

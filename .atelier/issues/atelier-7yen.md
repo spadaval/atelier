@@ -3,6 +3,7 @@ created_at: "2026-06-12T05:12:10.905602262+00:00"
 id: "atelier-7yen"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "evidence"
 - "reliability"
@@ -18,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Capture and attach validation evidence from commands"
-updated_at: "2026-06-12T05:12:10.905602262+00:00"
+updated_at: "2026-06-12T21:19:32.235226646+00:00"
 ---
 
 ## Description
