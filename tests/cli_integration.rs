@@ -960,6 +960,7 @@ fn test_top_level_help_only_shows_core_commands() {
             "missing common command example {common}"
         );
     }
+    assert!(!stdout.contains("workflow validate"));
 
     assert!(
         !stdout.contains("\nCommands:\n"),
@@ -988,6 +989,25 @@ fn test_top_level_help_only_shows_core_commands() {
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["workflow", "--help"]);
+    assert!(success, "workflow help failed: {stderr}");
+    assert!(stdout.contains("Advanced/internal workflow policy diagnostics"));
+    assert!(stdout.contains("advanced diagnostic"));
+}
+
+#[test]
+fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
+    let guidance =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("AGENTFACTORY.md"))
+            .unwrap();
+    assert!(guidance.contains("Hidden workflow diagnostics are not normal"));
+    assert!(!guidance.contains("atelier workflow validate issue"));
+    assert!(!guidance.contains("atelier workflow validate mission"));
 }
 
 #[test]

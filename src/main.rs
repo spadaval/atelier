@@ -245,7 +245,7 @@ enum Commands {
         limit: usize,
     },
 
-    /// Workflow policy and validator helpers
+    /// Advanced/internal workflow policy diagnostics
     #[command(hide = true)]
     Workflow {
         #[command(subcommand)]
@@ -843,7 +843,7 @@ enum EvidenceCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Evaluate workflow validators without mutating record state
+    /// Evaluate workflow validators as an advanced diagnostic without mutating record state
     Validate {
         target_kind: String,
         target_id: String,

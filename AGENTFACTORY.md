@@ -67,11 +67,11 @@ This file binds Agent Factory to this repository.
   - `atelier finish [issue-id]`
   - `atelier evidence add --kind <kind> --result <result> "summary"`
   - `atelier evidence attach <evidence-id> issue <issue-id>`
-- Advanced policy checks:
-  - Use only when the binding, assignment, workflow policy, or closeout contract
-    explicitly requires them; they do not replace attached Outcome proof.
-  - `atelier workflow validate issue <issue-id>`
-  - `atelier workflow validate mission <mission-id>`
+- Advanced policy diagnostics:
+  - Hidden workflow diagnostics are not normal planning, implementation, or
+    closeout commands. Use them only when a binding, assignment, workflow policy,
+    or closeout contract explicitly names the diagnostic command; they do not
+    replace attached Outcome proof.
 - Issues:
   - `atelier issue list --ready`
   - `atelier issue list --blocked`
