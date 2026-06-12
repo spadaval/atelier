@@ -25,8 +25,6 @@ in normal Agent Factory workflows:
 - `atelier workflow validate`
 - `atelier work start/finish/status`
 - `atelier worktree for/status/merge/remove`
-- `atelier export` and `atelier export --check`
-- `atelier rebuild`
 - `atelier import-beads`
 - `atelier lint`
 - `atelier doctor`
@@ -79,10 +77,24 @@ projection or UI is required.
 Work lifecycle commands store local work association in runtime state and
 enforce clean worktree plus current-export checks where they affect workflow
 transitions. Worktree helpers expose scan-friendly JSON status, create/remove
-associated Git worktrees, rebuild SQLite in new worktrees, and run
+associated Git worktrees, prepare local runtime state in new worktrees, and run
 `worktree_setup` hooks from the configured workflow policy.
 Mission closeout is ready only when all linked work is closed, required evidence
 is attached, workflow validators pass, and the Git worktree is clean.
+
+## Cache Transparency
+
+The local SQLite projection and cache are implementation details. Normal
+operators should not need to know that they exist, refresh them manually, or
+interpret projection freshness as a product concept. Core read and mutation
+commands must transparently keep local projection state usable, and degraded
+states must be reported as record or workflow repair problems rather than cache
+maintenance chores.
+
+Low-level debug and repair commands may expose cache mechanics when diagnosing
+Atelier itself. Those commands should not appear as ordinary next actions from
+core workflow surfaces, and their output should make clear that they are
+diagnostic tools rather than required user workflow.
 
 ## Removed Behavior
 
@@ -101,6 +113,14 @@ Removed command surfaces:
   `agent`, `locks`, and `sync`.
 - Backup `import` and `export --format json|markdown`; use `import-beads` for
   predecessor imports and canonical `export`/`rebuild` for durable state.
+
+## Low-Level Debug And Repair
+
+The implementation may retain low-level commands such as `atelier rebuild` and
+projection/export repair checks for development, diagnostics, migration, and
+test evidence. They are not part of the normal product workflow. Public
+orientation commands such as `atelier status`, `atelier doctor`, `atelier lint`,
+and record-specific repair guidance should absorb routine cache recovery.
 
 Internal helpers may remain only when a core workflow still uses them. For
 example, session rows remain an implementation detail of current work
@@ -133,7 +153,7 @@ The daemon surface and changelog-on-close behavior are not part of the target
 public workflow. Issue closure records close state, close time, and optional
 reason in tracker state; it does not mutate `CHANGELOG.md`.
 
-Canonical state is Markdown under tracked `.atelier/` records, checked with
-lint/export freshness gates and indexed into SQLite with `atelier rebuild`.
-`atelier export` remains a repair renderer for committed tracker state; backup
-JSON/Markdown formats are no longer command surfaces.
+Canonical state is Markdown under tracked `.atelier/` records and checked with
+lint and health gates. Local indexes are repaired transparently by normal
+commands. `atelier export` remains a low-level repair renderer for committed
+tracker state; backup JSON/Markdown formats are no longer command surfaces.

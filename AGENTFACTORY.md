@@ -8,6 +8,7 @@ This file binds Agent Factory to this repository.
 - Docs map: `docs/index.md`
 - Domain context: `CONTEXT.md`
 - Product intent: `SPEC.md`
+- Product index: `docs/product/index.md`
 - ADR directory: `docs/adr/`
 - Architecture index: `docs/architecture/index.md`
 - Quality index: `docs/architecture/quality/index.md`
@@ -67,7 +68,6 @@ This file binds Agent Factory to this repository.
   explicit drill-down commands.
 - Sync/state:
   - `git pull`
-  - `atelier rebuild`
   - `atelier export --check`
   - `atelier export`
   - `git status --short --branch`

@@ -167,13 +167,10 @@ their need:
 - Read canonical records under `.atelier/` when durable tracker state is
   needed. These Markdown records are the reviewable, mergeable source of truth
   for issues, missions, milestones, plans, evidence, and activity sidecars.
-- Rebuild local projections with `atelier rebuild` after checkout, pull, clone,
-  or merge. `.atelier/runtime/state.db` and projection metadata are rebuildable
-  local indexes, not durable API payloads to commit.
-- Use export and check commands for freshness and handoff gates. `atelier
-  export --check`, `atelier lint`, and `atelier doctor` are the supported
-  noninteractive health checks for stale records, invalid tracker state, and
-  broken runtime setup.
+- Use health commands for handoff gates. `atelier lint` and `atelier doctor`
+  are the supported noninteractive checks for invalid tracker state, degraded
+  local runtime, and repair guidance. Low-level projection repair commands are
+  diagnostic tools, not normal script workflow.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
   `atelier issue list --ready`, `atelier issue blocked`, `atelier issue children <id>`,

@@ -36,8 +36,11 @@ mission should not close while these sources contradict each other.
 
 ## Evidence
 
-- Add docs/help consistency checks or transcript tests.
+- Docs/help consistency checks or transcript tests compare the implemented
+  command surfaces against Agent Factory guidance, repository docs, and CLI help.
 
-- Add a test or lint finding for stale command guidance.
+- A stale-guidance check fails when docs, help, or tests still present obsolete
+  commands as normal workflow without an explicit migration window.
 
-- Run focused docs/help tests.
+- Run focused docs/help tests and record any intentionally deferred drift with a
+  linked owner.

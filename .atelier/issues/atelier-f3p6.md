@@ -45,9 +45,12 @@ finishing, or inspecting work.
 
 ## Evidence
 
-- CLI transcript tests cover root start, finish/current-work behavior, and
+- CLI transcript tests prove root `atelier start <issue-id>` begins normal work
+  and reports the active work state through the chosen status/current-work
+  surface.
 
-status surfaces.
+- Transcript tests prove finish or equivalent completion behavior is reachable
+  without requiring normal users to discover `atelier work`.
 
 - Help transcript tests prove `atelier --help` no longer recommends
 
@@ -55,7 +58,8 @@ status surfaces.
 
 common commands.
 
-- Docs and Agent Factory guidance are updated to the new command surface.
+- Docs and Agent Factory guidance name the new normal start, status, and
+  finish/current-work surfaces and classify worktree commands as advanced.
 
 - Run focused work/start/status CLI tests plus `atelier lint`.
 

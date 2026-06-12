@@ -33,8 +33,12 @@ whether a mission is ready to implement, validate, or close.
 
 ## Evidence
 
-- CLI transcript tests cover healthy and unhealthy reliability summaries.
+- CLI transcript tests cover healthy reliability summaries and unhealthy states
+  for malformed work, missing Outcome, missing Evidence, missing attached proof,
+  ignored-test blockers, docs/help drift, open blockers, and projection
+  freshness failures.
 
 - Tests prove summary output agrees with closeout blockers.
 
-- Run focused mission status tests.
+- Run focused mission status tests that assert bounded output and drill-down
+  commands for each unhealthy state.

@@ -33,8 +33,11 @@ send agents into obsolete commands or irrelevant validators.
 
 ## Evidence
 
-- Transcript tests cover representative next-action states.
+- Transcript tests cover next actions for no active work, active work, blocked
+  work, malformed issues, missing evidence, dirty worktree, ready work, and
+  closeout-ready work.
 
 - Tests fail if removed commands appear in normal next-action output.
 
-- Run focused CLI output tests.
+- Run focused CLI output tests that assert intent labels and current-state
+  reasons are present.

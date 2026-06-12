@@ -29,8 +29,9 @@ options.
 
 ## Outcome
 
-- Root `atelier status` shows the agreed checkout/work/mission/tracker/recent
-  activity signposts and active-mission-scoped next actions.
+- Root `atelier status` shows checkout state, active work, active mission,
+  tracker health, recent relevant activity, blockers, ready work, and
+  active-mission-scoped next actions.
 - `atelier start <issue-id>` exists as the normal work entrypoint or the
   mission records a deliberate replacement with implementation and docs.
 - The `atelier work` command group is exploded or hidden from the normal
@@ -38,8 +39,9 @@ options.
   surfaces.
 - Issue transition/options output exists so users can ask what an issue can do
   next without knowing internal validator commands.
-- History and prime surfaces are either implemented to the documented contract
-  or explicitly removed from the target with replacement guidance.
+- History and prime surfaces are either implemented with observable help and
+  transcript behavior or explicitly removed from the target with replacement
+  guidance.
 - User-facing next actions stop pushing normal users toward raw workflow
   validator commands when a status/transition surface should own that guidance.
 - Any remaining workflow-validator implementation is hidden behind domain
@@ -48,19 +50,24 @@ options.
 
 ## Evidence
 
-- Transcript tests cover empty and active root status, start/finish/current-work
+- Transcript tests cover empty and active root status, start behavior, finish or
+  equivalent current-work completion behavior, issue transition/options output,
+  and retained or removed history/prime behavior.
 
-orientation, issue transition options, and any retained history/prime surfaces.
+- Negative transcripts prove normal next actions do not route users to raw
+  workflow-validator commands when a domain status, transition, start, or
+  closeout surface owns the answer.
 
 - Tests cover the absence or replacement behavior for intentionally removed
 
 surfaces.
 
-- Focused docs checks show Agent Factory guidance matches the implemented
+- Docs/help parity checks show Agent Factory guidance and repository docs match
+  the implemented status, start, finish/current-work, transition, history, and
+  prime surfaces.
 
-command names.
-
-- Run focused CLI integration tests and `atelier lint`.
+- Run focused CLI integration tests for the repaired workflow signposts plus
+  `atelier lint`.
 
 ## Notes
 

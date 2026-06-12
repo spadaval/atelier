@@ -182,8 +182,8 @@ Supported hook events for schema version 1 are:
 
 - `before_transition`: runs after static transition checks and validators pass,
   but before the tracker mutation is committed;
-- `after_transition`: runs after the canonical record write and projection
-  refresh or stale-projection marking complete;
+- `after_transition`: runs after the canonical record write and any derived-state
+  refresh or repair marking is complete;
 - `worktree_setup`: runs when a worktree helper prepares a worktree.
 
 The staged `atelier worktree for` implementation executes hooks whose

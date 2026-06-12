@@ -1,9 +1,10 @@
 # Architecture
 
-This map separates current inherited implementation from target Atelier
-architecture. Product intent lives in [SPEC.md](../../SPEC.md), domain language
-lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is documented in
-[Chainlink Provenance](provenance.md).
+This map covers implementation architecture: code ownership, persistence
+boundaries, local runtime state, and inherited Chainlink structure. Product
+behavior lives in [Product](../product/index.md), product intent lives in
+[SPEC.md](../../SPEC.md), domain language lives in [CONTEXT.md](../../CONTEXT.md),
+and fork provenance is documented in [Chainlink Provenance](provenance.md).
 
 ## Current Implementation
 
@@ -24,26 +25,15 @@ Atelier currently starts from the Chainlink Rust CLI:
 
 See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.
-See [Work Model](work-model.md) for mission, milestone, epic, issue, workflow
-validator, and evidence relationships.
-See [Milestone Records](milestone-records.md) for the first-class checkpoint
-record contract and validation model.
-See [CLI Surface Tiers](cli-surface.md) for the public-help, compatibility, and
-integration command policy.
-See [Human CLI Output](human-cli-output.md) for the detail, queue, hierarchy,
-color, width, formatter, and test conventions for non-JSON command output.
-See [Workflow Configuration Contract](workflow-configuration.md) for the
-repository-owned workflow policy path, schema, validators, hooks, reload
-behavior, and examples.
 See [Markdown-First Record Store](markdown-first-record-store.md) for the
 RecordStore, ProjectionIndex, and RuntimeState boundaries that govern durable
 Markdown writes, rebuildable SQLite indexes, and local-only runtime data.
 See [Local Command Diagnostics](local-command-diagnostics.md) for the global
 local diagnostics store, command telemetry fields, redaction defaults, opt-out
 controls, retention behavior, and Mission Control export boundary.
-See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
-consumer contract, projection degradation rules, navigation model, and fixture
-expectations.
+See [Product](../product/index.md) for the work model, milestone contract,
+public CLI surface, human output, workflow policy, and Mission Control
+experience that the architecture supports.
 
 Accepted ADRs record cross-cutting product choices:
 
@@ -70,7 +60,8 @@ Accepted ADRs record cross-cutting product choices:
 - `export --check` detects stale canonical records and derived projections.
 - `rebuild` recreates SQLite projection state from committed Markdown records.
 - First-class concepts include missions, milestone checkpoint records, issues,
-  plans, evidence, runs, typed links, workflows, and workflow validators.
+  plans, evidence, runs, typed links, workflows, and workflow validators; their
+  user-visible behavior is defined in [Product](../product/index.md).
 - Repository-owned workflow policy lives in `.atelier/config.toml` or a
   documented workflow policy file selected by config; copied rule trees are
   integrations, not project tracker state.
@@ -86,12 +77,11 @@ Accepted ADRs record cross-cutting product choices:
 - ProjectionIndex code must own rebuild, reindex, query freshness, and
   stale-projection detection.
 - Workflow validator evaluation should produce machine-readable results suitable
-  for Mission Control.
-- Mission Control TUI code should consume only the documented projection fields
-  and keep CLI commands plus durable projections as the primary agent interface.
-- Human CLI rendering should use shared detail, queue, and hierarchy formatter
-  conventions while keeping canonical projection logic separate from display
-  text.
+  for the product workflow and Mission Control surfaces.
+- Mission Control TUI code should consume only documented projection fields and
+  keep CLI commands plus durable projections as the primary agent interface.
+- Human CLI rendering should keep canonical projection logic separate from
+  display text.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.
 

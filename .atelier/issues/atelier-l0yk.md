@@ -35,10 +35,12 @@ unfinished product behavior.
 
 ## Evidence
 
-- Add a test inventory or lint check for ignored tests.
+- Add a test inventory or lint check that lists ignored tests, reasons, linked
+  owners, and whether each ignored test covers product behavior.
 
 - Run the inventory against the current suite and create follow-up issues for
 
 unresolved ignored tests.
 
-- Attach evidence to the reliability mission.
+- Attach evidence to the reliability mission showing unresolved ignored or stale
+  tests are either linked to owners or no longer block product closeout.

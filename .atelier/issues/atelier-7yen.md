@@ -36,8 +36,12 @@ of writing summaries that cannot be audited.
 
 ## Evidence
 
-- CLI tests cover command transcript capture and attachment.
+- CLI tests cover capturing passing, failing, and blocked command transcripts as
+  evidence records and attaching them to issues, epics, and missions.
 
 - Evidence show/list output exposes enough metadata for closeout audits.
+
+- Tests prove captured evidence records include command, exit status, timestamp,
+  target, result, and bounded output summary.
 
 - Run focused evidence command tests.

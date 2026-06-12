@@ -28,8 +28,8 @@ Projection identity and health:
 | `generated_at` | Shown in the status line; `null` is allowed in fixtures. |
 | `source.state_path` | Shown in diagnostics so users know which projection was read. |
 | `source.export_current` | Drives stale-export warnings. |
-| `source.projection_current` | Drives stale-projection warnings. |
-| `source.errors[]` | Blocks normal rendering when projection health is invalid. |
+| `source.projection_current` | Drives derived-state health warnings. |
+| `source.errors[]` | Blocks normal rendering when derived state is invalid. |
 | `source.warnings[]` | Shown in diagnostics without blocking browsing. |
 | `workflow_config.path` | Identifies the workflow policy used for validator output. |
 | `workflow_config.sha256` | Shown in validator detail views. |
@@ -285,7 +285,7 @@ Keyboard expectations:
 | `c` | Copy the selected record ID. |
 | `C` | Copy the suggested CLI command for the selected record when one exists. |
 
-Search filters the active section only and must never hide stale-projection,
+Search filters the active section only and must never hide derived-state,
 schema, or workflow-config diagnostics. Detail views should show the record ID
 first so users can copy it even in a narrow terminal.
 
@@ -319,7 +319,7 @@ Required fixture coverage:
   document context;
 - empty projection with all section arrays present and empty;
 - absent `mission-control.json`;
-- stale export or stale projection health flags;
+- stale export or derived-state health flags;
 - missing optional section arrays;
 - malformed rows with missing IDs;
 - workflow config reload failure;
@@ -334,6 +334,6 @@ document, not merely that parsing succeeds.
 This contract follows the target work model in [Work Model](work-model.md), the
 workflow validator and reload behavior in
 [Workflow Configuration Contract](workflow-configuration.md), the validation
-ownership guidance in [Validation](quality/validation.md), and the derived
-projection boundary in
+ownership guidance in [Validation](../architecture/quality/validation.md), and
+the derived projection boundary in
 [Canonical Export And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md).

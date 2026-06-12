@@ -38,6 +38,9 @@ than rubber-stamping implementation claims.
 
 - Update Agent Factory validate procedure.
 
-- Run a process review against a representative mission or epic.
+- Run a process review against a representative mission or epic that verifies
+  the validator starts from Outcome claims and classifies each claim as pass,
+  fail, blocked, deferred, or not-applicable.
 
-- Attach evidence showing the process catches at least one missing-proof case.
+- Attach evidence showing the process catches at least one missing-proof or
+  docs/help drift case that broad tests alone would not catch.

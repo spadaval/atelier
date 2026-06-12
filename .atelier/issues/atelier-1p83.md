@@ -34,8 +34,10 @@ necessary but not sufficient proof that the parent outcome is real.
 
 ## Evidence
 
-- Tests prove closed children alone do not close an epic or mission.
+- Tests prove closed children alone do not close an epic or mission when the
+  parent Outcome or mission validation criteria lack attached proof.
 
-- Tests prove missing parent evidence blocks closeout.
+- Tests prove missing parent evidence, unresolved child contradictions, and open
+  linked work block closeout with specific diagnostics.
 
-- Run focused closeout tests.
+- Run focused closeout tests for epic and mission targets.

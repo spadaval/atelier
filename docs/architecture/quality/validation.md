@@ -17,7 +17,7 @@ Install `cargo-nextest` before running the default Rust test command:
 | `cargo test --test smoke_tests` | smoke scenarios |
 | `atelier export --check` | canonical record and derived projection freshness |
 | `atelier lint` | tracker structure |
-| `atelier doctor` | tracker install, cache, projection-rebuild, diagnostics, and runtime health |
+| `atelier doctor` | tracker install, local runtime, diagnostics, and workflow health |
 
 `atelier workflow validate` failures are command failures by default. Mission
 completion is valid only when all linked work is closed, required evidence is
@@ -28,8 +28,8 @@ attached, workflow validators pass, and the Git worktree is clean.
 - CLI behavior changes should include command-level tests or transcript evidence.
 - Persistence changes should include RecordStore round-trip, projection rebuild,
   or runtime-state migration proof as appropriate.
-- Export/rebuild changes should prove deterministic output and stale durable
-  state or stale projection detection.
+- Export/rebuild changes should prove deterministic output and derived-state
+  repair behavior.
 - Workflow, validator, evidence, mission, milestone, or plan changes should
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.

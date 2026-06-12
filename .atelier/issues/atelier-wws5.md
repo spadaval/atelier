@@ -37,6 +37,8 @@ audits.
 - Agent Factory planning guidance requires executable work to include
   Description, Outcome, Evidence, and optional Notes sections once the section
   parser lands.
+- Agent Factory guidance explains how to write good mission, epic, executable
+  issue, validation item, Outcome, Evidence, and Notes text.
 - The orchestrate procedure requires a mission contract audit before closeout:
   each mission Outcome line maps to linked work and attached evidence.
 - The implement procedure requires agents to update evidence or record exact
@@ -55,19 +57,17 @@ audits.
 
 ## Evidence
 
-- Patch the relevant Agent Factory skill procedure files under
-
-`/root/.agents/skills/agent-factory/`.
+- Patch the relevant Agent Factory skill procedure and standards files under
+  `/root/.agents/skills/agent-factory/`, including reusable work-item authoring
+  guidance.
 
 - Add or update repository binding guidance in `AGENTFACTORY.md` only where it
-
-reflects the shared skill behavior.
+  reflects the shared skill behavior.
 
 - Run a docs/process review against the updated skill text and capture evidence.
 
-- Demonstrate the new closeout guidance on mission `atelier-tcmr` before that
-
-mission closes.
+- Demonstrate the new authoring and closeout guidance on mission `atelier-tcmr`
+  before that mission closes.
 
 ## Notes
 

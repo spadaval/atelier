@@ -37,8 +37,12 @@ to the same durable-state validator.
 
 ## Evidence
 
-- Unit tests cover default validator selection by target and transition.
+- Unit tests cover validator selection for issue start, issue close, mission
+  closeout, evidence attachment, and tracker health targets.
 
-- CLI tests prove mission and issue validation report meaningful blockers.
+- CLI transcripts prove mission and issue validation report concrete blocker
+  classes such as malformed issue sections, open linked work, missing evidence,
+  unresolved blockers, stale projection, and dirty worktree state where
+  applicable.
 
 - Run focused validator tests.

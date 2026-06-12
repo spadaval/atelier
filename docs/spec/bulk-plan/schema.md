@@ -161,7 +161,7 @@ Mission records use:
 ### Milestones
 
 Milestone records follow the first-class checkpoint model in
-[Milestone Records](../../architecture/milestone-records.md):
+[Milestone Records](../../product/milestone-records.md):
 
 | Field | Type | Rule |
 | --- | --- | --- |

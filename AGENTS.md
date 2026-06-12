@@ -31,6 +31,7 @@
 - Product intent: `SPEC.md`
 - Domain language: `CONTEXT.md`
 - Documentation map: `docs/index.md`
+- Product behavior: `docs/product/index.md`
 - Architecture: `docs/architecture/index.md`
 - Quality and validation: `docs/architecture/quality/`
 

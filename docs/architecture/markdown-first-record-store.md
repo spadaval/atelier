@@ -22,8 +22,10 @@ The target architecture has three explicit components:
 
 Successful canonical mutations must write Markdown first. A command may refresh
 the projection in the same operation, but durability must not depend on a later
-SQLite export. Query commands may use SQLite after a cheap freshness check and
-must either refresh the projection or fail with an actionable recovery message.
+SQLite export. Query commands may use SQLite after a cheap freshness check, but
+cache refresh is transparent product behavior; user-facing recovery should name
+record or workflow repairs rather than ask operators to maintain projection
+state.
 
 ## Write Path
 
@@ -74,8 +76,10 @@ Query commands use `ProjectionIndex` when they need global state:
 Before reading the projection, commands check source freshness using record path,
 size, modified time as a hint, and content hashes when needed. If stale records
 are found, a query command may perform a targeted reindex. If targeted reindex is
-not implemented for the affected record kind, it must recommend `atelier rebuild`
-or run the equivalent safe rebuild path itself when the command contract permits.
+not implemented for the affected record kind, it must run the equivalent safe
+rebuild path itself when the command contract permits. Low-level rebuild
+commands may remain for debug and repair, but ordinary product workflows should
+not require them.
 
 Read-only commands must not silently answer from a stale projection when the
 result could affect orchestration, validation, or closeout decisions.
@@ -104,7 +108,8 @@ without being indexed, or lacks metadata, the command first validates
 `.atelier/`; when validation succeeds it automatically rebuilds the local
 SQLite projection and answers the query. Invalid Markdown, schema drift,
 conflicting records, missing required canonical state, or rebuild failures still
-fail closed with the stale-path diagnostics attached.
+block completion paths. Orientation and repair surfaces should degrade at the
+record level where possible instead of collapsing into cache-maintenance errors.
 
 The projection is metadata-only in the target design: it may keep fields needed
 to find, sort, filter, traverse, and validate records, but it must not be
@@ -238,8 +243,8 @@ The refresh helper deliberately runs canonical validation before replacing the
 projection. If a command writes invalid Markdown, the command must fail before
 answering from stale SQLite. If projection replacement fails after a successful
 canonical write, the canonical files remain durable and ordinary query commands
-can recover through the existing stale-projection rebuild path once the operator
-fixes the reported problem.
+can recover through the transparent projection repair path once the reported
+record or workflow problem is fixed.
 
 `atelier export` remains available as an explicit repair/sync command. New
 durable mutation paths must not use export as the normal step that makes command
@@ -252,12 +257,12 @@ comments and close reasons only, refuses to overwrite existing activity IDs,
 skips equivalent already-migrated entries on repeated runs, and prints a
 conversion summary. It is intentionally not a normal `atelier migrate` command.
 
-`atelier doctor` reports install, cache, projection-rebuild, diagnostics, and
-runtime-state health without acting as the canonical durability gate. `atelier
-lint` owns canonical Markdown validity and relationship findings. Doctor may
-show that rebuild readiness is degraded, but a repository can still have healthy
-runtime state when canonical Markdown needs lint repair, and optional runtime
-or cache directories may be absent.
+`atelier doctor` reports install, local runtime, diagnostics, and workflow
+health without acting as the canonical durability gate. `atelier lint` owns
+canonical Markdown validity and relationship findings. Doctor may show that
+local derived state is degraded, but a repository can still have healthy runtime
+state when canonical Markdown needs lint repair, and optional runtime or cache
+directories may be absent.
 
 `atelier export --check` verifies deterministic rendering of canonical Markdown
 and known derived projections. In the Markdown-first model, it should not depend

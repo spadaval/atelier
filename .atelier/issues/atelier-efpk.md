@@ -26,7 +26,9 @@ search, comments, destructive maintenance, and legacy helper commands together.
 
 ## Outcome
 
-- `atelier issue --help` exposes only the agreed issue lifecycle surface.
+- `atelier issue --help` exposes only issue lifecycle commands for creating,
+  inspecting, editing compact metadata, claiming or starting where applicable,
+  and closing or reopening where retained.
 - Redundant issue creation paths are folded into `issue create` options or
   removed/hidden according to the new sectioned issue contract.
 - Dependency, link, search, history/activity, hierarchy/impact, deletion, and
@@ -40,15 +42,22 @@ search, comments, destructive maintenance, and legacy helper commands together.
 
 ## Evidence
 
-- CLI transcript tests cover the reduced `atelier issue --help` output.
+- CLI transcript tests prove `atelier issue --help` lists only lifecycle commands
+  and omits graph, search, history, impact, destructive maintenance, and legacy
+  helper commands.
 
-- CLI transcript tests cover retained replacement workflows.
+- CLI transcript tests prove retained replacement workflows exist for parented
+  create, active-work create, remove-label, and blocked-list behavior when those
+  behaviors remain in the target surface.
 
-- Removed or hidden commands have explicit tests for failure or hidden-help
+- Removed or hidden commands have explicit tests for failure, hidden-help
+  behavior, or replacement guidance.
 
-behavior.
+- A command inventory compares old issue subcommands with their final normal,
+  moved, hidden, or removed status.
 
-- Run focused CLI integration tests for issue command hierarchy.
+- Focused CLI integration tests exercise the command hierarchy without relying
+  on old subcommands as normal behavior.
 
 - Run `atelier export --check` and `atelier lint`.
 

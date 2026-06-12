@@ -21,17 +21,21 @@
   accepted choice that Markdown records are canonical, SQLite is a
   rebuildable projection index plus local runtime state, and export is a
   compatibility/repair path during migration.
-- [docs/architecture/index.md](architecture/index.md): architecture and
-  ownership map.
+- [docs/product/index.md](product/index.md): product behavior, workflow model,
+  public command surface, and human interface contracts.
+- [docs/product/zen.md](product/zen.md): product principles for
+  semi-autonomous mission work, evidence, validation, and closeout.
+- [docs/architecture/index.md](architecture/index.md): implementation
+  architecture and ownership map.
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
   provenance, inherited module boundaries, preservation expectations, and
   deferred migration areas.
-- [docs/architecture/work-model.md](architecture/work-model.md): mission,
+- [docs/product/work-model.md](product/work-model.md): mission,
   milestone, epic, issue, workflow validator, and evidence relationships.
-- [docs/architecture/milestone-records.md](architecture/milestone-records.md):
+- [docs/product/milestone-records.md](product/milestone-records.md):
   first-class checkpoint record fields, validation model, evidence links, and
   command-surface ownership.
-- [docs/architecture/workflow-configuration.md](architecture/workflow-configuration.md):
+- [docs/product/workflow-configuration.md](product/workflow-configuration.md):
   repository-owned workflow policy path, schema, validators, hooks, reload
   behavior, and risk-scaled examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
@@ -41,13 +45,13 @@
 - [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
   local command telemetry storage, redaction defaults, opt-out controls,
   retention behavior, event fields, and Mission Control export boundary.
-- [docs/architecture/mission-control-tui.md](architecture/mission-control-tui.md):
+- [docs/product/mission-control-tui.md](product/mission-control-tui.md):
   Mission Control TUI projection dependencies, degradation rules, navigation
   model, mutation boundary, and fixture expectations.
-- [docs/architecture/cli-surface.md](architecture/cli-surface.md): public CLI
+- [docs/product/cli-surface.md](product/cli-surface.md): public CLI
   core command surface, removed compatibility commands, and inherited utility
   disposition.
-- [docs/architecture/human-cli-output.md](architecture/human-cli-output.md):
+- [docs/product/human-cli-output.md](product/human-cli-output.md):
   human-readable CLI output grammar, formatter boundaries, color/width policy,
   and test expectations.
 - `docs/architecture/quality/index.md`: quality documentation index.

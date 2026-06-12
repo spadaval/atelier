@@ -32,7 +32,11 @@ relationships:
   - kind: "issue"
     id: "atelier-l0yk"
   - kind: "issue"
+    id: "atelier-qb7m"
+  - kind: "issue"
     id: "atelier-u6ax"
+  - kind: "issue"
+    id: "atelier-v9id"
   - kind: "issue"
     id: "atelier-w8e3"
   attachments: []
@@ -41,7 +45,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Overhaul mission validation and reliability system"
-updated_at: "2026-06-12T05:12:44.936931257+00:00"
+updated_at: "2026-06-12T17:07:36.333322708+00:00"
 ---
 
 ## Description
@@ -62,27 +66,29 @@ audits, and drift detection.
   instead of summaries.
 - Validation subagents verify claims line by line instead of running broad tests
   and assuming success.
+- A mission-level adversarial validation pass tries to disprove every claimed
+  repair before closeout.
 - Epics and missions require independent closeout audits, not just closed
   children.
 - Docs, help output, tests, and Agent Factory guidance must agree before
   closeout.
 - Ignored or stale tests are visible blockers with owners.
 - CLI next actions are context-aware and covered by transcript tests.
+- Malformed canonical records do not disable orientation or repair commands;
+  they are reported as bounded, actionable degraded-state blockers.
 - Projection-backed commands rebuild or fail with bounded, actionable diagnostics
   instead of dumping stale index internals or rebuild races.
 
 ## Evidence
 
 - Child issues cover lint, validators, evidence capture, validation process,
+  closeout audit, adversarial mission validation, malformed-record recovery,
+  projection freshness, drift detection, ignored tests, next actions, and
+  reliability status.
 
-closeout audit, projection freshness, drift detection, ignored tests, next
-actions, and reliability
-
-status.
-
-- Final validation attaches evidence records for command transcripts and focused
-
-tests.
+- Final validation attaches evidence records for command transcripts, focused
+  tests, docs/help parity checks, stale-test inventory, and mission contract
+  audit results.
 
 - Mission `atelier-tcmr` cannot close until this reliability work is validated.
 
