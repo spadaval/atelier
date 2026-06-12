@@ -1,5 +1,4 @@
 ---
-acceptance: []
 created_at: "2026-06-12T06:05:00.000000000+00:00"
 id: "atelier-v9id"
 issue_type: "validation"
