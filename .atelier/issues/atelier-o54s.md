@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T20:58:48.813640540+00:00"
-evidence_required: []
 id: "atelier-o54s"
 issue_type: "epic"
 labels:
@@ -27,6 +25,8 @@ title: "Define Atelier human-output design system"
 updated_at: "2026-06-10T22:08:01.634171323+00:00"
 ---
 
+## Description
+
 Create the shared design and implementation direction for non-JSON CLI rendering. This epic should audit current default outputs, choose the reusable formatter primitives, and define the rules future commands follow.
 
 Why:
@@ -43,9 +43,14 @@ Out of scope:
 - Changing JSON schemas.
 - TUI work.
 
-Acceptance criteria:
+## Outcome
+
 - A documented pattern exists for detail views, grouped list/queue views, compact hierarchy views, and empty/error states.
 - Formatter helper boundaries are clear enough for implementation epics to use without re-litigating style.
 - Any high-leverage unresolved choices are captured as artifact-update tasks before implementation depends on them.
 
 Recommended subskill: agent-factory plan or implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

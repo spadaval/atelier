@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.269185814+00:00"
-evidence_required: []
 id: "atelier-ujm4"
 issue_type: "task"
 labels:
@@ -26,6 +24,8 @@ title: "Record evidence attachments in issue activity"
 updated_at: "2026-06-10T17:35:56.728302758+00:00"
 ---
 
+## Description
+
 Bridge rich evidence records into issue activity history without flattening evidence.
 
 What:
@@ -38,9 +38,14 @@ Out of scope:
 - Redesigning evidence storage or artifact backends.
 - Moving evidence bodies into issue activity files.
 
-Acceptance criteria:
+## Outcome
+
 - Attaching evidence to an issue creates a valid `evidence_attached` activity entry.
 - The entry includes enough metadata for human-readable history and JSON consumers to locate the rich evidence record.
 - Tests cover pass/fail or result-bearing evidence references and missing evidence diagnostics.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

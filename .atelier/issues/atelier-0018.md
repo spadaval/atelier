@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T22:34:34.779357612+00:00"
-evidence_required: []
 id: "atelier-0018"
 issue_type: "task"
 labels:
@@ -23,5 +21,14 @@ title: "Validate dependency edge add remove for Agent Factory workflow"
 updated_at: "2026-06-08T22:34:53.200182347+00:00"
 ---
 
+## Description
 
 Short-lived validation task used by atelier-z1p.6 to prove Agent Factory dependency add/remove commands through Atelier.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

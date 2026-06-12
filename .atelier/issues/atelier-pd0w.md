@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:08:34.447073812+00:00"
-evidence_required: []
 id: "atelier-pd0w"
 issue_type: "epic"
 labels:
@@ -31,6 +29,8 @@ title: "Epic: Better issue show human view"
 updated_at: "2026-06-10T17:43:52.159841537+00:00"
 ---
 
+## Description
+
 Upgrade the default human output for `atelier issue show <id>` into a richer, scan-friendly single-issue view inspired by `jira work --format details`.
 
 Scope:
@@ -46,9 +46,14 @@ Out of scope:
 - Mission Control TUI work.
 - New persistence model for activity.
 
-Acceptance criteria:
+## Outcome
+
 - Child issues cover core rendering, hierarchy/dependency context, recent activity/footer behavior, and regression validation.
 - JSON compatibility remains the explicit boundary for scripts and agents.
 - Future implementers can execute each child without needing the original chat plan.
 
 Recommended subskill: agent-factory orchestrate.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

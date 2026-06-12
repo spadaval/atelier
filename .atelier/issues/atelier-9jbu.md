@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:41:31.009321638+00:00"
-evidence_required: []
 id: "atelier-9jbu"
 issue_type: "task"
 labels:
@@ -20,6 +18,8 @@ status: "closed"
 title: "Reduce issue subcommands to lifecycle essentials"
 updated_at: "2026-06-12T03:35:44.546255361+00:00"
 ---
+
+## Description
 
 Redesign the `atelier issue` command group so it exposes only ordinary issue
 lifecycle operations. The current surface mixes lifecycle, dependency graph,
@@ -60,7 +60,7 @@ specific replacement is required:
 - `issue next`
 - `issue tested`
 
-Acceptance:
+## Outcome
 
 - The desired issue command surface is documented with keep/fold/move/remove
   classifications for every current issue subcommand.
@@ -71,3 +71,7 @@ Acceptance:
 - Transcript tests prove the replacement commands cover create, parented
   create, active-work create, reopen, label/unlabel, blocked-list, dependency,
   link, hierarchy, search, notes, and deletion workflows where retained.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

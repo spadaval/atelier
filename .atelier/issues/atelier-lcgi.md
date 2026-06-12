@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T18:54:24.351600365+00:00"
-evidence_required: []
 id: "atelier-lcgi"
 issue_type: "task"
 labels:
@@ -27,6 +25,8 @@ title: "Define the one-directory .atelier filesystem contract"
 updated_at: "2026-06-11T23:07:08.456713794+00:00"
 ---
 
+## Description
+
 Document the target contract for a single .atelier/ root before implementation begins.
 
 Scope:
@@ -38,7 +38,12 @@ Scope:
 Out of scope:
 - Moving files or changing code paths.
 
-Acceptance criteria:
+## Outcome
+
 - SPEC.md, CONTEXT.md, AGENTFACTORY.md, AGENTS.md, and canonical storage docs agree on the same layout.
 - The docs no longer present .atelier-state as the target name.
 - The contract explicitly says copied rule trees are not project state.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

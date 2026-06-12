@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T20:58:56.691138582+00:00"
-evidence_required: []
 id: "atelier-ugeo"
 issue_type: "epic"
 labels:
@@ -23,6 +21,8 @@ title: "Upgrade mission and issue detail human views"
 updated_at: "2026-06-10T22:15:52.530565986+00:00"
 ---
 
+## Description
+
 Make the primary detail views dense, scannable, and useful by default.
 
 Why:
@@ -39,9 +39,14 @@ Out of scope:
 - Large persistence-model changes.
 - Removing command surfaces.
 
-Acceptance criteria:
+## Outcome
+
 - Mission detail output provides enough context to coordinate work without immediately falling back to multiple separate commands.
 - Issue detail output follows the same visual grammar as mission detail output.
 - Tests or snapshots cover representative records with hierarchy, blockers, activity, empty sections, and linked evidence.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

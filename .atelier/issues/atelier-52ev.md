@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T16:16:00.177356290+00:00"
-evidence_required: []
 id: "atelier-52ev"
 issue_type: "task"
 labels:
@@ -21,4 +19,14 @@ title: "Retire issue description and legacy comment text from SQLite search proj
 updated_at: "2026-06-11T16:26:29.793290391+00:00"
 ---
 
+## Description
+
 Replace issue search's dependence on issues.description and comments.content with a metadata/search index that is rebuilt from RecordStore and activity sidecars. Keep issue list and ready queries on small metadata rows, and load Markdown only for selected detail results.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

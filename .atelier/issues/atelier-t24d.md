@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:54:34.276202555+00:00"
-evidence_required: []
 id: "atelier-t24d"
 issue_type: "task"
 labels:
@@ -28,9 +26,21 @@ title: "Decide worker workflow transition command model"
 updated_at: "2026-06-11T20:56:50.757820936+00:00"
 ---
 
+## Description
+
 Specify how workers and orchestrators move issues, epics, and missions through workflow states. Scope: whether start/finish/complete commands are separate concepts or ergonomic wrappers over generic workflow transitions; how transition commands run validators, surface missing evidence, support explicit waivers, and record durable handoff; how worker subagents should interact with Atelier from assignment through closeout. Acceptance: an artifact records the command model, the worker subagent flow, which commands are aliases/wrappers versus primitives, and how validation/evidence failures are handled without creating red tape for non-mission issue work.
 
-## Resolution
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.
+
+## Notes
+
+### Resolution
 
 Workflow transitions are the underlying model. Human-facing `start`, `finish`,
 and `complete` commands are ergonomic wrappers over configured workflow
@@ -59,7 +69,7 @@ The implementation may have an internal workflow-transition engine and may add
 diagnostic workflow commands for inspection, but worker-facing commands should
 stay intent-shaped rather than making agents remember raw transition names.
 
-## Validation And Evidence Behavior
+### Validation And Evidence Behavior
 
 Completion commands must run configured validators before mutating status. When
 evidence is missing, the command must say which record, criterion, or validator
@@ -71,7 +81,7 @@ gates. A waiver requires a reason, is recorded durably, and remains visible in
 status/closeout views. Non-waivable mechanical gates, such as invalid tracker
 state or multiple active missions in one checkout, remain hard failures.
 
-## Worker Subagent Flow
+### Worker Subagent Flow
 
 A worker subagent should:
 
@@ -85,7 +95,7 @@ A worker subagent should:
 8. If completion is blocked, leave a durable handoff with the blocking
    validator, missing evidence, failed proof, or follow-up item.
 
-## Rationale
+### Rationale
 
 This keeps orchestration legible without making agents operate a low-level state
 machine. Workflow policy owns which transitions and validators exist; CLI

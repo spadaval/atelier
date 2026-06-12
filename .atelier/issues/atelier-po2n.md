@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T03:50:40.571741313+00:00"
-evidence_required: []
 id: "atelier-po2n"
 issue_type: "task"
 labels:
@@ -31,6 +29,8 @@ title: "Extract ProjectionIndex freshness and reindex semantics"
 updated_at: "2026-06-10T20:14:20.047794054+00:00"
 ---
 
+## Description
+
 Define and implement the first ProjectionIndex boundary for rebuildable SQLite query indexes.
 
 Scope:
@@ -40,10 +40,12 @@ Scope:
 - Support full rebuild first; targeted reindex may be added if small and well-tested.
 - Do not migrate all mutating commands in this slice.
 
-Acceptance:
+## Outcome
+
 ProjectionIndex has an explicit module/API boundary; stale Markdown versus SQLite index state is detected before orchestration-relevant queries; stale-query behavior is deterministic and actionable; rebuild still recreates queryable issue/dependency/link state from .atelier-state; tests cover fresh, stale, missing, and repaired projection cases.
 
-Validation:
+## Evidence
+
 - cargo fmt -- --check
 - cargo test projection or equivalent focused tests
 - cargo test

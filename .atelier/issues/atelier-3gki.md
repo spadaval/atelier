@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T22:15:11.021103301+00:00"
-evidence_required: []
 id: "atelier-3gki"
 issue_type: "epic"
 labels:
@@ -25,4 +23,14 @@ title: "Implement enforceable workflow transitions"
 updated_at: "2026-06-11T22:23:54.673231332+00:00"
 ---
 
+## Description
 
+No legacy description text was specified.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

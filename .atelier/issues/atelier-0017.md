@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T22:34:26.490451281+00:00"
-evidence_required: []
 id: "atelier-0017"
 issue_type: "task"
 labels:
@@ -23,5 +21,14 @@ title: "Record Agent Factory Atelier validation evidence"
 updated_at: "2026-06-08T22:34:53.437062263+00:00"
 ---
 
+## Description
 
 Capture concise validation notes for atelier-z1p.6 showing Agent Factory can use Atelier for planning, updates, dependencies, closeout, sync, rebuild, and handoff.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T22:15:15.934536676+00:00"
-evidence_required: []
 id: "atelier-mkqo"
 issue_type: "task"
 labels:
@@ -23,4 +21,14 @@ title: "Route mission status=closed updates through close transition validation"
 updated_at: "2026-06-11T22:23:50.325391524+00:00"
 ---
 
+## Description
 
+No legacy description text was specified.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

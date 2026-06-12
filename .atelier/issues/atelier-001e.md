@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-09T17:30:35.664345209+00:00"
-evidence_required: []
 id: "atelier-001e"
 issue_type: "task"
 labels:
@@ -24,16 +22,24 @@ title: "Remove changelog behavior from issue closure"
 updated_at: "2026-06-09T18:55:47.741705917+00:00"
 ---
 
+## Description
+
 Decouple work-item closure from product changelog mutation. `issue close` should represent tracker state only; release-note or changelog generation should be a separate explicit workflow if retained later.
 
-## Acceptance
+## Outcome
 
 `issue close` no longer exposes or depends on changelog behavior. Existing tests and docs are updated so closing work records tracker closure reason only.
-## Validation
+
+## Evidence
 
 - `cargo fmt -- --check`
+
 - `cargo test` or a named focused substitute
+
 - `git diff --check`
+
 - `atelier lint`
+
 - `atelier export --check`
+
 - `atelier doctor`

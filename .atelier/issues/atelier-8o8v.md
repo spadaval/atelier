@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.246554229+00:00"
-evidence_required: []
 id: "atelier-8o8v"
 issue_type: "task"
 labels:
@@ -27,6 +25,8 @@ title: "Write issue mutations as activity entries"
 updated_at: "2026-06-10T17:33:14.622812806+00:00"
 ---
 
+## Description
+
 Write activity sidecars directly from future issue mutations.
 
 What:
@@ -40,10 +40,15 @@ Out of scope:
 - One-off migration of existing SQLite comments.
 - The history query/rendering command.
 
-Acceptance criteria:
+## Outcome
+
 - Creating comments/notes, closing/reopening issues, changing fields, and starting/finishing work create expected sidecar activity entries.
 - Activity body content matches the user-authored text or event detail without lossy formatting.
 - Existing issue show/comment behavior remains compatible with the projection/index model.
 - Focused integration tests cover each mutation type introduced here.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

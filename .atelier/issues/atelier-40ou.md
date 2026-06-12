@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T04:43:52.672217420+00:00"
-evidence_required: []
 id: "atelier-40ou"
 issue_type: "epic"
 labels:
@@ -10,7 +8,9 @@ labels:
 - "tracker"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-u6ax"
   children:
   - kind: "issue"
     id: "atelier-0j6e"

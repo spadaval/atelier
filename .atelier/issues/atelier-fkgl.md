@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T02:45:42.897885439+00:00"
-evidence_required: []
 id: "atelier-fkgl"
 issue_type: "task"
 labels:
@@ -19,4 +17,14 @@ title: "Update Agent Factory and tracker workflow examples"
 updated_at: "2026-06-11T04:23:55.019447200+00:00"
 ---
 
+## Description
+
 Remove --json assumptions from Agent Factory binding examples, tracker guidance, and repository workflow docs where Atelier commands are shown. Acceptance: future agents can plan, inspect, validate, and close work using human output, quiet output, and explicit drill-down commands without private chat knowledge.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

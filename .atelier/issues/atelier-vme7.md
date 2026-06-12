@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T18:55:07.069485604+00:00"
-evidence_required: []
 id: "atelier-vme7"
 issue_type: "task"
 labels:
@@ -22,6 +20,8 @@ title: "Move Claude hooks into an explicit optional integration"
 updated_at: "2026-06-12T00:12:24.022523831+00:00"
 ---
 
+## Description
+
 Separate Claude hook installation from core Atelier tracker initialization.
 
 Scope:
@@ -33,7 +33,12 @@ Scope:
 Out of scope:
 - Redesigning hook behavior itself.
 
-Acceptance criteria:
+## Outcome
+
 - atelier init no longer installs Claude hooks or MCP config.
 - A user who wants hooks has an explicit command/path to install them.
 - Docs and help text distinguish core tracker setup from optional Claude integration setup.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:54:59.376705533+00:00"
-evidence_required: []
 id: "atelier-c2oj"
 issue_type: "task"
 labels:
@@ -20,12 +18,14 @@ title: "Document file-first Markdown issue editing workflows"
 updated_at: "2026-06-12T03:37:44.576687346+00:00"
 ---
 
+## Description
+
 Document the preferred file-first issue authoring workflow wherever agents are
 likely to look. The workflow is: create a valid issue shell with
 `atelier issue create`, edit the generated canonical Markdown file directly,
 then run focused lint and any relevant workflow validation.
 
-Acceptance:
+## Outcome
 
 - `AGENTS.md` describes file-first issue editing for this repository.
 - `AGENTFACTORY.md` describes when to use `issue create` plus Markdown editing
@@ -36,3 +36,7 @@ Acceptance:
   only the storage spec.
 - Examples cover creating issues, parented issues, epics, dependencies, and
   validation after direct edits.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

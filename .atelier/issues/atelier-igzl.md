@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T04:55:44.832214824+00:00"
-evidence_required: []
 id: "atelier-igzl"
 issue_type: "task"
 labels:

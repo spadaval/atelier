@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:10:52.813630582+00:00"
-evidence_required: []
 id: "atelier-pgkd"
 issue_type: "task"
 labels:
@@ -24,4 +22,14 @@ title: "Add one-shot markdown-first layout migration"
 updated_at: "2026-06-11T23:31:47.652647633+00:00"
 ---
 
+## Description
+
 Implement atelier migrate markdown-first or equivalent internal migration to move existing committed records from .atelier-state/* into .atelier/*, preserve runtime state under ignored paths, and report clear next steps. Acceptance: writes after migration target only the new canonical layout.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

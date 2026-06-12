@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.329418067+00:00"
-evidence_required: []
 id: "atelier-yvk6"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ title: "Add SQLite comments-to-activity migration script"
 updated_at: "2026-06-10T17:37:47.184466923+00:00"
 ---
 
+## Description
+
 Provide the one-off migration path for existing local SQLite comments and close reasons.
 
 What:
@@ -38,7 +38,8 @@ Out of scope:
 - Migrating non-comment/non-close-reason runtime data.
 - Adding a first-class `atelier migrate` command.
 
-Acceptance criteria:
+## Outcome
+
 - Running against a temp repo with SQLite comments and close reasons generates valid sidecars.
 - `--dry-run` reports intended output without writing files.
 - A second run does not duplicate output and reports skipped/refused existing IDs clearly.
@@ -46,3 +47,7 @@ Acceptance criteria:
 - Tests or scripted validation cover dry run, normal run, and duplicate/id collision behavior.
 
 Recommended subskill: agent-factory migrate.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

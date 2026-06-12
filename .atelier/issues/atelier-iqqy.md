@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:54:57.152137733+00:00"
-evidence_required: []
 id: "atelier-iqqy"
 issue_type: "task"
 labels:
@@ -20,12 +18,14 @@ title: "Print canonical file paths in issue create and show output"
 updated_at: "2026-06-12T03:33:18.922078643+00:00"
 ---
 
+## Description
+
 Issue creation and inspection should make the file-first workflow obvious.
 Every issue creation path that remains after command consolidation should print
 the canonical Markdown path for the created issue, and `issue show` should also
 print the path for the displayed issue.
 
-Acceptance:
+## Outcome
 
 - `atelier issue create "Title"` prints the new issue ID and canonical
   `.atelier/issues/<id>.md` path.
@@ -36,3 +36,7 @@ Acceptance:
   `atelier lint <id>`.
 - Transcript tests cover create, create with parent, create with work, and
   show output.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

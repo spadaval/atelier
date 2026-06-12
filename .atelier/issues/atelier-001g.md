@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-09T17:30:35.790126736+00:00"
-evidence_required: []
 id: "atelier-001g"
 issue_type: "task"
 labels:
@@ -24,16 +22,24 @@ title: "Document CLI surface tiers and compatibility policy"
 updated_at: "2026-06-09T18:55:47.763872390+00:00"
 ---
 
+## Description
+
 Document the CLI surface tiers and compatibility policy created by the cleanup work.
 
-## Acceptance
+## Outcome
 
 Docs define core commands agents should use, hidden compatibility aliases, experimental or integration commands, removed Chainlink baggage, and migration notes for old command users.
-## Validation
+
+## Evidence
 
 - `cargo fmt -- --check`
+
 - `cargo test` or a named focused substitute
+
 - `git diff --check`
+
 - `atelier lint`
+
 - `atelier export --check`
+
 - `atelier doctor`

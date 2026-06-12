@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-0004"
 issue_type: "task"
 labels:
@@ -24,18 +22,29 @@ title: "Decide first artifact storage backends for evidence"
 updated_at: "2026-06-10T14:51:19.776106093+00:00"
 ---
 
+## Description
 
 Resolve the SPEC.md open question about artifact storage. Specify what evidence artifacts live in the repo, what may live externally, and which backend is first.
 
-## Resolution
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.
+
+## Notes
+
+### Resolution
 
 TODO: choose the initial artifact storage policy and backend.
 
-## Rationale
+### Rationale
 
 Evidence records need stable metadata, size/hash handling, and paths or URIs while avoiding oversized repository history for large artifacts.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - Store small artifacts directly in the repo.
 - Store metadata in repo and large artifacts externally.

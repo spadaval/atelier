@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T02:45:43.526136929+00:00"
-evidence_required: []
 id: "atelier-vqsb"
 issue_type: "validation"
 labels: []
@@ -20,4 +18,14 @@ title: "Add removal coverage for representative commands"
 updated_at: "2026-06-11T04:31:02.124296409+00:00"
 ---
 
+## Description
+
 Add or update integration tests proving command-result --json mode is absent from representative list/show/mutation/workflow commands and help output. Acceptance: tests fail if removed JSON result mode is accidentally reintroduced.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

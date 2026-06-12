@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T20:59:23.907724705+00:00"
-evidence_required: []
 id: "atelier-u8xc"
 issue_type: "validation"
 labels:
@@ -21,6 +19,8 @@ title: "Validate and document human CLI output conventions"
 updated_at: "2026-06-10T22:18:35.525315733+00:00"
 ---
 
+## Description
+
 Validate the improved human-output surfaces as a coherent operator experience and document the conventions so future CLI work follows them.
 
 Why:
@@ -36,9 +36,14 @@ Out of scope:
 - Implementing missing surfaces during validation except for tiny doc/test fixes.
 - Approving breaking JSON changes.
 
-Acceptance criteria:
+## Outcome
+
 - Validation evidence demonstrates improved scanability across representative fixture graphs and terminal widths.
 - `cargo fmt -- --check`, targeted CLI tests, `git diff --check`, `atelier export --check`, and `atelier lint` pass or failures are documented with owner issues.
 - Documentation gives future contributors concrete rules and examples for human CLI output.
 
 Recommended subskill: agent-factory validate and docs.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

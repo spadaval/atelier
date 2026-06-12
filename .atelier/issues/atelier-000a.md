@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:04:37+00:00"
-evidence_required: []
 id: "atelier-000a"
 issue_type: "task"
 labels:
@@ -21,9 +19,14 @@ title: "Configure Beads Dolt remote for Atelier"
 updated_at: "2026-06-08T17:59:15+00:00"
 ---
 
+## Description
 
 Agent-factory onboarding initialized Beads in shared-server mode, but bd doctor reports no Dolt remote configured. Choose the repository-appropriate remote URL and add it with bd dolt remote add origin <url>, then verify bd dolt status, bd dolt pull, bd dolt push, and bd lint.
 
-## Acceptance Criteria
+## Outcome
 
 bd doctor no longer reports Remote Consistency as missing; bd dolt status, bd dolt pull, bd dolt push, and bd lint have recorded pass/fail evidence in the bead notes.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

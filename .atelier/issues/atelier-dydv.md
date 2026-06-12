@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T18:55:24.517430677+00:00"
-evidence_required: []
 id: "atelier-dydv"
 issue_type: "validation"
 labels:
@@ -20,6 +18,8 @@ title: "Validate one-directory Atelier state cleanup end to end"
 updated_at: "2026-06-12T00:17:39.389111395+00:00"
 ---
 
+## Description
+
 Prove the one-directory .atelier cleanup works across docs, init, export, rebuild, and query flows.
 
 Scope:
@@ -29,8 +29,13 @@ Scope:
 - Confirm tracked config and canonical records appear in git status while DB/cache/locks remain ignored.
 - Capture any remaining compatibility gaps as follow-up issues.
 
-Acceptance criteria:
+## Outcome
+
 - cargo fmt -- --check passes.
 - cargo nextest run passes or failures are documented with concrete follow-ups.
 - atelier export --check, atelier lint, and atelier doctor pass on the migrated layout.
 - The epic has evidence that .atelier-state is no longer required for normal operation.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

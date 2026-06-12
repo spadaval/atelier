@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-000y"
 issue_type: "task"
 labels:
@@ -28,9 +26,14 @@ title: "Implement deterministic per-record export and `export --check`"
 updated_at: "2026-06-08T21:23:39+00:00"
 ---
 
+## Description
 
 Replace or augment backup-oriented export with canonical projections under `.atelier-state/`. `export --check` must compare live SQLite state with exported files and fail when projections are stale.
 
-## Acceptance Criteria
+## Outcome
 
 Export output is deterministic across repeated runs; stale projection cases fail export --check; mutating command behavior is documented; tests cover no-op export, changed record export, stale check failure, and JSON/Markdown serialization stability.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

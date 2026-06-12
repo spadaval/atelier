@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T00:57:51.432158883+00:00"
-evidence_required: []
 id: "atelier-4wif"
 issue_type: "epic"
 labels:
@@ -30,4 +28,14 @@ title: "Validate and document the refinement pass"
 updated_at: "2026-06-12T03:42:47.456351736+00:00"
 ---
 
+## Description
+
 Prove and document the final refinement. Acceptance: docs, tests, workflow validation, and linked evidence show the new CLI surfaces are coherent for agent workflows.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

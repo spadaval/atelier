@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T22:15:17.359756569+00:00"
-evidence_required: []
 id: "atelier-firx"
 issue_type: "validation"
 labels:
@@ -21,4 +19,14 @@ title: "Prove dirty worktree blocks mission closeout"
 updated_at: "2026-06-11T22:23:51.783036693+00:00"
 ---
 
+## Description
 
+No legacy description text was specified.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-000o"
 issue_type: "task"
 labels:
@@ -22,18 +20,29 @@ title: "Decide Atelier CLI binary and alias naming"
 updated_at: "2026-06-08T19:47:39+00:00"
 ---
 
+## Description
 
 Resolve the SPEC.md open question: should the binary be `atelier`, a shorter alias such as `atl`, or both? This choice blocks broad rename work because command names, tests, docs, package metadata, and install expectations depend on it.
 
-## Resolution
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.
+
+## Notes
+
+### Resolution
 
 Use `atelier` as the primary and only Milestone 1 CLI binary name. Do not add an `atl` short alias yet, and do not preserve an installed `chainlink` compatibility shim unless a later migration bead proves a concrete compatibility need.
 
-## Rationale
+### Rationale
 
 The fork establishment milestone needs a clear product identity before package metadata, command help, tests, generated resources, and docs are renamed. `atelier` is explicit, matches the product name, and avoids early cross-platform alias/install complexity. A short alias can be added later as an additive convenience without changing the canonical command or file layout.
 
-## Alternatives Considered
+### Alternatives Considered
 
 - `atelier` only: chosen for Milestone 1.
 - `atl` only: rejected because it hides the product identity during the fork rename.

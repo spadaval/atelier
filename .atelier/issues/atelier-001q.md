@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-09T19:47:13.601126452+00:00"
-evidence_required: []
 id: "atelier-001q"
 issue_type: "task"
 labels:
@@ -25,6 +23,14 @@ title: "Instrument CLI commands with structured duration events"
 updated_at: "2026-06-11T13:11:00.683840448+00:00"
 ---
 
+## Description
+
 Add a shared command telemetry wrapper that records start, finish, duration, status, command identity, workspace identity, and optional phase timings for every agent-facing command.
 
-Acceptance: successful and failed commands emit records when enabled, respect disabled telemetry, avoid sensitive argument capture by default, and have focused tests.
+## Outcome
+
+successful and failed commands emit records when enabled, respect disabled telemetry, avoid sensitive argument capture by default, and have focused tests.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

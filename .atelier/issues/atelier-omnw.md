@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T20:59:05.023604139+00:00"
-evidence_required: []
 id: "atelier-omnw"
 issue_type: "epic"
 labels:
@@ -23,6 +21,8 @@ title: "Replace flat issue queues with grouped scannable views"
 updated_at: "2026-06-10T22:15:52.549031285+00:00"
 ---
 
+## Description
+
 Improve routine work-selection output so users can scan open, ready, and search results without reading a raw table dump.
 
 Why:
@@ -39,9 +39,14 @@ Out of scope:
 - Building a full-screen TUI.
 - Hiding important issue records solely to make output short.
 
-Acceptance criteria:
+## Outcome
+
 - Default queue output is grouped, compact, and useful on a realistic project with dozens of issues.
 - Output makes blockers and parent context visible without becoming a massive tree.
 - Tests cover empty queues, mixed priorities/statuses/types, blocked work, and parent-child context.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

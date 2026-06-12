@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:54:57.864059395+00:00"
-evidence_required: []
 id: "atelier-ve3w"
 issue_type: "task"
 labels:
@@ -20,12 +18,14 @@ title: "Standardize mutation output around explicit change summaries"
 updated_at: "2026-06-12T03:35:45.167209738+00:00"
 ---
 
+## Description
+
 Mutation commands should state exactly what changed instead of relying on
 generic acknowledgements or generic next-command blocks. The output should be
 short, but it should identify the record, changed fields or relationships, the
 canonical file path when applicable, and any focused validation command.
 
-Acceptance:
+## Outcome
 
 - Define a common mutation acknowledgement shape for issue, mission, work,
   dependency, link, evidence, and plan mutations.
@@ -37,3 +37,7 @@ Acceptance:
   artifact-update task.
 - Transcript tests prove representative mutation outputs are explicit and
   concise.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

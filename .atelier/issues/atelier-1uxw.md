@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:28:37.399561843+00:00"
-evidence_required: []
 id: "atelier-1uxw"
 issue_type: "task"
 labels:
@@ -25,6 +23,8 @@ title: "Make Agent Factory guidance Atelier-native"
 updated_at: "2026-06-11T21:16:20.886569002+00:00"
 ---
 
+## Description
+
 Update the Agent Factory skill and procedure guidance so mission work assumes
 Atelier as the durable coordination substrate. Scope includes active mission
 focus, option-oriented mission/epic status, issue work selection from the active
@@ -46,7 +46,9 @@ epic context; create or locate the worktree/branch; start tracked work; implemen
 the owned slice; run the required proof; attach or record evidence; run the
 completion/transition command; leave durable handoff notes when not complete.
 
-Acceptance: SKILL.md and relevant procedure/standard docs tell orchestrators and
+## Outcome
+
+SKILL.md and relevant procedure/standard docs tell orchestrators and
 subagents to use Atelier mission, issue, work, worktree, evidence, workflow
 validate, lint, doctor, and export/check surfaces; guidance tells planners to
 resolve high-consequence product, architecture, persistence, security,
@@ -54,3 +56,7 @@ data-retention, migration, and public-contract choices before mission start and
 to block mission activation when such choices remain; guidance matches actual
 CLI behavior for transitions and evidence; legacy fallback language is clearly
 separated from the Atelier-dependent path.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

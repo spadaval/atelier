@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-000j"
 issue_type: "epic"
 labels:
@@ -36,9 +34,16 @@ title: "Milestone 4: First-class records and typed links"
 updated_at: "2026-06-11T14:41:58.783598154+00:00"
 ---
 
+## Description
+
 Introduce first-class missions, milestone checkpoint records, plans, evidence, workflow validators, and typed links so generic issues stop carrying every durable concept. Preserve existing issue behavior where useful, but make mission intent, checkpoint state, execution plans, validation proof, workflow transition checks, and semantic links explicit records or commands.
 
 Milestones are validated target states, not work containers or super-epics. Workflow validators belong to workflow policy and enforce transitions; milestone records own validation criteria.
 
-Acceptance:
+## Outcome
+
 Data model and CLI support first-class records for missions, milestone checkpoints, plans, evidence, workflow validators, and typed links, or explicitly staged subsets. Issues are no longer the only durable representation for non-issue concepts. Compatibility migration paths are defined where reasonable. Tests cover persistence, links, export/rebuild, JSON output, evidence validation, and workflow validator results.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

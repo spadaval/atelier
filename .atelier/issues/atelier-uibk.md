@@ -1,10 +1,9 @@
 ---
-acceptance: []
 created_at: "2026-06-12T04:51:47.082080848+00:00"
-evidence_required: []
 id: "atelier-uibk"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "markdown"
 - "migration"
 priority: "P1"
@@ -19,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Migrate existing issue records to sectioned Markdown"
-updated_at: "2026-06-12T04:51:47.082080848+00:00"
+updated_at: "2026-06-12T05:13:43.585958723+00:00"
 ---
 
 ## Description

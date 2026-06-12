@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T03:52:35.662499167+00:00"
-evidence_required: []
 id: "atelier-hdhk"
 issue_type: "task"
 labels:
@@ -26,6 +24,8 @@ title: "Reframe export and rebuild around Markdown-first records"
 updated_at: "2026-06-10T22:54:23.191622679+00:00"
 ---
 
+## Description
+
 Rework export/check/rebuild semantics so they no longer reassert SQLite as the canonical source after Markdown-first mutation lands.
 
 Scope:
@@ -34,10 +34,12 @@ Scope:
 - Keep rebuild as the safe way to recreate ProjectionIndex from RecordStore.
 - Label any SQLite-derived comparison as transitional compatibility behavior.
 
-Acceptance:
+## Outcome
+
 Docs and command behavior agree that canonical records live in Markdown; export --check detects malformed/stale rendered Markdown and derived projection drift; rebuild ignores local RuntimeState except for safe schema setup; tests cover Markdown-first check behavior, compatibility export repair, unexpected canonical files, and stale derived projections.
 
-Validation:
+## Evidence
+
 - cargo fmt -- --check
 - cargo test export rebuild or equivalent focused tests
 - cargo test

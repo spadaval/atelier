@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T22:15:21.083457086+00:00"
-evidence_required: []
 id: "atelier-2j0x"
 issue_type: "closeout"
 labels:
@@ -19,4 +17,14 @@ title: "Validate end-to-end mission lifecycle with real commands"
 updated_at: "2026-06-11T22:23:53.917435528+00:00"
 ---
 
+## Description
 
+No legacy description text was specified.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

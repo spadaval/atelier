@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T03:51:07.274706851+00:00"
-evidence_required: []
 id: "atelier-m25t"
 issue_type: "task"
 labels:
@@ -26,6 +24,8 @@ title: "Extend Markdown-first storage to first-class records"
 updated_at: "2026-06-10T18:59:58.882617064+00:00"
 ---
 
+## Description
+
 Prepare the Markdown-first storage boundary for first-class missions, milestones, plans, evidence, and workflow validator records.
 
 Scope:
@@ -34,10 +34,12 @@ Scope:
 - Coordinate with existing open issues for mission, plan, evidence, milestone, workflow validator, and Mission Control work.
 - Avoid reintroducing typed numeric IDs or aggregate manifest/graph canonical files.
 
-Acceptance:
+## Outcome
+
 First-class record kinds have an implementation-ready storage contract that reuses the Markdown-first architecture; issue-specific assumptions are isolated; future mission/plan/evidence command issues can depend on this slice rather than inventing separate persistence paths; tests or fixtures cover at least one non-issue record kind or a documented stub contract with validation.
 
-Validation:
+## Evidence
+
 - cargo fmt -- --check
 - cargo test
 - ./target/debug/atelier export --check

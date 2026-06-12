@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:10:57.592530355+00:00"
-evidence_required: []
 id: "atelier-unma"
 issue_type: "validation"
 labels:
@@ -22,4 +20,14 @@ title: "Prove direct Markdown edits refresh list, show, search, and relationship
 updated_at: "2026-06-12T00:23:19.884296557+00:00"
 ---
 
+## Description
+
 Manually add, edit, and delete Markdown issue files in tests, then run atelier lint, issue show, issue list --ready, search, and relationship commands. Acceptance: commands reflect canonical Markdown after auto-refresh.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

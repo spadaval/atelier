@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:09:12.870412513+00:00"
-evidence_required: []
 id: "atelier-p1yj"
 issue_type: "task"
 labels:
@@ -23,6 +21,8 @@ title: "Render richer issue show human header and core sections"
 updated_at: "2026-06-10T17:29:23.393254540+00:00"
 ---
 
+## Description
+
 Implement the core richer human layout for `atelier issue show <id>`.
 
 What:
@@ -41,7 +41,8 @@ Out of scope:
 - Implementing hierarchy/dependency row expansion beyond existing IDs; that is owned by the dependency-context child.
 - Activity preview and command footer behavior; those are owned by the activity/footer child.
 
-Acceptance criteria:
+## Outcome
+
 - Human `atelier issue show <id>` includes the richer header, metadata rows, labels, full description, acceptance criteria, and closed reason where applicable.
 - Human `atelier show <id>` uses the same improved display.
 - Existing terminal-safe rendering helpers are used where they fit; no new terminal-width dependency is introduced for v1.
@@ -49,3 +50,7 @@ Acceptance criteria:
 - Nonexistent issue errors remain clear.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

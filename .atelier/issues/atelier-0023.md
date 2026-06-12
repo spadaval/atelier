@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T00:22:41.105938194+00:00"
-evidence_required: []
 id: "atelier-0023"
 issue_type: "task"
 labels:
@@ -33,9 +31,31 @@ title: "Cut over record identity to project-scoped random IDs"
 updated_at: "2026-06-10T02:18:00.651875871+00:00"
 ---
 
+## Description
+
 Replace inherited numeric and typed-prefix record identity with one canonical project-scoped random ID format such as `atelier-z1p8`. This is a hard cutover, not a compatibility layer.
 
-## Scope
+## Outcome
+
+All user-facing commands accept and emit only project-scoped random record IDs; canonical export filenames and graph references use the same IDs; rebuild preserves IDs exactly; concurrent record creation does not rely on a shared sequence counter; existing repository state is migrated; tests and fixtures no longer depend on numeric or typed-prefix record IDs.
+
+## Evidence
+
+- `cargo fmt -- --check`
+
+- `cargo test`
+
+- `git diff --check`
+
+- `atelier lint`
+
+- `atelier export --check`
+
+- `atelier doctor`
+
+## Notes
+
+### Scope
 
 - Add a record ID allocator using `<project-slug>-<random-base36>` with a four-character default suffix and collision retry.
 - Use one global ID namespace across issues, missions, milestones, plans, evidence, and future first-class records.
@@ -43,20 +63,7 @@ Replace inherited numeric and typed-prefix record identity with one canonical pr
 - Remove numeric shorthand and typed-prefix style target identity from command parsing, JSON output, export, rebuild, and link APIs.
 - Keep record kind as metadata and validation context, not encoded in the ID.
 
-## Out Of Scope
+### Out Of Scope
 
 - Maintaining numeric or typed-prefix aliases after cutover.
 - Semantic slugs as primary identity.
-
-## Acceptance
-
-All user-facing commands accept and emit only project-scoped random record IDs; canonical export filenames and graph references use the same IDs; rebuild preserves IDs exactly; concurrent record creation does not rely on a shared sequence counter; existing repository state is migrated; tests and fixtures no longer depend on numeric or typed-prefix record IDs.
-
-## Validation
-
-- `cargo fmt -- --check`
-- `cargo test`
-- `git diff --check`
-- `atelier lint`
-- `atelier export --check`
-- `atelier doctor`

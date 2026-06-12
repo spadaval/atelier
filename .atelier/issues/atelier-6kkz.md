@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.309465327+00:00"
-evidence_required: []
 id: "atelier-6kkz"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ title: "Rebuild and export issue activity sidecars"
 updated_at: "2026-06-10T17:32:25.922110761+00:00"
 ---
 
+## Description
+
 Make activity sidecars canonical state for export, rebuild, and projections.
 
 What:
@@ -35,10 +35,15 @@ Out of scope:
 - Designing mission or plan activity projections.
 - The one-off SQLite migration script.
 
-Acceptance criteria:
+## Outcome
+
 - `atelier export --check` accounts for activity sidecars without spurious drift.
 - `atelier rebuild` reconstructs activity projections from `.atelier-state/` alone.
 - `issue show`, `atelier history`, and JSON output see the same activity before and after runtime DB deletion/rebuild.
 - Tests cover rebuild from canonical sidecars and export freshness behavior.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

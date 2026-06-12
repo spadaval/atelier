@@ -45,6 +45,7 @@ struct HookCommand {
 pub fn start(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
     print_active_mission_context(db, id)?;
+    warn_if_canonical_issue_sections_invalid(id);
     ensure_clean_worktree()?;
     let branch = current_branch().ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
@@ -57,6 +58,16 @@ pub fn start(db: &Database, id: &str) -> Result<()> {
     }
     println!("Worktree: {path}");
     Ok(())
+}
+
+fn warn_if_canonical_issue_sections_invalid(id: &str) {
+    let Ok(Some(state_dir)) = crate::storage_layout::find_canonical_dir_from_cwd() else {
+        return;
+    };
+    let store = crate::record_store::RecordStore::new(state_dir);
+    if let Err(error) = store.load_issue_by_id(id) {
+        println!("Warning: {error}");
+    }
 }
 
 pub fn finish(db: &Database, id: &str) -> Result<()> {

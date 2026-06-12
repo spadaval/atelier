@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T02:44:00.747913106+00:00"
-evidence_required: []
 id: "atelier-y571"
 issue_type: "epic"
 labels: []
@@ -28,4 +26,14 @@ title: "Epic: Strengthen focused human output after JSON removal"
 updated_at: "2026-06-11T04:31:25.583219096+00:00"
 ---
 
+## Description
+
 Improve default human-readable output only where JSON removal would otherwise hide important operational context. Acceptance: commands show selected actionable fields, bounded related context, readable status/progress, and next commands for deeper inspection; views do not become full record dumps; shared formatter conventions are reused.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

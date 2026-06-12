@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:28:37.436179178+00:00"
-evidence_required: []
 id: "atelier-qd2t"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ status: "closed"
 title: "Enforce active mission context in work commands"
 updated_at: "2026-06-11T21:16:29.009591502+00:00"
 ---
+
+## Description
 
 Implement or extend CLI behavior so active mission context guides ordinary
 orchestration commands. Scope: mission start/switch/status behavior; no-ID
@@ -49,9 +49,15 @@ not claim there is only one correct next step.
 
 Out of scope: supervising live agent processes.
 
-Acceptance: tests cover one active mission, switching, multiple-active lint
+## Outcome
+
+tests cover one active mission, switching, multiple-active lint
 failure, work start inside/outside active mission, non-mission lightweight issue
 work, worktree status showing mission context, completion blocked by missing
 evidence, completion after evidence is attached, explicit waiver behavior, and
 mission start/focus behavior when unresolved high-consequence artifact-update
 tasks are linked to the mission.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

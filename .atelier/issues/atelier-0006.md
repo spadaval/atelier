@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-0006"
 issue_type: "task"
 labels:
@@ -26,6 +24,8 @@ title: "Implement atelier mission status CLI"
 updated_at: "2026-06-11T21:18:41.584015646+00:00"
 ---
 
+## Description
+
 Add `atelier mission status [<mission-id>]` as the v1 mission-control surface.
 With a mission ID, show mission health, ready/blocked/done/backlog work, open
 blockers, evidence gaps, workflow validator failures, stale tracker/projection
@@ -43,7 +43,13 @@ can choose work from either mission or epic context.
 Quiet mode returns only essential IDs/counts suitable for shell composition. Do
 not add command-result JSON.
 
-Acceptance: CLI integration tests cover open mission status, active-mission
+## Outcome
+
+CLI integration tests cover open mission status, active-mission
 defaulting, option-oriented work selection context, evidence gaps, validator
 failure or warning state, all-work-done-but-missing-closeout state, no-ID
 dashboard mode, and quiet output.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

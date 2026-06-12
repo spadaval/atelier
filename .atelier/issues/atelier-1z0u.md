@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.288881607+00:00"
-evidence_required: []
 id: "atelier-1z0u"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ title: "Add atelier history command"
 updated_at: "2026-06-10T17:35:56.806271575+00:00"
 ---
 
+## Description
+
 Add the central history query surface.
 
 What:
@@ -38,10 +38,15 @@ Out of scope:
 - Non-issue history domains.
 - Migrating legacy comments.
 
-Acceptance criteria:
+## Outcome
+
 - Global and issue-scoped history return newest-first streams.
 - `--type`, `--since`, `--until`, `--limit`, and `--json` behave as documented.
 - Human output is readable and includes event type, timestamp, issue, actor/summary, body/detail, and evidence references where applicable.
 - Tests cover filtering, ordering, limits, JSON shape, invalid arguments, and empty history.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

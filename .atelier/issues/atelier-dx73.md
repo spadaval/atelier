@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T00:59:29.666340699+00:00"
-evidence_required: []
 id: "atelier-dx73"
 issue_type: "task"
 labels:
@@ -19,4 +17,14 @@ title: "Update product and Agent Factory command guidance"
 updated_at: "2026-06-12T03:37:45.183843273+00:00"
 ---
 
+## Description
+
 Update SPEC, docs, AGENTFACTORY binding, and related guidance after command decisions land. Acceptance: documented command guidance matches implemented surfaces and continues to forbid command-result JSON as the automation contract.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

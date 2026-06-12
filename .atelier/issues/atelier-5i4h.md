@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T04:53:56.961262790+00:00"
-evidence_required: []
 id: "atelier-5i4h"
 issue_type: "task"
 labels:

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T18:54:48.877278641+00:00"
-evidence_required: []
 id: "atelier-xcy9"
 issue_type: "task"
 labels:
@@ -25,6 +23,8 @@ title: "Simplify atelier init to create core tracker state only"
 updated_at: "2026-06-11T23:42:13.850110047+00:00"
 ---
 
+## Description
+
 Make atelier init initialize only core Atelier tracker state, not copied agent-rule bundles or Claude integration files.
 
 Scope:
@@ -38,7 +38,12 @@ Out of scope:
 - Removing packaged resources from the crate if optional integrations still need them.
 - Implementing the optional Claude integration command.
 
-Acceptance criteria:
+## Outcome
+
 - Fresh init produces a small .atelier/ containing tracked config plus ignored runtime DB only.
 - Existing init tests are updated to assert the reduced surface.
 - No generated .atelier/rules tree appears after core init.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

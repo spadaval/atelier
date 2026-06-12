@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:28:37.395693161+00:00"
-evidence_required: []
 id: "atelier-1tq7"
 issue_type: "task"
 labels:
@@ -24,9 +22,21 @@ title: "Define active mission focus and lifecycle rules"
 updated_at: "2026-06-11T20:35:35.900161156+00:00"
 ---
 
+## Description
+
 Define the repo-scoped active mission model for Atelier. Specify lifecycle states, the one-active-mission invariant, switch/deactivate behavior, how multiple worktrees inherit active mission context, how non-mission issue tasks stay outside the rule, and what lint/merge validation catches when branches diverge. Acceptance: docs or tracker artifact names the lifecycle states and invariant; command behavior for mission start/switch/finish/status is specified; lint behavior for multiple active missions is specified; strict versus advisory behavior is risk-scaled.
 
-## Resolution
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.
+
+## Notes
+
+### Resolution
 
 Atelier has one active mission per checkout/worktree.
 
@@ -37,7 +47,7 @@ whatever active mission exists in their checked-out Markdown state; if branches
 diverge and produce multiple active missions, `atelier lint` must report that as
 invalid canonical state.
 
-## Command Semantics
+### Command Semantics
 
 - `atelier mission start <id>` marks that mission active for the current
   checkout and fails if another mission is active unless an explicit switch
@@ -48,7 +58,7 @@ invalid canonical state.
   context for mission-linked work.
 - Non-mission issue tasks remain outside the active mission requirement.
 
-## Rationale
+### Rationale
 
 The product goal is orchestration focus, not global process supervision. Since
 Atelier's durable state lives in Markdown inside the repository, repo-local

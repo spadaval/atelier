@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:19:15.974791691+00:00"
-evidence_required: []
 id: "atelier-ia6p"
 issue_type: "task"
 labels:
@@ -19,4 +17,14 @@ title: "Design next-action formatting helpers without generic policy"
 updated_at: "2026-06-12T03:35:22.806464987+00:00"
 ---
 
+## Description
+
 Design central next-action rendering helpers that standardize labels, indentation, command text, optional why text, and empty rendering. Acceptance: helpers are explicitly non-authoritative; each command supplies its own context-specific actions and reasons, and tests prove the helper cannot degrade output into generic advice like try again or something went wrong.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

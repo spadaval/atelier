@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T16:15:50.476959575+00:00"
-evidence_required: []
 id: "atelier-6xoh"
 issue_type: "task"
 labels:
@@ -20,4 +18,14 @@ title: "Migrate first-class record detail views off records.body and records.dat
 updated_at: "2026-06-11T16:26:29.809160363+00:00"
 ---
 
+## Description
+
 Move mission, plan, and evidence detail rendering to locate records through SQLite metadata and load selected Markdown records through RecordStore. Retire records.body and records.data_json as detail payload sources once those command paths have RecordStore support.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

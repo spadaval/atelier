@@ -168,7 +168,36 @@ pub struct IssueSections {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IssueSectionName {
+    Description,
+    Outcome,
+    Evidence,
+    Notes,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IssueSectionState {
+    pub name: IssueSectionName,
+    pub required: bool,
+    pub present: bool,
+    pub empty: bool,
+}
+
 impl IssueSections {
+    pub const REQUIRED_NAMES: [IssueSectionName; 3] = [
+        IssueSectionName::Description,
+        IssueSectionName::Outcome,
+        IssueSectionName::Evidence,
+    ];
+
+    pub const ALL_NAMES: [IssueSectionName; 4] = [
+        IssueSectionName::Description,
+        IssueSectionName::Outcome,
+        IssueSectionName::Evidence,
+        IssueSectionName::Notes,
+    ];
+
     pub fn unchecked_from_body(body: Option<&str>) -> Self {
         if let Some(body) = body {
             if let Ok(sections) = parse_issue_sections(body, Path::new("<input>")) {
@@ -187,6 +216,72 @@ impl IssueSections {
             notes: None,
         }
     }
+
+    pub fn section(&self, name: IssueSectionName) -> Option<&str> {
+        match name {
+            IssueSectionName::Description => Some(&self.description),
+            IssueSectionName::Outcome => Some(&self.outcome),
+            IssueSectionName::Evidence => Some(&self.evidence),
+            IssueSectionName::Notes => self.notes.as_deref(),
+        }
+    }
+
+    pub fn section_states(&self) -> Vec<IssueSectionState> {
+        Self::ALL_NAMES
+            .into_iter()
+            .map(|name| {
+                let value = self.section(name);
+                IssueSectionState {
+                    name,
+                    required: name.required(),
+                    present: value.is_some(),
+                    empty: value.map(str::trim).is_none_or(str::is_empty),
+                }
+            })
+            .collect()
+    }
+
+    pub fn searchable_text(&self) -> String {
+        Self::ALL_NAMES
+            .into_iter()
+            .filter_map(|name| self.section(name))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+impl IssueSectionName {
+    pub fn title(self) -> &'static str {
+        match self {
+            IssueSectionName::Description => "Description",
+            IssueSectionName::Outcome => "Outcome",
+            IssueSectionName::Evidence => "Evidence",
+            IssueSectionName::Notes => "Notes",
+        }
+    }
+
+    pub fn required(self) -> bool {
+        matches!(
+            self,
+            IssueSectionName::Description | IssueSectionName::Outcome | IssueSectionName::Evidence
+        )
+    }
+}
+
+pub fn issue_section_diagnostic(
+    issue_id: Option<&str>,
+    section: &str,
+    relative: &Path,
+    detail: &str,
+) -> String {
+    let issue_id = issue_id
+        .map(str::to_string)
+        .or_else(|| issue_id_from_record_path(relative))
+        .unwrap_or_else(|| "(unknown)".to_string());
+    format!(
+        "{detail} for issue {issue_id}, section {section}, path {}",
+        display_state_path(relative)
+    )
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1070,21 +1165,32 @@ pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections
     let mut sections = BTreeMap::<String, String>::new();
     let mut current_heading: Option<String> = None;
     let mut current_body = String::new();
+    let issue_id = issue_id_from_record_path(relative);
 
     for line in body.lines() {
         if let Some(heading) = issue_level_two_heading(line) {
-            if !matches!(
-                heading.as_str(),
-                "Description" | "Outcome" | "Evidence" | "Notes"
-            ) {
+            if !IssueSections::ALL_NAMES
+                .into_iter()
+                .any(|name| name.title() == heading)
+            {
                 bail!(
-                    "Unknown issue body section '{}' in {}",
-                    heading,
-                    display_state_path(relative)
+                    "{}",
+                    issue_section_diagnostic(
+                        issue_id.as_deref(),
+                        &heading,
+                        relative,
+                        &format!("Unknown issue body section '{heading}'")
+                    )
                 );
             }
             if let Some(previous) = current_heading.replace(heading.clone()) {
-                finish_issue_section(&mut sections, previous, &current_body, relative)?;
+                finish_issue_section(
+                    &mut sections,
+                    previous,
+                    &current_body,
+                    relative,
+                    issue_id.as_deref(),
+                )?;
                 current_body.clear();
             } else if !current_body.trim().is_empty() {
                 bail!(
@@ -1108,18 +1214,44 @@ pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections
     }
 
     if let Some(previous) = current_heading {
-        finish_issue_section(&mut sections, previous, &current_body, relative)?;
+        finish_issue_section(
+            &mut sections,
+            previous,
+            &current_body,
+            relative,
+            issue_id.as_deref(),
+        )?;
     } else {
         bail!(
-            "Missing required issue body section 'Description' in {}",
-            display_state_path(relative)
+            "{}",
+            issue_section_diagnostic(
+                issue_id.as_deref(),
+                IssueSectionName::Description.title(),
+                relative,
+                "Missing required issue body section 'Description'"
+            )
         );
     }
 
-    let description = required_issue_section(&sections, "Description", relative)?;
-    let outcome = required_issue_section(&sections, "Outcome", relative)?;
-    let evidence = required_issue_section(&sections, "Evidence", relative)?;
-    let notes = sections.get("Notes").cloned();
+    let description = required_issue_section(
+        &sections,
+        IssueSectionName::Description,
+        relative,
+        issue_id.as_deref(),
+    )?;
+    let outcome = required_issue_section(
+        &sections,
+        IssueSectionName::Outcome,
+        relative,
+        issue_id.as_deref(),
+    )?;
+    let evidence = required_issue_section(
+        &sections,
+        IssueSectionName::Evidence,
+        relative,
+        issue_id.as_deref(),
+    )?;
+    let notes = sections.get(IssueSectionName::Notes.title()).cloned();
 
     Ok(IssueSections {
         description,
@@ -1145,20 +1277,29 @@ fn finish_issue_section(
     heading: String,
     body: &str,
     relative: &Path,
+    issue_id: Option<&str>,
 ) -> Result<()> {
     if sections.contains_key(&heading) {
         bail!(
-            "Duplicate issue body section '{}' in {}",
-            heading,
-            display_state_path(relative)
+            "{}",
+            issue_section_diagnostic(
+                issue_id,
+                &heading,
+                relative,
+                &format!("Duplicate issue body section '{heading}'")
+            )
         );
     }
     let content = body.trim().to_string();
     if content.is_empty() {
         bail!(
-            "Empty issue body section '{}' in {}",
-            heading,
-            display_state_path(relative)
+            "{}",
+            issue_section_diagnostic(
+                issue_id,
+                &heading,
+                relative,
+                &format!("Empty issue body section '{heading}'")
+            )
         );
     }
     sections.insert(heading, content);
@@ -1167,16 +1308,28 @@ fn finish_issue_section(
 
 fn required_issue_section(
     sections: &BTreeMap<String, String>,
-    heading: &str,
+    name: IssueSectionName,
     relative: &Path,
+    issue_id: Option<&str>,
 ) -> Result<String> {
+    let heading = name.title();
     sections.get(heading).cloned().ok_or_else(|| {
         anyhow!(
-            "Missing required issue body section '{}' in {}",
-            heading,
-            display_state_path(relative)
+            "{}",
+            issue_section_diagnostic(
+                issue_id,
+                heading,
+                relative,
+                &format!("Missing required issue body section '{heading}'")
+            )
         )
     })
+}
+
+fn issue_id_from_record_path(relative: &Path) -> Option<String> {
+    let file_name = relative.file_stem()?.to_str()?;
+    record_id::validate_record_id(file_name).ok()?;
+    Some(file_name.to_string())
 }
 
 pub fn parse_relationships(
@@ -1730,6 +1883,30 @@ updated_at: "2026-06-10T13:00:00+00:00"
             parsed.sections.notes.as_deref(),
             Some("Sequencing context.")
         );
+    }
+
+    #[test]
+    fn issue_sections_report_shared_presence_state_and_search_text() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let sections = parse_issue_sections(body, &issue_record_path("atelier-abcd")).unwrap();
+        let states = sections.section_states();
+
+        assert_eq!(
+            states
+                .iter()
+                .filter(|state| state.required && state.present && !state.empty)
+                .count(),
+            3
+        );
+        assert!(states.iter().any(|state| {
+            state.name == IssueSectionName::Notes
+                && !state.required
+                && !state.present
+                && state.empty
+        }));
+        assert!(sections
+            .searchable_text()
+            .contains("The desired finished world is observable."));
     }
 
     #[test]

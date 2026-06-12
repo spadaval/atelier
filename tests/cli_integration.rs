@@ -5197,6 +5197,57 @@ fn test_workflow_validate_fails_without_required_evidence() {
 }
 
 #[test]
+fn test_workflow_validate_can_use_parsed_issue_sections() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Parsed section workflow"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Parsed section workflow");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            &issue_id,
+            "--validator",
+            "issue_sections_parseable",
+        ],
+    );
+    assert!(success, "workflow validate failed: {stderr}");
+    assert!(stdout.contains("pass  issue_sections_parseable"));
+    assert!(stdout.contains("parsed required sections Description, Outcome, Evidence"));
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Section mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Section mission");
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "issue_sections_parseable",
+        ],
+    );
+    assert!(success, "mission workflow validate failed: {stderr}");
+    assert!(stdout.contains("pass  issue_sections_parseable"));
+    assert!(stdout.contains("for 1 issue(s)"));
+}
+
+#[test]
 fn test_git_worktree_clean_validator_fails_on_tracked_changes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6774,6 +6825,62 @@ hooks:
     assert!(success, "worktree remove failed: {stderr}");
     assert!(remove_out.contains("Removed worktree"));
     assert!(!worktree_path.exists());
+}
+
+#[test]
+fn test_work_start_reports_shared_section_diagnostic_without_blocking() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Malformed section work"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(stdout.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Malformed section work");
+    commit_all(dir.path(), "valid issue");
+
+    let issue_path = dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let malformed = markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
+    std::fs::write(&issue_path, malformed).unwrap();
+    commit_all(dir.path(), "malformed issue section");
+
+    let (lint_success, _lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(!lint_success, "lint should report malformed issue sections");
+    for needle in [
+        "Missing required issue body section 'Outcome'",
+        &issue_id,
+        "section Outcome",
+        ".atelier/issues/",
+    ] {
+        assert!(
+            lint_stderr.contains(needle),
+            "lint diagnostic missing {needle:?}: {lint_stderr}"
+        );
+    }
+
+    let (start_success, start_stdout, start_stderr) =
+        run_atelier(dir.path(), &["work", "start", &issue_id]);
+    assert!(
+        start_success,
+        "work start should warn but not block on section diagnostics: {start_stderr}"
+    );
+    assert!(start_stdout.contains("Started work on"));
+    for needle in [
+        "Warning: Missing required issue body section 'Outcome'",
+        &issue_id,
+        "section Outcome",
+        ".atelier/issues/",
+    ] {
+        assert!(
+            start_stdout.contains(needle),
+            "work start diagnostic missing {needle:?}: {start_stdout}"
+        );
+    }
 }
 
 #[test]

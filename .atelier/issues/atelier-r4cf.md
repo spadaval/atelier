@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:00.692912198+00:00"
-evidence_required: []
 id: "atelier-r4cf"
 issue_type: "epic"
 labels:
@@ -42,6 +40,8 @@ title: "Epic: Issue-centered activity history"
 updated_at: "2026-06-10T17:43:57.667530036+00:00"
 ---
 
+## Description
+
 Create the canonical issue-centered activity history system from the supplied plan.
 
 Scope:
@@ -57,7 +57,12 @@ Out of scope:
 - Replacing rich evidence records with activity entries.
 - Implementing the work in this planning pass.
 
-Acceptance criteria:
+## Outcome
+
 - Child issues cover schema/storage, issue mutation writes, evidence references, history CLI, rebuild/export projection, one-off migration, docs, and end-to-end validation.
 - Dependencies keep validation and UI/query work behind the canonical activity format and persistence work.
 - Future agents can execute each child without needing the original chat plan.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

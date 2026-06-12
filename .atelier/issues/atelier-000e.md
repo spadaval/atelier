@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-000e"
 issue_type: "task"
 labels:
@@ -26,9 +24,14 @@ title: "Rename package, binary, resources, and user-facing text for Atelier"
 updated_at: "2026-06-08T19:55:23+00:00"
 ---
 
+## Description
 
 Apply the chosen CLI naming across Cargo metadata, binary target, command help/about text, resource paths, generated hook references, and integration tests. Keep compatibility only where the resolved artifact explicitly requires it.
 
-## Acceptance Criteria
+## Outcome
 
 The main binary and help output use the chosen Atelier name; tests no longer rely on unintended Chainlink user-facing names; resource and generated paths are updated or documented as intentionally transitional; cargo test --test cli_integration passes or failures are captured in follow-up beads.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

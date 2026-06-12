@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T01:55:00.088845078+00:00"
-evidence_required: []
 id: "atelier-51xk"
 issue_type: "task"
 labels:
@@ -20,12 +18,14 @@ title: "Remove large text-field editing from issue update"
 updated_at: "2026-06-12T03:35:43.788915385+00:00"
 ---
 
+## Description
+
 Remove large body-field editing from `atelier issue update`. Long descriptions,
 rich acceptance criteria, notes, and similar fields should be edited directly in
 the canonical Markdown issue file so agents can use robust file-editing tools
 instead of fragile shell quoting.
 
-Acceptance:
+## Outcome
 
 - `issue update` no longer accepts description/body-style updates for rich
   issue text.
@@ -38,3 +38,7 @@ Acceptance:
   description updates.
 - Transcript tests cover the removed option, the help guidance, and the
   retained metadata-update path.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

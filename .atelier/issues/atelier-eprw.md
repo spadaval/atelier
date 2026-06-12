@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:10:54.799132612+00:00"
-evidence_required: []
 id: "atelier-eprw"
 issue_type: "task"
 labels:
@@ -23,4 +21,14 @@ title: "Fail projection queries clearly when canonical Markdown is invalid"
 updated_at: "2026-06-11T23:51:07.978213441+00:00"
 ---
 
+## Description
+
 Ensure invalid canonical Markdown blocks query refresh and produces actionable guidance to run atelier lint, without falling back to stale projection rows. Acceptance: tests cover invalid records with existing stale state.db.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

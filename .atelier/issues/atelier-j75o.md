@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T02:45:01.927227415+00:00"
-evidence_required: []
 id: "atelier-j75o"
 issue_type: "task"
 labels: []
@@ -20,4 +18,14 @@ title: "Improve detail views with bounded actionable context"
 updated_at: "2026-06-11T03:50:58.356184726+00:00"
 ---
 
+## Description
+
 Update selected show/status/detail commands to expose the right status, ownership, blocker, evidence, validation, and provenance context in readable sections. Acceptance: output stays bounded, avoids raw key/value dumps, and includes next commands for related information that should remain separate.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

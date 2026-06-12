@@ -689,7 +689,7 @@ fn canonical_issue_matches(record: &CanonicalIssueRecord, lowercase_query: &str)
     let haystack = format!(
         "{}\n{}",
         record.issue.title,
-        record.issue.description.as_deref().unwrap_or_default()
+        record.sections.searchable_text()
     )
     .to_lowercase();
     haystack.contains(lowercase_query)
@@ -1896,6 +1896,17 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     } else {
         db.list_issues(Some("all"), None, None)?
     };
+    let canonical_state_dir = find_state_dir_from_cwd()?;
+    let canonical_issues = if let Some(state_dir) = &canonical_state_dir {
+        let store = RecordStore::new(&state_dir);
+        store
+            .load_issues()?
+            .into_iter()
+            .map(|record| (record.issue.id.clone(), record))
+            .collect::<BTreeMap<_, _>>()
+    } else {
+        BTreeMap::new()
+    };
     let mut findings = Vec::new();
     for issue in issues {
         if issue.title.trim().is_empty() {
@@ -1919,6 +1930,29 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
                     "code": "missing_blocker",
                     "message": format!("Dependency references missing issue {}", format_issue_id(&blocker_id))
                 }));
+            }
+        }
+        if let Some(record) = canonical_issues.get(&issue.id) {
+            for state in record.sections.section_states() {
+                if state.required && (!state.present || state.empty) {
+                    findings.push(json!({
+                        "id": issue_id_for_agent(db, &issue)?,
+                        "code": "invalid_issue_section",
+                        "section": state.name.title(),
+                        "path": canonical_state_dir
+                            .as_ref()
+                            .map(|state_dir| {
+                                canonical_issue_path_from_state(state_dir, &issue.id)
+                                    .display()
+                                    .to_string()
+                            })
+                            .unwrap_or_default(),
+                        "message": format!(
+                            "Issue section {} must be present and non-empty",
+                            state.name.title()
+                        )
+                    }));
+                }
             }
         }
     }

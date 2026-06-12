@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T22:15:14.537845060+00:00"
-evidence_required: []
 id: "atelier-481n"
 issue_type: "epic"
 labels:
@@ -25,4 +23,14 @@ title: "Enforce mission closeout gates"
 updated_at: "2026-06-11T22:23:55.337364903+00:00"
 ---
 
+## Description
 
+No legacy description text was specified.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:09:12.915812699+00:00"
-evidence_required: []
 id: "atelier-nwug"
 issue_type: "task"
 labels:
@@ -23,6 +21,8 @@ title: "Add recent activity preview and command footer to issue show"
 updated_at: "2026-06-10T17:29:23.603761796+00:00"
 ---
 
+## Description
+
 Add a bounded recent activity preview and concise next-command footer to the human `issue show` view.
 
 What:
@@ -38,7 +38,8 @@ Out of scope:
 - Implementing `atelier history`.
 - Adding new command-line flags for preview limits or formats in v1.
 
-Acceptance criteria:
+## Outcome
+
 - Human issue show displays up to 5 newest issue activity entries when sidecars are available.
 - When sidecars are absent, issue show falls back to current notes/comments without failing.
 - Empty activity renders consistently with the rest of the improved view.
@@ -46,3 +47,7 @@ Acceptance criteria:
 - Focused tests cover fallback behavior when sidecars are absent.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

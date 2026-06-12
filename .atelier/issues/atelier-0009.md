@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-08T17:33:27+00:00"
-evidence_required: []
 id: "atelier-0009"
 issue_type: "epic"
 labels:
@@ -34,10 +32,21 @@ title: "Milestone 2: Canonical export and rebuild"
 updated_at: "2026-06-11T14:41:57.657636476+00:00"
 ---
 
+## Description
 
 Build the storage contract from SPEC.md: SQLite is runtime state, `.atelier-state/` is deterministic mergeable repo state, export freshness is checkable, and SQLite can be rebuilt after checkout, merge, pull, or clone.
 
-## Success Criteria
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.
+
+## Notes
+
+### Success Criteria
 
 - A deterministic `.atelier-state/` layout exists.
 - Mutating commands update exported state by default or have a documented staged rollout.

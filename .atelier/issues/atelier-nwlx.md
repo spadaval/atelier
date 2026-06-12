@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T18:54:40.116960501+00:00"
-evidence_required: []
 id: "atelier-nwlx"
 issue_type: "task"
 labels:
@@ -25,6 +23,8 @@ title: "Track Atelier project config and ignore only runtime files"
 updated_at: "2026-06-11T23:22:30.776797854+00:00"
 ---
 
+## Description
+
 Replace the current repo-level ignore of all .atelier/ with precise tracked/ignored boundaries.
 
 Scope:
@@ -36,7 +36,12 @@ Scope:
 Out of scope:
 - Designing a large configuration schema beyond the fields needed for current runtime and integration behavior.
 
-Acceptance criteria:
+## Outcome
+
 - git status can show tracked .atelier/config.toml and canonical record files.
 - state.db and lock/cache/local identity artifacts remain ignored.
 - Documentation describes config as tracked project state, not local runtime state.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-11T20:09:59.949770763+00:00"
-evidence_required: []
 id: "atelier-29oi"
 issue_type: "epic"
 labels:
@@ -31,11 +29,18 @@ title: "Implement markdown-first layout migration and compatibility"
 updated_at: "2026-06-11T23:35:48.137166586+00:00"
 ---
 
+## Description
+
 Move path resolution and migration behavior toward the new .atelier/ layout while preserving a temporary read/migrate-only compatibility path for existing .atelier-state repositories.
 
-Acceptance criteria:
+## Outcome
+
 - One storage layout module owns canonical paths, runtime/cache paths, legacy discovery, and ignore policy decisions.
 - atelier migrate markdown-first or equivalent one-shot migration moves committed records from .atelier-state/* into .atelier/* without moving runtime state into committed paths.
 - .gitignore ignores only runtime/cache subpaths, not all of .atelier/.
 - After migration, canonical writes target only the new layout; old .atelier-state is not silently rewritten.
 - Existing init/export/rebuild flows agree on the new layout.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

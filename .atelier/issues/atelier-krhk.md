@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.368552201+00:00"
-evidence_required: []
 id: "atelier-krhk"
 issue_type: "validation"
 labels:
@@ -21,6 +19,8 @@ title: "Validate issue activity history end to end"
 updated_at: "2026-06-10T17:43:46.476755383+00:00"
 ---
 
+## Description
+
 Validate issue-centered activity history end to end.
 
 What:
@@ -31,7 +31,8 @@ What:
 - Run the migration script on a temp repo with SQLite comments and close reasons; verify generated sidecars and no duplicate output on a second run.
 - Run the agreed validation commands.
 
-Acceptance criteria:
+## Outcome
+
 - `cargo fmt -- --check` passes.
 - Focused history/activity integration tests pass.
 - `cargo test` passes.
@@ -41,3 +42,7 @@ Acceptance criteria:
 - Any residual risk or intentionally deferred non-issue history support is documented in the issue close reason.
 
 Recommended subskill: agent-factory validate.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

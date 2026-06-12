@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T00:57:48.547594891+00:00"
-evidence_required: []
 id: "atelier-6dvg"
 issue_type: "epic"
 labels:
@@ -38,4 +36,14 @@ title: "Improve human output and next-action guidance"
 updated_at: "2026-06-12T03:36:03.367841847+00:00"
 ---
 
+## Description
+
 Improve output usefulness without restoring command-result JSON. Acceptance: next actions explain why an agent would run them, empty states are concise, and quiet output remains minimal and script-friendly.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

@@ -6,6 +6,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::db::Database;
+use crate::record_store::{IssueSections, RecordStore};
 
 const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
 
@@ -183,6 +184,7 @@ fn evaluate_builtin(
                 Ok((false, "atelier lint failed".to_string()))
             }
         }
+        "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
         "validation_criteria_satisfied" => Ok((
             false,
             "validation criteria records are not implemented in this staged slice".to_string(),
@@ -193,6 +195,71 @@ fn evaluate_builtin(
         )),
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
+}
+
+fn issue_sections_parseable(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    let issue_ids = match target_kind {
+        "issue" => {
+            let mut ids = BTreeSet::new();
+            ids.insert(target_id.to_string());
+            ids
+        }
+        "mission" => mission_issue_ids(db, target_id)?,
+        _ => {
+            return Ok((
+                true,
+                format!("issue sections do not apply to {target_kind} records"),
+            ))
+        }
+    };
+    if issue_ids.is_empty() {
+        return Ok((true, "no linked issues require section checks".to_string()));
+    }
+
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+    let store = RecordStore::new(&state_dir);
+    let mut checked = 0;
+    for issue_id in issue_ids {
+        let record = match store.load_issue_by_id(&issue_id) {
+            Ok(record) => record,
+            Err(error) => return Ok((false, error.to_string())),
+        };
+        let invalid = record
+            .sections
+            .section_states()
+            .into_iter()
+            .filter(|state| state.required && (!state.present || state.empty))
+            .map(|state| state.name.title().to_string())
+            .collect::<Vec<_>>();
+        if !invalid.is_empty() {
+            let path = state_dir.join("issues").join(format!("{issue_id}.md"));
+            return Ok((
+                false,
+                format!(
+                    "issue {issue_id} has invalid sections {} in {}",
+                    invalid.join(", "),
+                    path.display()
+                ),
+            ));
+        }
+        checked += 1;
+    }
+
+    Ok((
+        true,
+        format!(
+            "parsed required sections {} are present and non-empty for {checked} issue(s)",
+            IssueSections::REQUIRED_NAMES
+                .into_iter()
+                .map(|name| name.title())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    ))
 }
 
 fn open_blockers(db: &Database, target_kind: &str, target_id: &str) -> Result<Vec<String>> {

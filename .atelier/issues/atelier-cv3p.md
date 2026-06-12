@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T02:09:59.661915974+00:00"
-evidence_required: []
 id: "atelier-cv3p"
 issue_type: "task"
 labels:
@@ -20,4 +18,14 @@ title: "Implement mission lifecycle statuses"
 updated_at: "2026-06-12T03:32:48.880253737+00:00"
 ---
 
+## Description
+
 Implement the mission lifecycle model once the contract is specified. Scope: support draft, ready, active, and closed mission statuses; make mission start transition a ready mission to active; enforce at most one active mission; remove use of data.active as lifecycle state; update mission list/status/show rendering and filters; preserve closeout validation for closed; add focused CLI integration coverage. Acceptance: tests prove default creation state, ready-to-active start, one-active enforcement, list/status behavior, rejection of obsolete mission status aliases, and closeout behavior.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

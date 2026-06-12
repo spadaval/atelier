@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T03:50:49.785782245+00:00"
-evidence_required: []
 id: "atelier-e2vh"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ title: "Migrate issue mutations to Markdown-first writes"
 updated_at: "2026-06-10T23:49:11.731358422+00:00"
 ---
 
+## Description
+
 Move canonical issue mutations from SQLite-first plus export to Markdown-first writes.
 
 Scope:
@@ -33,10 +33,12 @@ Scope:
 - Keep compatibility commands working or classify each deferred path explicitly.
 - Do not change local-only sessions, timers, usage, or lock behavior except for record ID references required by the mutation path.
 
-Acceptance:
+## Outcome
+
 A successful canonical issue mutation is durable in .atelier-state without requiring a later SQLite export; ProjectionIndex is refreshed or marked stale with an actionable repair path; export --check and rebuild remain valid after each mutation; tests or CLI transcripts cover create, update, close/reopen, label, dependency add/remove, and typed link mutation behavior.
 
-Validation:
+## Evidence
+
 - cargo fmt -- --check
 - cargo test
 - scripted CLI mutation round trip in a temp repo

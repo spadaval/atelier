@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-12T00:57:45.632734590+00:00"
-evidence_required: []
 id: "atelier-o2a4"
 issue_type: "epic"
 labels:
@@ -42,4 +40,14 @@ title: "Reshape command hierarchy for workflow ergonomics"
 updated_at: "2026-06-12T03:36:04.665698736+00:00"
 ---
 
+## Description
+
 Plan intuitive command placement and remove redundant command surfaces that make agent workflows harder to explain. Acceptance: command placement is documented with old-to-new mappings, direct-removal decisions, and validation expectations for issue lifecycle, dependencies, links, search, notes/activity, work/start, setup/integrations, rebuild, maintenance, and state commands. Prefer deleting moved or duplicate command behavior once the replacement is clear, tested, and documented; retain aliases only when a human explicitly asks for a compatibility window.
+
+## Outcome
+
+Outcome was not specified in the legacy issue record.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

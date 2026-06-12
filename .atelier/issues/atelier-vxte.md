@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:09:12.894589289+00:00"
-evidence_required: []
 id: "atelier-vxte"
 issue_type: "task"
 labels:
@@ -24,6 +22,8 @@ title: "Add hierarchy and dependency context to issue show"
 updated_at: "2026-06-10T17:29:23.402451775+00:00"
 ---
 
+## Description
+
 Add hierarchy and dependency context to the richer human `issue show` view.
 
 What:
@@ -39,7 +39,8 @@ Out of scope:
 - New persistence fields.
 - Terminal-width measurement dependency for v1.
 
-Acceptance criteria:
+## Outcome
+
 - Parent title appears in human output when a parent exists.
 - Subissue progress/counts are correct for direct children.
 - Dependency rows include title, status, and priority for each referenced issue.
@@ -48,3 +49,7 @@ Acceptance criteria:
 - Focused helper tests cover dependency row formatting and subissue summary counts.
 
 Recommended subskill: agent-factory implement.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

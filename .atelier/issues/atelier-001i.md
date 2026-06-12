@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-09T17:30:35.841097873+00:00"
-evidence_required: []
 id: "atelier-001i"
 issue_type: "task"
 labels:
@@ -29,16 +27,24 @@ title: "Add first-class plan commands"
 updated_at: "2026-06-10T04:30:15.278404729+00:00"
 ---
 
+## Description
+
 Add first-class durable plan commands for execution intent that must survive across sessions or agents.
 
-## Acceptance
+## Outcome
 
 `atelier plan create/show/revise/link` exists with stable JSON, plan revisions preserve reasoned history, plans export and rebuild deterministically, and plans can link to missions, milestones, issues, and evidence.
-## Validation
+
+## Evidence
 
 - `cargo fmt -- --check`
+
 - `cargo test` or a named focused substitute
+
 - `git diff --check`
+
 - `atelier lint`
+
 - `atelier export --check`
+
 - `atelier doctor`

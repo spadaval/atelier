@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T16:00:59.351671663+00:00"
-evidence_required: []
 id: "atelier-t79u"
 issue_type: "task"
 labels:
@@ -23,6 +21,8 @@ title: "Document issue activity history"
 updated_at: "2026-06-10T17:38:39.026306267+00:00"
 ---
 
+## Description
+
 Document the issue activity history model and operator workflows.
 
 What:
@@ -33,9 +33,14 @@ What:
 Out of scope:
 - Changing behavior without matching implementation issues.
 
-Acceptance criteria:
+## Outcome
+
 - Docs explain the canonical format well enough for a future agent to add or debug activity records.
 - Operator docs include migration-script usage and safety expectations.
 - Documentation matches implemented CLI flags and JSON behavior once the implementation issues land.
 
 Recommended subskill: agent-factory docs.
+
+## Evidence
+
+Evidence was not specified in the legacy issue record.

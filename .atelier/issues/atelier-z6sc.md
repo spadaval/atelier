@@ -1,7 +1,5 @@
 ---
-acceptance: []
 created_at: "2026-06-10T03:52:27.308529893+00:00"
-evidence_required: []
 id: "atelier-z6sc"
 issue_type: "task"
 labels:
@@ -26,6 +24,8 @@ title: "Decide and migrate durable notes and comments"
 updated_at: "2026-06-10T22:54:23.132139132+00:00"
 ---
 
+## Description
+
 Resolve how agent notes, close reasons, claims, and comments survive Markdown-first rebuild.
 
 Scope:
@@ -34,10 +34,12 @@ Scope:
 - Implement the chosen migration or create implementation children if it spans multiple commands.
 - Preserve Agent Factory handoff expectations for durable notes.
 
-Acceptance:
+## Outcome
+
 The durable behavior for notes/comments is documented and implemented or split into ready implementation children; append-notes and close reasons either survive delete-DB/rebuild/show JSON or are explicitly reclassified as local runtime with replacement workflow; tests or transcripts cover the chosen path.
 
-Validation:
+## Evidence
+
 - cargo fmt -- --check
 - cargo test comments or equivalent focused tests
 - cargo test
