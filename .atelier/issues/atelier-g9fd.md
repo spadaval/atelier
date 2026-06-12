@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Prove recovery when state.db is missing or stale"
-updated_at: "2026-06-11T20:10:57.980157137+00:00"
+updated_at: "2026-06-12T00:21:52.672319566+00:00"
 ---
 
 Delete state.db, modify Markdown, and simulate checkout-like clean state. Acceptance: commands rebuild the ProjectionIndex when safe or fail clearly when canonical Markdown is invalid.
