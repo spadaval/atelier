@@ -172,7 +172,7 @@ fn issue_id_by_title(dir: &Path, title: &str) -> String {
 }
 
 fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
-    let record_dir = dir.join(".atelier-state").join(directory);
+    let record_dir = dir.join(".atelier").join(directory);
     let entries = std::fs::read_dir(&record_dir)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()));
     for entry in entries {
@@ -194,7 +194,7 @@ fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
     let activity_dir = dir
-        .join(".atelier-state")
+        .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.activity"));
     let mut paths = std::fs::read_dir(&activity_dir)
@@ -248,7 +248,7 @@ fn register_issue_ids_from_stdout(dir: &Path, stdout: &str) {
 }
 
 fn register_issue_ids_from_state(dir: &Path) {
-    let issues_dir = dir.join(".atelier-state/issues");
+    let issues_dir = dir.join(".atelier/issues");
     let Ok(entries) = std::fs::read_dir(issues_dir) else {
         return;
     };
@@ -506,7 +506,7 @@ fn test_command_telemetry_records_success_event() {
     assert!(event["duration_ms"].as_u64().is_some());
     assert!(event["workspace_id"].as_str().unwrap().len() >= 16);
     assert!(event["workspace_root"].is_null());
-    assert_eq!(event["state_path"], ".atelier-state");
+    assert_eq!(event["state_path"], ".atelier");
 }
 
 #[test]
@@ -1431,7 +1431,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
     .unwrap();
     let activity_dir = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.activity"));
     std::fs::create_dir_all(&activity_dir).unwrap();
@@ -1592,7 +1592,7 @@ fn write_activity_fixture(
     body: &str,
 ) {
     let activity_dir = dir
-        .join(".atelier-state")
+        .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.activity"));
     std::fs::create_dir_all(&activity_dir).unwrap();
@@ -1725,7 +1725,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(stdout.contains("blocking relationships: 1"));
     assert!(dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("issues")
         .join("atelier-0001.md")
         .exists());
@@ -4914,7 +4914,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let mission_path = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("missions")
         .join(format!("{mission_id}.md"));
     let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
@@ -4927,7 +4927,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let plan_path = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("plans")
         .join(format!("{plan_id}.md"));
     let plan_markdown = std::fs::read_to_string(&plan_path).unwrap();
@@ -4938,7 +4938,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let evidence_path = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("evidence")
         .join(format!("{evidence_id}.md"));
     let evidence_markdown = std::fs::read_to_string(&evidence_path).unwrap();
@@ -5093,12 +5093,15 @@ fn test_git_worktree_clean_validator_fails_on_tracked_changes() {
     let mission_id = record_id_by_title(dir.path(), "missions", "Tracked dirty");
     commit_all(dir.path(), "baseline");
 
+    let mission_path = dir
+        .path()
+        .join(".atelier")
+        .join("missions")
+        .join(format!("{mission_id}.md"));
+    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
     std::fs::write(
-        dir.path()
-            .join(".atelier-state")
-            .join("missions")
-            .join(format!("{mission_id}.md")),
-        "dirty",
+        &mission_path,
+        mission_markdown.replace("Tracked dirty", "Tracked dirty changed"),
     )
     .unwrap();
     let (success, stdout, stderr) = run_atelier(
@@ -5685,7 +5688,7 @@ fn test_mission_status_cli_reports_control_state() {
 
     let mission_path = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("missions")
         .join(format!("{mission_id}.md"));
     let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
@@ -5697,7 +5700,9 @@ fn test_mission_status_cli_reports_control_state() {
     let (success, stale_status, stderr) =
         run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "stale mission status failed: {stderr}");
-    assert!(stale_status.contains("Tracker:  stale"));
+    assert!(stale_status.contains("Autonomy status stale"));
+    assert!(stale_status.contains("Tracker:  ok"));
+    assert!(stale_status.contains("git_worktree_clean: fail"));
     assert!(stale_status.contains("closeout validator failure detected."));
 }
 
@@ -5872,7 +5877,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     let mission_id = record_id_by_title(dir.path(), "missions", "Guard schema");
     let mission_path = dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("missions")
         .join(format!("{mission_id}.md"));
 
@@ -6679,7 +6684,7 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(success, "export failed: {stderr}");
     let issue_record = std::fs::read_to_string(
         dir.path()
-            .join(".atelier-state/issues")
+            .join(".atelier/issues")
             .join(format!("{issue_id}.md")),
     )
     .unwrap();

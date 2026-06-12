@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate one-directory Atelier state cleanup end to end"
-updated_at: "2026-06-11T18:55:24.517430677+00:00"
+updated_at: "2026-06-12T00:17:39.389111395+00:00"
 ---
 
 Prove the one-directory .atelier cleanup works across docs, init, export, rebuild, and query flows.

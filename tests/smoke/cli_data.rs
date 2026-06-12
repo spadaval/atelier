@@ -111,7 +111,7 @@ fn test_canonical_export_check_cli() {
     let issue_path = h
         .temp_dir
         .path()
-        .join(".atelier-state")
+        .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();

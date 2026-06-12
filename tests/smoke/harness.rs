@@ -175,7 +175,7 @@ impl SmokeHarness {
     }
 
     fn register_issue_ids_from_state(&self) {
-        let issues_dir = self.temp_dir.path().join(".atelier-state/issues");
+        let issues_dir = self.temp_dir.path().join(".atelier/issues");
         let Ok(entries) = std::fs::read_dir(issues_dir) else {
             return;
         };
