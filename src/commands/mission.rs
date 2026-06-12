@@ -267,6 +267,9 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         println!("Linked evidence: {}", summary.evidence_count);
     }
 
+    print_mission_heading("Reliability");
+    print_reliability_summary(db, state_dir, &mission, &summary, &tracker, &closeout)?;
+
     print_mission_heading("Closeout Gates");
     if mission_lifecycle_status(&mission) == "closed" {
         println!("Mission is closed.");
@@ -808,6 +811,198 @@ impl MissionCloseoutStatus {
             }
         }
     }
+}
+
+#[derive(Default)]
+struct IssueSectionGapSummary {
+    malformed: Vec<String>,
+    missing_outcome: Vec<String>,
+    missing_evidence: Vec<String>,
+}
+
+fn print_reliability_summary(
+    db: &Database,
+    state_dir: &Path,
+    mission: &DomainRecord,
+    summary: &MissionListSummary,
+    tracker: &TrackerHealth,
+    closeout: &MissionCloseoutStatus,
+) -> Result<()> {
+    let section_gaps = mission_issue_section_gaps(db, state_dir, &mission.id)?;
+    let issue_proof_gaps = mission_issue_proof_gaps(db, &mission.id)?;
+
+    if tracker.stale_entries.is_empty() {
+        println!("Projection Freshness: current");
+    } else {
+        println!(
+            "Projection Freshness: stale - {}",
+            compact_strings(&tracker.stale_entries)
+        );
+        println!("  Next: atelier doctor");
+    }
+
+    if let Some(result) = closeout_validator_result(closeout, "issue_sections_parseable") {
+        if result.passed && section_gaps.malformed.is_empty() {
+            println!("Malformed Work: none");
+        } else {
+            let reason = if section_gaps.malformed.is_empty() {
+                result.reason.clone()
+            } else {
+                compact_strings(&section_gaps.malformed)
+            };
+            println!("Malformed Work: found - {reason}");
+            println!("  Next: atelier lint");
+        }
+    }
+
+    print_section_gap_signal("Missing Outcome Sections", &section_gaps.missing_outcome);
+    print_section_gap_signal("Missing Evidence Sections", &section_gaps.missing_evidence);
+
+    let mut proof_parts = Vec::new();
+    if summary.evidence_count == 0 {
+        proof_parts.push("mission proof is not attached".to_string());
+    }
+    if !issue_proof_gaps.is_empty() {
+        proof_parts.push(format!(
+            "issue proof gaps: {}",
+            compact_strings(&issue_proof_gaps)
+        ));
+    }
+    if proof_parts.is_empty() {
+        println!("Attached Proof: complete");
+    } else {
+        println!("Attached Proof: missing - {}", proof_parts.join("; "));
+        println!("  Next: atelier evidence add --kind validation --result pass \"...\"");
+        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
+    }
+
+    print_reliability_validator_signal(
+        closeout,
+        "command_surface_current",
+        "Docs/Help Drift",
+        "clear",
+        "detected",
+        "update docs, help text, or command-surface tests",
+    );
+    print_reliability_validator_signal(
+        closeout,
+        "ignored_tests_reviewed",
+        "Ignored Test Review",
+        "current",
+        "needed",
+        "assign owners or remove stale ignored tests",
+    );
+
+    if closeout.open_blockers.is_empty() {
+        println!("Open Blockers: none");
+    } else {
+        println!(
+            "Open Blockers: {} open - {}",
+            closeout.open_blockers.len(),
+            compact_strings(&closeout.open_blockers)
+        );
+        println!("  Next: close or unblock listed blockers");
+    }
+
+    println!("Drill-downs:");
+    println!("  atelier mission audit {}", mission.id);
+    println!("  atelier lint");
+    println!("  atelier doctor");
+    Ok(())
+}
+
+fn print_section_gap_signal(label: &str, ids: &[String]) {
+    if ids.is_empty() {
+        println!("{label}: none");
+    } else {
+        println!("{label}: {} issue(s) - {}", ids.len(), compact_strings(ids));
+        println!("  Next: atelier lint");
+    }
+}
+
+fn print_reliability_validator_signal(
+    closeout: &MissionCloseoutStatus,
+    validator: &str,
+    label: &str,
+    pass_text: &str,
+    fail_text: &str,
+    next: &str,
+) {
+    let Some(result) = closeout_validator_result(closeout, validator) else {
+        return;
+    };
+    if result.passed {
+        println!("{label}: {pass_text}");
+    } else {
+        println!("{label}: {fail_text} - {}", result.reason);
+        println!("  Next: {next}");
+    }
+}
+
+fn closeout_validator_result<'a>(
+    closeout: &'a MissionCloseoutStatus,
+    validator: &str,
+) -> Option<&'a crate::commands::workflow::ValidatorResult> {
+    closeout
+        .validator_results
+        .iter()
+        .find(|result| result.validator == validator)
+}
+
+fn mission_issue_section_gaps(
+    db: &Database,
+    state_dir: &Path,
+    mission_id: &str,
+) -> Result<IssueSectionGapSummary> {
+    let store = RecordStore::new(state_dir);
+    let mut gaps = IssueSectionGapSummary::default();
+    for issue_id in mission_issue_ids(db, mission_id)? {
+        match store.load_issue_by_id(&issue_id) {
+            Ok(record) => {
+                for state in record.sections.section_states() {
+                    if !state.required || (state.present && !state.empty) {
+                        continue;
+                    }
+                    if state.name == record_store::IssueSectionName::Outcome {
+                        gaps.missing_outcome.push(issue_id.clone());
+                    } else if state.name == record_store::IssueSectionName::Evidence {
+                        gaps.missing_evidence.push(issue_id.clone());
+                    }
+                }
+            }
+            Err(error) => {
+                let diagnostic = error.to_string();
+                if diagnostic.contains("section 'Outcome'")
+                    || diagnostic.contains("section Outcome")
+                    || diagnostic.contains("section `Outcome`")
+                {
+                    gaps.missing_outcome.push(issue_id.clone());
+                }
+                if diagnostic.contains("section 'Evidence'")
+                    || diagnostic.contains("section Evidence")
+                    || diagnostic.contains("section `Evidence`")
+                {
+                    gaps.missing_evidence.push(issue_id.clone());
+                }
+                gaps.malformed.push(format!("{issue_id}: {diagnostic}"));
+            }
+        }
+    }
+    gaps.malformed.sort();
+    gaps.missing_outcome.sort();
+    gaps.missing_evidence.sort();
+    Ok(gaps)
+}
+
+fn mission_issue_proof_gaps(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut gaps = Vec::new();
+    for issue_id in mission_issue_ids(db, mission_id)? {
+        if validating_evidence_ids(db, "issue", &issue_id)?.is_empty() {
+            gaps.push(issue_id);
+        }
+    }
+    gaps.sort();
+    Ok(gaps)
 }
 
 struct CloseoutStatusLine {

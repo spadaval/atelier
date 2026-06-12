@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add mission reliability status summary"
-updated_at: "2026-06-12T05:12:44.936931257+00:00"
+updated_at: "2026-06-12T23:41:43.347354181+00:00"
 ---
 
 ## Description

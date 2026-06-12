@@ -7519,9 +7519,20 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Record health work");
     let issue_id = issue_id.as_str();
+    let (success, evidence_issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Record evidence work"]);
+    assert!(success, "evidence issue create failed: {stderr}");
+    assert!(evidence_issue_out.contains("Created issue atelier-"));
+    let evidence_issue_id = issue_id_by_title(dir.path(), "Record evidence work");
+    let evidence_issue_id = evidence_issue_id.as_str();
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
     assert!(success, "mission add work failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-work", mission_id, evidence_issue_id],
+    );
+    assert!(success, "mission add evidence work failed: {stderr}");
     commit_all(dir.path(), "record health baseline");
 
     let issue_path = dir
@@ -7529,6 +7540,11 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
         .join(".atelier")
         .join("issues")
         .join(format!("{issue_id}.md"));
+    let evidence_issue_path = dir
+        .path()
+        .join(".atelier")
+        .join("issues")
+        .join(format!("{evidence_issue_id}.md"));
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(
         &issue_path,
@@ -7550,29 +7566,43 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     let stale_markdown = std::fs::read_to_string(&issue_path).unwrap();
     let malformed = stale_markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
     std::fs::write(&issue_path, malformed).unwrap();
-    let metadata = std::fs::metadata(&issue_path).unwrap();
-    let mut hasher = Sha256::new();
-    hasher.update(std::fs::read(&issue_path).unwrap());
-    let invalid_hash = format!("{:x}", hasher.finalize());
+    let evidence_markdown = std::fs::read_to_string(&evidence_issue_path).unwrap();
+    let malformed_evidence =
+        evidence_markdown.replace("\n## Evidence\n\nEvidence was not specified.\n", "\n");
+    std::fs::write(&evidence_issue_path, malformed_evidence).unwrap();
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
-    conn.execute(
-        "UPDATE projection_index_sources
-         SET size_bytes = ?1, sha256 = ?2
-         WHERE path = ?3",
-        rusqlite::params![
-            i64::try_from(metadata.len()).unwrap(),
-            invalid_hash,
-            format!("issues/{issue_id}.md")
-        ],
-    )
-    .unwrap();
+    for (path, id) in [
+        (&issue_path, issue_id),
+        (&evidence_issue_path, evidence_issue_id),
+    ] {
+        let metadata = std::fs::metadata(path).unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(std::fs::read(path).unwrap());
+        let invalid_hash = format!("{:x}", hasher.finalize());
+        conn.execute(
+            "UPDATE projection_index_sources
+             SET size_bytes = ?1, sha256 = ?2
+             WHERE path = ?3",
+            rusqlite::params![
+                i64::try_from(metadata.len()).unwrap(),
+                invalid_hash,
+                format!("issues/{id}.md")
+            ],
+        )
+        .unwrap();
+    }
     commit_all(dir.path(), "malformed record source");
 
     let (success, malformed_status, stderr) =
         run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "malformed mission status failed: {stderr}");
+    assert!(malformed_status.contains("Reliability"));
+    assert!(malformed_status.contains("Malformed Work: found"));
+    assert!(malformed_status.contains("Missing Outcome Sections: 1 issue(s)"));
+    assert!(malformed_status.contains("Missing Evidence Sections: 1 issue(s)"));
     assert!(malformed_status.contains("Linked Issue Records: malformed"));
     assert!(malformed_status.contains("Missing required issue body section 'Outcome'"));
+    assert!(malformed_status.contains("Missing required issue body section 'Evidence'"));
     assert!(malformed_status.contains("atelier lint"));
 }
 
@@ -7885,6 +7915,16 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Blockers"));
     assert!(status_out.contains("Evidence"));
     assert!(status_out.contains("Gap: no evidence records are linked to this mission."));
+    assert!(status_out.contains("Reliability"));
+    assert!(status_out.contains("Projection Freshness: current"));
+    assert!(status_out.contains("Malformed Work: none"));
+    assert!(status_out.contains("Missing Outcome Sections: none"));
+    assert!(status_out.contains("Missing Evidence Sections: none"));
+    assert!(status_out.contains("Attached Proof: missing"));
+    assert!(status_out.contains("Open Blockers: 1 open"));
+    assert!(status_out.contains(&format!("atelier mission audit {mission_id}")));
+    assert!(status_out.contains("atelier lint"));
+    assert!(status_out.contains("atelier doctor"));
     assert!(status_out.contains("Closeout Gates"));
     assert!(status_out.contains("Mission Proof: missing"));
     assert!(status_out.contains("Advanced Validator Detail"));
@@ -7976,6 +8016,11 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(success, "closeout mission status failed: {stderr}");
     assert!(closeout_status.contains("Health:   closeout"));
     assert!(closeout_status.contains("Closeout: ready"));
+    assert!(closeout_status.contains("Reliability"));
+    assert!(closeout_status.contains("Attached Proof: complete"));
+    assert!(closeout_status.contains("Docs/Help Drift: clear"));
+    assert!(closeout_status.contains("Ignored Test Review: current"));
+    assert!(closeout_status.contains("Open Blockers: none"));
     assert!(closeout_status.contains(&format!(
         "Close mission (all closeout gates pass): atelier mission update {closeout_mission} --status closed"
     )));
