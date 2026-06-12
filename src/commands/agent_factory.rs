@@ -2229,7 +2229,12 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     }
 }
 
-pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
+pub fn doctor(
+    db: &Database,
+    repo_root: &Path,
+    state_dir: &Path,
+    runtime_db_existed: bool,
+) -> Result<()> {
     let layout = crate::storage_layout::StorageLayout::new(repo_root);
     let atelier_dir = layout.atelier_dir();
     let config_path = layout.config_path();
@@ -2248,7 +2253,7 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
     };
     let mut health = BTreeMap::new();
     health.insert("config", config_path.exists());
-    health.insert("database", db_path.exists());
+    health.insert("database", runtime_db_existed);
     health.insert("ignore_rules", ignore_rules_current);
     health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
@@ -2295,7 +2300,11 @@ pub fn doctor(db: &Database, repo_root: &Path, state_dir: &Path) -> Result<()> {
     );
     println!(
         "  database: {}",
-        if db_path.exists() { "ok" } else { "not ok" }
+        if runtime_db_existed {
+            "ok"
+        } else {
+            "missing (runtime projection artifact)"
+        }
     );
     println!(
         "  local_tables: {}",

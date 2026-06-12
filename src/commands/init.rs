@@ -19,6 +19,7 @@ pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/state.db",
     "/.atelier/state.db-shm",
     "/.atelier/state.db-wal",
+    "/.atelier/.state.db.*.rebuild-tmp*",
     "/.atelier/agent.json",
     "/.atelier/.cache/",
     "/.atelier/runtime/",
@@ -130,6 +131,7 @@ mod tests {
 
         let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert!(gitignore.contains("/.atelier/state.db"));
+        assert!(gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
         assert!(gitignore.contains("/.atelier/.locks-cache/"));
         assert!(gitignore.contains("/.atelier/cache/"));
         assert!(!gitignore.contains("/.atelier/rules/"));

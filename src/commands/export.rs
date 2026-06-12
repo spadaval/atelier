@@ -145,7 +145,10 @@ fn canonical_check_entries(db: &Database, state_dir: &Path) -> Result<Vec<String
     }
 
     if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
-        stale.push(format!("invalid: {error:#}"));
+        stale.push(format!(
+            "invalid: canonical tracker Markdown is invalid; run `atelier lint` for details: {error:#}"
+        ));
+        return Ok(stale);
     }
 
     let freshness = projection_index::check(db, state_dir)?;

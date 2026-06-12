@@ -10,6 +10,8 @@ use std::time::UNIX_EPOCH;
 use crate::db::Database;
 use crate::record_store;
 
+const MAX_PROBLEM_SAMPLES: usize = 5;
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SourceEntry {
     pub path: String,
@@ -39,23 +41,91 @@ impl FreshnessReport {
     }
 
     pub fn problem_messages(&self) -> Vec<String> {
-        self.problems
-            .iter()
-            .map(|problem| match problem {
-                FreshnessProblem::MissingMetadata { path } => {
-                    format!("missing projection metadata for {path}")
-                }
-                FreshnessProblem::MissingSource { path } => {
-                    format!("indexed source is missing: {path}")
-                }
-                FreshnessProblem::ChangedSource { path } => {
-                    format!("indexed source changed: {path}")
-                }
-                FreshnessProblem::UnindexedSource { path } => {
-                    format!("canonical source is not indexed: {path}")
-                }
-            })
-            .collect()
+        let mut messages = Vec::new();
+        let mut missing_metadata = Vec::new();
+        let mut missing_sources = Vec::new();
+        let mut changed_sources = Vec::new();
+        let mut unindexed_sources = Vec::new();
+
+        for problem in &self.problems {
+            match problem {
+                FreshnessProblem::MissingMetadata { path } => missing_metadata.push(path.as_str()),
+                FreshnessProblem::MissingSource { path } => missing_sources.push(path.as_str()),
+                FreshnessProblem::ChangedSource { path } => changed_sources.push(path.as_str()),
+                FreshnessProblem::UnindexedSource { path } => unindexed_sources.push(path.as_str()),
+            }
+        }
+
+        push_missing_metadata_message(&mut messages, &missing_metadata);
+        push_path_group_message(
+            &mut messages,
+            &missing_sources,
+            "indexed source is missing",
+            "indexed sources are missing",
+        );
+        push_path_group_message(
+            &mut messages,
+            &changed_sources,
+            "indexed source changed",
+            "indexed sources changed",
+        );
+        push_path_group_message(
+            &mut messages,
+            &unindexed_sources,
+            "canonical source is not indexed",
+            "canonical sources are not indexed",
+        );
+        if !messages.is_empty() {
+            messages.push(
+                "repair: run `atelier rebuild` after canonical tracker records validate; run `atelier lint` to inspect record errors"
+                    .to_string(),
+            );
+        }
+        messages
+    }
+}
+
+fn push_missing_metadata_message(messages: &mut Vec<String>, paths: &[&str]) {
+    match paths {
+        [] => {}
+        [path] => messages.push(format!(
+            "runtime projection metadata is missing for canonical source: {path}"
+        )),
+        _ => messages.push(format!(
+            "runtime projection metadata is missing for {} canonical sources (showing first {}): {}",
+            paths.len(),
+            paths.len().min(MAX_PROBLEM_SAMPLES),
+            paths
+                .iter()
+                .take(MAX_PROBLEM_SAMPLES)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+fn push_path_group_message(
+    messages: &mut Vec<String>,
+    paths: &[&str],
+    singular: &str,
+    plural: &str,
+) {
+    match paths {
+        [] => {}
+        [path] => messages.push(format!("{singular}: {path}")),
+        _ => messages.push(format!(
+            "{} {} (showing first {}): {}",
+            paths.len(),
+            plural,
+            paths.len().min(MAX_PROBLEM_SAMPLES),
+            paths
+                .iter()
+                .take(MAX_PROBLEM_SAMPLES)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
     }
 }
 
@@ -315,5 +385,28 @@ mod tests {
                 path: "issues/atelier-aaaa.md".to_string()
             }]
         );
+    }
+
+    #[test]
+    fn freshness_problem_messages_are_bounded_and_actionable() {
+        let report = FreshnessReport {
+            checked: true,
+            source_count: 8,
+            problems: (0..8)
+                .map(|index| FreshnessProblem::ChangedSource {
+                    path: format!("issues/atelier-{index:04}.md"),
+                })
+                .collect(),
+        };
+
+        let messages = report.problem_messages();
+
+        assert_eq!(messages.len(), 2);
+        assert!(messages[0].contains("8 indexed sources changed"));
+        assert!(messages[0].contains("showing first 5"));
+        assert!(messages[0].contains("issues/atelier-0004.md"));
+        assert!(!messages[0].contains("issues/atelier-0005.md"));
+        assert!(messages[1].contains("atelier rebuild"));
+        assert!(messages[1].contains("atelier lint"));
     }
 }

@@ -3,6 +3,7 @@ created_at: "2026-06-12T05:45:00+00:00"
 id: "atelier-fx9r"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "diagnostics"
 - "projection"
 - "reliability"
@@ -24,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Fix projection stale rebuild races and diagnostics"
-updated_at: "2026-06-12T05:45:00+00:00"
+updated_at: "2026-06-12T20:54:00.821986766+00:00"
 ---
 
 ## Description

@@ -755,6 +755,7 @@ impl CommandStorageAccess {
 struct CommandStorage {
     layout: storage_layout::StorageLayout,
     db: Database,
+    runtime_db_existed: bool,
 }
 
 impl CommandStorage {
@@ -785,36 +786,62 @@ impl CommandStorage {
 
 fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     let layout = storage_layout::StorageLayout::discover()?;
+    let runtime_db_existed = layout.runtime_db_path().exists();
     let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
     let db = if mode.requires_fresh_projection() {
-        ensure_fresh_projection_db(db, &layout)?
+        ensure_fresh_projection_db(db, &layout, runtime_db_existed)?
     } else {
         db
     };
-    Ok(CommandStorage { layout, db })
+    Ok(CommandStorage {
+        layout,
+        db,
+        runtime_db_existed,
+    })
 }
 
 fn ensure_fresh_projection_db(
     db: Database,
     layout: &storage_layout::StorageLayout,
+    runtime_db_existed: bool,
 ) -> Result<Database> {
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
-        let report = projection_index::check(&db, &state_dir)?;
-        if !report.is_fresh() {
+        if !runtime_db_existed {
             commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
-                format!(
-                    "Projection index is stale and canonical state is not rebuild-ready; \
-                     run `atelier lint` for details, then fix canonical tracker records before querying.\n{}",
-                    report.problem_messages().join("\n")
-                )
+                "Runtime projection database is missing and canonical tracker Markdown is not rebuild-ready; \
+                 run `atelier lint` for details, then fix canonical tracker records before querying."
+                    .to_string()
             })?;
             let db_path = layout.runtime_db_path();
             drop(db);
             commands::rebuild::run(&state_dir, &db_path).with_context(|| {
                 format!(
-                    "Projection index is stale and automatic rebuild failed for {}",
+                    "Runtime projection database is missing and automatic rebuild failed for {}",
                     state_dir.display()
+                )
+            })?;
+            eprintln!(
+                "Runtime projection database was missing; rebuilt local SQLite projection from {}",
+                state_dir.display()
+            );
+            return Database::open(&db_path).context("Failed to open database");
+        }
+
+        let report = projection_index::check(&db, &state_dir)?;
+        if !report.is_fresh() {
+            commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
+                "Canonical tracker Markdown is invalid; run `atelier lint` for details, \
+                 then fix canonical tracker records before querying."
+                    .to_string()
+            })?;
+            let db_path = layout.runtime_db_path();
+            drop(db);
+            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
+                format!(
+                    "Projection index is stale and automatic rebuild failed for {}\n{}",
+                    state_dir.display(),
+                    report.problem_messages().join("\n")
                 )
             })?;
             eprintln!(
@@ -1651,7 +1678,12 @@ fn run() -> Result<()> {
 
         Commands::Doctor => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
-            commands::agent_factory::doctor(storage.db(), storage.repo_root(), &storage.state_dir())
+            commands::agent_factory::doctor(
+                storage.db(),
+                storage.repo_root(),
+                &storage.state_dir(),
+                storage.runtime_db_existed,
+            )
         }
     };
 

@@ -99,6 +99,10 @@ pub fn has_canonical_records(atelier_dir: &Path) -> bool {
 }
 
 pub fn is_local_atelier_path(relative_path: &Path) -> bool {
+    if is_runtime_rebuild_temp_path(relative_path) {
+        return true;
+    }
+
     let Some(first) = relative_path.components().next() else {
         return false;
     };
@@ -118,6 +122,19 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || relative_path == Path::new("hook-config.local.json")
 }
 
+fn is_runtime_rebuild_temp_path(relative_path: &Path) -> bool {
+    if relative_path.components().count() != 1 {
+        return false;
+    }
+    let Some(file_name) = relative_path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    file_name.starts_with(&format!(".{LEGACY_RUNTIME_DB}."))
+        && (file_name.ends_with(".rebuild-tmp")
+            || file_name.ends_with(".rebuild-tmp-shm")
+            || file_name.ends_with(".rebuild-tmp-wal"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +149,18 @@ mod tests {
         let layout = StorageLayout::new(dir.path());
 
         assert_eq!(layout.canonical_dir(), dir.path().join(".atelier"));
+    }
+
+    #[test]
+    fn rebuild_temp_database_paths_are_local_atelier_paths() {
+        assert!(is_local_atelier_path(Path::new(
+            ".state.db.123.456.rebuild-tmp"
+        )));
+        assert!(is_local_atelier_path(Path::new(
+            ".state.db.123.456.rebuild-tmp-wal"
+        )));
+        assert!(!is_local_atelier_path(Path::new(
+            "issues/.state.db.123.456.rebuild-tmp"
+        )));
     }
 }

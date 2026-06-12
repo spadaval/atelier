@@ -450,6 +450,27 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
 }
 
 #[test]
+fn test_doctor_distinguishes_missing_runtime_projection_database() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Missing projection db"]);
+    assert!(success, "issue create failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
+    assert!(success, "doctor failed: {stderr}");
+    assert!(stdout.contains("Projection rebuild:"));
+    assert!(stdout.contains("projection_fresh: not ok"));
+    assert!(stdout.contains("Runtime state:"));
+    assert!(stdout.contains("database: missing (runtime projection artifact)"));
+    assert!(stdout.contains("projection_metadata: stale"));
+}
+
+#[test]
 fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6296,6 +6317,64 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
 }
 
 #[test]
+fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let mut issue_ids = Vec::new();
+    for index in 0..12 {
+        let title = format!("Bulk indexed {index}");
+        let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", &title]);
+        assert!(success, "issue create failed: {stderr}");
+        assert!(issue_out.contains("Created issue atelier-"));
+        issue_ids.push(issue_ref(dir.path(), index + 1));
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    for (index, issue_id) in issue_ids.iter().enumerate() {
+        let issue_path = dir
+            .path()
+            .join(".atelier/issues")
+            .join(format!("{issue_id}.md"));
+        let markdown = std::fs::read_to_string(&issue_path).unwrap();
+        std::fs::write(
+            &issue_path,
+            markdown.replace(
+                &format!("title: \"Bulk indexed {index}\""),
+                &format!("title: \"Bulk markdown {index}\""),
+            ),
+        )
+        .unwrap();
+    }
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(!success, "export check should report stale projection");
+    assert!(
+        stderr.contains("12 indexed sources changed")
+            && stderr.contains("showing first 5")
+            && stderr.contains("atelier rebuild"),
+        "stale diagnostics should be bounded and actionable: {stderr}"
+    );
+    assert!(
+        stderr.lines().count() < 12,
+        "stale diagnostics should not dump every changed source: {stderr}"
+    );
+
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(
+        success,
+        "many changed sources should transparently rebuild: {stderr}"
+    );
+    assert!(list_out.contains("Bulk markdown 0"));
+    assert!(list_out.contains("Bulk markdown 11"));
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic rebuild diagnostic: {stderr}"
+    );
+}
+
+#[test]
 fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6437,6 +6516,53 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
 }
 
 #[test]
+fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Temp rebuild filter"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    let temp_path = dir.path().join(".atelier/.state.db.123.456.rebuild-tmp");
+    std::fs::write(&temp_path, "partial sqlite rebuild").unwrap();
+
+    let issue_path = dir
+        .path()
+        .join(".atelier/issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace("Temp rebuild filter", "Temp rebuild filter changed"),
+    )
+    .unwrap();
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "query should ignore rebuild tmp file: {stderr}");
+    assert!(show_out.contains("Temp rebuild filter changed"));
+    assert!(
+        !stderr.contains("rebuild-tmp"),
+        "query diagnostics must not report rebuild tmp path: {stderr}"
+    );
+
+    let commands: &[&[&str]] = &[&["lint"], &["export", "--check"], &["doctor"]];
+    for args in commands {
+        let (success, stdout, stderr) = run_atelier(dir.path(), args);
+        assert!(success, "{args:?} should ignore rebuild tmp file: {stderr}");
+        let combined = format!("{stdout}\n{stderr}");
+        assert!(
+            !combined.contains("rebuild-tmp"),
+            "{args:?} diagnostics must not report rebuild tmp path: {combined}"
+        );
+    }
+}
+
+#[test]
 fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6463,15 +6589,32 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     )
     .unwrap();
 
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(
+        !success,
+        "invalid canonical Markdown should fail export check"
+    );
+    assert!(
+        stderr.contains("canonical tracker Markdown is invalid")
+            && stderr.contains("atelier lint")
+            && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "unexpected invalid export error: {stderr}"
+    );
+    assert!(
+        !stderr.contains("indexed source changed"),
+        "invalid canonical errors must not be obscured by stale metadata: {stderr}"
+    );
+
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(
         !success,
         "invalid canonical Markdown should fail, stdout: {stdout}"
     );
     assert!(
-        stderr.contains("canonical state is not rebuild-ready")
+        stderr.contains("Canonical tracker Markdown is invalid")
             && stderr.contains("atelier lint")
-            && stderr.contains("Invalid YAML front matter"),
+            && stderr.contains("Invalid YAML front matter")
+            && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected invalid Markdown error: {stderr}"
     );
     assert!(
@@ -6559,7 +6702,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     assert!(success, "lint should rebuild missing state.db: {stderr}");
     assert!(stdout.contains("Lint passed."));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        stderr.contains("Runtime projection database was missing; rebuilt local SQLite projection"),
         "missing rebuild diagnostic: {stderr}"
     );
 }
