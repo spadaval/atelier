@@ -22,6 +22,8 @@ relationships:
   - kind: "issue"
     id: "atelier-6dvg"
   - kind: "issue"
+    id: "atelier-8vfc"
+  - kind: "issue"
     id: "atelier-9jbu"
   - kind: "issue"
     id: "atelier-bzts"
