@@ -12,7 +12,13 @@ relationships:
   - kind: "issue"
     id: "atelier-efpk"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-826i"
+    role: "validates"
+  - kind: "evidence"
+    id: "atelier-mz60"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

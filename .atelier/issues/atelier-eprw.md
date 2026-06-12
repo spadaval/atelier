@@ -12,8 +12,14 @@ relationships:
   - kind: "issue"
     id: "atelier-g9fd"
   children: []
-  attachments: []
-  relates: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-ybcj"
+    role: "validates"
+  relates:
+  - kind: "issue"
+    id: "atelier-fx9r"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 1
 status: "closed"

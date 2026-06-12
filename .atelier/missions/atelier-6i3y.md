@@ -1,29 +1,36 @@
 ---
 created_at: "2026-06-11T00:40:11.669040461+00:00"
 id: "atelier-6i3y"
-data: "{\"constraints\":[\"Preserve existing JSON schemas unless a separate migration explicitly approves a contract change.\",\"Keep human output useful in colorless logs and narrow terminals; color, if added, cannot be the only carrier of meaning.\",\"Use shared formatter/date helpers where more than one command needs the same policy.\"],\"evidence\":[],\"milestones\":[],\"plans\":[],\"risks\":[\"Changing human text may affect users scraping default output; mitigate by documenting JSON as the stable scripting interface and keeping quiet mode minimal.\",\"A broad formatting pass can devolve into cosmetic churn; mitigate by prioritizing the identified rough surfaces and adding focused fixtures.\"],\"validation\":[\"Golden or behavior tests cover mission show, issue show, issue list/ready/search, mission/plan/evidence lists, link list, dep list, workflow validate, and work/worktree status.\",\"Tests or deterministic formatter units prove readable date rendering and raw key/value suffix removal.\",\"Run cargo fmt -- --check, cargo nextest run or focused equivalent, git diff --check, atelier export --check, atelier lint, and atelier doctor.\"],\"work\":[]}"
+labels:
+- "mission"
 relationships:
   blocks: []
-  children:
-  - kind: "issue"
-    id: "atelier-ap3r"
-  - kind: "issue"
-    id: "atelier-pukf"
-  - kind: "issue"
-    id: "atelier-v851"
-  - kind: "issue"
-    id: "atelier-wnf1"
-  attachments:
+  children: []
+  attachments: []
+  relates:
   - kind: "evidence"
     id: "atelier-tm8c"
-    role: "validates"
-  relates: []
+    type: "validates"
+  - kind: "issue"
+    id: "atelier-ap3r"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-pukf"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-v851"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-wnf1"
+    type: "advances"
 schema: "atelier.mission"
 schema_version: 1
 status: "closed"
 title: "Refine human CLI output ergonomics"
 updated_at: "2026-06-11T02:08:39.707242883+00:00"
 ---
+
+## Intent
 
 Atelier default human CLI output still leaks implementation-shaped data and inconsistent formatting even after the first output improvement pass. This mission tracks a second pass focused on eliminating raw key/value tails, full machine timestamps in human views, and command-specific formatting drift across the core CLI.
 
@@ -44,3 +51,20 @@ End state:
 Default non-JSON output follows `docs/architecture/human-cli-output.md` across core commands. Human views use readable dates (relative where useful plus exact when needed), explicit labels instead of raw suffix fields, stable grouping, bounded long lists, consistent empty states, and shared formatter helpers. JSON output remains the automation contract and is not changed by this mission.
 
 Recommended subskill: agent-factory orchestrate.
+
+## Constraints
+
+- Preserve existing JSON schemas unless a separate migration explicitly approves a contract change.
+- Keep human output useful in colorless logs and narrow terminals; color, if added, cannot be the only carrier of meaning.
+- Use shared formatter/date helpers where more than one command needs the same policy.
+
+## Risks
+
+- Changing human text may affect users scraping default output; mitigate by documenting JSON as the stable scripting interface and keeping quiet mode minimal.
+- A broad formatting pass can devolve into cosmetic churn; mitigate by prioritizing the identified rough surfaces and adding focused fixtures.
+
+## Validation
+
+- Golden or behavior tests cover mission show, issue show, issue list/ready/search, mission/plan/evidence lists, link list, dep list, workflow validate, and work/worktree status.
+- Tests or deterministic formatter units prove readable date rendering and raw key/value suffix removal.
+- Run cargo fmt -- --check, cargo nextest run or focused equivalent, git diff --check, atelier export --check, atelier lint, and atelier doctor.

@@ -5,11 +5,11 @@ data: "{\"captured_at\":\"2026-06-11T23:48:56.021470109+00:00\",\"kind\":\"test\
 relationships:
   blocks: []
   children: []
-  attachments:
+  attachments: []
+  relates:
   - kind: "issue"
     id: "atelier-cd1l"
-    role: "validates"
-  relates: []
+    type: "validates"
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

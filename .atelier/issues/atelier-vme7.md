@@ -11,7 +11,10 @@ relationships:
   - kind: "issue"
     id: "atelier-dydv"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-utql"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

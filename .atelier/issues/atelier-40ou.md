@@ -26,7 +26,10 @@ relationships:
     id: "atelier-uibk"
   - kind: "issue"
     id: "atelier-v4u7"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-v6pk"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

@@ -13,7 +13,10 @@ relationships:
   - kind: "issue"
     id: "atelier-auqt"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-py2d"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

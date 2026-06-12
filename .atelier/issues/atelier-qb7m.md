@@ -11,10 +11,7 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-fx9r"
-    type: "related"
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"

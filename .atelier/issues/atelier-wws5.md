@@ -15,7 +15,10 @@ relationships:
   - kind: "issue"
     id: "atelier-ymfl"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-4itj"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

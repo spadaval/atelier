@@ -20,7 +20,10 @@ relationships:
     id: "atelier-pgkd"
   - kind: "issue"
     id: "atelier-ru15"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-iimw"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

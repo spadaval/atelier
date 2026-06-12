@@ -9,7 +9,10 @@ priority: "P2"
 relationships:
   blocks: []
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-3aho"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

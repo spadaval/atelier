@@ -13,7 +13,10 @@ relationships:
   - kind: "issue"
     id: "atelier-pgkd"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-i3no"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

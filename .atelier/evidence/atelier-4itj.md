@@ -5,14 +5,14 @@ data: "{\"captured_at\":\"2026-06-12T21:49:54.353732264+00:00\",\"kind\":\"revie
 relationships:
   blocks: []
   children: []
-  attachments:
+  attachments: []
+  relates:
   - kind: "issue"
     id: "atelier-wws5"
-    role: "validates"
+    type: "validates"
   - kind: "mission"
     id: "atelier-tcmr"
-    role: "validates"
-  relates: []
+    type: "validates"
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

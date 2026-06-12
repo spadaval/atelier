@@ -15,7 +15,10 @@ relationships:
   - kind: "issue"
     id: "atelier-uibk"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-lboe"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

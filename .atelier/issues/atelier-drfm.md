@@ -12,7 +12,10 @@ relationships:
   - kind: "issue"
     id: "atelier-auqt"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-ltmu"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

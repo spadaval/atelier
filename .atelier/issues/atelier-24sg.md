@@ -18,7 +18,10 @@ relationships:
     id: "atelier-gye2"
   - kind: "issue"
     id: "atelier-unma"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-opbm"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

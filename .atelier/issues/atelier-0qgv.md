@@ -69,7 +69,10 @@ relationships:
   - kind: "issue"
     id: "atelier-zjua"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-uvdv"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

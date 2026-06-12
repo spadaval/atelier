@@ -22,7 +22,10 @@ relationships:
     id: "atelier-vme7"
   - kind: "issue"
     id: "atelier-xcy9"
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-k2mg"
+    role: "validates"
   relates: []
 schema: "atelier.issue"
 schema_version: 1

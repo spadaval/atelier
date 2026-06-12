@@ -13,13 +13,19 @@ relationships:
   - kind: "issue"
     id: "atelier-k9m8"
   children: []
-  attachments: []
+  attachments:
+  - kind: "evidence"
+    id: "atelier-63dm"
+    role: "validates"
+  - kind: "evidence"
+    id: "atelier-kklv"
+    role: "validates"
   relates:
   - kind: "issue"
-    id: "atelier-eprw"
+    id: "atelier-ncog"
     type: "related"
   - kind: "issue"
-    id: "atelier-ncog"
+    id: "atelier-qb7m"
     type: "related"
 schema: "atelier.issue"
 schema_version: 1

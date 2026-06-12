@@ -843,12 +843,16 @@ fn render_issue_sections(sections: &IssueSections) -> String {
 
 pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
     let spec = canonical_record_kind(&record.record.kind)?;
-    validate_domain_record(record, Path::new("<record>"), spec)?;
+    let mut record = record.clone();
+    if spec.kind == "mission" {
+        record.relationships = normalize_legacy_mission_relationships(record.relationships);
+    }
+    validate_domain_record(&record, Path::new("<record>"), spec)?;
     let mut relationships = record.relationships.clone();
     sort_relationships(&mut relationships);
 
     if spec.kind == "mission" {
-        return render_mission_record(record, &relationships, spec);
+        return render_mission_record(&record, &relationships, spec);
     }
 
     let mut output = String::new();
@@ -1288,7 +1292,7 @@ fn normalize_legacy_mission_relationships(mut relationships: Relationships) -> R
     let mut normalized_attachments = Vec::new();
     for attachment in relationships.attachments {
         match (attachment.kind.as_str(), attachment.role.as_str()) {
-            ("issue", "advances" | "blocked_by" | "validates") => {
+            ("issue", "advances" | "blocked_by" | "validates") | ("evidence", "validates") => {
                 relationships.relates.push(RelatesRelationship {
                     kind: attachment.kind,
                     id: attachment.id,
@@ -1525,11 +1529,7 @@ fn legacy_mission_sections(
     let data: Value = serde_json::from_str(data_json)
         .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
     Ok(MissionSections {
-        intent: body
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(title)
-            .to_string(),
+        intent: legacy_mission_intent(body, title),
         constraints: mission_list_section(value_string_array(&data, "constraints"), "- None."),
         risks: mission_list_section(value_string_array(&data, "risks"), "- None."),
         validation: mission_list_section(
@@ -1542,6 +1542,22 @@ fn legacy_mission_sections(
             .filter(|value| !value.trim().is_empty()),
         notes: None,
     })
+}
+
+fn legacy_mission_intent(body: Option<&str>, title: &str) -> String {
+    let Some(body) = body.map(str::trim).filter(|value| !value.is_empty()) else {
+        return title.to_string();
+    };
+    body.lines()
+        .map(|line| {
+            if let Some(rest) = line.strip_prefix("## ") {
+                format!("### {rest}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn mission_list_section(values: Vec<String>, empty: &str) -> String {
@@ -2528,6 +2544,28 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
+    fn mission_render_normalizes_legacy_evidence_attachments() {
+        let mut record = mission_record("atelier-miss");
+        record
+            .relationships
+            .attachments
+            .push(AttachmentRelationship {
+                kind: "evidence".to_string(),
+                id: "atelier-prof".to_string(),
+                role: "validates".to_string(),
+            });
+
+        let text = render_domain_record(&record).unwrap();
+
+        assert!(text.contains(
+            "  relates:\n  - kind: \"evidence\"\n    id: \"atelier-prof\"\n    type: \"validates\"\n"
+        ));
+        assert!(
+            !text.contains("kind: \"evidence\"\n    id: \"atelier-prof\"\n    role: \"validates\"")
+        );
+    }
+
+    #[test]
     fn legacy_mission_data_record_loads_into_typed_sections_and_relationships() {
         let spec = canonical_record_kind("mission").unwrap();
         let path = canonical_record_path(spec, "atelier-legd").unwrap();
@@ -2543,6 +2581,9 @@ relationships:
   - kind: "issue"
     id: "atelier-vlid"
     role: "validates"
+  - kind: "evidence"
+    id: "atelier-proof"
+    role: "validates"
   - kind: "plan"
     id: "atelier-plan"
     role: "planned_by"
@@ -2557,6 +2598,10 @@ updated_at: "2026-06-10T13:00:00+00:00"
 ---
 
 Legacy intent.
+
+## Problem
+
+Legacy missions used free-form body headings.
 "#;
         let parsed = parse_domain_record(text, &path, spec).unwrap();
         let rendered = render_domain_record(&parsed).unwrap();
@@ -2583,8 +2628,15 @@ Legacy intent.
                 && relation.id == "atelier-vlid"
                 && relation.relation_type == "validates"
         }));
+        assert!(parsed.relationships.relates.iter().any(|relation| {
+            relation.kind == "evidence"
+                && relation.id == "atelier-proof"
+                && relation.relation_type == "validates"
+        }));
         assert!(!rendered.contains("\ndata: "));
         assert!(rendered.contains("## Intent\n\nLegacy intent."));
+        assert!(rendered.contains("### Problem\n\nLegacy missions used free-form body headings."));
+        assert!(parse_domain_record(&rendered, &path, spec).is_ok());
     }
 
     #[test]
