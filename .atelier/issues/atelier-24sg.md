@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate markdown-first migration, recovery, and cache behavior"
-updated_at: "2026-06-11T20:10:01.031144865+00:00"
+updated_at: "2026-06-12T00:30:14.129098182+00:00"
 ---
 
 Prove the markdown-first system recovers from committed Markdown alone and fails safely when canonical records are invalid.
