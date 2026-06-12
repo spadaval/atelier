@@ -6621,6 +6621,123 @@ fn test_mission_closeout_uses_contract_audit() {
 }
 
 #[test]
+fn test_epic_closeout_requires_closed_children_and_parent_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let epic_body = "## Description\n\nEpic body.\n\n## Outcome\n\nEpic parent outcome is independently proven.\n\n## Evidence\n\n- Attached validation evidence proves the epic parent outcome.";
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Closeout epic",
+            "--issue-type",
+            "epic",
+            "--description",
+            epic_body,
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Closeout epic");
+    let epic_id = epic_id.as_str();
+
+    let child_body = "## Description\n\nChild body.\n\n## Outcome\n\nChild outcome is complete.\n\n## Evidence\n\n- Attached validation evidence proves the child outcome.";
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Open child",
+            "--parent",
+            epic_id,
+            "--description",
+            child_body,
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Open child");
+    let child_id = child_id.as_str();
+
+    attach_issue_pass_evidence(dir.path(), epic_id);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", epic_id, "--reason", "parent done"],
+    );
+    assert!(!success, "open child should block epic closeout");
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("child work is still open"));
+    assert!(stderr.contains(child_id));
+
+    attach_issue_pass_evidence(dir.path(), child_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", child_id, "--reason", "child done"],
+    );
+    assert!(success, "child close failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", epic_id, "--reason", "parent done"],
+    );
+    assert!(
+        success,
+        "epic close after child and parent proof failed: {stderr}"
+    );
+}
+
+#[test]
+fn test_closed_children_alone_do_not_close_epic_parent() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Unproven epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Unproven epic");
+    let epic_id = epic_id.as_str();
+
+    let child_body = "## Description\n\nChild body.\n\n## Outcome\n\nChild is done.\n\n## Evidence\n\n- Attached validation evidence proves the child.";
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Closed child",
+            "--parent",
+            epic_id,
+            "--description",
+            child_body,
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Closed child");
+    let child_id = child_id.as_str();
+    attach_issue_pass_evidence(dir.path(), child_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", child_id, "--reason", "child done"],
+    );
+    assert!(success, "child close failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", epic_id, "--reason", "parent done"],
+    );
+    assert!(
+        !success,
+        "missing parent evidence should block epic closeout"
+    );
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("no validating evidence is linked"));
+    assert!(stderr.contains("atelier evidence capture"));
+}
+
+#[test]
 fn test_workflow_validate_can_use_parsed_issue_sections() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

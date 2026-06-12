@@ -664,7 +664,38 @@ fn ensure_issue_closeout_ready(
             open_blockers.join(", ")
         );
     }
+    if record.issue.issue_type == "epic" {
+        let open_children = open_descendant_issue_ids(db, issue_id)?;
+        if !open_children.is_empty() {
+            bail!(
+                "Epic {} cannot be closed because child work is still open: {}",
+                format_issue_id(issue_id),
+                open_children.join(", ")
+            );
+        }
+    }
     ensure_issue_closeout_proof(db, state_dir, issue_id, record)
+}
+
+fn open_descendant_issue_ids(db: &Database, issue_id: &str) -> Result<Vec<String>> {
+    let mut open = Vec::new();
+    collect_open_descendant_issue_ids(db, issue_id, &mut open)?;
+    open.sort();
+    Ok(open)
+}
+
+fn collect_open_descendant_issue_ids(
+    db: &Database,
+    issue_id: &str,
+    open: &mut Vec<String>,
+) -> Result<()> {
+    for child in db.get_subissues(issue_id)? {
+        if child.status != "closed" {
+            open.push(format_issue_id(&child.id));
+        }
+        collect_open_descendant_issue_ids(db, &child.id, open)?;
+    }
+    Ok(())
 }
 
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
