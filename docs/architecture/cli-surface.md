@@ -26,6 +26,10 @@ in normal Agent Factory workflows:
 - `atelier lint`
 - `atelier doctor`
 
+`atelier init` is core tracker setup only. It creates `.atelier/` records,
+`.atelier/config.toml`, local runtime storage, and root ignore rules; it does
+not install editor or assistant hooks.
+
 There is no `atelier mission close` command in v1. Closing a mission uses
 `atelier mission update <id> --status closed`, which routes through the
 configured close transition validators. Reopening with
@@ -86,6 +90,13 @@ association, but there is no `session` command.
 Integration experiments must not define the product's default mental model.
 Removed experiments should return as explicit core proposals rather than hidden
 command groups.
+
+- `atelier integrations claude install` installs the optional Claude Code
+  integration. It writes `.claude/hooks`, `.claude/mcp`, `.claude/settings.json`,
+  merges Atelier's MCP server into `.mcp.json`, and writes
+  `.atelier/hook-config.json`. It reads `.atelier/config.toml` to confirm the
+  current project layout and does not copy the bundled `resources/atelier/rules`
+  tree into each repository.
 
 Generic replacements should use domain language. `atelier issue impact <id>` is
 the visible relation-impact command. Impact follows hierarchy plus the

@@ -15,8 +15,9 @@ Atelier currently starts from the Chainlink Rust CLI:
   canonical export/rebuild, import-beads, lint, and doctor.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
-- `resources/atelier/`: bundled rules, hook configuration, and integration
-  assets renamed for Atelier from the inherited Chainlink defaults.
+- `resources/atelier/` and `resources/claude/`: bundled rule and integration
+  assets. Core `atelier init` does not copy these into repositories; optional
+  integration commands install the relevant assets explicitly.
 - `tests/`: CLI integration and smoke coverage.
 - `fuzz/`: libFuzzer targets for CLI output, create, dependencies, import,
   search, and state-machine behavior.

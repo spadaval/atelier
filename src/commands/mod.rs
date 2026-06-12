@@ -8,6 +8,7 @@ pub mod evidence;
 pub mod export;
 pub mod import;
 pub mod init;
+pub mod integrations;
 pub mod label;
 pub mod migrate;
 pub mod mission;

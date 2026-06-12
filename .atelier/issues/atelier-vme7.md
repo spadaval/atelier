@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Move Claude hooks into an explicit optional integration"
-updated_at: "2026-06-11T18:55:07.069485604+00:00"
+updated_at: "2026-06-12T00:12:24.022523831+00:00"
 ---
 
 Separate Claude hook installation from core Atelier tracker initialization.

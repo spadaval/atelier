@@ -380,6 +380,36 @@ fn test_init_twice_is_idempotent() {
 }
 
 #[test]
+fn test_claude_integration_install_is_explicit() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    assert!(!dir.path().join(".claude").exists());
+    assert!(!dir.path().join(".mcp.json").exists());
+    assert!(!dir.path().join(".atelier").join("rules").exists());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["integrations", "claude", "install"]);
+    assert!(success, "claude integration install failed: {stderr}");
+    assert!(stdout.contains("Claude integration installed."));
+
+    assert!(dir.path().join(".claude/settings.json").exists());
+    assert!(dir.path().join(".claude/hooks/prompt-guard.py").exists());
+    assert!(dir.path().join(".claude/hooks/post-edit-check.py").exists());
+    assert!(dir.path().join(".claude/hooks/session-start.py").exists());
+    assert!(dir.path().join(".claude/hooks/pre-web-check.py").exists());
+    assert!(dir.path().join(".claude/hooks/work-check.py").exists());
+    assert!(dir.path().join(".claude/hooks/atelier_config.py").exists());
+    assert!(dir.path().join(".claude/mcp/safe-fetch-server.py").exists());
+    assert!(dir.path().join(".atelier/hook-config.json").exists());
+    assert!(!dir.path().join(".atelier/rules").exists());
+
+    let mcp: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join(".mcp.json")).unwrap())
+            .unwrap();
+    assert!(mcp["mcpServers"]["atelier-safe-fetch"].is_object());
+}
+
+#[test]
 fn test_doctor_human_separates_projection_and_runtime_state_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
