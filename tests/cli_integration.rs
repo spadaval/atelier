@@ -7638,7 +7638,7 @@ hooks:
 }
 
 #[test]
-fn test_work_start_reports_shared_section_diagnostic_without_blocking() {
+fn test_start_refuses_shared_section_diagnostic() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -7659,8 +7659,9 @@ fn test_work_start_reports_shared_section_diagnostic_without_blocking() {
     std::fs::write(&issue_path, malformed).unwrap();
     commit_all(dir.path(), "malformed issue section");
 
-    let (lint_success, _lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    let (lint_success, lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(!lint_success, "lint should report malformed issue sections");
+    let lint_transcript = format!("{lint_stdout}\n{lint_stderr}");
     for needle in [
         "Missing required issue body section 'Outcome'",
         &issue_id,
@@ -7668,27 +7669,27 @@ fn test_work_start_reports_shared_section_diagnostic_without_blocking() {
         ".atelier/issues/",
     ] {
         assert!(
-            lint_stderr.contains(needle),
-            "lint diagnostic missing {needle:?}: {lint_stderr}"
+            lint_transcript.contains(needle),
+            "lint diagnostic missing {needle:?}: {lint_transcript}"
         );
     }
 
     let (start_success, start_stdout, start_stderr) =
-        run_atelier(dir.path(), &["work", "start", &issue_id]);
+        run_atelier(dir.path(), &["start", &issue_id]);
     assert!(
-        start_success,
-        "work start should warn but not block on section diagnostics: {start_stderr}"
+        !start_success,
+        "start should refuse malformed issue sections"
     );
-    assert!(start_stdout.contains("Started work on"));
+    let start_transcript = format!("{start_stdout}\n{start_stderr}");
     for needle in [
-        "Warning: Missing required issue body section 'Outcome'",
+        "Missing required issue body section 'Outcome'",
         &issue_id,
         "section Outcome",
         ".atelier/issues/",
     ] {
         assert!(
-            start_stdout.contains(needle),
-            "work start diagnostic missing {needle:?}: {start_stdout}"
+            start_transcript.contains(needle),
+            "start diagnostic missing {needle:?}: {start_transcript}"
         );
     }
 }

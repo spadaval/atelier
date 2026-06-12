@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate sectioned issue workflow end to end"
-updated_at: "2026-06-12T21:21:01.849503220+00:00"
+updated_at: "2026-06-12T21:32:57.668040024+00:00"
 ---
 
 ## Description
