@@ -787,13 +787,21 @@ mod tests {
     #[test]
     fn rebuild_round_trips_canonical_domain_records() {
         let (db, dir) = setup_test_db();
+        let mission_sections = record_store::mission_sections_from_inputs(
+            "Mission",
+            Some("Mission body"),
+            vec!["keep contract".to_string()],
+            Vec::new(),
+            Vec::new(),
+        );
+        let mission_body = record_store::render_mission_sections(&mission_sections);
         let mission_id = db
             .create_record(
                 "mission",
                 "Mission",
                 "ready",
-                Some("Mission body"),
-                r#"{"constraints":["keep contract"],"risks":[],"validation":[]}"#,
+                Some(&mission_body),
+                record_store::MISSION_EMPTY_DATA_JSON,
             )
             .unwrap();
         let plan_id = db
