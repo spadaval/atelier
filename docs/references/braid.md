@@ -28,7 +28,7 @@ on 2026-06-08.
 - Braid separates workflow storage modes from auto-sync policy:
   issues-with-code, a dedicated issues branch, and an external issues repo are
   distinct choices. Atelier should preserve that explicitness when designing
-  `.atelier-state/` and worktree behavior.
+  `.atelier/` and worktree behavior.
 - `design` issues are a useful precedent for human-in-the-loop decisions.
   Atelier's decision beads and ADR flow should keep this spirit, but with
   richer links to decisions, evidence, and workflow validation.
@@ -63,7 +63,7 @@ on 2026-06-08.
 - `atelier-nxxa`: decide the Atelier CLI binary and alias naming before
   adopting Braid-inspired command names.
 - `atelier-xrzs`: define how Braid-like Markdown records map into
-  `.atelier-state/`.
+  `.atelier/`.
 - `atelier-eqmn` and `atelier-x88e`: adapt Braid's agent/worktree flow for
   Atelier's `work start`, `work finish`, and worktree commands.
 - `atelier-v72a`: decide how Braid's design/meta ideas map to first-class
@@ -73,4 +73,4 @@ on 2026-06-08.
   configurable workflow behavior.
 - Future ADR: storage mode policy for issues-with-code, dedicated state branch,
   or external state repo if Atelier supports more than the default
-  `.atelier-state/` layout.
+  `.atelier/` layout.

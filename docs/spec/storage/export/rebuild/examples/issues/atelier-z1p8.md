@@ -28,5 +28,5 @@ title: "Define canonical export layout"
 updated_at: "2026-06-08T00:00:00Z"
 ---
 
-Define the canonical `.atelier-state` layout for deterministic export and
+Define the canonical `.atelier` layout for deterministic export and
 SQLite rebuild.

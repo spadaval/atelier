@@ -496,8 +496,7 @@ machine-readable source of truth, not command-result JSON.
   project root. Canonical Markdown records and tracked project config live under
   `.atelier/`; `.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/`
   contain ignored local projection/runtime/cache files such as SQLite state,
-  identity, locks, diagnostics, and UI caches. `.atelier-state/` is a
-  read/migrate compatibility source only.
+  identity, locks, diagnostics, and UI caches.
 - Should sessions be exported, partially exported, or treated as local runtime
   metadata? Command diagnostics are resolved separately as local-only telemetry
   and do not answer this broader run/session policy.

@@ -9,8 +9,8 @@ Accepted.
 Atelier is a local-first tracker whose durable project state must be legible,
 mergeable, and recoverable through Git. The previous milestone established
 Markdown records and removed aggregate `manifest.json` and `graph.json` files
-as canonical state. The single-tree follow-up moves the target committed root to
-`.atelier/` while treating `.atelier-state/` as compatibility state.
+as canonical state. The single-tree follow-up established `.atelier/` as the
+committed canonical root.
 
 The inherited Chainlink implementation still centers many commands on SQLite
 rows and then uses export to render Markdown. That path is useful for migration,

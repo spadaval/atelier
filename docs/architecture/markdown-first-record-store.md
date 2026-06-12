@@ -11,9 +11,6 @@ local-only runtime state.
 Atelier's durable project state lives in tracked Markdown record files under
 `.atelier/`. SQLite remains valuable, but as a rebuildable projection and
 runtime store rather than a second canonical copy of the same facts.
-`.atelier-state/` is compatibility state for repositories created before the
-single-tree migration; it may be read and migrated, but it is not the
-post-migration write target.
 
 The target architecture has three explicit components:
 
@@ -54,7 +51,7 @@ records are recognized as a future kind but do not yet have a canonical
 `.atelier/` directory.
 
 The first issue-focused `RecordStore` slice was implemented as a testable file
-API for the legacy `.atelier-state/issues/*.md` layout. The single-tree
+API for the legacy `.atelier/issues/*.md` layout. The single-tree
 migration keeps the same responsibilities while moving the target path to
 `.atelier/issues/*.md`: issue record discovery, canonical path validation,
 schema and front matter parsing, deterministic rendering, ID collision checks

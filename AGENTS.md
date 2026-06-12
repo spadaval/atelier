@@ -18,8 +18,6 @@
   durable tracker state. Treat `.atelier/state.db`, `.atelier/runtime/`,
   identity, locks, diagnostics, and `.atelier/cache/` as ignored local
   runtime/cache state that can be rebuilt or recreated.
-- `.atelier-state/` is compatibility state for read/migrate work only; do not
-  introduce new normal writes there.
 - Beads is no longer repository tracking state. Do not use the predecessor CLI
   for planning, execution, handoff, or recovery in this repository.
 
@@ -33,9 +31,11 @@
 
 ## Common Commands
 
-The installed `atelier` binary is often out of date during local development.
-Prefer `cargo run -- ...` when checking current code, or refresh the installed
-binary with `cargo install --path .`.
+Prefer the installed `atelier` command for normal tracker work. Use
+`target/debug/atelier` only when testing local CLI changes that have not been
+installed yet. Recompile first when that binary is missing or stale relative to
+Rust sources/manifests; use `cargo run -- ...` only when a one-off rebuild plus
+execution is specifically useful.
 
 ```bash
 cargo fmt -- --check

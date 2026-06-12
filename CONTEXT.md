@@ -57,9 +57,6 @@
   successful durable mutations should write record files through RecordStore,
   then refresh ProjectionIndex. SQLite is not the destination source of truth
   for canonical records.
-- `.atelier-state/` is compatibility state for repositories created before the
-  single-tree migration. Migration code may discover, read, and import it, but
-  normal durable writes target `.atelier/` only.
 - Dependencies should represent actual sequencing. Canonical state groups
   record relationships under `relationships`: use `blocks` for readiness,
   `children` for hierarchy and mission work, `attachments` for plans/evidence,

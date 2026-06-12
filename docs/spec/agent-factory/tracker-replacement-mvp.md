@@ -22,7 +22,7 @@ binding. Beads is retained only as an archived recovery source.
 The cutover must prove:
 
 - Current Beads records are imported into Atelier or explicitly waived.
-- `.atelier-state/` is current, deterministic, and rebuildable from a clean
+- `.atelier/` is current, deterministic, and rebuildable from a clean
   checkout-like state.
 - Agent-facing text output is usable without JSON parsing.
 - Agent-facing workflows use focused text output plus committed tracker state
@@ -38,7 +38,7 @@ The cutover must prove:
 Earlier cutover work required a command-result `--json` envelope for Agent
 Factory parity. That contract is retired. Atelier command results are
 human-first, quiet output remains intentionally terse, and durable
-machine-readable state lives in `.atelier-state/`, rebuildable projection files,
+machine-readable state lives in `.atelier/`, rebuildable projection files,
 authored JSON inputs, and diagnostic logging surfaces such as
 `--log-format json`.
 
@@ -46,7 +46,7 @@ Scripts and agents migrating away from command-result JSON should use these
 supported replacements:
 
 - quiet acknowledgements for simple composition and exit-status checks;
-- canonical `.atelier-state/` Markdown records for durable state;
+- canonical `.atelier/` Markdown records for durable state;
 - rebuildable local projections refreshed by `atelier rebuild`;
 - freshness and health commands such as `atelier export --check`,
   `atelier lint`, and `atelier doctor`;
@@ -62,7 +62,7 @@ versioned machine-readable schema.
 Local command diagnostics are also not a replacement for the retired
 command-result JSON envelope. They may record redacted command families,
 durations, exit status, and phase timings for local performance analysis, but
-they must stay outside `.atelier-state/` and must not become the Agent Factory
+they must stay outside `.atelier/` and must not become the Agent Factory
 automation contract.
 
 Historical error codes from the replacement MVP remain useful vocabulary for
@@ -74,7 +74,7 @@ human diagnostics and workflow validators:
 | `invalid_input` | Flags, status values, issue types, priorities, labels, or IDs are invalid. |
 | `invalid_dependency` | A dependency would reference a missing record, duplicate an edge, or create a cycle where cycles are forbidden. |
 | `blocked` | A command cannot proceed because open blockers exist. |
-| `stale_export` | SQLite, derived projections, and `.atelier-state/` differ during `export --check` or a cutover check. |
+| `stale_export` | SQLite, derived projections, and `.atelier/` differ during `export --check` or a cutover check. |
 | `schema_mismatch` | Rebuild/import encountered unsupported projection schema or version. |
 | `dirty_tracker` | Tracker state has unexported or unpushed changes that must be resolved before handoff. |
 | `storage_error` | SQLite, file IO, or manifest validation failed. |
@@ -117,13 +117,13 @@ JSON result from the command itself.
 
 | Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Machine-readable replacement | Required | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier-state/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
+| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
 | Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Quiet acknowledgement with changed ID/fields; canonical issue record records durable owner/assignee state. | Yes | `atelier-z1p.3` |
-| Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier-state/issues/<id>.activity/` or the canonical note field, depending on the notes model in use. | Yes | `atelier-z1p.3` |
+| Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier/issues/<id>.activity/` or the canonical note field, depending on the notes model in use. | Yes | `atelier-z1p.3` |
 | Update title/body/priority/status/labels/parent | `bd update <id> --title ... --description ... --priority ... --status ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags | Print changed fields and the ID. Invalid values are rejected with actionable text. | Quiet acknowledgement and canonical issue record; invalid values fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
 | Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Quiet acknowledgement and canonical close metadata; `atelier lint` or workflow validation owns machine-checkable closure defects. | Yes | `atelier-z1p.3` |
 | Reopen accidentally closed work | `bd reopen <id>` | `atelier issue reopen <id>` | Print reopened ID and previous close reason. | Quiet acknowledgement and canonical issue record with reopened state. | Yes | `atelier-z1p.3` |
-| Find ready executable work | `bd ready` | `atelier issue list --ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier-state/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
+| Find ready executable work | `bd ready` | `atelier issue list --ready` | List open issues with no open blockers, sorted by priority then updated age or documented deterministic tie-breaker. Show blockers count when no work is ready. | Focused queue command backed by ProjectionIndex rebuilt from `.atelier/`; scripts may use IDs from quiet output for the next drill-down command. | Yes | `atelier-z1p.3` |
 | List/filter work | `bd list --status=open` | `atelier issue list --status open` | Print compact rows with ID, status, priority, type, title, and assignee. | Focused queue command backed by ProjectionIndex; durable fields remain in canonical records. | Yes | `atelier-z1p.3` |
 | Search work by text | `bd search "<topic>"` | `atelier issue search "<topic>"` | Print ranked matches with ID, title, status, and short excerpt when available. | Focused search command backed by ProjectionIndex; scripts should use returned IDs for follow-up drill-down instead of parsing excerpts. | Yes | `atelier-z1p.3` |
 | Create normal task/feature/bug/validation/closeout beads | `bd create ...` | `atelier issue create ...` | Print new ID and title. All required fields must be accepted by flags or stdin, not an editor. | Quiet acknowledgement with new ID; canonical record is the durable created state. | Yes | `atelier-z1p.3` |
@@ -132,11 +132,11 @@ JSON result from the command itself.
 | List blocked work | `bd blocked` | `atelier issue blocked` | Print open issues grouped or annotated by open blockers. | Focused queue command backed by ProjectionIndex; use `issue show` for a selected record's durable details. | Yes | `atelier-z1p.3` |
 | Validate tracker records | `bd lint` and `bd lint <id>` | `atelier lint` and `atelier lint <id>` or documented equivalent | Print pass/fail summary and each actionable defect with record ID. | Supported health/check command. Exit status and finding text are the stable automation boundary unless a future diagnostic format is documented. | Yes | `atelier-z1p.3` |
 | Check tracker installation/health | `bd doctor` / `bd ping` | `atelier doctor` or `atelier status --check` | Print runtime DB path, state path, schema version, export freshness, and rebuild readiness. | Supported health/check command. Exit status and named paths/state are the stable automation boundary unless a future diagnostic format is documented. | Yes | `atelier-z1p.3` |
-| Export durable state | `bd export -o .beads/issues.manual.jsonl` | `atelier export` and `atelier export --output .atelier-state` | Print records written, output path, and whether derived files were regenerated. | Canonical `.atelier-state/` records and derived projections; `export --check` verifies freshness. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
-| Check export freshness before handoff | No exact Beads equivalent; Agent Factory uses backup plus Dolt status | `atelier export --check` | Print whether `.atelier-state/` is current. Stale files name changed, missing, or unexpected paths. | Supported freshness gate. Exit status, stale path names, and canonical records are the automation boundary. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
-| Rebuild runtime state after checkout | `bd bootstrap` / Dolt sync | `atelier rebuild` | Print source state dir, runtime DB path, record counts, and schema validation result. | Rebuildable ProjectionIndex and RuntimeState generated from `.atelier-state/`; the rebuilt SQLite database is local runtime state. | Yes | `atelier-fq9y` closed; cutover proof in `atelier-z1p.4` |
-| Import current Beads data | `bd export` then `bd import` | `atelier import-beads .beads/issues.manual.jsonl` or `atelier import --format beads-jsonl ...` | Print imported, skipped, lossy, and failed counts. Preserve or report every source ID. | One-way import input and canonical `.atelier-state/` output; import reports are migration evidence, not an ongoing command-result API. | Yes | `atelier-z1p.2` |
-| Push/pull tracker state | `bd dolt pull`, `bd dolt push`, `bd dolt status` | Git plus `.atelier-state/`: `git status`, `git pull`, `atelier rebuild`, `atelier export --check`, `git push` | Agent docs must state that committed `.atelier-state/` is the durable sync surface and SQLite is local runtime state. | Git moves committed canonical records; `atelier rebuild` recreates local projections; health/check commands detect dirty projection state. | Yes | `atelier-z1p.4` |
+| Export durable state | `bd export -o .beads/issues.manual.jsonl` | `atelier export` and `atelier export --output .atelier` | Print records written, output path, and whether derived files were regenerated. | Canonical `.atelier/` records and derived projections; `export --check` verifies freshness. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
+| Check export freshness before handoff | No exact Beads equivalent; Agent Factory uses backup plus Dolt status | `atelier export --check` | Print whether `.atelier/` is current. Stale files name changed, missing, or unexpected paths. | Supported freshness gate. Exit status, stale path names, and canonical records are the automation boundary. | Yes | `atelier-ywow` closed; parity polish in `atelier-z1p.3` |
+| Rebuild runtime state after checkout | `bd bootstrap` / Dolt sync | `atelier rebuild` | Print source state dir, runtime DB path, record counts, and schema validation result. | Rebuildable ProjectionIndex and RuntimeState generated from `.atelier/`; the rebuilt SQLite database is local runtime state. | Yes | `atelier-fq9y` closed; cutover proof in `atelier-z1p.4` |
+| Import current Beads data | `bd export` then `bd import` | `atelier import-beads .beads/issues.manual.jsonl` or `atelier import --format beads-jsonl ...` | Print imported, skipped, lossy, and failed counts. Preserve or report every source ID. | One-way import input and canonical `.atelier/` output; import reports are migration evidence, not an ongoing command-result API. | Yes | `atelier-z1p.2` |
+| Push/pull tracker state | `bd dolt pull`, `bd dolt push`, `bd dolt status` | Git plus `.atelier/`: `git status`, `git pull`, `atelier rebuild`, `atelier export --check`, `git push` | Agent docs must state that committed `.atelier/` is the durable sync surface and SQLite is local runtime state. | Git moves committed canonical records; `atelier rebuild` recreates local projections; health/check commands detect dirty projection state. | Yes | `atelier-z1p.4` |
 | Preserve manual backup before cutover | `.beads/issues.manual.jsonl` | Archived Beads export plus Atelier import report | Print backup path and source record count. | Archived migration artifact and import evidence only. It is not part of normal Atelier automation after cutover. | Yes | `atelier-z1p.2`, `atelier-z1p.4` |
 | Record comments separately from notes | `bd comment` / `bd comments` | `atelier issue comment` / future notes model | Text must show chronological comments if used by Agent Factory. | Canonical activity sidecars or future notes records. A command-result JSON comment envelope is not required for the first cutover. | No for first cutover if Beads notes are preserved | Later feature bead |
 | Worktree creation and assignment | `bd worktree` | Future `atelier worktree` | Not required for first cutover; agents can use normal Git worktrees. | Not required. | No | Deferred |
@@ -161,7 +161,7 @@ commands:
 4. Closeout: a closeout worker must be able to classify parent criteria in
    durable notes and close the parent or child without using Beads.
 5. Recovery: from a clean checkout-like state, `atelier rebuild` must recreate
-   local SQLite state from `.atelier-state/`, after which show/list/ready/lint
+   local SQLite state from `.atelier/`, after which show/list/ready/lint
    commands behave the same as before rebuild.
 
 ## Historical Command Mappings
@@ -190,7 +190,7 @@ After identity cutover, every command in this mapping uses the single
 project-scoped random Atelier ID such as `atelier-z1p8`. Numeric IDs such as
 `#1` or `1`, typed-prefix IDs such as `ISS-0001`, and imported predecessor IDs
 are not maintained as alternate command references. Required commands use
-focused human output; committed `.atelier-state/` records and projections are
+focused human output; committed `.atelier/` records and projections are
 the machine-readable state boundary.
 
 ## Cutover Status
@@ -209,7 +209,7 @@ Already closed prerequisites that remain part of the replacement foundation:
 | Foundation | Bead | Status |
 | --- | --- | --- |
 | Deterministic canonical export and `export --check`. | `atelier-ywow` | Closed. |
-| SQLite rebuild from `.atelier-state/`. | `atelier-fq9y` | Closed. |
+| SQLite rebuild from `.atelier/`. | `atelier-fq9y` | Closed. |
 | Milestone 2 storage closeout. | `atelier-pefi` | Closed. |
 
 ## Deferred Non-Blockers

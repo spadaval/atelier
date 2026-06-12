@@ -20,8 +20,8 @@ Date: 2026-06-08
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Atelier is the configured tracker in `AGENTFACTORY.md` for `/root/atelier`. | pass | `AGENTFACTORY.md` names Atelier, `.atelier-state/`, `.atelier/state.db`, and Atelier normal commands. |
-| Current Beads issues, dependencies, statuses, labels, and notes are migrated or explicitly waived. | pass | `.atelier-state/` contains the imported records as neutral Atelier issues; Beads source aliases and source sections were removed after validation. |
+| Atelier is the configured tracker in `AGENTFACTORY.md` for `/root/atelier`. | pass | `AGENTFACTORY.md` names Atelier, `.atelier/`, `.atelier/state.db`, and Atelier normal commands. |
+| Current Beads issues, dependencies, statuses, labels, and notes are migrated or explicitly waived. | pass | `.atelier/` contains the imported records as neutral Atelier issues; Beads source aliases and source sections were removed after validation. |
 | Agent Factory skill docs no longer assume Beads as the only tracker. | pass | `SKILL.md` routes through the repository-bound tracker and `AGENTFACTORY.md` names only Atelier commands for normal work. |
 | A real planning, update, and closeout workflow is executed through Atelier. | pass | `agent-factory-atelier-validation.md` records issue create, ready, show, update, dependency add/remove, notes, close, lint, export, rebuild, and sync proof. |
 | Beads data is kept after import. | superseded | The retention policy was retired. The old archive was purged after the canonical Atelier state proved self-sufficient. |

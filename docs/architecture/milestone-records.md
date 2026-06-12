@@ -89,6 +89,6 @@ validation.
 
 Milestones are first-class checkpoint records, not an inherited issue lifecycle
 subsystem. They are created today through `atelier plan apply` bulk-plan input
-and rendered under `.atelier/milestones/` after the single-tree migration. A
-future dedicated checkpoint command must target this record contract directly
-rather than restoring the deleted legacy `milestone` command group.
+and rendered under `.atelier/milestones/`. A future dedicated checkpoint command
+must target this record contract directly rather than restoring the deleted
+legacy `milestone` command group.

@@ -5,18 +5,13 @@ Markdown records under `.atelier/` are the committed rebuild source for the
 local SQLite projection at `.atelier/state.db`; runtime and cache files remain
 ignored local state.
 
-During the migration window, existing repositories may still contain
-`.atelier-state/`. Commands may discover, read, validate, and migrate that tree,
-but post-migration durable writes target `.atelier/` only.
-
 ## Goals
 
 - The export is deterministic for the same logical state.
 - The export is sufficient to rebuild SQLite for all canonical records.
 - Every record carries schema and version metadata.
-- `export --check` can compare compatibility state with the committed
-  projection during migration, and target lint/rebuild checks validate
-  `.atelier/` Markdown directly.
+- `export --check`, `lint`, and `rebuild` validate `.atelier/` Markdown
+  directly.
 - Git merges happen through tracked `.atelier/` record files, not through
   SQLite.
 
@@ -56,9 +51,9 @@ tracked config surface.
 
 `.atelier/config.toml` is tracked project state. It identifies the Atelier
 project config schema, project slug, canonical state root, local runtime
-directory, runtime SQLite path, cache directory, and compatibility read/migrate
-state root. Runtime and cache paths named by the config remain local-only and
-must stay ignored; the config records where they live, not their contents.
+directory, runtime SQLite path, and cache directory. Runtime and cache paths
+named by the config remain local-only and must stay ignored; the config records
+where they live, not their contents.
 
 ## Schema Identity
 
@@ -411,11 +406,8 @@ defines its durable layout.
 
 ## Mutating Command Rollout
 
-Milestone 2 introduced `atelier export` as the deterministic writer for
-`.atelier-state/` and `atelier export --check` as the durable-state freshness
-check. The single-tree migration narrows that behavior to compatibility and
-repair: post-migration writes target `.atelier/`, and `.atelier-state/` is
-read/migrate only.
+`atelier export` remains the deterministic repair/check surface for canonical
+records, and normal durable writes target `.atelier/` directly.
 
 `atelier rebuild` recreates `.atelier/state.db` from tracked
 `.atelier/` canonical records and may create ignored runtime/cache directories

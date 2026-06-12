@@ -25,8 +25,6 @@ concrete files, commands, and product-specific skills.
   `.atelier/`
 - Runtime tracker database: local `.atelier/state.db`, rebuilt from
   committed `.atelier/` records
-- Compatibility state: `.atelier-state/` may be discovered, read, and migrated
-  by explicit migration work only. Do not introduce new normal writes there.
 - Missions are durable active-focus records for product outcomes and
   coordinated workstreams. Link executable issues to missions and select worker
   issues from the active mission or epic graph. Keep mission status in sync with
@@ -39,6 +37,11 @@ concrete files, commands, and product-specific skills.
   before starting a mission. Mission-linked decision issues are only for local
   execution choices that do not change the mission objective, safety posture,
   public contract, or validation policy.
+- Prefer the installed `atelier` command for normal tracker work. Use
+  `target/debug/atelier` only when testing local CLI changes that have not been
+  installed yet, and rebuild it first when it is missing or stale. Use
+  `cargo run -- ...` only when a one-off rebuild plus execution is specifically
+  useful.
 - Mission commands:
   - `atelier mission list`
   - `atelier mission show <id>`
@@ -66,11 +69,10 @@ concrete files, commands, and product-specific skills.
 - Human-first workflow: do not use command-result `--json` as the Agent Factory
   automation contract. Inspect records with focused human output, use quiet
   output only for commands that naturally acknowledge one ID/count/status, and
-  run explicit drill-down commands such as `atelier issue show <id>`,
-  `atelier mission show <id>`, `atelier mission status <id>`,
-  `atelier issue list --ready`,
-  `atelier evidence show <id>`,
-  `atelier workflow validate issue <id>`,
+  run explicit drill-down commands such as
+  `atelier issue show <id>`, `atelier mission show <id>`,
+  `atelier mission status <id>`, `atelier issue list --ready`,
+  `atelier evidence show <id>`, `atelier workflow validate issue <id>`,
   `atelier workflow validate mission <id>`, `atelier export --check`,
   `atelier lint`, and `atelier doctor` when more state is needed.
 - Sync and state commands:
