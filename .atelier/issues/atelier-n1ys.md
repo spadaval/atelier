@@ -3,6 +3,7 @@ created_at: "2026-06-12T04:51:52.623285724+00:00"
 id: "atelier-n1ys"
 issue_type: "validation"
 labels:
+- "assignee:root"
 - "markdown"
 - "validation"
 priority: "P1"
@@ -17,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Validate sectioned issue workflow end to end"
-updated_at: "2026-06-12T04:51:52.623285724+00:00"
+updated_at: "2026-06-12T21:21:01.849503220+00:00"
 ---
 
 ## Description
