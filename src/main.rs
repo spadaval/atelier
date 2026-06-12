@@ -320,6 +320,9 @@ enum IssueCommands {
         /// Show only ready work
         #[arg(long)]
         ready: bool,
+        /// Show only blocked work
+        #[arg(long)]
+        blocked: bool,
     },
 
     /// Search issues by text
@@ -404,6 +407,7 @@ enum IssueCommands {
     },
 
     /// Reopen a closed issue
+    #[command(hide = true)]
     Reopen {
         /// Issue ID
         id: String,
@@ -1090,16 +1094,27 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             priority,
             ready,
+            blocked,
         } => {
             let db = projection_query_db()?;
-            commands::agent_factory::list(
-                &db,
-                Some(&status),
-                label.as_deref(),
-                priority.as_deref(),
-                ready,
-                quiet,
-            )
+            if blocked {
+                if ready {
+                    bail!("--blocked cannot be combined with --ready");
+                }
+                if status != "open" || label.is_some() || priority.is_some() {
+                    bail!("--blocked cannot be combined with --status, --label, or --priority");
+                }
+                commands::deps::list_blocked(&db)
+            } else {
+                commands::agent_factory::list(
+                    &db,
+                    Some(&status),
+                    label.as_deref(),
+                    priority.as_deref(),
+                    ready,
+                    quiet,
+                )
+            }
         }
 
         IssueCommands::Search { query } => {

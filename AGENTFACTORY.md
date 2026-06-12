@@ -55,6 +55,7 @@ This file binds Agent Factory to this repository.
   - `atelier evidence attach <evidence-id> issue <issue-id>`
 - Issues:
   - `atelier issue list --ready`
+  - `atelier issue list --blocked`
   - `atelier issue list --status open`
   - `atelier issue show <id>`
   - `atelier issue transition <id> --options`

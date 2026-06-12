@@ -962,6 +962,44 @@ fn test_root_start_finish_and_issue_transition_surface() {
 }
 
 #[test]
+fn test_issue_help_uses_reduced_lifecycle_surface() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "--help"]);
+    assert!(success, "issue help failed: {stderr}");
+    for command in ["create", "list", "show", "transition", "update", "close"] {
+        assert!(
+            stdout
+                .lines()
+                .any(|line| line.trim_start().starts_with(command)),
+            "missing reduced issue command {command}:\n{stdout}"
+        );
+    }
+    for hidden in [
+        "quick",
+        "subissue",
+        "reopen",
+        "label",
+        "unlabel",
+        "blocked",
+        "block",
+        "unblock",
+        "close-all",
+        "delete",
+        "next",
+        "tested",
+    ] {
+        assert!(
+            !stdout
+                .lines()
+                .any(|line| line.trim_start().starts_with(hidden)),
+            "folded or moved command {hidden} is still visible:\n{stdout}"
+        );
+    }
+}
+
+#[test]
 fn test_removed_aliases_fail_as_unknown_commands() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1567,7 +1605,8 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(stdout.contains("Closed:"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Done enough"));
-    assert!(stdout.contains("atelier issue reopen"));
+    assert!(stdout.contains("atelier issue update"));
+    assert!(stdout.contains("--status open"));
 }
 
 #[test]
@@ -1801,6 +1840,39 @@ fn test_update_issue_priority() {
     assert!(show_out.contains("critical"));
 }
 
+#[test]
+fn test_update_issue_remove_label_replaces_unlabel_helper() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Label lifecycle", "--label", "keep-me"],
+    );
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            "1",
+            "--label",
+            "remove-me",
+            "--remove-label",
+            "keep-me",
+        ],
+    );
+    assert!(success, "update label replacement failed: {stderr}");
+    assert!(stdout.contains("Updated issue"));
+
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let labels_line = show_out
+        .lines()
+        .find(|line| line.starts_with("Labels:"))
+        .unwrap_or("");
+    assert!(labels_line.contains("remove-me"), "{show_out}");
+    assert!(!labels_line.contains("keep-me"), "{show_out}");
+}
+
 // ==================== Issue Close/Reopen Tests ====================
 
 #[test]
@@ -1853,10 +1925,11 @@ fn test_reopen_issue() {
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
     run_atelier(dir.path(), &["issue", "close", "1"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "reopen", "1"]);
+    let (success, stdout, _) =
+        run_atelier(dir.path(), &["issue", "update", "1", "--status", "open"]);
 
     assert!(success);
-    assert!(stdout.contains("Reopened") || stdout.contains("reopen"));
+    assert!(stdout.contains("Updated issue"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("open"));
@@ -2317,6 +2390,24 @@ fn test_block_issue() {
 
     let (_, blocked_out, _) = run_atelier(dir.path(), &["issue", "blocked"]);
     assert!(blocked_out.contains("Blocked issue"));
+}
+
+#[test]
+fn test_issue_list_blocked_replaces_blocked_helper() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Blocked issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
+    let blocked_id = issue_ref(dir.path(), 1);
+    let blocker_id = issue_ref(dir.path(), 2);
+    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &blocked_id, &blocker_id]);
+    assert!(success, "dep add failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
+    assert!(success, "issue list --blocked failed: {stderr}");
+    assert!(stdout.contains("Blocked issue"));
+    assert!(stdout.contains(&blocker_id));
 }
 
 #[test]
@@ -2975,13 +3066,13 @@ fn test_unrelate_issues() {
 }
 
 #[test]
-fn test_issue_help_shows_impact_and_hides_legacy_assumption_commands() {
+fn test_issue_help_hides_non_lifecycle_assumption_commands() {
     let dir = tempdir().unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "--help"]);
 
     assert!(success, "issue help failed: {}", stderr);
-    assert!(stdout.contains("impact"));
+    assert!(!stdout.contains("impact"));
     assert!(!stdout.contains("cascade"));
     assert!(!stdout.contains("falsify"));
 }

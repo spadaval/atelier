@@ -75,7 +75,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("------------");
     println!("  Inspect mission readiness: atelier mission status");
     if ready.is_empty() {
-        println!("  Find blocked work: atelier issue blocked");
+        println!("  Find blocked work: atelier issue list --blocked");
     } else {
         println!("  Choose ready work: atelier issue list --ready");
         println!("  Start selected work: atelier start <issue-id>");

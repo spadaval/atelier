@@ -522,7 +522,7 @@ fn transition_actions(db: &Database, issue: &Issue) -> Result<Vec<TransitionActi
             } else {
                 "issue is already open".to_string()
             },
-            command: format!("atelier issue reopen {id}"),
+            command: format!("atelier issue update {id} --status open"),
         },
         TransitionAction {
             name: "repair sections",
@@ -732,7 +732,10 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         object.id
     );
     if object.status == "closed" {
-        println!("  Reopen this issue: atelier issue reopen {}", object.id);
+        println!(
+            "  Reopen this issue: atelier issue update {} --status open",
+            object.id
+        );
     } else {
         println!("  Start tracked work: atelier start {}", object.id);
         println!(

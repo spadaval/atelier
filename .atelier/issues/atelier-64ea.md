@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Fold issue helper flows into lifecycle commands"
-updated_at: "2026-06-12T21:07:19.655220456+00:00"
+updated_at: "2026-06-12T21:15:58.939395642+00:00"
 ---
 
 ## Description
