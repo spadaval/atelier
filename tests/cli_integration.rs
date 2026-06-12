@@ -6288,6 +6288,200 @@ fn test_workflow_validate_can_use_parsed_issue_sections() {
 }
 
 #[test]
+fn test_workflow_validate_defaults_are_target_and_transition_aware() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let issue_body = "## Description\n\nDefault validator issue body.\n\n## Outcome\n\nWorkflow validation reports target-aware issue close blockers.\n\n## Evidence\n\n- `atelier workflow validate issue <id>` reports missing evidence.";
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Default close validators",
+            "--description",
+            issue_body,
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Default close validators");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            &issue_id,
+            "--transition",
+            "close",
+        ],
+    );
+    assert!(!success, "issue close defaults should require evidence");
+    assert!(stdout.contains("pass  durable_state_current"));
+    assert!(stdout.contains("pass  issue_sections_parseable"));
+    assert!(stdout.contains("pass  no_open_blockers"));
+    assert!(stdout.contains("fail  evidence_attached"));
+    assert!(stdout.contains("no validating evidence link found"));
+    assert!(stderr.contains("workflow validation failed"));
+
+    let (success, blocker_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Default start blocker",
+            "--description",
+            "## Description\n\nBlocker body.\n\n## Outcome\n\nBlocker remains open.\n\n## Evidence\n\n- `atelier workflow validate issue <id> --transition start` reports the open blocker.",
+        ],
+    );
+    assert!(success, "blocker create failed: {stderr}");
+    assert!(blocker_out.contains("Created issue atelier-"));
+    let blocker_id = issue_id_by_title(dir.path(), "Default start blocker");
+    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &issue_id, &blocker_id]);
+    assert!(success, "dep add failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            &issue_id,
+            "--transition",
+            "start",
+        ],
+    );
+    assert!(!success, "issue start defaults should report blockers");
+    assert!(stdout.contains("fail  no_open_blockers"));
+    assert!(stdout.contains(&blocker_id));
+    assert!(
+        !stdout.contains("evidence_attached"),
+        "start defaults must not require validation evidence:\n{stdout}"
+    );
+    assert!(stderr.contains("workflow validation failed"));
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "create", "Default mission validators"],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Default mission validators");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+    commit_all(dir.path(), "default validator setup");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--transition",
+            "close",
+        ],
+    );
+    assert!(
+        !success,
+        "mission close defaults should report closeout blockers"
+    );
+    for validator in [
+        "durable_state_current",
+        "issue_sections_parseable",
+        "no_open_work",
+        "evidence_attached",
+        "no_open_blockers",
+        "no_blocking_lints",
+        "ignored_tests_reviewed",
+        "git_worktree_clean",
+    ] {
+        assert!(
+            stdout.contains(validator),
+            "mission default output missing {validator}:\n{stdout}"
+        );
+    }
+    assert!(stdout.contains("open linked work"));
+    assert!(stdout.contains(&issue_id));
+    assert!(stdout.contains("no validating evidence link found"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_workflow_validate_defaults_for_evidence_and_tracker_health_targets() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "target-aware evidence proof",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - target-aware evidence proof"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "target-aware evidence proof");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "evidence",
+            &evidence_id,
+            "--transition",
+            "attach",
+        ],
+    );
+    assert!(success, "evidence target defaults failed: {stderr}");
+    assert!(stdout.contains("pass  durable_state_current"));
+    assert!(
+        !stdout.contains("issue_sections_parseable"),
+        "evidence defaults must not run issue validators:\n{stdout}"
+    );
+
+    commit_all(dir.path(), "tracker health setup");
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "tracker",
+            "health",
+            "--transition",
+            "health",
+        ],
+    );
+    assert!(success, "tracker health defaults failed: {stderr}");
+    for validator in [
+        "durable_state_current",
+        "no_blocking_lints",
+        "ignored_tests_reviewed",
+        "git_worktree_clean",
+    ] {
+        assert!(
+            stdout.contains(&format!("pass  {validator}")),
+            "tracker health output missing passing {validator}:\n{stdout}"
+        );
+    }
+    assert!(
+        !stdout.contains("issue_sections_parseable"),
+        "tracker health defaults must not run issue validators:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_lint_rejects_missing_required_issue_section() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -7024,21 +7218,43 @@ fn test_mission_status_cli_reports_control_state() {
 
     let (success, ready_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "subissue", epic_id, "Ready status work"],
+        &[
+            "issue",
+            "subissue",
+            epic_id,
+            "Ready status work",
+            "--description",
+            "## Description\n\nReady status body.\n\n## Outcome\n\nMission status reports ready linked work.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this work as ready.",
+        ],
     );
     assert!(success, "ready work create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
 
     let (success, blocked_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "subissue", epic_id, "Blocked status work"],
+        &[
+            "issue",
+            "subissue",
+            epic_id,
+            "Blocked status work",
+            "--description",
+            "## Description\n\nBlocked status body.\n\n## Outcome\n\nMission status reports blocked linked work.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this work as blocked.",
+        ],
     );
     assert!(success, "blocked work create failed: {stderr}");
     assert!(blocked_out.contains(epic_id));
     let blocked_id = issue_id_by_title(dir.path(), "Blocked status work");
     let blocked_id = blocked_id.as_str();
-    let (success, blocker_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Status blocker"]);
+    let (success, blocker_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Status blocker",
+            "--description",
+            "## Description\n\nStatus blocker body.\n\n## Outcome\n\nMission status reports this issue as an open blocker.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this blocker.",
+        ],
+    );
     assert!(success, "blocker create failed: {stderr}");
     assert!(blocker_out.contains("Created issue atelier-"));
     let blocker_id = issue_id_by_title(dir.path(), "Status blocker");

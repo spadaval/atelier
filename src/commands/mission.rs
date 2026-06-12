@@ -9,16 +9,6 @@ use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::record_store::{self, RecordStore, MISSION_EMPTY_DATA_JSON};
 
 const KIND: &str = "mission";
-const MISSION_CLOSE_VALIDATORS: &[&str] = &[
-    "durable_state_current",
-    "issue_sections_parseable",
-    "evidence_attached",
-    "no_open_blockers",
-    "no_blocking_lints",
-    "ignored_tests_reviewed",
-    "git_worktree_clean",
-];
-
 pub fn create(
     state_dir: &Path,
     db_path: &Path,
@@ -690,16 +680,8 @@ fn mission_closeout_status(
 ) -> Result<MissionCloseoutStatus> {
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let validator_results = crate::commands::workflow::evaluate(
-        db,
-        KIND,
-        &mission.id,
-        "close",
-        MISSION_CLOSE_VALIDATORS
-            .iter()
-            .map(|validator| (*validator).to_string())
-            .collect(),
-    )?;
+    let validator_results =
+        crate::commands::workflow::evaluate(db, KIND, &mission.id, "close", Vec::new())?;
     Ok(MissionCloseoutStatus {
         open_work,
         open_blockers,

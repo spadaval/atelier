@@ -50,10 +50,7 @@ pub fn evaluate(
 ) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
     let validators = if validators.is_empty() {
-        vec![
-            "durable_state_current".to_string(),
-            "issue_sections_parseable".to_string(),
-        ]
+        default_validators(target_kind, transition)
     } else {
         validators
     };
@@ -74,6 +71,46 @@ pub fn evaluate(
     }
 
     Ok(results)
+}
+
+pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
+    let names: &[&str] = match (target_kind, transition) {
+        ("issue", "start") => &[
+            "durable_state_current",
+            "issue_sections_parseable",
+            "no_open_blockers",
+        ],
+        ("issue", "close") => &[
+            "durable_state_current",
+            "issue_sections_parseable",
+            "no_open_blockers",
+            "evidence_attached",
+        ],
+        ("mission", "close") => &[
+            "durable_state_current",
+            "issue_sections_parseable",
+            "no_open_work",
+            "evidence_attached",
+            "no_open_blockers",
+            "no_blocking_lints",
+            "ignored_tests_reviewed",
+            "git_worktree_clean",
+        ],
+        ("mission", _) => &[
+            "durable_state_current",
+            "issue_sections_parseable",
+            "no_open_blockers",
+        ],
+        ("evidence", _) => &["durable_state_current"],
+        ("tracker", "health") => &[
+            "durable_state_current",
+            "no_blocking_lints",
+            "ignored_tests_reviewed",
+            "git_worktree_clean",
+        ],
+        _ => &["durable_state_current"],
+    };
+    names.iter().map(|name| (*name).to_string()).collect()
 }
 
 pub fn print_validation_results(results: &[ValidatorResult]) {
@@ -128,6 +165,11 @@ fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
         "issue" => {
             db.require_issue(id)?;
         }
+        "tracker" => {
+            if id != "health" {
+                bail!("unsupported tracker validation target {id}; expected health");
+            }
+        }
         _ => {
             db.require_record(kind, id)?;
         }
@@ -174,6 +216,14 @@ fn evaluate_builtin(
                 Ok((true, "no open blockers".to_string()))
             } else {
                 Ok((false, format!("open blockers: {}", open.join(", "))))
+            }
+        }
+        "no_open_work" => {
+            let open = open_work(db, target_kind, target_id)?;
+            if open.is_empty() {
+                Ok((true, "no open linked work".to_string()))
+            } else {
+                Ok((false, format!("open linked work: {}", open.join(", "))))
             }
         }
         "git_worktree_clean" => git_worktree_clean(),
@@ -290,6 +340,20 @@ fn open_blockers(db: &Database, target_kind: &str, target_id: &str) -> Result<Ve
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
         .filter(|issue| issue.status == "open")
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    open.sort();
+    Ok(open)
+}
+
+fn open_work(db: &Database, target_kind: &str, target_id: &str) -> Result<Vec<String>> {
+    if target_kind != "mission" {
+        return Ok(Vec::new());
+    }
+    let mut open = mission_issue_ids(db, target_id)?
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| issue.status != "closed")
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
     open.sort();
@@ -436,5 +500,52 @@ mod tests {
         let warning = slow_validator_warning(&validator_result(101)).unwrap();
         assert!(warning.contains("validator took 101ms"));
         assert!(warning.contains("under 100ms"));
+    }
+
+    #[test]
+    fn default_validators_are_target_and_transition_aware() {
+        assert_eq!(
+            default_validators("issue", "start"),
+            vec![
+                "durable_state_current",
+                "issue_sections_parseable",
+                "no_open_blockers"
+            ]
+        );
+        assert_eq!(
+            default_validators("issue", "close"),
+            vec![
+                "durable_state_current",
+                "issue_sections_parseable",
+                "no_open_blockers",
+                "evidence_attached"
+            ]
+        );
+        assert_eq!(
+            default_validators("mission", "close"),
+            vec![
+                "durable_state_current",
+                "issue_sections_parseable",
+                "no_open_work",
+                "evidence_attached",
+                "no_open_blockers",
+                "no_blocking_lints",
+                "ignored_tests_reviewed",
+                "git_worktree_clean"
+            ]
+        );
+        assert_eq!(
+            default_validators("evidence", "attach"),
+            vec!["durable_state_current"]
+        );
+        assert_eq!(
+            default_validators("tracker", "health"),
+            vec![
+                "durable_state_current",
+                "no_blocking_lints",
+                "ignored_tests_reviewed",
+                "git_worktree_clean"
+            ]
+        );
     }
 }

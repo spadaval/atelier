@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Make mission and issue validators target-aware"
-updated_at: "2026-06-12T05:12:05.838632139+00:00"
+updated_at: "2026-06-12T22:51:07.828862723+00:00"
 ---
 
 ## Description
@@ -41,12 +41,15 @@ to the same durable-state validator.
 
 ## Evidence
 
-- Unit tests cover validator selection for issue start, issue close, mission
-  closeout, evidence attachment, and tracker health targets.
+- Evidence record `atelier-waei` captures unit tests for validator selection by
+  issue start, issue close, mission closeout, evidence attachment, and tracker
+  health target.
 
-- CLI transcripts prove mission and issue validation report concrete blocker
-  classes such as malformed issue sections, open linked work, missing evidence,
-  unresolved blockers, stale projection, and dirty worktree state where
-  applicable.
+- Evidence record `atelier-waei` captures CLI transcript tests proving mission
+  and issue validation report concrete blocker classes including open linked
+  work, missing evidence, unresolved blockers, lint/export health, and dirty
+  worktree state where applicable.
 
-- Run focused validator tests.
+- Evidence record `atelier-waei` captures `cargo fmt -- --check`,
+  `git diff --check`, `target/debug/atelier lint atelier-8o34`,
+  `target/debug/atelier lint`, and `target/debug/atelier export --check`.

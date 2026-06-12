@@ -2015,7 +2015,11 @@ fn run() -> Result<()> {
                     transition,
                     validator,
                 } => {
-                    let target_id = resolve_record_arg(&db, &target_kind, &target_id)?;
+                    let target_id = if target_kind == "tracker" {
+                        target_id
+                    } else {
+                        resolve_record_arg(&db, &target_kind, &target_id)?
+                    };
                     commands::workflow::validate(
                         &db,
                         &target_kind,
