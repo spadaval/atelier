@@ -29,9 +29,9 @@ on 2026-06-08.
   issues-with-code, a dedicated issues branch, and an external issues repo are
   distinct choices. Atelier should preserve that explicitness when designing
   `.atelier/` and worktree behavior.
-- `design` issues are a useful precedent for human-in-the-loop decisions.
-  Atelier's decision beads and ADR flow should keep this spirit, but with
-  richer links to decisions, evidence, and workflow validation.
+- `design` issues are a useful precedent for human-in-the-loop design work.
+  Atelier should keep the explicit artifact-update workflow, but with richer
+  links to evidence and workflow validation.
 - `meta` issues with rollup counts are useful as a lightweight grouping model.
   Atelier should translate that into first-class missions and milestones rather
   than overloading dependency edges for membership.
@@ -50,7 +50,7 @@ on 2026-06-08.
   typed-link concepts.
 - Do not limit durable issue kinds to regular, design, and meta. Atelier needs
   configurable issue/work item types plus first-class evidence, workflow
-  validators, plans, runs, and decisions.
+  validators, plans, runs, and artifact-update work.
 - Do not assume Git-only synchronization is enough for all runtime behavior.
   Atelier should use Git for mergeable durable state, while local SQLite indexes
   support fast queries, locks, workflow checks, and Mission Control projection.

@@ -5,7 +5,6 @@ evidence_required: []
 id: "atelier-000i"
 issue_type: "task"
 labels:
-- "decision"
 - "deferred"
 - "domain-model"
 - "spec"
@@ -27,7 +26,7 @@ updated_at: "2026-06-11T13:14:54.372653798+00:00"
 
 Resolve the deferred question of whether sessions/runs are exported, partially exported, or treated as local runtime metadata after the first workflow/evidence model exists.
 
-## Decision
+## Resolution
 
 Deferred. Direct live agent-run tracking is out of scope for the current milestones. The first domain-model and Mission Control slices should not depend on durable run/session records.
 

@@ -32,7 +32,7 @@ Document the target contract for a single .atelier/ root before implementation b
 Scope:
 - Replace the .atelier-state/.atelier split in product and architecture docs with one .atelier/ root.
 - Specify which paths are tracked canonical project state and which paths are ignored local runtime state.
-- Make .atelier/config.toml the tracked project config target unless a later decision explicitly chooses a different file.
+- Make .atelier/config.toml the tracked project config target unless a later artifact explicitly chooses a different file.
 - State that state.db stays local and rebuildable.
 
 Out of scope:

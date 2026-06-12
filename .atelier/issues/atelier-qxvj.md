@@ -44,7 +44,7 @@ What:
 - Generate UTC IDs in `YYYYMMDDTHHMMSSffffffZ` form, adding `-01`, `-02`, etc. only for same-timestamp collisions.
 - Store typed front matter with `schema: atelier.activity`, `schema_version: 1`, `id`, `subject_kind: issue`, `subject_id`, `event_type`, `actor`, `created_at`, and `summary`.
 - Keep human text or event details in the markdown body.
-- Support V1 event types: `comment`, `note`, `handoff`, `decision`, `plan`, `close_reason`, `status_changed`, `field_changed`, `work_started`, `work_finished`, and `evidence_attached`.
+- Support V1 event types: `comment`, `note`, `handoff`, `plan`, `close_reason`, `status_changed`, `field_changed`, `work_started`, `work_finished`, and `evidence_attached`.
 
 Out of scope:
 - The `atelier history` CLI rendering/query surface.

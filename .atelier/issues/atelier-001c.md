@@ -23,7 +23,7 @@ title: "Demote or remove inherited utility commands from primary help"
 updated_at: "2026-06-09T18:56:01.276721478+00:00"
 ---
 
-Demote or remove inherited utility commands from the primary public surface after the classification decision is recorded. Initial candidates are `cpitd`, `usage`, `timer`, `daemon`, and `archive`, unless classification intentionally retains one under an explicit non-core namespace.
+Demote or remove inherited utility commands from the primary public surface after the classification artifact is recorded. Initial candidates are `cpitd`, `usage`, `timer`, `daemon`, and `archive`, unless classification intentionally retains one under an explicit non-core namespace.
 
 ## Acceptance
 

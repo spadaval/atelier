@@ -896,6 +896,7 @@ fn test_removed_aliases_fail_as_unknown_commands() {
         vec!["start"],
         vec!["sync"],
         vec!["mission", "view"],
+        vec!["work", "worktree"],
     ] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} unexpectedly succeeded");
@@ -1944,7 +1945,6 @@ fn test_issue_mutations_create_activity_sidecars() {
         ("human", "Plain comment body"),
         ("note", "Operator note body"),
         ("plan", "Plan body"),
-        ("decision", "Decision body"),
         ("handoff", "Handoff body"),
     ] {
         let (success, _, stderr) = run_atelier(
@@ -1953,6 +1953,20 @@ fn test_issue_mutations_create_activity_sidecars() {
         );
         assert!(success, "issue comment {kind} failed: {stderr}");
     }
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "comment",
+            &issue_id,
+            "Invalid body",
+            "--kind",
+            "decision",
+        ],
+    );
+    assert!(!success, "invalid comment kind should be rejected");
+    assert!(stderr.contains("Invalid comment kind 'decision'"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2003,7 +2017,6 @@ fn test_issue_mutations_create_activity_sidecars() {
     assert_activity_contains(&activities, "note", &["Operator note body"]);
     assert_activity_contains(&activities, "note", &["Append note body"]);
     assert_activity_contains(&activities, "plan", &["Plan body"]);
-    assert_activity_contains(&activities, "decision", &["Decision body"]);
     assert_activity_contains(&activities, "handoff", &["Handoff body"]);
     assert_activity_contains(
         &activities,
@@ -2409,6 +2422,26 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("[epic] open - Container work"));
+}
+
+#[test]
+fn test_removed_issue_type_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Artifact task",
+            "--issue-type",
+            "decision",
+        ],
+    );
+
+    assert!(!success, "removed issue type should be rejected");
+    assert!(stderr.contains("Invalid issue_type 'decision'"));
 }
 
 // ==================== Session Tests ====================
@@ -4973,7 +5006,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
             "create",
             "Resolve mission blocker",
             "--issue-type",
-            "decision",
+            "task",
         ],
     );
     assert!(success, "blocker issue create failed: {stderr}");
@@ -5306,7 +5339,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     std::fs::write(dir.path().join("dirty-after-close.txt"), "dirty").unwrap();
     let (success, reopen_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "open"],
+        &["mission", "update", &mission_id, "--status", "ready"],
     );
     assert!(
         success,
@@ -5409,10 +5442,10 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     init_git_repo(dir.path());
 
     let (success, older_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Older open"]);
+        run_atelier(dir.path(), &["mission", "create", "Older ready"]);
     assert!(success, "older mission create failed: {stderr}");
     assert!(older_out.contains("Mission atelier-"));
-    let older_id = record_id_by_title(dir.path(), "missions", "Older open");
+    let older_id = record_id_by_title(dir.path(), "missions", "Older ready");
     let older_id = older_id.as_str();
 
     std::thread::sleep(std::time::Duration::from_millis(5));
@@ -5563,13 +5596,13 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(!stdout.contains("Closed"));
 
     let active_row = format!("{active_id} [ready] - Active mission");
-    let older_row = format!("{older_id} [ready] - Older open");
+    let older_row = format!("{older_id} [ready] - Older ready");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
     let active_pos = stdout.find(&active_row).expect("missing active row");
     let older_pos = stdout.find(&older_row).expect("missing older row");
     assert!(
         active_pos < older_pos,
-        "newer open mission should sort first:\n{stdout}"
+        "newer ready mission should sort first:\n{stdout}"
     );
     assert!(!stdout.contains(&closed_row));
     assert!(
@@ -5598,15 +5631,21 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let closed_pos = all_out.find(&closed_row).expect("missing closed row");
     assert!(
         active_pos < closed_pos,
-        "open missions should sort before closed missions:\n{all_out}"
+        "current missions should sort before closed missions:\n{all_out}"
     );
+
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "ready"]);
+    assert!(success, "filtered mission list failed: {stderr}");
+    assert!(ready_out.contains(&active_row));
+    assert!(ready_out.contains(&older_row));
+    assert!(!ready_out.contains(&closed_row));
 
     let (success, open_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "open"]);
-    assert!(success, "filtered mission list failed: {stderr}");
-    assert!(open_out.contains(&active_row));
-    assert!(open_out.contains(&older_row));
-    assert!(!open_out.contains(&closed_row));
+    assert!(!success, "mission status alias should be rejected");
+    assert!(open_out.is_empty());
+    assert!(stderr.contains("Invalid mission status 'open'"));
 
     let (success, empty_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "draft"]);
@@ -5892,7 +5931,7 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
 }
 
 #[test]
-fn test_mission_list_default_open_empty_state() {
+fn test_mission_list_default_current_empty_state() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());

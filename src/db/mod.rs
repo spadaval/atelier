@@ -70,7 +70,6 @@ pub const VALID_STATUSES: &[&str] = &["open", "closed", "archived"];
 pub const VALID_ISSUE_TYPES: &[&str] = &[
     "bug",
     "closeout",
-    "decision",
     "epic",
     "feature",
     "spike",

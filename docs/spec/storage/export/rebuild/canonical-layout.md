@@ -298,7 +298,7 @@ Issue front matter adds:
 | Field | Type | Rule |
 | --- | --- | --- |
 | `priority` | string | Stable priority value, such as `P1`. |
-| `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, `spike`, or `decision`. |
+| `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 | `acceptance` | array | Acceptance criteria strings in user-defined order. |
 | `evidence_required` | array | Evidence requirements in user-defined order. |
 

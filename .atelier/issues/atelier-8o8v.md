@@ -30,7 +30,7 @@ updated_at: "2026-06-10T17:33:14.622812806+00:00"
 Write activity sidecars directly from future issue mutations.
 
 What:
-- Update issue comment/note/handoff/plan/decision workflows to append canonical issue activity entries.
+- Update issue comment/note/handoff/plan workflows to append canonical issue activity entries.
 - Record close reasons as `close_reason` activity entries.
 - Record status and field mutations as `status_changed` and `field_changed` entries where relevant.
 - Record work lifecycle events as `work_started` and `work_finished` entries.

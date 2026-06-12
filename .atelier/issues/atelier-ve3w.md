@@ -34,6 +34,6 @@ Acceptance:
   `blocked_by: added atelier-abcd`.
 - Commands avoid vague success text when changed state can be named.
 - Quiet output remains minimal if quiet mode is retained by the quiet-mode
-  decision issue.
+  artifact-update task.
 - Transcript tests prove representative mutation outputs are explicit and
   concise.

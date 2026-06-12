@@ -53,7 +53,7 @@ read on 2026-06-08.
 ## Follow-Up Decisions
 
 - `atelier-xrzs`: use Minibeads' front matter plus Markdown body pattern as an
-  input to the `.atelier` record format decision.
+  input to the `.atelier` record format artifact.
 - `atelier-ywow` and `atelier-fq9y`: ensure deterministic export/rebuild keeps
   the human-readable benefits of Minibeads without making Markdown the runtime
   source.

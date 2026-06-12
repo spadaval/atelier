@@ -2,7 +2,7 @@
 
 - `AGENTFACTORY.md`: agent-factory bindings for this repository.
 - `AGENTS.md`: concise entry point for agents working in this repository.
-- [CONTEXT.md](../CONTEXT.md): domain language and ambiguity decisions.
+- [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
   canonical `.atelier/` record file, ignored runtime/cache, compatibility, and
@@ -13,12 +13,12 @@
 - [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
   minimum human command, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
-- `docs/adr/`: durable architecture and process decisions.
+- `docs/adr/`: durable architecture and process choices.
 - [docs/adr/0001-project-scoped-random-record-ids.md](adr/0001-project-scoped-random-record-ids.md):
-  accepted decision that canonical record IDs are project-scoped random IDs
+  accepted choice that canonical record IDs are project-scoped random IDs
   such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
 - [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
-  accepted decision that Markdown records are canonical, SQLite is a
+  accepted choice that Markdown records are canonical, SQLite is a
   rebuildable projection index plus local runtime state, and export is a
   compatibility/repair path during migration.
 - [docs/architecture/index.md](architecture/index.md): architecture and

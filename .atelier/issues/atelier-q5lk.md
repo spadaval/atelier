@@ -3,10 +3,9 @@ acceptance: []
 created_at: "2026-06-11T20:10:51.629151183+00:00"
 evidence_required: []
 id: "atelier-q5lk"
-issue_type: "decision"
+issue_type: "task"
 labels:
 - "activity"
-- "decision"
 - "markdown"
 priority: "P1"
 relationships:

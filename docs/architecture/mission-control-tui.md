@@ -47,7 +47,7 @@ Dashboard and summary fields:
 | `summary.plan_drift_count` | Dashboard count and plan badge. |
 | `summary.evidence_gap_count` | Dashboard count and evidence badge. |
 | `summary.validator_failure_count` | Dashboard count and validator badge. |
-| `summary.decision_count` | Dashboard count and decision badge. |
+| `summary.artifact_update_count` | Dashboard count and artifact-update badge. |
 
 Mission fields:
 
@@ -161,18 +161,18 @@ Workflow validator failure fields:
 | `validator_failures[].details` | JSON detail panel. |
 | `validator_failures[].config_sha256` | Workflow config traceability. |
 
-Decision fields:
+Artifact-update fields:
 
 | Field path | Use |
 | --- | --- |
-| `decisions[].id` | Row key, copy target, and detail identifier. |
-| `decisions[].title` | Primary row label. |
-| `decisions[].status` | Status chip and filtering. |
-| `decisions[].summary` | Detail overview. |
-| `decisions[].applies_to[]` | Cross-links to affected records. |
-| `decisions[].blocking[]` | Work blocked by the decision. |
-| `decisions[].decided_at` | Sort and detail timestamp when present. |
-| `decisions[].updated_at` | Fallback sort and detail timestamp. |
+| `artifact_updates[].id` | Row key, copy target, and detail identifier. |
+| `artifact_updates[].title` | Primary row label. |
+| `artifact_updates[].status` | Status chip and filtering. |
+| `artifact_updates[].summary` | Detail overview. |
+| `artifact_updates[].applies_to[]` | Cross-links to affected records. |
+| `artifact_updates[].blocking[]` | Work blocked by the artifact update. |
+| `artifact_updates[].completed_at` | Sort and detail timestamp when present. |
+| `artifact_updates[].updated_at` | Fallback sort and detail timestamp. |
 
 Agent, run, branch, worktree, claim, and lock fields:
 
@@ -310,12 +310,13 @@ Required fixture coverage:
 - active mission with linked milestones, plans, risks, evidence gaps, and
   validator failures;
 - backlog and ready work, including review and validation queues;
-- open blockers with both issue blockers and decision blockers;
+- open blockers with both issue blockers and artifact-update blockers;
 - plan states for current, drifted, and superseded plans;
 - evidence gaps for missing count, missing evidence type, and linked validator;
 - workflow validator failures using the machine-readable result shape from the
   workflow configuration contract;
-- decisions that block work and decisions that only document context;
+- artifact-update tasks that block work and artifact-update tasks that only
+  document context;
 - empty projection with all section arrays present and empty;
 - absent `mission-control.json`;
 - stale export or stale projection health flags;

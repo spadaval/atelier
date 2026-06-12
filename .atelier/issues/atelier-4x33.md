@@ -19,4 +19,4 @@ title: "Add transcript-based CLI validation coverage"
 updated_at: "2026-06-12T03:37:43.819345052+00:00"
 ---
 
-Add focused CLI validation coverage using representative transcripts. Acceptance: tests or fixtures cover status, history, mission, work, help, empty states, next-action guidance, compatibility aliases, and quiet output where relevant.
+Add focused CLI validation coverage using representative transcripts. Acceptance: tests or fixtures cover status, history, mission, work, help, empty states, next-action guidance, rejected obsolete aliases, and quiet output where relevant.

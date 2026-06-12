@@ -179,7 +179,7 @@ enum Commands {
         action: WorkflowCommands,
     },
 
-    /// Work lifecycle and worktree helpers
+    /// Work lifecycle helpers
     Work {
         #[command(subcommand)]
         action: WorkCommands,
@@ -341,7 +341,7 @@ enum IssueCommands {
         /// New status (open, in_progress, closed)
         #[arg(short, long)]
         status: Option<String>,
-        /// New issue type (bug, closeout, decision, epic, feature, spike, task, validation)
+        /// New issue type (bug, closeout, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Add labels to the issue
@@ -401,7 +401,7 @@ enum IssueCommands {
         id: String,
         /// Comment text
         text: String,
-        /// Comment kind (note, plan, decision, observation, blocker, resolution, result, handoff, human)
+        /// Comment kind (note, plan, observation, blocker, resolution, result, handoff, human)
         #[arg(long, default_value = "note")]
         kind: String,
     },
@@ -525,11 +525,11 @@ enum MissionCommands {
         #[arg(long = "switch")]
         switch_active: bool,
     },
-    /// Show mission-control status for one mission or all open missions
+    /// Show mission-control status for one mission or all current missions
     Status { id: Option<String> },
     /// List missions
     List {
-        /// Filter missions by status (default: open; use all to include closed/history)
+        /// Filter missions by status (default: current; use all to include closed/history)
         #[arg(short, long)]
         status: Option<String>,
     },
@@ -651,11 +651,6 @@ enum WorkCommands {
     Finish { id: String },
     /// Show current work association
     Status,
-    /// Create or locate a worktree for an issue
-    Worktree {
-        #[command(subcommand)]
-        action: WorktreeCommands,
-    },
 }
 
 #[derive(Subcommand)]
@@ -1559,21 +1554,6 @@ fn run() -> Result<()> {
                     commands::work::finish(&db, &id)
                 }
                 WorkCommands::Status => commands::work::status(&db),
-                WorkCommands::Worktree { action } => match action {
-                    WorktreeCommands::For { id, path } => {
-                        let id = resolve_issue_arg(&db, &id)?;
-                        commands::work::worktree_for(&db, &id, path.as_deref())
-                    }
-                    WorktreeCommands::Status => commands::work::worktree_status(&db),
-                    WorktreeCommands::Merge { id } => {
-                        let id = resolve_issue_arg(&db, &id)?;
-                        commands::work::worktree_merge(&db, &id)
-                    }
-                    WorktreeCommands::Remove { id, force } => {
-                        let id = resolve_issue_arg(&db, &id)?;
-                        commands::work::worktree_remove(&db, &id, force)
-                    }
-                },
             }
         }
 
@@ -1706,12 +1686,6 @@ fn command_identity(command: &Commands) -> &'static str {
             WorkCommands::Start { .. } => "work start",
             WorkCommands::Finish { .. } => "work finish",
             WorkCommands::Status => "work status",
-            WorkCommands::Worktree { action } => match action {
-                WorktreeCommands::For { .. } => "work worktree for",
-                WorktreeCommands::Status => "work worktree status",
-                WorktreeCommands::Merge { .. } => "work worktree merge",
-                WorktreeCommands::Remove { .. } => "work worktree remove",
-            },
         },
         Commands::Worktree { action } => match action {
             WorktreeCommands::For { .. } => "worktree for",

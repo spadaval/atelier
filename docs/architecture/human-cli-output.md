@@ -218,7 +218,7 @@ Color is optional hierarchy, never the only carrier of meaning.
   when `NO_COLOR` is not set, and disable it for non-interactive output.
 - Avoid one-off per-command color decisions; use shared style helpers once
   color is introduced.
-- A future `--color=auto|always|never` flag is a separate CLI-surface decision
+- A future `--color=auto|always|never` flag is a separate CLI-surface artifact
   and should be captured as its own issue before implementation depends on it.
 
 Until shared color helpers exist, output changes should focus on layout and text

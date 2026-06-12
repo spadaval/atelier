@@ -53,7 +53,7 @@ model:
 
 Use "Chainlink" when documenting source provenance or current behavior that is
 still plainly inherited from the original project. Use "Atelier" when
-documenting target product behavior or new architecture decisions.
+documenting target product behavior or new architecture choices.
 
 ## Preservation Expectations
 

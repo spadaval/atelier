@@ -157,7 +157,7 @@ Activity front matter uses `schema: "atelier.activity"` and
 - `id`: timestamp activity ID matching the file name.
 - `subject_kind`: `issue` in V1.
 - `subject_id`: canonical issue ID.
-- `event_type`: one of `comment`, `note`, `handoff`, `decision`, `plan`,
+- `event_type`: one of `comment`, `note`, `handoff`, `plan`,
   `close_reason`, `status_changed`, `field_changed`, `work_started`,
   `work_finished`, or `evidence_attached`.
 - `actor`: user or agent identity that produced the event.
@@ -178,7 +178,7 @@ Imported predecessor comments and close reasons are migration input, not a
 separate durable comment store. The accepted policy is:
 
 - New Atelier notes, comments, handoffs, work-start/work-finish events,
-  decisions, close reasons, and evidence attachments are canonical issue
+  resolution comments, close reasons, and evidence attachments are canonical issue
   activity sidecars.
 - Imported comments from Beads or older SQLite rows may be converted into
   activity sidecars by an explicit migration step. Conversion preserves original

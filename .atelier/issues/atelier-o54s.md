@@ -46,6 +46,6 @@ Out of scope:
 Acceptance criteria:
 - A documented pattern exists for detail views, grouped list/queue views, compact hierarchy views, and empty/error states.
 - Formatter helper boundaries are clear enough for implementation epics to use without re-litigating style.
-- Any high-leverage unresolved choices are captured as decision issues before implementation depends on them.
+- Any high-leverage unresolved choices are captured as artifact-update tasks before implementation depends on them.
 
 Recommended subskill: agent-factory plan or implement.

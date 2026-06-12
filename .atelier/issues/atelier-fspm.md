@@ -3,7 +3,7 @@ acceptance: []
 created_at: "2026-06-11T02:45:00.234954408+00:00"
 evidence_required: []
 id: "atelier-fspm"
-issue_type: "decision"
+issue_type: "task"
 labels: []
 priority: "P1"
 relationships:
@@ -22,4 +22,4 @@ title: "Decide JSON boundary exceptions before implementation"
 updated_at: "2026-06-11T03:50:22.253595690+00:00"
 ---
 
-Resolve whether any JSON-labeled surface is outside command-result output mode, especially --log-format json, mission-control.json, export/check internals, import/export backup flows, and future API/projection files. Acceptance: the decision is recorded durably; implementation epics remain blocked until this issue is closed; unresolved human choices are escalated instead of guessed.
+Resolve whether any JSON-labeled surface is outside command-result output mode, especially --log-format json, mission-control.json, export/check internals, import/export backup flows, and future API/projection files. Acceptance: the resolution is recorded durably; implementation epics remain blocked until this issue is closed; unresolved human choices are escalated instead of guessed.

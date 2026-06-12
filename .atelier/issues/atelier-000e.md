@@ -27,7 +27,7 @@ updated_at: "2026-06-08T19:55:23+00:00"
 ---
 
 
-Apply the chosen CLI naming decision across Cargo metadata, binary target, command help/about text, resource paths, generated hook references, and integration tests. Keep compatibility only where the decision explicitly requires it.
+Apply the chosen CLI naming across Cargo metadata, binary target, command help/about text, resource paths, generated hook references, and integration tests. Keep compatibility only where the resolved artifact explicitly requires it.
 
 ## Acceptance Criteria
 

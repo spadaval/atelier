@@ -3,7 +3,7 @@ acceptance: []
 created_at: "2026-06-10T03:52:27.308529893+00:00"
 evidence_required: []
 id: "atelier-z6sc"
-issue_type: "decision"
+issue_type: "task"
 labels:
 - "comments"
 - "durability"

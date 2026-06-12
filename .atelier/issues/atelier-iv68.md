@@ -20,4 +20,4 @@ title: "Remove --json CLI options for command result rendering"
 updated_at: "2026-06-11T03:50:58.325373741+00:00"
 ---
 
-Remove command-result --json flags from relevant clap definitions and command dispatch while preserving unrelated diagnostic logging options if approved by the boundary decision. Acceptance: help output for representative commands no longer lists result --json; invoking removed flags fails with a clear standard CLI error; no command silently ignores the flag.
+Remove command-result --json flags from relevant clap definitions and command dispatch while preserving unrelated diagnostic logging options if approved by the boundary artifact. Acceptance: help output for representative commands no longer lists result --json; invoking removed flags fails with a clear standard CLI error; no command silently ignores the flag.

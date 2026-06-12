@@ -6,7 +6,6 @@ use crate::utils::format_issue_id;
 const KNOWN_COMMENT_KINDS: &[&str] = &[
     "note",
     "plan",
-    "decision",
     "observation",
     "blocker",
     "resolution",
@@ -21,6 +20,7 @@ pub fn validate_comment_kind(kind: &str) -> bool {
 
 pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
     db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
     if !validate_comment_kind(kind) {
         tracing::warn!(
             "unknown comment kind '{}'. Known kinds: {}",
@@ -36,6 +36,7 @@ pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<(
 
 pub fn run_canonical(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
     db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
     if !validate_comment_kind(kind) {
         tracing::warn!(
             "unknown comment kind '{}'. Known kinds: {}",
@@ -45,6 +46,15 @@ pub fn run_canonical(db: &Database, issue_id: &str, content: &str, kind: &str) -
     }
     crate::commands::activity_log::record_comment(issue_id, kind, content)?;
     println!("Added comment to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
+fn reject_invalid_comment_kind(kind: &str) -> Result<()> {
+    if kind == "decision" {
+        anyhow::bail!(
+            "Invalid comment kind 'decision'. Valid kinds: note, plan, observation, blocker, resolution, result, handoff, human"
+        );
+    }
     Ok(())
 }
 
@@ -216,17 +226,27 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        run(&db, &issue_id, "A decision was made", "decision").unwrap();
+        run(&db, &issue_id, "A plan was made", "plan").unwrap();
 
         let comments = db.get_comments(issue_id).unwrap();
-        assert_eq!(comments[0].kind, "decision");
+        assert_eq!(comments[0].kind, "plan");
+    }
+
+    #[test]
+    fn test_invalid_comment_kind_is_rejected() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+
+        let error = run(&db, &issue_id, "Do not store this", "decision").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Invalid comment kind 'decision'"));
     }
 
     #[test]
     fn test_validate_known_kinds() {
         assert!(validate_comment_kind("note"));
         assert!(validate_comment_kind("plan"));
-        assert!(validate_comment_kind("decision"));
         assert!(validate_comment_kind("observation"));
         assert!(validate_comment_kind("blocker"));
         assert!(validate_comment_kind("resolution"));

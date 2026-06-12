@@ -6,7 +6,6 @@ id: "atelier-001p"
 issue_type: "task"
 labels:
 - "assignee:root"
-- "decision"
 - "diagnostics"
 - "telemetry"
 priority: "P2"

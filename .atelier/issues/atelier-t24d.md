@@ -3,10 +3,9 @@ acceptance: []
 created_at: "2026-06-11T20:54:34.276202555+00:00"
 evidence_required: []
 id: "atelier-t24d"
-issue_type: "decision"
+issue_type: "task"
 labels:
 - "agent-factory"
-- "decision"
 - "workflow"
 priority: "P1"
 relationships:
@@ -29,9 +28,9 @@ title: "Decide worker workflow transition command model"
 updated_at: "2026-06-11T20:56:50.757820936+00:00"
 ---
 
-Decide how workers and orchestrators move issues, epics, and missions through workflow states. Scope: whether start/finish/complete commands are separate concepts or ergonomic wrappers over generic workflow transitions; how transition commands run validators, surface missing evidence, support explicit waivers, and record durable handoff; how worker subagents should interact with Atelier from assignment through closeout. Acceptance: decision records the command model, the worker subagent flow, which commands are aliases/wrappers versus primitives, and how validation/evidence failures are handled without creating red tape for non-mission issue work.
+Specify how workers and orchestrators move issues, epics, and missions through workflow states. Scope: whether start/finish/complete commands are separate concepts or ergonomic wrappers over generic workflow transitions; how transition commands run validators, surface missing evidence, support explicit waivers, and record durable handoff; how worker subagents should interact with Atelier from assignment through closeout. Acceptance: an artifact records the command model, the worker subagent flow, which commands are aliases/wrappers versus primitives, and how validation/evidence failures are handled without creating red tape for non-mission issue work.
 
-## Decision
+## Resolution
 
 Workflow transitions are the underlying model. Human-facing `start`, `finish`,
 and `complete` commands are ergonomic wrappers over configured workflow

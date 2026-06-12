@@ -5,7 +5,6 @@ evidence_required: []
 id: "atelier-000t"
 issue_type: "task"
 labels:
-- "decision"
 - "locks"
 - "spec"
 - "worktree"
@@ -25,9 +24,9 @@ updated_at: "2026-06-10T14:51:19.805241515+00:00"
 ---
 
 
-Resolve the SPEC.md open question about Chainlink lock/sync behavior. Decide what becomes claim/worktree association, what remains as lock coordination, and what is removed or deferred.
+Resolve the SPEC.md open question about Chainlink lock/sync behavior. Specify what becomes claim/worktree association, what remains as lock coordination, and what is removed or deferred.
 
-## Decision
+## Resolution
 
 Retire almost all inherited Chainlink lock/sync functionality from Atelier's
 public product surface. Normal tracked work uses Git branch/worktree state,

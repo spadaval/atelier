@@ -26,7 +26,6 @@ pub enum ActivityEventType {
     Comment,
     Note,
     Handoff,
-    Decision,
     Plan,
     CloseReason,
     StatusChanged,
@@ -42,7 +41,6 @@ impl ActivityEventType {
             Self::Comment => "comment",
             Self::Note => "note",
             Self::Handoff => "handoff",
-            Self::Decision => "decision",
             Self::Plan => "plan",
             Self::CloseReason => "close_reason",
             Self::StatusChanged => "status_changed",
@@ -68,7 +66,6 @@ impl FromStr for ActivityEventType {
             "comment" => Ok(Self::Comment),
             "note" => Ok(Self::Note),
             "handoff" => Ok(Self::Handoff),
-            "decision" => Ok(Self::Decision),
             "plan" => Ok(Self::Plan),
             "close_reason" => Ok(Self::CloseReason),
             "status_changed" => Ok(Self::StatusChanged),
@@ -443,6 +440,14 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("Invalid event_type 'unknown'"));
+
+        let error = IssueActivity::from_markdown(
+            &rendered.replace("event_type: \"handoff\"", "event_type: \"decision\""),
+            &relative,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("Invalid event_type 'decision'"));
     }
 
     #[test]

@@ -30,7 +30,7 @@ Add first-class evidence commands for validation proof records.
 
 ## Acceptance
 
-`atelier evidence add/show/list` exists with stable JSON; evidence records include kind, result, summary, path or URI, producer, and timestamp; records export and rebuild deterministically; artifact storage follows the evidence-backend decision.
+`atelier evidence add/show/list` exists with stable JSON; evidence records include kind, result, summary, path or URI, producer, and timestamp; records export and rebuild deterministically; artifact storage follows the evidence-backend artifact.
 ## Validation
 
 - `cargo fmt -- --check`

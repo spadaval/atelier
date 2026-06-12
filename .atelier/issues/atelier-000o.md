@@ -5,7 +5,6 @@ evidence_required: []
 id: "atelier-000o"
 issue_type: "task"
 labels:
-- "decision"
 - "fork"
 - "spec"
 priority: "P1"
@@ -24,9 +23,9 @@ updated_at: "2026-06-08T19:47:39+00:00"
 ---
 
 
-Resolve the SPEC.md open question: should the binary be `atelier`, a shorter alias such as `atl`, or both? This decision blocks broad rename work because command names, tests, docs, package metadata, and install expectations depend on it.
+Resolve the SPEC.md open question: should the binary be `atelier`, a shorter alias such as `atl`, or both? This choice blocks broad rename work because command names, tests, docs, package metadata, and install expectations depend on it.
 
-## Decision
+## Resolution
 
 Use `atelier` as the primary and only Milestone 1 CLI binary name. Do not add an `atl` short alias yet, and do not preserve an installed `chainlink` compatibility shim unless a later migration bead proves a concrete compatibility need.
 

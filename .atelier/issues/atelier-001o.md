@@ -34,7 +34,7 @@ Add an optional terminal UI for browsing Atelier state after Mission Control pro
 ## Scope
 
 - Provide a TUI entry point such as `atelier ui` or `atelier mission-control tui`.
-- Show active missions, milestone checkpoint progress, backlog/ready work, blockers, plan drift, evidence gaps, workflow validator failures, branches/worktrees, and recent decisions from the Mission Control projection.
+- Show active missions, milestone checkpoint progress, backlog/ready work, blockers, plan drift, evidence gaps, workflow validator failures, branches/worktrees, and recent artifact updates from the Mission Control projection.
 - Include keyboard navigation, filtering/search, record detail views, and copyable IDs/commands for agent handoff.
 - Keep mutating operations narrow at first, such as claim/open/show commands, unless workflow validation and confirmation behavior are explicit.
 - Degrade cleanly when mission, plan, evidence, workflow, or worktree records are not implemented yet.

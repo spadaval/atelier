@@ -20,12 +20,12 @@ title: "Define command removal and migration behavior"
 updated_at: "2026-06-12T03:25:34.607296507+00:00"
 ---
 
-Define how command moves and removals should be handled in this refinement pass. The default policy is staged deprecation or a compatibility alias for moved commands when existing operator habits or Agent Factory guidance could break. Direct removal is acceptable only when the issue proves the command is redundant, the replacement is clear, tested, and documented, and no compatibility need remains.
+Define how command moves and removals should be handled in this refinement pass. The default policy is direct removal of moved, inherited, or duplicate command surfaces once the replacement is clear, tested, and documented. Compatibility aliases and staged deprecations are not retained unless a human explicitly asks for a compatibility window.
 
 Acceptance:
 
 - Each removed or moved command has an explicit old-to-new mapping in docs and validation transcripts.
-- The spec distinguishes true compatibility needs from redundant ergonomic clutter.
+- The spec distinguishes retained product behavior from redundant ergonomic clutter.
 - `issue quick` and `issue subissue` are evaluated as removal candidates once `issue create --work` and `issue create --parent <id>` cover their use cases.
 - Help output and Agent Factory guidance do not recommend removed commands.
-- Any direct removal or retained alias requires an explicit, issue-backed reason.
+- Any retained alias requires an explicit human request and issue-backed reason.

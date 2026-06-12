@@ -3,8 +3,11 @@
 Atelier's public CLI presents the agent-native workflow first. Inherited
 Chainlink utilities are not kept as command aliases once their replacement path
 is documented; deleting old surfaces and their command code is preferred over
-compatibility shims. Compatibility aliases are retained only when a staged
-migration protects current Agent Factory guidance or existing operator habits.
+compatibility shims. This repository is a WIP product with few users, so
+compatibility with obsolete command shapes, statuses, and output contracts is
+usually harmful. Do not add staged deprecations, aliases, fallback readers, or
+old-output shims unless a human explicitly asks for them for a specific
+transition.
 
 ## Core
 
@@ -40,12 +43,10 @@ it points operators to the scoped status surface that owns closeout readiness.
 Mission lifecycle statuses are `draft`, `ready`, `active`, and `closed`.
 Mission creation defaults to `ready`; `atelier mission start <id>` transitions
 the selected mission to `active` and transitions any previous active mission
-back to `ready` when `--switch` is supplied. Legacy `open` mission records are
-read as `ready`, and legacy `data.active` records are read as `active` until
-the canonical record is next rewritten. `atelier mission list --status open`
-remains a compatibility filter for all non-closed missions, and
-`atelier mission update <id> --status open` is accepted as a staged alias for
-`ready`.
+back to `ready` when `--switch` is supplied. Mission commands do not accept
+`open` as a mission-status alias and do not read legacy `data.active` state;
+committed mission records should be migrated directly to the lifecycle status
+they mean.
 
 There is no `atelier mission close` command in v1. Closing a mission uses
 `atelier mission update <id> --status closed`, which routes through the
@@ -83,12 +84,11 @@ associated Git worktrees, rebuild SQLite in new worktrees, and run
 Mission closeout is ready only when all linked work is closed, required evidence
 is attached, workflow validators pass, and the Git worktree is clean.
 
-## Removed Compatibility
+## Removed Behavior
 
-The legacy compatibility layer has been classified and removed from the public
+The inherited command layer has been classified and removed from the public
 command surface. The default classification for an inherited or duplicate
-surface is `delete` unless it is in the core list above or required by
-`AGENTFACTORY.md`.
+surface is `delete` unless it is in the core list above.
 
 Removed command surfaces:
 
@@ -124,7 +124,7 @@ the visible relation-impact command. Impact follows hierarchy plus the
 impact-bearing relation types `derived`, `caused-by`, and `falsifies`
 transitively, and `assumption` one hop from the source. The inherited `cascade`
 and `falsify` commands are removed so reassessment stays an explicit operator
-decision through `issue impact`, `issue label`, `issue comment`, or `issue close`
+action through `issue impact`, `issue label`, `issue comment`, or `issue close`
 instead of an assumption-specific command path.
 
 ## Removed Or Deferred Behavior
@@ -134,6 +134,6 @@ public workflow. Issue closure records close state, close time, and optional
 reason in tracker state; it does not mutate `CHANGELOG.md`.
 
 Canonical state is Markdown under tracked `.atelier/` records, checked with
-lint/export compatibility gates and indexed into SQLite with `atelier rebuild`.
-`atelier export` remains a compatibility and repair renderer during migration;
-backup JSON/Markdown formats are no longer command surfaces.
+lint/export freshness gates and indexed into SQLite with `atelier rebuild`.
+`atelier export` remains a repair renderer for committed tracker state; backup
+JSON/Markdown formats are no longer command surfaces.

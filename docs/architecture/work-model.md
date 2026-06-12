@@ -12,9 +12,9 @@ proof. These concepts should not collapse into one issue hierarchy.
   completion state. It is not a work container or super-epic.
 - Epic: a coordinated work package. Epics group implementation, documentation,
   review, validation, and closeout tasks that deliver a coherent change.
-- Issue: the actual accountability unit for work. Tasks, bugs, decisions,
-  reviews, validations, and closeouts are issue-shaped until a more specific
-  first-class record exists.
+- Issue: the actual accountability unit for work. Tasks, bugs, reviews,
+  validations, closeouts, and artifact updates are issue-shaped until a more
+  specific first-class record exists.
 - Workflow: the policy for how records move between states.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
@@ -59,13 +59,13 @@ Dependencies remain separate:
 
 ```text
 issue blocks issue
-decision blocks epic
+artifact update blocks epic
 validator failure blocks transition
 ```
 
 Mission work and mission blockers are distinct. `mission advances issue` means
 the issue or epic is part of the mission's execution/progress graph. `mission
-blocked_by issue` means the issue, decision, or validation item is gating the
+blocked_by issue` means the issue, artifact update, or validation item is gating the
 mission but is not necessarily ordinary mission scope.
 
 ## Agent Workflow

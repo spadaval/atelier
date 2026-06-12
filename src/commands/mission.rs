@@ -50,8 +50,8 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
     let db = Database::open(db_path)?;
     let mission = db.require_record(KIND, id)?;
-    let open_missions = open_mission_records(&db)?;
-    let active = open_missions
+    let current_missions = current_mission_records(&db)?;
+    let active = current_missions
         .iter()
         .filter(|record| is_active_mission(record))
         .collect::<Vec<_>>();
@@ -72,7 +72,7 @@ pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) ->
 
     let store = RecordStore::new(state_dir);
     let mut changed = false;
-    for record in open_missions {
+    for record in current_missions {
         let mut canonical = store.load_domain_record_by_id(KIND, &record.id)?;
         let should_be_active = canonical.record.id == mission.id;
         if set_mission_active_state(&mut canonical.record, should_be_active)? {
@@ -103,7 +103,7 @@ pub fn status(db: &Database, state_dir: &Path, id: Option<&str>, quiet: bool) ->
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
-    let records = open_mission_records(db)?;
+    let records = current_mission_records(db)?;
     let mut rows = records
         .into_iter()
         .map(|record| {
@@ -406,7 +406,7 @@ fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>>
 }
 
 pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
-    let active = open_mission_records(db)?
+    let active = current_mission_records(db)?
         .into_iter()
         .filter(is_active_mission)
         .collect::<Vec<_>>();
@@ -423,15 +423,15 @@ pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
     Ok(active.into_iter().next())
 }
 
-fn open_mission_records(db: &Database) -> Result<Vec<DomainRecord>> {
-    mission_records_for_filter(db, Some("open"))
+fn current_mission_records(db: &Database) -> Result<Vec<DomainRecord>> {
+    mission_records_for_filter(db, Some("current"))
 }
 
 fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec<DomainRecord>> {
     let records = db.list_records(KIND, None)?;
     Ok(match status {
         None | Some("all") => records,
-        Some("open") => records
+        Some("current") => records
             .into_iter()
             .filter(|record| mission_lifecycle_status(record) != "closed")
             .collect(),
@@ -447,7 +447,6 @@ fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec
 
 fn normalize_mission_status(status: &str) -> Result<&str> {
     match status {
-        "open" => Ok("ready"),
         "draft" | "ready" | "active" | "closed" => Ok(status),
         _ => bail!(
             "Invalid mission status '{}'. Must be one of: draft, ready, active, closed",
@@ -457,13 +456,7 @@ fn normalize_mission_status(status: &str) -> Result<&str> {
 }
 
 fn mission_lifecycle_status(record: &DomainRecord) -> String {
-    if is_active_mission(record) {
-        "active".to_string()
-    } else if record.status == "open" {
-        "ready".to_string()
-    } else {
-        record.status.clone()
-    }
+    record.status.clone()
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
@@ -478,7 +471,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     let status_filter = match status {
         Some("all") => None,
         Some(status) => Some(status),
-        None => Some("open"),
+        None => Some("current"),
     };
     let records = mission_records_for_filter(db, status_filter)?;
     let mut rows = records
@@ -530,11 +523,6 @@ pub fn update(
             enforce_closeout(&db, id)?;
         }
         current.record.status = status.to_string();
-        if status == "closed" {
-            if let Some(object) = data.as_object_mut() {
-                object.remove("active");
-            }
-        }
     }
     if let Some(body) = body {
         current.record.body = Some(body.to_string());
@@ -996,7 +984,7 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
 fn mission_status_rank(status: &str) -> u8 {
     match status {
         "active" => 0,
-        "ready" | "open" => 1,
+        "ready" => 1,
         "draft" => 2,
         "closed" => 4,
         _ => 3,
@@ -1245,26 +1233,15 @@ fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>
 }
 
 fn is_active_mission(record: &DomainRecord) -> bool {
-    if record.status == "active" {
-        return true;
-    }
-    serde_json::from_str::<Value>(&record.data_json)
-        .ok()
-        .and_then(|data| data.get("active").and_then(Value::as_bool))
-        .unwrap_or(false)
+    record.status == "active"
 }
 
 fn set_mission_active_state(record: &mut DomainRecord, active: bool) -> Result<bool> {
-    let mut data: Value = serde_json::from_str(&record.data_json)?;
     let target_status = if active { "active" } else { "ready" };
     if is_active_mission(record) == active && record.status == target_status {
         return Ok(false);
     }
-    if let Some(object) = data.as_object_mut() {
-        object.remove("active");
-    }
     record.status = target_status.to_string();
-    record.data_json = serde_json::to_string(&data)?;
     Ok(true)
 }
 

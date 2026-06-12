@@ -45,7 +45,7 @@ See [Mission Control TUI](mission-control-tui.md) for the read-only terminal UI
 consumer contract, projection degradation rules, navigation model, and fixture
 expectations.
 
-Accepted ADRs record cross-cutting product decisions:
+Accepted ADRs record cross-cutting product choices:
 
 - [ADR 0001: Project-Scoped Random Record IDs](../adr/0001-project-scoped-random-record-ids.md)
 - [ADR 0002: Markdown-First Record Store](../adr/0002-markdown-first-record-store.md)

@@ -33,12 +33,13 @@ interaction flow, evidence and validator expectations, handoff requirements, and
 removal or demotion of generic tracker/Beads language where Atelier is now the
 product dependency.
 
-Mission creation guidance should distinguish ordinary decision issues from
-autonomy-blocking decisions. Highly consequential product, architecture,
-persistence, security, data-retention, migration, or public-contract decisions
-must be resolved before a mission is started. Mission-linked decision issues are
-allowed only for local execution choices that can be resolved without changing
-the mission's objective, safety posture, public contract, or validation policy.
+Mission creation guidance should distinguish ordinary local execution choices
+from autonomy-blocking product, architecture, persistence, security,
+data-retention, migration, or public-contract choices. High-consequence choices
+must be resolved before a mission is started. Mission-linked artifact-update
+tasks are allowed only for local execution choices that can be resolved without
+changing the mission's objective, safety posture, public contract, or validation
+policy.
 
 The worker flow should be explicit: inspect assigned issue and parent mission or
 epic context; create or locate the worktree/branch; start tracked work; implement
@@ -48,7 +49,8 @@ completion/transition command; leave durable handoff notes when not complete.
 Acceptance: SKILL.md and relevant procedure/standard docs tell orchestrators and
 subagents to use Atelier mission, issue, work, worktree, evidence, workflow
 validate, lint, doctor, and export/check surfaces; guidance tells planners to
-resolve high-consequence decisions before mission start and to block mission
-activation when such decisions remain; guidance matches actual CLI behavior for
-transitions and evidence; legacy fallback language is clearly separated from the
-Atelier-dependent path.
+resolve high-consequence product, architecture, persistence, security,
+data-retention, migration, and public-contract choices before mission start and
+to block mission activation when such choices remain; guidance matches actual
+CLI behavior for transitions and evidence; legacy fallback language is clearly
+separated from the Atelier-dependent path.

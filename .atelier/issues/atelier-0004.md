@@ -5,7 +5,6 @@ evidence_required: []
 id: "atelier-0004"
 issue_type: "task"
 labels:
-- "decision"
 - "evidence"
 - "spec"
 priority: "P3"
@@ -26,9 +25,9 @@ updated_at: "2026-06-10T14:51:19.776106093+00:00"
 ---
 
 
-Resolve the SPEC.md open question about artifact storage. Decide what evidence artifacts live in the repo, what may live externally, and which backend is first.
+Resolve the SPEC.md open question about artifact storage. Specify what evidence artifacts live in the repo, what may live externally, and which backend is first.
 
-## Decision
+## Resolution
 
 TODO: choose the initial artifact storage policy and backend.
 

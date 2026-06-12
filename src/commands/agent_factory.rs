@@ -173,7 +173,6 @@ fn activity_note_objects(issue_id: &str) -> Result<Vec<NoteObject>> {
                 ActivityEventType::Comment
                     | ActivityEventType::Note
                     | ActivityEventType::Handoff
-                    | ActivityEventType::Decision
                     | ActivityEventType::Plan
             )
         })

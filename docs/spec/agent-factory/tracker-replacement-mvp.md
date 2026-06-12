@@ -90,7 +90,7 @@ drill-down commands for related records instead of dumping every field:
 | `description` | String or `null`; maps Beads description. |
 | `acceptance_criteria` | String or array preserving imported acceptance text. |
 | `status` | Stable status string such as `open`, `in_progress`, or `closed`. |
-| `issue_type` | Stable type string such as `epic`, `task`, `feature`, `bug`, `validation`, `closeout`, `spike`, or `decision`. |
+| `issue_type` | Stable type string such as `epic`, `task`, `feature`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 | `priority` | Stable priority value comparable for ready ordering. |
 | `labels` | Sorted array of strings. |
 | `parent` | Parent ID or `null`. |

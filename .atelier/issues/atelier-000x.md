@@ -5,7 +5,6 @@ evidence_required: []
 id: "atelier-000x"
 issue_type: "task"
 labels:
-- "decision"
 - "spec"
 - "storage"
 priority: "P1"
@@ -26,7 +25,7 @@ updated_at: "2026-06-08T19:47:40+00:00"
 
 Resolve whether `.atelier/state.db` is always ignored, optionally committed for convenience, or handled by another policy while still being rebuildable from `.atelier-state/`.
 
-## Decision
+## Resolution
 
 Always treat `.atelier/state.db` and the rest of `.atelier/` as local runtime state. Keep `.atelier/` ignored. Commit deterministic, rebuildable state only under `.atelier-state/`, with local cache subpaths such as `.atelier-state/cache/` ignored when they are derived artifacts.
 

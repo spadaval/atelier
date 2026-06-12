@@ -33,11 +33,11 @@ worktree helpers carrying active mission context; and transition-driven
 completion/closeout behavior.
 
 Mission start/focus behavior should include a readiness gate for unresolved
-high-consequence decisions. The command should block or warn according to
-workflow policy when open decision issues linked to the mission affect product,
-architecture, persistence, security, migration, public contracts, data
-retention, or validation policy. Local execution decisions can remain mission
-work when they do not undermine autonomous execution.
+high-consequence product, architecture, persistence, security, migration, public
+contract, data-retention, or validation-policy choices. The command should block
+or warn according to workflow policy when open artifact-update tasks linked to
+the mission affect those areas. Local execution choices can remain mission work
+when they do not undermine autonomous execution.
 
 Completion commands should trigger configured workflow validators before marking
 an issue, epic, or mission done. Missing evidence must be reported explicitly,
@@ -53,5 +53,5 @@ Acceptance: tests cover one active mission, switching, multiple-active lint
 failure, work start inside/outside active mission, non-mission lightweight issue
 work, worktree status showing mission context, completion blocked by missing
 evidence, completion after evidence is attached, explicit waiver behavior, and
-mission start/focus behavior when unresolved high-consequence decisions are
-linked to the mission.
+mission start/focus behavior when unresolved high-consequence artifact-update
+tasks are linked to the mission.

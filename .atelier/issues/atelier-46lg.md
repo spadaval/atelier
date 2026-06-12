@@ -20,4 +20,4 @@ title: "Specify setup, integrations, rebuild, maintenance, and state grouping"
 updated_at: "2026-06-12T03:25:24.819494670+00:00"
 ---
 
-Decide command grouping for setup, integrations, rebuild, state management, diagnostics, lint, and doctor. Acceptance: command taxonomy is documented with compatibility aliases or staged deprecation guidance for moved commands.
+Decide command grouping for setup, integrations, rebuild, state management, diagnostics, lint, and doctor. Acceptance: command taxonomy is documented with final command homes and direct-removal guidance for moved commands.

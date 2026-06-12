@@ -8,7 +8,6 @@ pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
     let (event_type, summary) = match kind {
         "note" => (ActivityEventType::Note, "Added note"),
         "handoff" => (ActivityEventType::Handoff, "Added handoff"),
-        "decision" => (ActivityEventType::Decision, "Added decision"),
         "plan" => (ActivityEventType::Plan, "Added plan"),
         _ => (ActivityEventType::Comment, "Added comment"),
     };
