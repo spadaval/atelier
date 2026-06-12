@@ -7607,6 +7607,193 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
 }
 
 #[test]
+fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let valid_body = "## Description\n\nValid orientation body.\n\n## Outcome\n\nValid linked work remains visible during degraded orientation.\n\n## Evidence\n\n- `atelier mission status <id>` lists valid linked work.";
+    let malformed_body = "## Description\n\nMalformed orientation body.\n\n## Outcome\n\nMalformed linked work is reported as a degraded blocker.\n\n## Evidence\n\n- `atelier lint <id>` reports the malformed record.";
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Degraded orientation"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Degraded orientation");
+    let mission_id = mission_id.as_str();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "mission activate failed: {stderr}");
+
+    let (success, valid_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Valid degraded work",
+            "--description",
+            valid_body,
+        ],
+    );
+    assert!(success, "valid issue create failed: {stderr}");
+    assert!(valid_out.contains("Created issue atelier-"));
+    let valid_id = issue_id_by_title(dir.path(), "Valid degraded work");
+    let valid_id = valid_id.as_str();
+
+    let (success, malformed_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Malformed degraded work",
+            "--description",
+            malformed_body,
+        ],
+    );
+    assert!(success, "malformed issue create failed: {stderr}");
+    assert!(malformed_out.contains("Created issue atelier-"));
+    let malformed_id = issue_id_by_title(dir.path(), "Malformed degraded work");
+    let malformed_id = malformed_id.as_str();
+
+    for issue_id in [valid_id, malformed_id] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+        assert!(success, "mission add work failed for {issue_id}: {stderr}");
+    }
+    commit_all(dir.path(), "valid degraded orientation baseline");
+
+    let malformed_path = dir
+        .path()
+        .join(".atelier")
+        .join("issues")
+        .join(format!("{malformed_id}.md"));
+    let markdown = std::fs::read_to_string(&malformed_path).unwrap();
+    std::fs::write(&malformed_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+    commit_all(dir.path(), "malformed degraded orientation record");
+
+    let (status_success, status_out, status_err) = run_atelier(dir.path(), &["status"]);
+    assert!(
+        status_success,
+        "status should degrade instead of failing: {status_err}"
+    );
+    assert!(status_out.contains("Atelier Status"));
+    assert!(status_out.contains(&format!("Active mission: {mission_id}")));
+    assert_degraded_repair_guidance(&status_err, malformed_id);
+
+    let (mission_success, mission_out, mission_err) =
+        run_atelier(dir.path(), &["mission", "status", mission_id]);
+    assert!(
+        mission_success,
+        "mission status should degrade instead of failing: {mission_err}"
+    );
+    assert!(mission_out.contains("Mission Status"));
+    assert!(mission_out.contains(valid_id));
+    assert!(mission_out.contains(malformed_id));
+    assert!(mission_out.contains("Reliability"));
+    assert!(mission_out.contains("Malformed Work: found"));
+    assert!(mission_out.contains("Linked Issue Records: malformed"));
+    assert!(mission_out.contains("Missing required issue body section 'Outcome'"));
+    assert_degraded_repair_guidance(&mission_err, malformed_id);
+
+    let (mission_show_success, mission_show_out, mission_show_err) =
+        run_atelier(dir.path(), &["mission", "show", mission_id]);
+    assert!(
+        mission_show_success,
+        "mission show should degrade instead of failing: {mission_show_err}"
+    );
+    assert!(mission_show_out.contains("Valid degraded work"));
+    assert!(mission_show_out.contains("Malformed degraded work"));
+    assert_degraded_repair_guidance(&mission_show_err, malformed_id);
+
+    let (show_success, show_out, show_err) =
+        run_atelier(dir.path(), &["issue", "show", malformed_id]);
+    assert!(
+        show_success,
+        "issue show should degrade instead of failing: {show_err}"
+    );
+    assert!(show_out.contains("Tracker Degraded"));
+    assert!(show_out.contains("Fallback: showing the last valid local projection"));
+    assert!(show_out.contains("Missing required issue body section 'Outcome'"));
+    assert!(show_out.contains(&format!("Next: atelier lint {malformed_id}")));
+    assert_degraded_repair_guidance(&show_err, malformed_id);
+
+    let (doctor_success, doctor_out, doctor_err) = run_atelier(dir.path(), &["doctor"]);
+    assert!(doctor_success, "doctor should remain usable: {doctor_err}");
+    assert!(doctor_out.contains("Projection rebuild:"));
+    assert!(doctor_out.contains("rebuild_ready: not ok"));
+
+    let (lint_success, lint_out, lint_err) = run_atelier(dir.path(), &["lint"]);
+    assert!(
+        !lint_success,
+        "global lint must fail closed for malformed records"
+    );
+    let lint_transcript = format!("{lint_out}\n{lint_err}");
+    assert_degraded_lint_diagnostic(&lint_transcript, malformed_id);
+
+    let (focused_success, focused_out, focused_err) =
+        run_atelier(dir.path(), &["lint", malformed_id]);
+    assert!(
+        !focused_success,
+        "focused lint must fail closed for malformed records"
+    );
+    let focused_transcript = format!("{focused_out}\n{focused_err}");
+    assert_degraded_lint_diagnostic(&focused_transcript, malformed_id);
+
+    let (close_success, _close_out, close_err) = run_atelier(
+        dir.path(),
+        &["issue", "close", malformed_id, "--reason", "done"],
+    );
+    assert!(!close_success, "issue closeout must fail closed");
+    assert!(close_err.contains("Canonical tracker Markdown is invalid"));
+    assert!(close_err.contains("atelier lint"));
+
+    let (workflow_success, _workflow_out, workflow_err) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            mission_id,
+            "--transition",
+            "close",
+        ],
+    );
+    assert!(!workflow_success, "workflow gates must fail closed");
+    assert!(workflow_err.contains("Canonical tracker Markdown is invalid"));
+    assert!(workflow_err.contains("atelier lint"));
+}
+
+fn assert_degraded_repair_guidance(stderr: &str, issue_id: &str) {
+    for needle in [
+        "Tracker degraded".to_string(),
+        "orientation only".to_string(),
+        "Repair: run `atelier lint`".to_string(),
+        format!(".atelier/issues/{issue_id}.md"),
+        "Missing required issue body section 'Outcome'".to_string(),
+    ] {
+        assert!(
+            stderr.contains(&needle),
+            "degraded stderr missing {needle:?}:\n{stderr}"
+        );
+    }
+}
+
+fn assert_degraded_lint_diagnostic(transcript: &str, issue_id: &str) {
+    for needle in [
+        format!(".atelier/issues/{issue_id}.md"),
+        "Missing required issue body section 'Outcome'".to_string(),
+        "section Outcome".to_string(),
+    ] {
+        assert!(
+            transcript.contains(&needle),
+            "lint transcript missing {needle:?}:\n{transcript}"
+        );
+    }
+}
+
+#[test]
 fn test_mission_list_human_overview_orders_and_summarizes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -8598,11 +8785,15 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(
-        !success,
-        "invalid canonical Markdown should fail, stdout: {stdout}"
+        success,
+        "invalid canonical Markdown should show degraded fallback: {stderr}"
     );
+    assert!(stdout.contains("Tracker Degraded"));
+    assert!(stdout.contains("Invalid YAML front matter"));
+    assert!(stdout.contains("Fallback: showing the last valid local projection"));
+    assert!(stdout.contains(&format!("Next: atelier lint {issue_id}")));
     assert!(
-        stderr.contains("Canonical tracker Markdown is invalid")
+        stderr.contains("Tracker degraded")
             && stderr.contains("atelier lint")
             && stderr.contains("Invalid YAML front matter")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),

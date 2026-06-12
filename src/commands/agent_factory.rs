@@ -297,14 +297,23 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
 pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
-    let object = match canonical_issue_detail(&id)? {
-        Some(record) => issue_object_from_canonical(db, issue, record)?,
-        None => issue_object(db, issue)?,
+    let (object, degraded) = match canonical_issue_detail(&id) {
+        Ok(Some(record)) => (issue_object_from_canonical(db, issue, record)?, None),
+        Ok(None) => (issue_object(db, issue)?, None),
+        Err(error) => (
+            issue_object(db, issue)?,
+            Some(format!("Canonical issue record is malformed: {error:#}")),
+        ),
     };
-    render_issue_show_human(db, &id, &object)
+    render_issue_show_human(db, &id, &object, degraded.as_deref())
 }
 
-fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObject) -> Result<()> {
+fn render_issue_show_human(
+    db: &Database,
+    canonical_id: &str,
+    object: &IssueObject,
+    degraded: Option<&str>,
+) -> Result<()> {
     let identity = format!(
         "{} [{}] {} - {}",
         object.id, object.issue_type, object.status, object.title
@@ -336,6 +345,14 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     }
     if let Some(path) = canonical_issue_path(canonical_id)? {
         println!("File:     {}", path.display());
+    }
+    if let Some(degraded) = degraded {
+        println!();
+        println!("Tracker Degraded");
+        println!("----------------");
+        println!("{degraded}");
+        println!("Fallback: showing the last valid local projection for orientation only.");
+        println!("Next: atelier lint {}", object.id);
     }
 
     render_parent_context(db, canonical_id)?;

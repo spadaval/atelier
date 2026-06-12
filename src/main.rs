@@ -909,6 +909,9 @@ fn find_atelier_dir() -> Result<PathBuf> {
 enum CommandStorageAccess {
     /// Read/query commands that depend on a fresh SQLite projection.
     ProjectionQuery,
+    /// Orientation reads that can fall back to the existing projection when
+    /// canonical records are malformed, as long as the degraded state is named.
+    DegradedProjectionQuery,
     /// Commands that write canonical Markdown and then refresh the projection.
     CanonicalMutation,
     /// Runtime-local commands that must not refresh or mutate canonical state.
@@ -921,8 +924,14 @@ impl CommandStorageAccess {
     fn requires_fresh_projection(self) -> bool {
         matches!(
             self,
-            CommandStorageAccess::ProjectionQuery | CommandStorageAccess::CanonicalMutation
+            CommandStorageAccess::ProjectionQuery
+                | CommandStorageAccess::DegradedProjectionQuery
+                | CommandStorageAccess::CanonicalMutation
         )
+    }
+
+    fn allows_degraded_projection(self) -> bool {
+        matches!(self, CommandStorageAccess::DegradedProjectionQuery)
     }
 }
 
@@ -963,7 +972,12 @@ fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     let runtime_db_existed = layout.runtime_db_path().exists();
     let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
     let db = if mode.requires_fresh_projection() {
-        ensure_fresh_projection_db(db, &layout, runtime_db_existed)?
+        ensure_fresh_projection_db(
+            db,
+            &layout,
+            runtime_db_existed,
+            mode.allows_degraded_projection(),
+        )?
     } else {
         db
     };
@@ -978,6 +992,7 @@ fn ensure_fresh_projection_db(
     db: Database,
     layout: &storage_layout::StorageLayout,
     runtime_db_existed: bool,
+    allow_degraded_projection: bool,
 ) -> Result<Database> {
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
@@ -1004,11 +1019,25 @@ fn ensure_fresh_projection_db(
 
         let report = projection_index::check(&db, &state_dir)?;
         if !report.is_fresh() {
-            commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
-                "Canonical tracker Markdown is invalid; run `atelier lint` for details, \
-                 then fix canonical tracker records before querying."
-                    .to_string()
-            })?;
+            if let Err(error) = commands::rebuild::validate_canonical_state(&state_dir) {
+                if allow_degraded_projection {
+                    eprintln!(
+                        "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
+                    );
+                    eprintln!("Repair: run `atelier lint` for record diagnostics, then fix the named Markdown before closing or mutating work.");
+                    eprintln!(
+                        "Projection freshness: {}",
+                        report.problem_messages().join("; ")
+                    );
+                    eprintln!("Canonical diagnostic: {error:#}");
+                    return Ok(db);
+                }
+                return Err(error).with_context(|| {
+                    "Canonical tracker Markdown is invalid; run `atelier lint` for details, \
+                     then fix canonical tracker records before querying."
+                        .to_string()
+                });
+            }
             let db_path = layout.runtime_db_path();
             drop(db);
             commands::rebuild::run(&state_dir, &db_path).with_context(|| {
@@ -1040,6 +1069,10 @@ fn projection_query_db() -> Result<Database> {
     Ok(command_storage(CommandStorageAccess::ProjectionQuery)?.into_db())
 }
 
+fn degraded_projection_query_db() -> Result<Database> {
+    Ok(command_storage(CommandStorageAccess::DegradedProjectionQuery)?.into_db())
+}
+
 fn lint_db() -> Result<Database> {
     let layout = storage_layout::StorageLayout::discover()?;
     if layout.runtime_db_path().exists() {
@@ -1060,9 +1093,13 @@ mod command_storage_tests {
     #[test]
     fn access_modes_declare_projection_freshness_policy() {
         assert!(CommandStorageAccess::ProjectionQuery.requires_fresh_projection());
+        assert!(CommandStorageAccess::DegradedProjectionQuery.requires_fresh_projection());
         assert!(CommandStorageAccess::CanonicalMutation.requires_fresh_projection());
         assert!(!CommandStorageAccess::RuntimeOnly.requires_fresh_projection());
         assert!(!CommandStorageAccess::HealthRepair.requires_fresh_projection());
+        assert!(!CommandStorageAccess::ProjectionQuery.allows_degraded_projection());
+        assert!(CommandStorageAccess::DegradedProjectionQuery.allows_degraded_projection());
+        assert!(!CommandStorageAccess::CanonicalMutation.allows_degraded_projection());
     }
 }
 
@@ -1287,7 +1324,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             ready,
             blocked,
         } => {
-            let db = projection_query_db()?;
+            let db = degraded_projection_query_db()?;
             if blocked {
                 if ready {
                     bail!("--blocked cannot be combined with --ready");
@@ -1310,17 +1347,17 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::Search { query } => {
             issue_compat_guidance("atelier search <query>");
-            let db = projection_query_db()?;
+            let db = degraded_projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
 
         IssueCommands::Show { id } => {
-            let db = projection_query_db()?;
+            let db = degraded_projection_query_db()?;
             commands::agent_factory::show(&db, &id)
         }
 
         IssueCommands::Transition { id, options } => {
-            let db = projection_query_db()?;
+            let db = degraded_projection_query_db()?;
             let _ = options;
             commands::agent_factory::transition_options(&db, &id)
         }
@@ -1544,13 +1581,13 @@ fn run() -> Result<()> {
         }
 
         Commands::Prime => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             let repo_root = storage.repo_root().to_path_buf();
             commands::prime::run(storage.db(), &storage.state_dir(), &repo_root)
         }
 
         Commands::Status => {
-            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
@@ -1577,7 +1614,7 @@ fn run() -> Result<()> {
         Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Search { query } => {
-            let db = projection_query_db()?;
+            let db = degraded_projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
 
@@ -1757,7 +1794,7 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Show { id } => {
-                let db = projection_query_db()?;
+                let db = degraded_projection_query_db()?;
                 commands::mission::show(&db, &id)
             }
             MissionCommands::Start { id, switch_active } => {
@@ -1768,7 +1805,7 @@ fn run() -> Result<()> {
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
             MissionCommands::Status { id } => {
-                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
                 commands::mission::status(storage.db(), &storage.state_dir(), id.as_deref(), quiet)
             }
             MissionCommands::Audit { id } => {
@@ -1776,7 +1813,7 @@ fn run() -> Result<()> {
                 commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
             }
             MissionCommands::List { status } => {
-                let db = projection_query_db()?;
+                let db = degraded_projection_query_db()?;
                 commands::mission::list(&db, status.as_deref())
             }
             MissionCommands::Update {
