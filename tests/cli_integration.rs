@@ -177,6 +177,10 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
+fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
+    format!("#[test]\n#[{ignore_attribute}]\nfn {test_name}() {{}}\n")
+}
+
 fn remove_issue_section(markdown: &str, heading: &str) -> String {
     let marker = format!("## {heading}\n");
     let start = markdown.find(&marker).expect("section heading missing");
@@ -1799,7 +1803,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_history_reads_activity_sidecars_with_filters_and_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1855,7 +1859,7 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_history_empty_and_invalid_limit() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1870,7 +1874,7 @@ fn test_history_empty_and_invalid_limit() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_evidence_issue_link_creates_history_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2768,7 +2772,7 @@ fn test_removed_issue_type_is_rejected() {
 // ==================== Session Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2780,7 +2784,7 @@ fn test_session_start() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2793,7 +2797,7 @@ fn test_session_status() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2807,7 +2811,7 @@ fn test_session_work() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_end() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2934,7 +2938,7 @@ fn test_unicode_in_cli() {
 // ==================== Archive Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_closed_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2948,7 +2952,7 @@ fn test_archive_closed_issue() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_open_issue_fails() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2967,7 +2971,7 @@ fn test_archive_open_issue_fails() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2984,7 +2988,7 @@ fn test_archive_list() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_unarchive_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3010,7 +3014,7 @@ fn test_unarchive_issue() {
 // ==================== Milestone Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_create() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3025,7 +3029,7 @@ fn test_milestone_create() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3041,7 +3045,7 @@ fn test_milestone_list() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_show() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3059,7 +3063,7 @@ fn test_milestone_show() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_add_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3078,7 +3082,7 @@ fn test_milestone_add_issues() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_close() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3091,7 +3095,7 @@ fn test_milestone_close() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_delete() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3109,7 +3113,7 @@ fn test_milestone_delete() {
 // ==================== Timer Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_timer_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3122,7 +3126,7 @@ fn test_timer_start() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_timer_stop() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3136,7 +3140,7 @@ fn test_timer_stop() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_timer_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3153,7 +3157,7 @@ fn test_timer_status() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_timer_status_no_timer() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3460,7 +3464,7 @@ fn test_next_no_issues() {
 // ==================== Export/Import Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3484,7 +3488,7 @@ fn test_export_json() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_markdown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3518,7 +3522,7 @@ fn test_export_markdown() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_import_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3670,7 +3674,7 @@ fn test_delete_with_subissues() {
 // ==================== Additional Session Edge Cases ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_work_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3683,7 +3687,7 @@ fn test_session_work_nonexistent_issue() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_end_without_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3698,7 +3702,7 @@ fn test_session_end_without_start() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_status_without_session() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3714,7 +3718,7 @@ fn test_session_status_without_session() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_multiple_starts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3780,7 +3784,7 @@ fn test_next_all_closed() {
 // ==================== Additional Archive Edge Cases ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_older_days() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3795,7 +3799,7 @@ fn test_archive_older_days() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_already_archived() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3819,7 +3823,7 @@ fn test_archive_already_archived() {
 // ==================== Additional Milestone Edge Cases ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_remove_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3837,7 +3841,7 @@ fn test_milestone_remove_issue() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_show_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3848,7 +3852,7 @@ fn test_milestone_show_nonexistent() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_list_closed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4221,7 +4225,7 @@ fn test_next_only_subissues_ready() {
 
 // --- import.rs: Import with parent relationships ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_import_with_parent_relationships() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4256,7 +4260,7 @@ fn test_import_with_parent_relationships() {
 
 // --- import.rs: Import issues with labels and comments ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_import_with_labels_and_comments() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4294,7 +4298,7 @@ fn test_import_with_labels_and_comments() {
 
 // --- session.rs: Session with handoff notes from previous session ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_start_shows_handoff_notes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4320,7 +4324,7 @@ fn test_session_start_shows_handoff_notes() {
 
 // --- session.rs: Session status with active issue ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_status_with_active_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4442,7 +4446,7 @@ fn test_multiple_labels() {
 
 // --- Export markdown format test ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_markdown_format() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4481,7 +4485,7 @@ fn test_export_markdown_format() {
 
 // --- Archive older days test ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_older_no_matches() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4711,7 +4715,7 @@ fn test_block_nonexistent_issue() {
 
 // --- session.rs: Session status deleted issue ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_session_status_deleted_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4746,7 +4750,7 @@ fn test_show_with_related_issues() {
 
 // --- milestone.rs: Edge cases ---
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_add_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4766,7 +4770,7 @@ fn test_milestone_add_nonexistent_issue() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_milestone_delete_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -5042,7 +5046,7 @@ fn test_stress_rapid_operations() {
 
 /// Test export/import round-trip preserves data
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_integrity_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -5244,6 +5248,22 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(mission_out.contains("Mission atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Ship records");
     let mission_id = mission_id.as_str();
+    let (success, mission_update, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "update",
+            mission_id,
+            "--body",
+            "Updated mission body",
+            "--risk",
+            "Projection drift",
+            "--validation",
+            "Run focused mission checks",
+        ],
+    );
+    assert!(success, "mission update failed: {stderr}");
+    assert!(mission_update.contains("Status: ready"));
 
     let (success, plan_out, stderr) = run_atelier(
         dir.path(),
@@ -5351,10 +5371,20 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
     assert!(mission_markdown.contains("schema: \"atelier.mission\""));
     assert!(mission_markdown.contains("schema_version: 1"));
-    assert!(mission_markdown.contains("data: "));
+    assert!(!mission_markdown.contains("\ndata: "));
+    assert!(mission_markdown.contains("labels:\n- \"mission\"\n"));
+    assert!(mission_markdown.contains("## Intent\n\nUpdated mission body"));
+    assert!(mission_markdown.contains("## Constraints\n\n- Keep issues accountable"));
+    assert!(mission_markdown.contains("## Risks\n\n- Projection drift"));
+    assert!(mission_markdown.contains("## Validation\n\n- Run focused mission checks"));
     assert!(mission_markdown.contains("relationships:"));
-    assert!(mission_markdown.contains(&format!("id: \"{issue_id}\"")));
-    assert!(mission_markdown.contains(&format!("id: \"{blocker_id}\"")));
+    assert!(!mission_markdown.contains("  attachments:\n  - kind: \"issue\""));
+    assert!(mission_markdown.contains(&format!(
+        "  - kind: \"issue\"\n    id: \"{blocker_id}\"\n    type: \"blocked_by\""
+    )));
+    assert!(mission_markdown.contains(&format!(
+        "  - kind: \"issue\"\n    id: \"{issue_id}\"\n    type: \"advances\""
+    )));
 
     let plan_path = dir
         .path()
@@ -5482,6 +5512,94 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(evidence_list.contains("Evidence"));
     assert!(evidence_list.contains("1 total"));
     assert!(evidence_list.contains("cargo test passed"));
+}
+
+#[test]
+fn test_mission_relationship_filtering_keeps_supporting_records_out_of_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Filtered mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Filtered mission");
+    let mission_id = mission_id.as_str();
+
+    let (success, work_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Counted work"]);
+    assert!(success, "work issue create failed: {stderr}");
+    assert!(work_out.contains("Created issue atelier-"));
+    let work_id = issue_id_by_title(dir.path(), "Counted work");
+    let work_id = work_id.as_str();
+
+    let (success, support_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Supporting reference"]);
+    assert!(success, "support issue create failed: {stderr}");
+    assert!(support_out.contains("Created issue atelier-"));
+    let support_id = issue_id_by_title(dir.path(), "Supporting reference");
+    let support_id = support_id.as_str();
+
+    let (success, blocker_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Direct blocker"]);
+    assert!(success, "blocker issue create failed: {stderr}");
+    assert!(blocker_out.contains("Created issue atelier-"));
+    let blocker_id = issue_id_by_title(dir.path(), "Direct blocker");
+    let blocker_id = blocker_id.as_str();
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, work_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-blocker", mission_id, blocker_id],
+    );
+    assert!(success, "mission add-blocker failed: {stderr}");
+
+    let mission_path = dir
+        .path()
+        .join(".atelier")
+        .join("missions")
+        .join(format!("{mission_id}.md"));
+    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
+    std::fs::write(
+        &mission_path,
+        mission_markdown.replace(
+            "schema: \"atelier.mission\"",
+            &format!(
+                "  - kind: \"issue\"\n    id: \"{support_id}\"\n    type: \"related\"\nschema: \"atelier.mission\""
+            ),
+        ),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(
+        success,
+        "rebuild after supporting relation edit failed: {stderr}"
+    );
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
+    assert!(success, "mission show failed: {stderr}");
+    assert!(show_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
+    assert!(show_out.contains("Mission Blockers: 1"));
+    assert!(show_out.contains("Linked Work"));
+    assert!(show_out.contains("Counted work"));
+    assert!(show_out.contains("Supporting Records"));
+    assert!(show_out.contains("Supporting reference (related)"));
+
+    let linked_work = show_out
+        .split("Linked Work")
+        .nth(1)
+        .and_then(|text| text.split("Supporting Records").next())
+        .unwrap_or("");
+    assert!(
+        !linked_work.contains("Supporting reference"),
+        "supporting relation was rendered as linked work:\n{show_out}"
+    );
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Total: 1 ready"));
+    assert!(status_out.contains("Mission blockers: 1 open"));
 }
 
 #[test]
@@ -5752,6 +5870,131 @@ fn test_workflow_validate_fails_without_required_evidence() {
     assert!(stdout.contains("fail  evidence_attached"));
     assert!(stdout.contains("no validating evidence link found"));
     assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_workflow_validate_reports_ignored_tests_without_owner() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    std::fs::create_dir_all(dir.path().join("tests")).unwrap();
+    std::fs::write(
+        dir.path().join("tests/ignored_inventory.rs"),
+        ignored_test_source(
+            "ignore = \"reason: product parser migration; product: yes\"",
+            "hidden_product_behavior",
+        ),
+    )
+    .unwrap();
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Ignored inventory"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Ignored inventory");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "mission",
+            &mission_id,
+            "--validator",
+            "ignored_tests_reviewed",
+        ],
+    );
+
+    assert!(!success, "ignored test inventory should fail");
+    assert!(stdout.contains("fail  ignored_tests_reviewed"));
+    assert!(stdout.contains("hidden_product_behavior"));
+    assert!(stdout.contains("missing owner or linked issue"));
+    assert!(stdout.contains("product=yes"));
+    assert!(stderr.contains("workflow validation failed"));
+}
+
+#[test]
+fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "create", "Ignored blocker mission"],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Ignored blocker mission");
+    let mission_id = mission_id.as_str();
+
+    let (success, work_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Finished behavior work"]);
+    assert!(success, "work create failed: {stderr}");
+    assert!(work_out.contains("Created issue atelier-"));
+    let work_id = issue_id_by_title(dir.path(), "Finished behavior work");
+    let work_id = work_id.as_str();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, work_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "close", work_id, "--reason", "done"]);
+    assert!(success, "close work failed: {stderr}");
+
+    let (success, followup_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Resolve ignored behavior test"],
+    );
+    assert!(success, "follow-up create failed: {stderr}");
+    assert!(followup_out.contains("Created issue atelier-"));
+    let followup_id = issue_id_by_title(dir.path(), "Resolve ignored behavior test");
+    let followup_id = followup_id.as_str();
+
+    std::fs::create_dir_all(dir.path().join("tests")).unwrap();
+    std::fs::write(
+        dir.path().join("tests/product_gap.rs"),
+        ignored_test_source(
+            &format!(
+                "ignore = \"reason: product behavior pending migration; issue: {followup_id}; product: yes\""
+            ),
+            "ignored_product_closeout_gap",
+        ),
+    )
+    .unwrap();
+
+    let (success, evidence_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "ignored blocker evidence",
+        ],
+    );
+    assert!(success, "evidence add failed: {stderr}");
+    assert!(evidence_out.contains("[evidence] pass - ignored blocker evidence"));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "ignored blocker evidence");
+    let evidence_id = evidence_id.as_str();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", evidence_id, "mission", mission_id],
+    );
+    assert!(success, "evidence attach failed: {stderr}");
+    commit_all(dir.path(), "ignored test closeout blocker");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Closeout: blocked"));
+    assert!(status_out.contains("Validator ignored_tests_reviewed: fail"));
+    assert!(status_out.contains("ignored_product_closeout_gap"));
+    assert!(status_out.contains(followup_id));
+    assert!(status_out.contains("ignored product-behavior test is still blocking closeout"));
+    assert!(!status_out.contains(&format!(
+        "atelier mission update {mission_id} --status closed"
+    )));
 }
 
 #[test]
@@ -7942,7 +8185,7 @@ fn test_unicode_in_dependencies() {
 
 /// Test export/import preserves Unicode
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_unicode_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

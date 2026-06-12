@@ -187,6 +187,7 @@ fn evaluate_builtin(
                 Ok((false, "atelier lint failed".to_string()))
             }
         }
+        "ignored_tests_reviewed" => ignored_tests_reviewed(),
         "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
         "validation_criteria_satisfied" => Ok((
             false,
@@ -319,7 +320,7 @@ fn mission_direct_blockers(db: &Database, mission_id: &str) -> Result<Vec<String
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
     let mut issue_ids = BTreeSet::new();
     for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type == "blocked_by" {
+        if link.relation_type != "advances" {
             continue;
         }
         let linked_id = if link.source_kind == "issue"
@@ -394,6 +395,11 @@ fn git_worktree_clean() -> Result<(bool, String)> {
             ),
         ))
     }
+}
+
+fn ignored_tests_reviewed() -> Result<(bool, String)> {
+    let inventory = crate::test_inventory::IgnoredTestInventory::scan_repo(&repo_root()?)?;
+    Ok(inventory.status_reason())
 }
 
 fn repo_root() -> Result<PathBuf> {

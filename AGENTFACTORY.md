@@ -27,7 +27,9 @@ This file binds Agent Factory to this repository.
   committed `.atelier/` records
 - Missions are durable active-focus records. Link executable issues to missions
   and select worker issues from the active mission or epic graph.
-- Issues are executable tracker items.
+- Issues are executable tracker items. When sectioned Markdown is supported,
+  executable issues use `Description`, `Outcome`, `Evidence`, and optional
+  `Notes`.
 - Important unresolved choices become artifact-update tasks. Block dependent
   implementation on those tasks when needed.
 - Validation criteria must name observable completion behavior: command output,
@@ -36,14 +38,14 @@ This file binds Agent Factory to this repository.
 - Use the validation router for proof routing:
   `docs/architecture/quality/validation.md`. Ordinary executable issues prove
   their own scoped Outcome on the issue. Risky, broad, public-contract,
-  migration, cross-cutting, Agent Factory process, stale-test, docs/help parity,
-  and parent closeout claims require first-class evidence and may require a
-  separate validation or closeout issue.
+  process-policy, migration, cross-cutting, Agent Factory process, stale-test,
+  docs/help parity, parent-level, epic, and mission claims require first-class
+  evidence and may require a separate validation or closeout issue.
 - Use durable issue notes for handoff context, caveats, skipped optional checks,
   or trivial docs-only proof. Use first-class evidence for non-trivial proof,
-  workflow validation, process-policy changes, failed or deferred checks, and
-  any result a future worker must inspect. Use separate validation issues when
-  the implementer should not validate their own claim.
+  advanced policy checks, process-policy changes, failed or deferred checks,
+  and any result a future worker must inspect. Use separate validation issues
+  when the implementer should not validate their own claim.
 - Prefer the installed `atelier` command for normal tracker work. Use
   `target/debug/atelier` only when testing local CLI changes that have not been
   installed yet, and rebuild it first when it is missing or stale. Use
@@ -64,6 +66,9 @@ This file binds Agent Factory to this repository.
   - `atelier finish [issue-id]`
   - `atelier evidence add --kind <kind> --result <result> "summary"`
   - `atelier evidence attach <evidence-id> issue <issue-id>`
+- Advanced policy checks:
+  - Use only when the binding, assignment, workflow policy, or closeout contract
+    explicitly requires them; they do not replace attached Outcome proof.
   - `atelier workflow validate issue <issue-id>`
   - `atelier workflow validate mission <mission-id>`
 - Issues:
@@ -86,7 +91,8 @@ This file binds Agent Factory to this repository.
   - `atelier issue close <id> --reason "..."`
 - Do not use command-result `--json` as the Agent Factory automation contract.
   Use focused human output, quiet acknowledgements only where natural, and
-  explicit drill-down commands.
+  explicit drill-down commands. Use `show`, `list`, `transition`, and `status`
+  for normal planning or drill-down, not raw workflow-validator output.
 - Sync/state:
   - `git pull`
   - `atelier export --check`
@@ -98,7 +104,9 @@ This file binds Agent Factory to this repository.
   - `atelier lint <id>`
   - `atelier doctor`
 - Mission completion requires all linked work closed, required evidence
-  attached, workflow validators passing, and a clean Git worktree.
+  attached, required advanced policy checks passing, a contract audit mapping
+  each mission Outcome line to linked work and attached evidence, and a clean
+  Git worktree.
 - Do not preserve old command names, status aliases, output shims, or fallback
   readers unless a human explicitly asks for a compatibility window.
 

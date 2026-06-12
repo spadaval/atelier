@@ -906,8 +906,9 @@ fn create_bulk_record(
     body: Option<&str>,
     data: Value,
 ) -> Result<()> {
+    let status = if kind == "mission" { "ready" } else { "open" };
     let record =
-        store.create_domain_record(kind, title, "open", body, &serde_json::to_string(&data)?)?;
+        store.create_domain_record(kind, title, status, body, &serde_json::to_string(&data)?)?;
     let id = record.record.id;
     resolved.insert(
         client_ref.to_string(),

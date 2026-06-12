@@ -233,36 +233,11 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
 fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> {
     let mut relationships = domain_relationships(db, record)?;
     record_store::sort_relationships(&mut relationships);
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.created_at.to_rfc3339()),
-    )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.id))?;
-    write_json_scalar(&mut output, "data", &record.data_json)?;
-    record_store::write_yaml_relationships(&mut output, &relationships)?;
-    write_yaml_scalar(
-        &mut output,
-        "schema",
-        Some(record_store::canonical_record_kind(&record.kind)?.schema),
-    )?;
-    output.push_str(&format!(
-        "schema_version: {}\n",
-        record_store::canonical_record_kind(&record.kind)?.schema_version
-    ));
-    write_yaml_scalar(&mut output, "status", Some(&record.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&normalize_body(record.body.as_deref().unwrap_or("")));
-    output.push('\n');
-    Ok(output)
+    record_store::render_domain_record(&record_store::CanonicalDomainRecord {
+        record: record.clone(),
+        labels: domain_labels(record),
+        relationships,
+    })
 }
 
 fn issue_relationships(db: &Database, issue: &Issue) -> Result<Relationships> {
@@ -309,7 +284,10 @@ fn classify_record_link_for_owner(
     owner_id: &str,
 ) {
     if link.source_kind == owner_kind && link.source_id == owner_id {
-        if link.target_kind == "issue" && is_child_relation(&link.relation_type) {
+        if owner_kind == "issue"
+            && link.target_kind == "issue"
+            && is_child_relation(&link.relation_type)
+        {
             relationships.children.push(RelationshipTarget {
                 kind: link.target_kind.clone(),
                 id: link.target_id.clone(),
@@ -331,6 +309,9 @@ fn classify_record_link_for_owner(
         && link.target_id == owner_id
         && is_attachment_kind(&link.source_kind)
         && is_attachment_role(&link.relation_type)
+        && !(owner_kind == "mission"
+            && link.source_kind == "evidence"
+            && link.relation_type == "validates")
     {
         relationships.attachments.push(AttachmentRelationship {
             kind: link.source_kind.clone(),
@@ -362,40 +343,18 @@ fn issue_record_path(id: &str) -> PathBuf {
     record_store::issue_record_path(id)
 }
 
+fn domain_labels(record: &DomainRecord) -> Vec<String> {
+    match record.kind.as_str() {
+        "mission" => vec!["mission".to_string()],
+        _ => Vec::new(),
+    }
+}
+
 fn display_state_path(relative_path: &Path) -> String {
     format!(
         ".atelier/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
-}
-
-fn normalize_body(body: &str) -> String {
-    body.replace("\r\n", "\n").replace('\r', "\n")
-}
-
-fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Result<()> {
-    match value {
-        Some(value) => {
-            output.push_str(key);
-            output.push_str(": ");
-            output.push_str(&serde_json::to_string(value)?);
-            output.push('\n');
-        }
-        None => {
-            output.push_str(key);
-            output.push_str(": null\n");
-        }
-    }
-    Ok(())
-}
-
-fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> {
-    let _: serde_json::Value = serde_json::from_str(value)?;
-    output.push_str(key);
-    output.push_str(": ");
-    output.push_str(&serde_json::to_string(value)?);
-    output.push('\n');
-    Ok(())
 }
 
 #[cfg(test)]

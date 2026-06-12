@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
-use crate::record_store::RecordStore;
+use crate::record_store::{self, RecordStore, MISSION_EMPTY_DATA_JSON};
 
 const KIND: &str = "mission";
 const MISSION_CLOSE_VALIDATORS: &[&str] = &[
@@ -15,6 +15,7 @@ const MISSION_CLOSE_VALIDATORS: &[&str] = &[
     "evidence_attached",
     "no_open_blockers",
     "no_blocking_lints",
+    "ignored_tests_reviewed",
     "git_worktree_clean",
 ];
 
@@ -27,17 +28,17 @@ pub fn create(
     risks: Vec<String>,
     validation: Vec<String>,
 ) -> Result<()> {
-    let data = json!({
-        "constraints": constraints,
-        "risks": risks,
-        "validation": validation,
-        "milestones": [],
-        "plans": [],
-        "evidence": [],
-        "work": []
-    });
+    let sections =
+        record_store::mission_sections_from_inputs(title, body, constraints, risks, validation);
+    let mission_body = record_store::render_mission_sections(&sections);
     let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(KIND, title, "ready", body, &data.to_string())?;
+    let created = store.create_domain_record(
+        KIND,
+        title,
+        "ready",
+        Some(&mission_body),
+        MISSION_EMPTY_DATA_JSON,
+    )?;
     refresh_projection(state_dir, db_path)?;
     let db = Database::open(db_path)?;
     let record = db.require_record(KIND, &created.record.id)?;
@@ -338,6 +339,7 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
     let mut evidence = Vec::new();
     let mut milestones = Vec::new();
     let mut mission_blockers = Vec::new();
+    let mut supporting = Vec::new();
     let mut seen_records = BTreeSet::new();
     let mut seen_mission_blockers = BTreeSet::new();
     let mut seen_work = BTreeSet::new();
@@ -353,13 +355,22 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
             continue;
         };
         match kind {
-            "plan" if seen_records.insert((kind.to_string(), linked_id.to_string())) => {
+            "plan"
+                if link.relation_type == "planned_by"
+                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
+            {
                 plans.push(record_summary(db, kind, linked_id)?)
             }
-            "evidence" if seen_records.insert((kind.to_string(), linked_id.to_string())) => {
+            "evidence"
+                if link.relation_type == "validates"
+                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
+            {
                 evidence.push(record_summary(db, kind, linked_id)?)
             }
-            "milestone" if seen_records.insert((kind.to_string(), linked_id.to_string())) => {
+            "milestone"
+                if link.relation_type == "has_checkpoint"
+                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
+            {
                 milestones.push(record_summary(db, kind, linked_id)?)
             }
             "issue" => {
@@ -374,6 +385,17 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
                     }
                     continue;
                 }
+                if link.relation_type != "advances" {
+                    if seen_records.insert((kind.to_string(), linked_id.to_string())) {
+                        supporting.push(linked_record_summary(
+                            db,
+                            kind,
+                            linked_id,
+                            &link.relation_type,
+                        )?);
+                    }
+                    continue;
+                }
                 if !seen_work.insert(linked_id.to_string()) {
                     continue;
                 }
@@ -383,7 +405,16 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
                     .expect("known work bucket")
                     .push(issue_json_with_relation(db, &issue, &link.relation_type)?);
             }
-            _ => {}
+            _ => {
+                if seen_records.insert((kind.to_string(), linked_id.to_string())) {
+                    supporting.push(linked_record_summary(
+                        db,
+                        kind,
+                        linked_id,
+                        &link.relation_type,
+                    )?);
+                }
+            }
         }
     }
 
@@ -394,6 +425,7 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
         &evidence,
         &work,
         &mission_blockers,
+        &supporting,
     )?;
     Ok(())
 }
@@ -510,10 +542,10 @@ pub fn update(
     }
     let store = RecordStore::new(state_dir);
     let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut data: Value = serde_json::from_str(&current.record.data_json)?;
-    replace_array(&mut data, "constraints", constraints);
-    replace_array(&mut data, "risks", risks);
-    replace_array(&mut data, "validation", validation);
+    let mut sections = record_store::mission_sections_from_domain_record(&current.record)?;
+    replace_section_list(&mut sections.constraints, constraints);
+    replace_section_list(&mut sections.risks, risks);
+    replace_section_list(&mut sections.validation, validation);
     if let Some(title) = title {
         current.record.title = title.to_string();
     }
@@ -526,9 +558,10 @@ pub fn update(
         current.record.status = status.to_string();
     }
     if let Some(body) = body {
-        current.record.body = Some(body.to_string());
+        sections.intent = body.trim().to_string();
     }
-    current.record.data_json = serde_json::to_string(&data)?;
+    current.record.body = Some(record_store::render_mission_sections(&sections));
+    current.record.data_json = MISSION_EMPTY_DATA_JSON.to_string();
     current.record.updated_at = Utc::now();
     store.write_domain_record_atomic(&current)?;
     refresh_projection(state_dir, db_path)?;
@@ -543,7 +576,7 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
     let issue = db.require_issue(issue_id)?;
     drop(db);
     let store = RecordStore::new(state_dir);
-    let inserted = store.add_attachment_relationship(KIND, id, "issue", &issue.id, "advances")?;
+    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
     refresh_projection(state_dir, db_path)?;
     if inserted {
         println!("Added work {} to mission {}", issue.id, id);
@@ -728,7 +761,7 @@ pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -
     let issue = db.require_issue(issue_id)?;
     drop(db);
     let store = RecordStore::new(state_dir);
-    let inserted = store.add_attachment_relationship(KIND, id, "issue", &issue.id, "blocked_by")?;
+    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "blocked_by")?;
     refresh_projection(state_dir, db_path)?;
     if inserted {
         println!("Added blocker {} to mission {}", issue.id, id);
@@ -799,14 +832,14 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
                     }
                 }
             }
-            "issue" => {
+            "issue" if link.relation_type == "advances" => {
                 if !seen_work.insert(linked_id.to_string()) {
                     continue;
                 }
                 let issue = db.require_issue(linked_id)?;
                 linked_work.push(issue);
             }
-            "evidence" => {
+            "evidence" if link.relation_type == "validates" => {
                 summary.evidence_count += 1;
             }
             _ => {}
@@ -1226,7 +1259,7 @@ fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>
         let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
             continue;
         };
-        if kind == "issue" && link.relation_type != "blocked_by" {
+        if kind == "issue" && link.relation_type == "advances" {
             collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
         }
     }
@@ -1283,8 +1316,9 @@ fn render_mission_show_human(
     evidence: &[Value],
     work: &BTreeMap<String, Vec<Value>>,
     mission_blockers: &[Value],
+    supporting: &[Value],
 ) -> Result<()> {
-    let data: Value = serde_json::from_str(&mission.data_json)?;
+    let sections = record_store::mission_sections_from_domain_record(mission)?;
     let status = mission_lifecycle_status(mission);
     let identity = format!("Mission {} [{}] - {}", mission.id, status, mission.title);
     println!("{identity}");
@@ -1293,10 +1327,16 @@ fn render_mission_show_human(
     println!("Created:  {}", format_human_datetime(mission.created_at));
     println!("Updated:  {}", format_human_datetime(mission.updated_at));
 
-    print_mission_text_section("Body", mission.body.as_deref());
-    print_mission_list_section("Constraints", string_array(&data, "constraints"));
-    print_mission_list_section("Risks", string_array(&data, "risks"));
-    print_mission_list_section("Validation", string_array(&data, "validation"));
+    print_mission_section("Intent", &sections.intent);
+    print_mission_section("Constraints", &sections.constraints);
+    print_mission_section("Risks", &sections.risks);
+    print_mission_section("Validation", &sections.validation);
+    if let Some(closeout_notes) = sections.closeout_notes.as_deref() {
+        print_mission_section("Closeout Notes", closeout_notes);
+    }
+    if let Some(notes) = sections.notes.as_deref() {
+        print_mission_section("Notes", notes);
+    }
 
     print_mission_heading("Progress");
     println!(
@@ -1319,27 +1359,19 @@ fn render_mission_show_human(
     print_record_group("Evidence", evidence);
     print_mission_blockers(mission_blockers);
     print_work_groups(work);
+    print_record_group("Supporting Records", supporting);
     print_evidence_gaps(evidence);
     print_mission_next_commands(mission);
     Ok(())
 }
 
-fn print_mission_text_section(title: &str, body: Option<&str>) {
-    if let Some(body) = body.map(str::trim).filter(|body| !body.is_empty()) {
-        print_mission_heading(title);
-        println!("{body}");
-    }
-}
-
-fn print_mission_list_section(title: &str, values: Vec<String>) {
+fn print_mission_section(title: &str, value: &str) {
     print_mission_heading(title);
-    if values.is_empty() {
+    if value.trim().is_empty() {
         println!("(none)");
         return;
     }
-    for value in values {
-        println!("  {value}");
-    }
+    println!("{}", value.trim());
 }
 
 fn print_mission_heading(title: &str) {
@@ -1424,27 +1456,23 @@ fn print_mission_next_commands(mission: &DomainRecord) {
     }
 }
 
-fn string_array(data: &Value, key: &str) -> Vec<String> {
-    data.get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
 fn work_bucket_len(work: &BTreeMap<String, Vec<Value>>, bucket: &str) -> usize {
     work.get(bucket).map_or(0, Vec::len)
 }
 
 fn record_row(record: &Value) -> String {
+    let relation_type = value_str(record, "relation_type");
+    let relation = if relation_type == "(unknown)" || relation_type.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", readable_relation(relation_type))
+    };
     format!(
         "{} [{}] - {}",
         value_str(record, "id"),
         value_str(record, "status"),
         value_str(record, "title")
-    )
+    ) + &relation
 }
 
 fn issue_row(issue: &Value) -> String {
@@ -1511,6 +1539,27 @@ fn record_summary(db: &Database, kind: &str, id: &str) -> Result<Value> {
     }))
 }
 
+fn linked_record_summary(
+    db: &Database,
+    kind: &str,
+    id: &str,
+    relation_type: &str,
+) -> Result<Value> {
+    if kind == "issue" {
+        let issue = db.require_issue(id)?;
+        return Ok(json!({
+            "id": issue.id,
+            "kind": "issue",
+            "title": issue.title,
+            "status": issue.status,
+            "relation_type": relation_type,
+        }));
+    }
+    let mut summary = record_summary(db, kind, id)?;
+    summary["relation_type"] = Value::String(relation_type.to_string());
+    Ok(summary)
+}
+
 fn issue_json_with_relation(db: &Database, issue: &Issue, relation_type: &str) -> Result<Value> {
     Ok(json!({
         "id": issue.id,
@@ -1547,8 +1596,19 @@ fn open_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
     Ok(blockers)
 }
 
-fn replace_array(data: &mut Value, key: &str, values: Vec<String>) {
+fn replace_section_list(section: &mut String, values: Vec<String>) {
     if !values.is_empty() {
-        data[key] = Value::Array(values.into_iter().map(Value::String).collect());
+        *section = values
+            .into_iter()
+            .map(|value| {
+                let value = value.trim().to_string();
+                if value.starts_with("- ") {
+                    value
+                } else {
+                    format!("- {value}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
     }
 }

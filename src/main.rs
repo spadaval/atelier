@@ -11,6 +11,7 @@ mod record_store;
 mod storage_layout;
 mod sync;
 mod telemetry;
+mod test_inventory;
 mod utils;
 
 use anyhow::{bail, Context, Result};

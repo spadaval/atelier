@@ -5,7 +5,7 @@ use super::harness::{assert_stdout_contains, SmokeHarness};
 // ==================== Import/Export Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_empty_db_json() {
     let h = SmokeHarness::new();
     let export_path = h.temp_dir.path().join("export.json");
@@ -23,7 +23,7 @@ fn test_export_empty_db_json() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_json_format() {
     let h = SmokeHarness::new();
 
@@ -59,7 +59,7 @@ fn test_export_json_format() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_export_markdown_format() {
     let h = SmokeHarness::new();
 
@@ -154,7 +154,7 @@ fn test_import_malformed_json() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_import_export_roundtrip() {
     let h = SmokeHarness::new();
 
@@ -229,7 +229,7 @@ fn test_import_export_roundtrip() {
 // ==================== Archive Tests ====================
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_full_lifecycle() {
     let h = SmokeHarness::new();
 
@@ -270,7 +270,7 @@ fn test_archive_full_lifecycle() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_open_issue_fails_smoke() {
     let h = SmokeHarness::new();
 
@@ -288,7 +288,7 @@ fn test_archive_open_issue_fails_smoke() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_archive_older_batch() {
     let h = SmokeHarness::new();
 
@@ -317,7 +317,7 @@ fn test_archive_older_batch() {
 }
 
 #[test]
-#[ignore = "legacy command surface removed"]
+#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
 fn test_unarchive_not_archived() {
     let h = SmokeHarness::new();
 

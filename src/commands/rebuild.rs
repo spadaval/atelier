@@ -791,7 +791,7 @@ mod tests {
             .create_record(
                 "mission",
                 "Mission",
-                "open",
+                "ready",
                 Some("Mission body"),
                 r#"{"constraints":["keep contract"],"risks":[],"validation":[]}"#,
             )
@@ -831,10 +831,18 @@ mod tests {
         let mission_markdown = fs::read_to_string(&mission_path).unwrap();
         assert!(mission_markdown.contains("schema: \"atelier.mission\""));
         assert!(mission_markdown.contains("schema_version: 1"));
-        assert!(mission_markdown.contains("data: "));
+        assert!(!mission_markdown.contains("\ndata: "));
+        assert!(mission_markdown.contains("labels:\n- \"mission\"\n"));
+        assert!(mission_markdown.contains("## Intent\n\nMission body"));
+        assert!(mission_markdown.contains("## Constraints\n\n- keep contract"));
         assert!(mission_markdown.contains(&format!(
-            "  attachments:\n  - kind: \"evidence\"\n    id: \"{evidence_id}\"\n    role: \"validates\"\n  - kind: \"plan\"\n    id: \"{plan_id}\"\n    role: \"planned_by\"\n"
+            "  attachments:\n  - kind: \"plan\"\n    id: \"{plan_id}\"\n    role: \"planned_by\"\n"
         )));
+        assert!(!mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
+
+        let evidence_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
+        let evidence_markdown = fs::read_to_string(&evidence_path).unwrap();
+        assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
 
         let rebuilt_path = dir.path().join(".atelier/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
@@ -842,12 +850,17 @@ mod tests {
 
         let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
-        assert_eq!(mission.body.as_deref(), Some("Mission body"));
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&mission.data_json).unwrap()["constraints"]
-                [0],
-            "keep contract"
-        );
+        assert!(mission
+            .body
+            .as_deref()
+            .unwrap()
+            .contains("## Intent\n\nMission body"));
+        assert!(mission
+            .body
+            .as_deref()
+            .unwrap()
+            .contains("## Constraints\n\n- keep contract"));
+        assert_eq!(mission.data_json, "{}");
         assert!(rebuilt.get_record("plan", &plan_id).unwrap().is_some());
         assert!(rebuilt
             .get_record("evidence", &evidence_id)
@@ -893,7 +906,7 @@ mod tests {
         let (db, dir) = setup_test_db();
         let issue_id = db.create_issue("Issue", None, "medium").unwrap();
         let mission_id = db
-            .create_record("mission", "Mission", "open", None, "{}")
+            .create_record("mission", "Mission", "ready", None, "{}")
             .unwrap();
 
         let state_dir = dir.path().join(".atelier");

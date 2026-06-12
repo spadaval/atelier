@@ -3,6 +3,7 @@ created_at: "2026-06-12T05:12:30.096190618+00:00"
 id: "atelier-l0yk"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "reliability"
 - "tests"
 priority: "P1"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Make ignored and stale tests visible blockers"
-updated_at: "2026-06-12T05:12:30.096190618+00:00"
+updated_at: "2026-06-12T21:54:00.991501933+00:00"
 ---
 
 ## Description

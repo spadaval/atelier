@@ -82,7 +82,7 @@ proptest! {
 
     /// Circular dependencies should be prevented
     #[test]
-    #[ignore = "extended property test; run with `cargo nextest run --profile extended --run-ignored=only`"]
+    #[ignore = "reason: extended property test run only in extended profile; owner: quality; product: yes; blocking: no"]
     fn prop_extended_no_circular_deps(chain_len in 2usize..6) {
         let (db, _dir) = setup_test_db();
 
@@ -105,7 +105,7 @@ proptest! {
 
     /// Deleting a parent should cascade to all children
     #[test]
-    #[ignore = "extended property test; run with `cargo nextest run --profile extended --run-ignored=only`"]
+    #[ignore = "reason: extended property test run only in extended profile; owner: quality; product: yes; blocking: no"]
     fn prop_extended_cascade_deletes_children(child_count in 1usize..5) {
         let (db, _dir) = setup_test_db();
 
@@ -139,7 +139,7 @@ proptest! {
 
     /// Ready list should never contain issues with open blockers
     #[test]
-    #[ignore = "extended property test; run with `cargo nextest run --profile extended --run-ignored=only`"]
+    #[ignore = "reason: extended property test run only in extended profile; owner: quality; product: yes; blocking: no"]
     fn prop_extended_ready_list_correctness(issue_count in 2usize..8) {
         let (db, _dir) = setup_test_db();
 
@@ -175,7 +175,7 @@ proptest! {
 
     /// Search wildcards should be escaped properly
     #[test]
-    #[ignore = "extended property test; run with `cargo nextest run --profile extended --run-ignored=only`"]
+    #[ignore = "reason: extended property test run only in extended profile; owner: quality; product: yes; blocking: no"]
     fn prop_extended_search_wildcards_escaped(
         prefix in "[a-zA-Z]{3,5}",
         suffix in "[a-zA-Z]{3,5}"

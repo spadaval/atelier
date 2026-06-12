@@ -12,4 +12,5 @@ pub mod projection_index;
 pub mod record_id;
 pub mod record_store;
 pub mod sync;
+pub mod test_inventory;
 pub mod utils;

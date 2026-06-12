@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Update Agent Factory skill for evidence-backed mission reliability"
-updated_at: "2026-06-12T05:10:04.339881237+00:00"
+updated_at: "2026-06-12T21:50:36.172756550+00:00"
 ---
 
 ## Description

@@ -3,6 +3,7 @@ created_at: "2026-06-12T19:29:10.963980302+00:00"
 id: "atelier-8ec6"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "implementation"
 - "mission"
 - "records"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Introduce typed mission record parsing and rendering"
-updated_at: "2026-06-12T19:29:10.963980302+00:00"
+updated_at: "2026-06-12T22:01:26.799111981+00:00"
 ---
 
 ## Description

@@ -3,6 +3,7 @@ created_at: "2026-06-12T19:29:16.395428888+00:00"
 id: "atelier-7r55"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "mission"
 - "projection"
 - "relationships"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Normalize mission relationship semantics"
-updated_at: "2026-06-12T19:29:16.395428888+00:00"
+updated_at: "2026-06-12T22:01:21.088495836+00:00"
 ---
 
 ## Description

@@ -112,7 +112,10 @@ expectations, and closeout notes live in ordered Markdown sections:
 Notes` and `Notes` are optional. Linked work, blockers, checkpoints, plans,
 evidence, and other supporting records are typed links, not prose-only lists.
 `atelier mission show` and `atelier mission status` render those links as
-Linked Work, Mission Blockers, Evidence, Plans, and checkpoint sections.
+Linked Work, Mission Blockers, Evidence, Plans, and checkpoint sections. They
+count only `advances` issue links as mission work and only `blocked_by` issue
+links as direct mission blockers; other precise relations remain supporting
+records instead of broadening the work queue.
 
 This abbreviated escaped-JSON shape is rejected as an authoring contract:
 
