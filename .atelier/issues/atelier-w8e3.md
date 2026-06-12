@@ -22,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Add mission contract audit closeout command"
-updated_at: "2026-06-12T05:11:58.957324222+00:00"
+updated_at: "2026-06-12T23:18:39.342474480+00:00"
 ---
 
 ## Description
