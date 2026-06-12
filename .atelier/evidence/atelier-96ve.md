@@ -7,6 +7,9 @@ relationships:
   children: []
   attachments:
   - kind: "issue"
+    id: "atelier-nzy1"
+    role: "validates"
+  - kind: "issue"
     id: "atelier-pyre"
     role: "validates"
   relates: []
@@ -14,7 +17,7 @@ schema: "atelier.evidence"
 schema_version: 1
 status: "pass"
 title: "Closeout proof gate scenario matrix: issue closeout rejects malformed/missing proof; mission closeout rejects open work, missing mission proof, contract-audit gaps, dirty worktree, stale/malformed records; attached evidence satisfies issue and mission proof; domain status and closeout surfaces name the same blocker classes and normal recovery commands without requiring raw workflow validation."
-updated_at: "2026-06-12T23:53:24.187257413+00:00"
+updated_at: "2026-06-12T23:54:56.406451975+00:00"
 ---
 
 Closeout proof gate scenario matrix: issue closeout rejects malformed/missing proof; mission closeout rejects open work, missing mission proof, contract-audit gaps, dirty worktree, stale/malformed records; attached evidence satisfies issue and mission proof; domain status and closeout surfaces name the same blocker classes and normal recovery commands without requiring raw workflow validation.
