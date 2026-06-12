@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Parse issue Markdown sections as first-class structure"
-updated_at: "2026-06-12T04:55:44.832214824+00:00"
+updated_at: "2026-06-12T21:38:49.029586285+00:00"
 ---
 
 ## Description

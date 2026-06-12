@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair and consolidate CLI command surfaces"
-updated_at: "2026-06-12T20:57:40.978332368+00:00"
+updated_at: "2026-06-12T21:38:50.304358458+00:00"
 ---
 
 ## Description
