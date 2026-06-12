@@ -461,7 +461,10 @@ fn transition_actions(db: &Database, issue: &Issue) -> Result<Vec<TransitionActi
     close_blockers.extend(open_blockers.iter().map(|id| format!("open blocker {id}")));
     close_blockers.extend(section_blockers.iter().cloned());
     if !evidence_attached {
-        close_blockers.push("no validating evidence linked".to_string());
+        close_blockers.push(
+            "missing issue-level proof; capture passing evidence or attach existing evidence"
+                .to_string(),
+        );
     }
 
     let start_blocker = if issue.status == "closed" {

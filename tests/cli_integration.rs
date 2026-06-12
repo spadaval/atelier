@@ -1167,7 +1167,8 @@ fn test_root_start_finish_and_issue_transition_surface() {
     assert!(transition_out.contains("start"));
     assert!(transition_out.contains(&format!("atelier start {issue_id}")));
     assert!(transition_out.contains("Blocked Actions"));
-    assert!(transition_out.contains("no validating evidence linked"));
+    assert!(transition_out.contains("missing issue-level proof"));
+    assert!(transition_out.contains("capture passing evidence or attach existing evidence"));
 
     let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "root start failed: {stderr}");
@@ -6358,7 +6359,9 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains("Closeout: blocked"));
-    assert!(status_out.contains("Validator ignored_tests_reviewed: fail"));
+    assert!(status_out.contains("Ignored Test Review: needed"));
+    assert!(status_out.contains("Advanced Validator Detail"));
+    assert!(status_out.contains("fail  ignored_tests_reviewed"));
     assert!(status_out.contains("ignored_product_closeout_gap"));
     assert!(status_out.contains(followup_id));
     assert!(status_out.contains("ignored product-behavior test is still blocking closeout"));
@@ -7324,7 +7327,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
 
-    let (success, _, stderr) = run_atelier(
+    let (success, closeout_blocked_out, stderr) = run_atelier(
         dir.path(),
         &["mission", "update", &mission_id, "--status", "closed"],
     );
@@ -7332,6 +7335,10 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         !success,
         "mission close should fail with open work and no evidence"
     );
+    assert!(closeout_blocked_out.contains("Mission closeout blocked"));
+    assert!(closeout_blocked_out.contains("open mission work"));
+    assert!(closeout_blocked_out.contains("missing mission proof"));
+    assert!(closeout_blocked_out.contains("contract audit failed"));
     assert!(stderr.contains("mission closeout blocked"));
 
     attach_issue_pass_evidence(dir.path(), &work_id);
@@ -7425,7 +7432,8 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     );
     assert!(!success, "dirty worktree must block mission closeout");
     assert!(stdout.contains("Mission closeout blocked"));
-    assert!(stdout.contains("validator git_worktree_clean failed"));
+    assert!(stdout.contains("worktree: dirty"));
+    assert!(stdout.contains("commit or remove untracked worktree changes"));
     assert!(stdout.contains("untracked-closeout.txt"));
     assert!(stderr.contains("mission closeout blocked"));
 }
@@ -7466,10 +7474,86 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(status_out.contains(&work_id));
     assert!(status_out.contains("Blockers: open"));
     assert!(status_out.contains(&blocker_id));
-    assert!(status_out.contains("Evidence: missing"));
-    assert!(status_out.contains("Validator git_worktree_clean: fail"));
+    assert!(status_out.contains("Mission Proof: missing"));
+    assert!(status_out.contains("Worktree: dirty"));
     assert!(status_out.contains("status-dirty.txt"));
-    assert!(status_out.contains("closeout validator failure"));
+    assert!(status_out.contains("Advanced Validator Detail"));
+    assert!(status_out.contains("advanced closeout validator failure"));
+}
+
+#[test]
+fn test_mission_status_names_stale_and_malformed_record_blockers() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Record health blockers"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Record health blockers");
+    let mission_id = mission_id.as_str();
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Record health work"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Record health work");
+    let issue_id = issue_id.as_str();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    commit_all(dir.path(), "record health baseline");
+
+    let issue_path = dir
+        .path()
+        .join(".atelier")
+        .join("issues")
+        .join(format!("{issue_id}.md"));
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        markdown.replace("Record health work", "Record health work stale"),
+    )
+    .unwrap();
+    commit_all(dir.path(), "stale record source");
+
+    let (success, stale_status, stderr) =
+        run_atelier(dir.path(), &["mission", "status", mission_id]);
+    assert!(success, "stale mission status failed: {stderr}");
+    assert!(
+        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "valid stale projection should be named and repaired before mission status:\nstdout:\n{stale_status}\nstderr:\n{stderr}"
+    );
+    assert!(stale_status.contains("Tracker:  ok"));
+    assert!(stale_status.contains("Tracker State: current"));
+
+    let stale_markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let malformed = stale_markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
+    std::fs::write(&issue_path, malformed).unwrap();
+    let metadata = std::fs::metadata(&issue_path).unwrap();
+    let mut hasher = Sha256::new();
+    hasher.update(std::fs::read(&issue_path).unwrap());
+    let invalid_hash = format!("{:x}", hasher.finalize());
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    conn.execute(
+        "UPDATE projection_index_sources
+         SET size_bytes = ?1, sha256 = ?2
+         WHERE path = ?3",
+        rusqlite::params![
+            i64::try_from(metadata.len()).unwrap(),
+            invalid_hash,
+            format!("issues/{issue_id}.md")
+        ],
+    )
+    .unwrap();
+    commit_all(dir.path(), "malformed record source");
+
+    let (success, malformed_status, stderr) =
+        run_atelier(dir.path(), &["mission", "status", mission_id]);
+    assert!(success, "malformed mission status failed: {stderr}");
+    assert!(malformed_status.contains("Linked Issue Records: malformed"));
+    assert!(malformed_status.contains("Missing required issue body section 'Outcome'"));
+    assert!(malformed_status.contains("atelier lint"));
 }
 
 #[test]
@@ -7782,9 +7866,9 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Evidence"));
     assert!(status_out.contains("Gap: no evidence records are linked to this mission."));
     assert!(status_out.contains("Closeout Gates"));
-    assert!(status_out.contains("Evidence: missing"));
-    assert!(status_out.contains("Validators"));
-    assert!(status_out.contains("closeout validator failure detected."));
+    assert!(status_out.contains("Mission Proof: missing"));
+    assert!(status_out.contains("Advanced Validator Detail"));
+    assert!(status_out.contains("advanced closeout validator failure detected."));
     assert!(status_out.contains("Next Commands"));
     assert!(status_out.contains(&format!(
         "Inspect mission record (durable intent and linked work): atelier mission show {mission_id}"
@@ -7892,8 +7976,8 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(success, "stale mission status failed: {stderr}");
     assert!(stale_status.contains("Autonomy status stale"));
     assert!(stale_status.contains("Tracker:  ok"));
-    assert!(stale_status.contains("git_worktree_clean: fail"));
-    assert!(stale_status.contains("closeout validator failure detected."));
+    assert!(stale_status.contains("Worktree: dirty"));
+    assert!(stale_status.contains("advanced closeout validator failure detected."));
 }
 
 #[test]

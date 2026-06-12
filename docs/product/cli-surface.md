@@ -86,12 +86,14 @@ canonical relationship buckets, and refreshes the projection after successful
 canonical writes. `atelier mission show` is the rich mission detail read:
 it summarizes linked plans, milestones, evidence, and work grouped by ready,
 blocked, done, and backlog state. `atelier mission status [<id>]` is the
-mission-control CLI surface for active mission health, evidence gaps, blockers,
-validator freshness, closeout readiness, and next actions before any separate
-projection or UI is required. `atelier mission audit <id>` is the closeout
-contract surface: it maps authored mission validation expectations and linked
-epic outcomes to current work, blockers, and attached evidence before a mission
-can close.
+mission-control CLI surface for active mission health, mission proof gaps,
+blockers, record health, docs/help drift, ignored-test review, dirty worktree
+state, closeout readiness, and next actions before any separate projection or UI
+is required. Raw workflow validator names are diagnostic detail; the primary
+closeout output should name the operator-facing blocker class and the next
+domain command. `atelier mission audit <id>` is the closeout contract surface:
+it maps authored mission validation expectations and linked epic outcomes to
+current work, blockers, and attached evidence before a mission can close.
 `atelier evidence capture` runs a command and stores bounded stdout/stderr
 summaries with command, exit status, result, timestamp, and optional target
 metadata so validation proof does not require manual transcript copy/paste.
@@ -113,8 +115,9 @@ not need the hidden `atelier work start/finish/status` command group for normal
 workflow. Worktree helpers expose scan-friendly JSON status, create/remove
 associated Git worktrees, prepare local runtime state in new worktrees, and run
 `worktree_setup` hooks from the configured workflow policy.
-Mission closeout is ready only when all linked work is closed, required evidence
-is attached, workflow validators pass, and the Git worktree is clean.
+Mission closeout is ready only when all linked work is closed, mission proof is
+attached, contract audit passes, linked issue records are parseable, docs/help
+and ignored-test review gates are current, and the Git worktree is clean.
 
 ## Cache Transparency
 

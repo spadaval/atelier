@@ -274,12 +274,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         closeout.print_human();
     }
 
-    print_mission_heading("Validators");
+    print_mission_heading("Advanced Validator Detail");
     if validator_failures == 0 {
-        println!("All closeout validators passed.");
+        println!("All advanced closeout validators passed.");
     } else {
         println!(
-            "{} closeout validator failure detected.",
+            "{} advanced closeout validator failure detected.",
             validator_failures
         );
         for result in closeout
@@ -731,14 +731,21 @@ impl MissionCloseoutStatus {
     fn blocking_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
         if !self.open_work.is_empty() {
-            messages.push(format!("open mission work: {}", self.open_work.join(", ")));
+            messages.push(format!(
+                "open mission work: {}; close or defer linked work before mission closeout",
+                compact_strings(&self.open_work)
+            ));
         }
         if !self.open_blockers.is_empty() {
-            messages.push(format!("open blockers: {}", self.open_blockers.join(", ")));
+            messages.push(format!(
+                "open blockers: {}; close or remove blocker links before mission closeout",
+                compact_strings(&self.open_blockers)
+            ));
         }
         if self.evidence_missing {
-            messages
-                .push("missing evidence: attach validation evidence to the mission".to_string());
+            messages.push(
+                "missing mission proof: attach validation evidence to the mission".to_string(),
+            );
         }
         if !self.contract_audit.passed() {
             messages.push(format!(
@@ -752,10 +759,9 @@ impl MissionCloseoutStatus {
             .iter()
             .filter(|result| !result.passed)
         {
-            messages.push(format!(
-                "validator {} failed: {}",
-                result.validator, result.reason
-            ));
+            if let Some(message) = closeout_validator_blocking_message(result, &self.mission_id) {
+                messages.push(message);
+            }
         }
         messages
     }
@@ -768,21 +774,21 @@ impl MissionCloseoutStatus {
         if self.open_work.is_empty() {
             println!("Work: closed");
         } else {
-            println!("Work: open - {}", self.open_work.join(", "));
+            println!("Work: open - {}", compact_strings(&self.open_work));
             println!("  Next: atelier issue close <issue-id> --reason \"...\"");
         }
         if self.open_blockers.is_empty() {
             println!("Blockers: clear");
         } else {
-            println!("Blockers: open - {}", self.open_blockers.join(", "));
+            println!("Blockers: open - {}", compact_strings(&self.open_blockers));
             println!("  Next: close or unblock the blocker issues.");
         }
         if self.evidence_missing {
-            println!("Evidence: missing");
+            println!("Mission Proof: missing");
             println!("  Next: atelier evidence add --kind validation --result pass \"...\"");
             println!("  Next: atelier evidence attach <evidence-id> mission <mission-id>");
         } else {
-            println!("Evidence: attached");
+            println!("Mission Proof: attached");
         }
         if self.contract_audit.passed() {
             println!("Contract Audit: pass");
@@ -794,12 +800,97 @@ impl MissionCloseoutStatus {
             println!("  Next: atelier mission audit {}", self.mission_id);
         }
         for result in &self.validator_results {
-            if result.passed {
-                println!("Validator {}: pass", result.validator);
-            } else {
-                println!("Validator {}: fail - {}", result.validator, result.reason);
+            if let Some(line) = closeout_validator_status_line(result, &self.mission_id) {
+                println!("{}", line.summary);
+                if let Some(next) = line.next {
+                    println!("  Next: {next}");
+                }
             }
         }
+    }
+}
+
+struct CloseoutStatusLine {
+    summary: String,
+    next: Option<String>,
+}
+
+fn closeout_validator_status_line(
+    result: &crate::commands::workflow::ValidatorResult,
+    mission_id: &str,
+) -> Option<CloseoutStatusLine> {
+    let (label, pass_text, fail_text, next) = closeout_validator_user_text(&result.validator)?;
+    if result.passed {
+        Some(CloseoutStatusLine {
+            summary: format!("{label}: {pass_text}"),
+            next: None,
+        })
+    } else {
+        let next = next.replace("{mission}", mission_id);
+        Some(CloseoutStatusLine {
+            summary: format!("{label}: {fail_text} - {}", result.reason),
+            next: Some(next),
+        })
+    }
+}
+
+fn closeout_validator_blocking_message(
+    result: &crate::commands::workflow::ValidatorResult,
+    mission_id: &str,
+) -> Option<String> {
+    let (label, _pass_text, fail_text, next) = closeout_validator_user_text(&result.validator)?;
+    let next = next.replace("{mission}", mission_id);
+    Some(format!(
+        "{}: {} - {}; next: {}",
+        label.to_ascii_lowercase(),
+        fail_text,
+        result.reason,
+        next
+    ))
+}
+
+fn closeout_validator_user_text(
+    validator: &str,
+) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
+    match validator {
+        "durable_state_current" => Some((
+            "Tracker State",
+            "current",
+            "stale",
+            "atelier export --check",
+        )),
+        "issue_sections_parseable" => Some((
+            "Linked Issue Records",
+            "parseable",
+            "malformed",
+            "atelier lint",
+        )),
+        "no_blocking_lints" => Some(("Blocking Lints", "clear", "failing", "atelier lint")),
+        "command_surface_current" => Some((
+            "Docs/Help Drift",
+            "clear",
+            "detected",
+            "update docs, help text, or command-surface tests",
+        )),
+        "ignored_tests_reviewed" => Some((
+            "Ignored Test Review",
+            "current",
+            "needed",
+            "assign owners or remove stale ignored tests",
+        )),
+        "git_worktree_clean" => Some((
+            "Worktree",
+            "clean",
+            "dirty",
+            "commit or remove untracked worktree changes",
+        )),
+        "no_open_work" | "no_open_blockers" | "evidence_attached" => None,
+        _ => Some((
+            "Additional Closeout Check",
+            "passed",
+            "failed",
+            "atelier mission status {mission}",
+        )),
     }
 }
 
