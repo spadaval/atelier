@@ -68,6 +68,84 @@ the issue or epic is part of the mission's execution/progress graph. `mission
 blocked_by issue` means the issue, artifact update, or validation item is gating the
 mission but is not necessarily ordinary mission scope.
 
+## Readable Mission Records
+
+Mission records are meant to be reviewed by operators and agents in normal
+Markdown diffs. The product contract is not an escaped `data` object in YAML.
+Mission front matter carries compact identity, lifecycle state, labels, and
+typed relationships. Mission narrative, constraints, risks, validation
+expectations, and closeout notes live in ordered Markdown sections:
+
+```text
+## Intent
+## Constraints
+## Risks
+## Validation
+## Closeout Notes
+## Notes
+```
+
+`Intent`, `Constraints`, `Risks`, and `Validation` are required. `Closeout
+Notes` and `Notes` are optional. Linked work, blockers, checkpoints, plans,
+evidence, and other supporting records are typed links, not prose-only lists.
+`atelier mission show` and `atelier mission status` render those links as
+Linked Work, Mission Blockers, Evidence, Plans, and checkpoint sections.
+
+This abbreviated escaped-JSON shape is rejected as an authoring contract:
+
+```markdown
+---
+id: "atelier-tcmr"
+data: "{\"constraints\":[\"Use sectioned issue Markdown.\"],\"risks\":[\"Large rework can sprawl.\"],\"validation\":[\"Closeout requires evidence.\"],\"work\":[]}"
+schema: "atelier.mission"
+schema_version: 1
+status: "ready"
+title: "Repair CLI workflow rework and validation gaps"
+---
+
+Repair CLI workflow rework and validation gaps.
+```
+
+The abbreviated readable shape keeps the mission content where reviewers can see
+it and keeps relationships typed:
+
+```markdown
+---
+id: "atelier-tcmr"
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates:
+  - kind: "issue"
+    id: "atelier-gjaz"
+    type: "advances"
+schema: "atelier.mission"
+schema_version: 1
+status: "ready"
+title: "Repair CLI workflow rework and validation gaps"
+---
+
+## Intent
+
+Repair the CLI workflow and validation gaps.
+
+## Constraints
+
+- Use sectioned issue Markdown.
+
+## Risks
+
+- Large rework can sprawl.
+
+## Validation
+
+- Closeout requires linked work closed and validation evidence attached.
+```
+
+The validating evidence itself is a separate evidence record linked back to the
+mission with `role: validates`; it is not copied into the mission body.
+
 ## Agent Workflow
 
 An agent tasked with a mission should be able to:
