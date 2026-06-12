@@ -804,16 +804,11 @@ fn projection_query_db() -> Result<Database> {
 
 fn lint_db() -> Result<Database> {
     let layout = storage_layout::StorageLayout::discover()?;
-    let state_dir = layout.canonical_dir();
-    if state_dir.is_dir() {
-        commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
-            format!(
-                "Canonical tracker Markdown is invalid in {}; fix canonical records before linting.",
-                state_dir.display()
-            )
-        })?;
+    if layout.runtime_db_path().exists() {
+        Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
+    } else {
+        projection_query_db()
     }
-    projection_query_db()
 }
 
 fn canonical_mutation_db() -> Result<Database> {

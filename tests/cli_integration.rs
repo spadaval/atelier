@@ -171,6 +171,23 @@ fn issue_id_by_title(dir: &Path, title: &str) -> String {
     record_id_by_title(dir, "issues", title)
 }
 
+fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
+    dir.join(".atelier")
+        .join("issues")
+        .join(format!("{issue_id}.md"))
+}
+
+fn remove_issue_section(markdown: &str, heading: &str) -> String {
+    let marker = format!("## {heading}\n");
+    let start = markdown.find(&marker).expect("section heading missing");
+    let rest = &markdown[start + marker.len()..];
+    let end = rest
+        .find("\n## ")
+        .map(|offset| start + marker.len() + offset)
+        .unwrap_or(markdown.len());
+    format!("{}{}", &markdown[..start], &markdown[end..])
+}
+
 fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
     let record_dir = dir.join(".atelier").join(directory);
     let entries = std::fs::read_dir(&record_dir)
@@ -5248,6 +5265,136 @@ fn test_workflow_validate_can_use_parsed_issue_sections() {
 }
 
 #[test]
+fn test_lint_rejects_missing_required_issue_section() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Missing outcome lint"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Missing outcome lint");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "lint should fail for missing Outcome");
+    assert!(
+        stdout.contains(&format!("issue {issue_id}"))
+            && stdout.contains("section Outcome")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stderr.contains("Lint failed"));
+}
+
+#[test]
+fn test_lint_rejects_empty_required_issue_section() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Empty outcome lint"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Empty outcome lint");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let invalid = markdown.replace("## Outcome\n\nOutcome was not specified.", "## Outcome\n\n");
+    std::fs::write(&issue_path, invalid).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "lint should fail for empty Outcome");
+    assert!(
+        stdout.contains(&format!("issue {issue_id}"))
+            && stdout.contains("section Outcome")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn test_lint_rejects_duplicate_recognized_issue_heading() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Duplicate outcome lint"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Duplicate outcome lint");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let invalid = markdown.replace(
+        "## Evidence",
+        "## Outcome\n\nSecond outcome should be rejected.\n\n## Evidence",
+    );
+    std::fs::write(&issue_path, invalid).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(!success, "lint should fail for duplicate Outcome");
+    assert!(
+        stdout.contains(&format!("issue {issue_id}"))
+            && stdout.contains("section Outcome")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing structural diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn test_work_start_refuses_structurally_invalid_issue() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Invalid work start"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Invalid work start");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "start", &issue_id]);
+    assert!(!success, "work start should refuse invalid issue");
+    assert!(
+        stderr.contains(&format!("issue {issue_id}"))
+            && stderr.contains("section Outcome")
+            && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing refusal diagnostic, stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn test_issue_closeout_refuses_structurally_invalid_issue() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Invalid closeout"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Invalid closeout");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &issue_id, "--reason", "done"],
+    );
+    assert!(!success, "issue close should refuse invalid issue");
+    assert!(
+        stderr.contains(&format!("issue {issue_id}"))
+            && stderr.contains("section Outcome")
+            && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing closeout diagnostic, stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
 fn test_git_worktree_clean_validator_fails_on_tracked_changes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6348,10 +6495,11 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
         "lint must reject malformed canonical Markdown, stdout: {stdout}"
     );
     assert!(
-        stderr.contains("Canonical tracker Markdown is invalid")
-            && stderr.contains("Invalid YAML front matter"),
-        "unexpected lint error: {stderr}"
+        stdout.contains("Invalid YAML front matter")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "unexpected lint output: {stdout}\nstderr: {stderr}"
     );
+    assert!(stderr.contains("Lint failed"));
     assert!(
         !stdout.contains("Lint passed."),
         "lint must not pass from stale SQLite rows: {stdout}"

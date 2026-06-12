@@ -11,6 +11,7 @@ use crate::record_store::RecordStore;
 const KIND: &str = "mission";
 const MISSION_CLOSE_VALIDATORS: &[&str] = &[
     "durable_state_current",
+    "issue_sections_parseable",
     "evidence_attached",
     "no_open_blockers",
     "no_blocking_lints",

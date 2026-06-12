@@ -8,7 +8,8 @@ use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
 use crate::record_store::{
-    CanonicalIssueRecord, IssueSections, RecordStore, RelationshipTarget, Relationships,
+    issue_record_path, CanonicalIssueRecord, IssueSections, RecordStore, RelationshipTarget,
+    Relationships,
 };
 use crate::utils::format_issue_id;
 
@@ -1532,6 +1533,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
 
 pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
+    ensure_canonical_issue_sections_valid(&id)?;
     let open_blockers = db
         .get_blockers(&id)?
         .into_iter()
@@ -1574,6 +1576,7 @@ pub fn close_lifecycle(
 ) -> Result<()> {
     let db = Database::open(db_path)?;
     let id = resolve_id(&db, issue_ref)?;
+    RecordStore::new(state_dir).load_issue_by_id(&id)?;
     let open_blockers = db
         .get_blockers(&id)?
         .into_iter()
@@ -1614,6 +1617,14 @@ pub fn close_lifecycle(
         object.id,
         reason.map(|r| format!(": {r}")).unwrap_or_default()
     );
+    Ok(())
+}
+
+fn ensure_canonical_issue_sections_valid(issue_id: &str) -> Result<()> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        return Ok(());
+    };
+    RecordStore::new(state_dir).load_issue_by_id(issue_id)?;
     Ok(())
 }
 
@@ -1897,17 +1908,44 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
         db.list_issues(Some("all"), None, None)?
     };
     let canonical_state_dir = find_state_dir_from_cwd()?;
-    let canonical_issues = if let Some(state_dir) = &canonical_state_dir {
+    let (canonical_issues, canonical_findings) = if let Some(state_dir) = &canonical_state_dir {
         let store = RecordStore::new(&state_dir);
-        store
-            .load_issues()?
-            .into_iter()
-            .map(|record| (record.issue.id.clone(), record))
-            .collect::<BTreeMap<_, _>>()
+        let mut records = BTreeMap::new();
+        let mut findings = Vec::new();
+        let paths = if let Some(issue_ref) = issue_ref {
+            let id = resolve_id(db, issue_ref)?;
+            vec![issue_record_path(&id)]
+        } else {
+            store.discover_issue_paths()?
+        };
+        for relative in paths {
+            match store.load_issue(&relative) {
+                Ok(record) => {
+                    records.insert(record.issue.id.clone(), record);
+                }
+                Err(error) => {
+                    findings.push(json!({
+                        "id": issue_ref
+                            .map(|_| relative.file_stem()
+                                .and_then(|stem| stem.to_str())
+                                .unwrap_or("(unknown)")
+                                .to_string())
+                            .unwrap_or_else(|| relative.file_stem()
+                                .and_then(|stem| stem.to_str())
+                                .unwrap_or("(unknown)")
+                                .to_string()),
+                        "code": "invalid_canonical_issue",
+                        "path": state_dir.join(&relative).display().to_string(),
+                        "message": error.to_string()
+                    }));
+                }
+            }
+        }
+        (records, findings)
     } else {
-        BTreeMap::new()
+        (BTreeMap::new(), Vec::new())
     };
-    let mut findings = Vec::new();
+    let mut findings = canonical_findings;
     for issue in issues {
         if issue.title.trim().is_empty() {
             findings.push(json!({

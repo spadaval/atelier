@@ -50,7 +50,10 @@ pub fn evaluate(
 ) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
     let validators = if validators.is_empty() {
-        vec!["durable_state_current".to_string()]
+        vec![
+            "durable_state_current".to_string(),
+            "issue_sections_parseable".to_string(),
+        ]
     } else {
         validators
     };
