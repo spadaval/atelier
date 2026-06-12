@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Clarify and streamline agent CLI workflows"
-updated_at: "2026-06-12T03:08:57.615815568+00:00"
+updated_at: "2026-06-12T03:43:18.356213069+00:00"
 ---
 
 Refine Atelier CLI so agents can quickly understand current state, recent activity, next work, workflow guardrails, and command organization without relying on private context or generic next-command output. Treat closed mission atelier-8bky and decision atelier-t24d as historical context, not reopened active work. Recommended subskill: agent-factory orchestrate.
