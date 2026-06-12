@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Markdown-first single-tree storage overhaul"
-updated_at: "2026-06-11T20:09:59.016928901+00:00"
+updated_at: "2026-06-12T00:31:23.405885419+00:00"
 ---
 
 Move Atelier to a single committed .atelier/ tree where canonical Markdown records are the source of truth and runtime/cache state is explicitly ignored. This is a planning mission only: implementation starts after the linked contract, migration, validation, and sequencing issues are accepted.
