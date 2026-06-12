@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Resolve obsolete ignored legacy command-surface tests"
-updated_at: "2026-06-12T21:42:51.151434546+00:00"
+updated_at: "2026-06-12T22:08:59.363841831+00:00"
 ---
 
 ## Description

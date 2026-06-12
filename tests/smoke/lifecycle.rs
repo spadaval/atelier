@@ -5,7 +5,7 @@ use super::harness::SmokeHarness;
 // ===========================================================================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_roundtrip() {
     let h = SmokeHarness::new();
 
@@ -61,7 +61,7 @@ fn test_timer_roundtrip() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_start_already_running() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Double-start issue"]);
@@ -82,7 +82,7 @@ fn test_timer_start_already_running() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_stop_not_running() {
     let h = SmokeHarness::new();
 
@@ -105,7 +105,7 @@ fn test_timer_stop_not_running() {
 // ===========================================================================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_full_lifecycle() {
     let h = SmokeHarness::new();
 
@@ -169,7 +169,7 @@ fn test_session_full_lifecycle() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_status_no_session() {
     let h = SmokeHarness::new();
 
@@ -188,7 +188,7 @@ fn test_session_status_no_session() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_end_without_start() {
     let h = SmokeHarness::new();
 
@@ -310,7 +310,7 @@ fn test_circular_dependency_prevented() {
 // ===========================================================================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_full_lifecycle() {
     let h = SmokeHarness::new();
 

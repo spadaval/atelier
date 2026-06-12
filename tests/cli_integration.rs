@@ -1803,7 +1803,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_history_reads_activity_sidecars_with_filters_and_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1859,7 +1859,7 @@ fn test_history_reads_activity_sidecars_with_filters_and_json() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_history_empty_and_invalid_limit() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1874,7 +1874,7 @@ fn test_history_empty_and_invalid_limit() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_evidence_issue_link_creates_history_activity() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2772,7 +2772,7 @@ fn test_removed_issue_type_is_rejected() {
 // ==================== Session Tests ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2784,7 +2784,7 @@ fn test_session_start() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2797,7 +2797,7 @@ fn test_session_status() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2811,7 +2811,7 @@ fn test_session_work() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_end() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2938,7 +2938,7 @@ fn test_unicode_in_cli() {
 // ==================== Archive Tests ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_closed_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2952,7 +2952,7 @@ fn test_archive_closed_issue() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_open_issue_fails() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2971,7 +2971,7 @@ fn test_archive_open_issue_fails() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2988,7 +2988,7 @@ fn test_archive_list() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_unarchive_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3014,7 +3014,7 @@ fn test_unarchive_issue() {
 // ==================== Milestone Tests ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_create() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3029,7 +3029,7 @@ fn test_milestone_create() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3045,7 +3045,7 @@ fn test_milestone_list() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_show() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3063,7 +3063,7 @@ fn test_milestone_show() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_add_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3082,7 +3082,7 @@ fn test_milestone_add_issues() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_close() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3095,7 +3095,7 @@ fn test_milestone_close() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_delete() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3113,7 +3113,7 @@ fn test_milestone_delete() {
 // ==================== Timer Tests ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3126,7 +3126,7 @@ fn test_timer_start() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_stop() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3140,7 +3140,7 @@ fn test_timer_stop() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3157,7 +3157,7 @@ fn test_timer_status() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_timer_status_no_timer() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3464,7 +3464,7 @@ fn test_next_no_issues() {
 // ==================== Export/Import Tests ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_export_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3488,7 +3488,7 @@ fn test_export_json() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_export_markdown() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3522,7 +3522,7 @@ fn test_export_markdown() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_import_json() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3674,7 +3674,7 @@ fn test_delete_with_subissues() {
 // ==================== Additional Session Edge Cases ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_work_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3687,7 +3687,7 @@ fn test_session_work_nonexistent_issue() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_end_without_start() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3702,7 +3702,7 @@ fn test_session_end_without_start() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_status_without_session() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3718,7 +3718,7 @@ fn test_session_status_without_session() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_multiple_starts() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3784,7 +3784,7 @@ fn test_next_all_closed() {
 // ==================== Additional Archive Edge Cases ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_older_days() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3799,7 +3799,7 @@ fn test_archive_older_days() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_already_archived() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3823,7 +3823,7 @@ fn test_archive_already_archived() {
 // ==================== Additional Milestone Edge Cases ====================
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_remove_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3841,7 +3841,7 @@ fn test_milestone_remove_issue() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_show_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3852,7 +3852,7 @@ fn test_milestone_show_nonexistent() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_list_closed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4225,7 +4225,7 @@ fn test_next_only_subissues_ready() {
 
 // --- import.rs: Import with parent relationships ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_import_with_parent_relationships() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4260,7 +4260,7 @@ fn test_import_with_parent_relationships() {
 
 // --- import.rs: Import issues with labels and comments ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_import_with_labels_and_comments() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4298,7 +4298,7 @@ fn test_import_with_labels_and_comments() {
 
 // --- session.rs: Session with handoff notes from previous session ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_start_shows_handoff_notes() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4324,7 +4324,7 @@ fn test_session_start_shows_handoff_notes() {
 
 // --- session.rs: Session status with active issue ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_status_with_active_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4446,7 +4446,7 @@ fn test_multiple_labels() {
 
 // --- Export markdown format test ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_export_markdown_format() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4485,7 +4485,7 @@ fn test_export_markdown_format() {
 
 // --- Archive older days test ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_archive_older_no_matches() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4715,7 +4715,7 @@ fn test_block_nonexistent_issue() {
 
 // --- session.rs: Session status deleted issue ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_session_status_deleted_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4750,7 +4750,7 @@ fn test_show_with_related_issues() {
 
 // --- milestone.rs: Edge cases ---
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_add_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -4770,7 +4770,7 @@ fn test_milestone_add_nonexistent_issue() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_milestone_delete_nonexistent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -5046,7 +5046,7 @@ fn test_stress_rapid_operations() {
 
 /// Test export/import round-trip preserves data
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_integrity_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -8185,7 +8185,7 @@ fn test_unicode_in_dependencies() {
 
 /// Test export/import preserves Unicode
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; issue: atelier-jqds; product: yes; blocking: yes"]
+#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_unicode_export_import_roundtrip() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
