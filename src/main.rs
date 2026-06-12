@@ -761,6 +761,29 @@ enum EvidenceCommands {
         #[arg(long)]
         producer: Option<String>,
     },
+    /// Capture a command transcript as validation evidence
+    Capture {
+        #[arg(long = "kind")]
+        evidence_kind: String,
+        #[arg(long)]
+        result: String,
+        #[arg(long)]
+        summary: Option<String>,
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long)]
+        uri: Option<String>,
+        #[arg(long)]
+        producer: Option<String>,
+        #[arg(long)]
+        target_kind: Option<String>,
+        #[arg(long)]
+        target_id: Option<String>,
+        #[arg(long, default_value = "validates")]
+        role: String,
+        #[arg(last = true, required = true, num_args = 1..)]
+        command: Vec<String>,
+    },
     /// Show an evidence record
     Show { id: String },
     /// Attach evidence to a target record
@@ -1068,6 +1091,14 @@ fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
 
 fn issue_compat_guidance(replacement: &str) {
     eprintln!("Compatibility: this hidden issue helper remains callable; use `{replacement}`.");
+}
+
+fn resolve_evidence_target_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
+    if matches!(kind, "issue" | "epic") {
+        resolve_issue_arg(db, id)
+    } else {
+        Ok(id.to_string())
+    }
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -1828,6 +1859,43 @@ fn run() -> Result<()> {
                     producer.as_deref(),
                 )
             }
+            EvidenceCommands::Capture {
+                evidence_kind,
+                result,
+                summary,
+                path,
+                uri,
+                producer,
+                target_kind,
+                target_id,
+                role,
+                command,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let target_id = match (target_kind.as_deref(), target_id.as_deref()) {
+                    (Some(kind), Some(id)) => {
+                        Some(resolve_evidence_target_arg(storage.db(), kind, id)?)
+                    }
+                    (None, None) => None,
+                    _ => bail!("--target-kind and --target-id must be supplied together"),
+                };
+                commands::evidence::capture(
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    commands::evidence::CaptureOptions {
+                        evidence_kind: &evidence_kind,
+                        result: &result,
+                        summary: summary.as_deref(),
+                        path: path.as_deref(),
+                        uri: uri.as_deref(),
+                        producer: producer.as_deref(),
+                        target_kind: target_kind.as_deref(),
+                        target_id: target_id.as_deref(),
+                        role: &role,
+                        command: &command,
+                    },
+                )
+            }
             EvidenceCommands::Show { id } => {
                 let db = projection_query_db()?;
                 commands::evidence::show(&db, &id)
@@ -1839,7 +1907,8 @@ fn run() -> Result<()> {
                 role,
             } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let target_id = resolve_record_arg(storage.db(), &target_kind, &target_id)?;
+                let target_id =
+                    resolve_evidence_target_arg(storage.db(), &target_kind, &target_id)?;
                 commands::evidence::attach(
                     &storage.state_dir(),
                     &storage.db_path(),
@@ -2045,6 +2114,7 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Evidence { action } => match action {
             EvidenceCommands::Add { .. } => "evidence add",
+            EvidenceCommands::Capture { .. } => "evidence capture",
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
