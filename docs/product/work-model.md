@@ -23,6 +23,29 @@ proof. These concepts should not collapse into one issue hierarchy.
   can validate an issue, epic, mission, or a specific milestone validation
   criterion.
 
+## Proof Routing
+
+Atelier routes proof by risk and scope. Ordinary executable issues prove their
+own Outcome on the issue: the `Evidence` section names the proof, the worker
+runs the narrowest checks that support the claim, and the result is recorded
+before closeout.
+
+Durable issue notes are for handoff context, caveats, skipped optional checks,
+and trivial proof that does not need a separate artifact. First-class evidence
+records are required for non-trivial command transcripts, test results,
+migration proof, process-policy changes, workflow validation, closeout audits,
+and any `fail`, `blocked`, `deferred`, or `not-applicable` classification that
+future workers must inspect.
+
+Separate validation or closeout issues are required when the implementer should
+not validate the claim alone: migrations, public command or API contracts,
+docs/help parity, stale-test risk, cross-cutting workflow or persistence
+behavior, Agent Factory process changes, and all epic or mission closeouts.
+
+The detailed routing table lives in
+[Validation](../architecture/quality/validation.md). Product docs should point
+to that router instead of defining a second proof model.
+
 ## Mission Sizing
 
 Missions are goal records, not task records. A mission should describe the

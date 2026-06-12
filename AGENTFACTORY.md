@@ -33,6 +33,17 @@ This file binds Agent Factory to this repository.
 - Validation criteria must name observable completion behavior: command output,
   rejected commands, help text, file contents, tests, lint/export checks, or
   evidence records.
+- Use the validation router for proof routing:
+  `docs/architecture/quality/validation.md`. Ordinary executable issues prove
+  their own scoped Outcome on the issue. Risky, broad, public-contract,
+  migration, cross-cutting, Agent Factory process, stale-test, docs/help parity,
+  and parent closeout claims require first-class evidence and may require a
+  separate validation or closeout issue.
+- Use durable issue notes for handoff context, caveats, skipped optional checks,
+  or trivial docs-only proof. Use first-class evidence for non-trivial proof,
+  workflow validation, process-policy changes, failed or deferred checks, and
+  any result a future worker must inspect. Use separate validation issues when
+  the implementer should not validate their own claim.
 - Prefer the installed `atelier` command for normal tracker work. Use
   `target/debug/atelier` only when testing local CLI changes that have not been
   installed yet, and rebuild it first when it is missing or stale. Use
@@ -53,6 +64,8 @@ This file binds Agent Factory to this repository.
   - `atelier finish [issue-id]`
   - `atelier evidence add --kind <kind> --result <result> "summary"`
   - `atelier evidence attach <evidence-id> issue <issue-id>`
+  - `atelier workflow validate issue <issue-id>`
+  - `atelier workflow validate mission <mission-id>`
 - Issues:
   - `atelier issue list --ready`
   - `atelier issue list --status open`

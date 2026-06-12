@@ -3,6 +3,7 @@ created_at: "2026-06-12T19:39:42.527274179+00:00"
 id: "atelier-6w0u"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "docs"
 - "process"
 - "validation"
@@ -22,9 +23,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define validation routing policy for work items"
-updated_at: "2026-06-12T19:39:42.527274179+00:00"
+updated_at: "2026-06-12T21:11:26.147862233+00:00"
 ---
 
 ## Description
