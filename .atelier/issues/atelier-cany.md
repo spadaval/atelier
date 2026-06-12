@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement issue transition options surface"
-updated_at: "2026-06-12T20:29:35.180566310+00:00"
+updated_at: "2026-06-12T22:10:24.136622568+00:00"
 ---
 
 ## Description
