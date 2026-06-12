@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement issue body section parser and rendering"
-updated_at: "2026-06-12T05:03:46.768403215+00:00"
+updated_at: "2026-06-12T05:12:09.399587813+00:00"
 ---
 
 ## Description

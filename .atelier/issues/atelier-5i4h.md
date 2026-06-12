@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Remove issue evidence_required frontmatter field"
-updated_at: "2026-06-12T05:03:53.468188664+00:00"
+updated_at: "2026-06-12T05:12:27.609461536+00:00"
 ---
 
 ## Description
