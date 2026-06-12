@@ -26,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Strengthen canonical Markdown lint and direct-edit validation"
-updated_at: "2026-06-11T20:10:00.668923069+00:00"
+updated_at: "2026-06-12T00:08:06.847192187+00:00"
 ---
 
 Make atelier lint the canonical validator for committed Markdown records and direct-edit workflows.
