@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Enforce issue closeout proof gates"
-updated_at: "2026-06-12T19:39:47.942112843+00:00"
+updated_at: "2026-06-12T23:06:00.163574620+00:00"
 ---
 
 ## Description
