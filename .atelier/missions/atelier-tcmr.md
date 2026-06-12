@@ -34,9 +34,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "active"
 title: "Repair CLI workflow rework and validation gaps"
-updated_at: "2026-06-12T19:19:18.924846572+00:00"
+updated_at: "2026-06-12T23:04:50.340082788+00:00"
 ---
 
 ## Intent
