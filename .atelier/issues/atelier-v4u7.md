@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-v4u7"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "markdown"
 priority: "P1"
 relationships:
@@ -22,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Implement issue body section parser and rendering"
-updated_at: "2026-06-12T04:51:36.967886831+00:00"
+updated_at: "2026-06-12T05:03:46.768403215+00:00"
 ---
 
 ## Description

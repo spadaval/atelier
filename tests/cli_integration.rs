@@ -1091,17 +1091,22 @@ fn test_list_filter_by_label() {
 fn test_show_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nThe issue show command renders parsed sections.\n\n## Evidence\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.";
 
-    run_atelier(
-        dir.path(),
-        &["issue", "create", "Test issue", "-d", "Description"],
-    );
+    run_atelier(dir.path(), &["issue", "create", "Test issue", "-d", body]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success);
     assert!(stdout.contains("Test issue"));
     assert!(stdout.contains("Description"));
+    assert!(stdout.contains("Outcome"));
+    assert!(stdout.contains("The issue show command renders parsed sections."));
+    assert!(stdout.contains("Evidence"));
+    assert!(stdout.contains("- Show output contains the section headings."));
+    assert!(stdout.contains("Notes"));
+    assert!(stdout.contains("CLI display context."));
+    assert!(!stdout.contains("Acceptance Criteria"));
 }
 
 #[test]
@@ -6095,9 +6100,7 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     std::fs::write(
         &unindexed_path,
         r#"---
-acceptance: []
 created_at: "2026-06-10T12:00:00+00:00"
-evidence_required: []
 id: "atelier-zzzz"
 issue_type: "task"
 labels: []
@@ -6114,7 +6117,17 @@ title: "Unindexed issue"
 updated_at: "2026-06-10T12:00:00+00:00"
 ---
 
+## Description
+
 Body
+
+## Outcome
+
+The unindexed issue is discoverable after rebuild.
+
+## Evidence
+
+- `atelier issue search Unindexed` shows the record.
 "#,
     )
     .unwrap();

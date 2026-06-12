@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
 use crate::models::{DomainRecord, Issue};
 use crate::record_store::{
-    AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, RecordStore,
-    RelatesRelationship, RelationshipTarget, Relationships,
+    AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, IssueSections,
+    RecordStore, RelatesRelationship, RelationshipTarget, Relationships,
 };
 
 const KIND: &str = "plan";
@@ -517,6 +517,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
         let status = issue.status.as_deref().unwrap_or("open").to_string();
+        let sections = IssueSections::unchecked_from_body(description.as_deref());
         let record = CanonicalIssueRecord {
             issue: Issue {
                 id: id.clone(),
@@ -531,8 +532,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
                 closed_at: (status == "closed").then_some(now),
             },
             labels: sorted(issue.labels.clone()),
-            acceptance: issue.acceptance.clone(),
-            evidence_required: issue.evidence_required.clone(),
+            sections,
             relationships: Relationships::default(),
         };
         store.write_issue_atomic(&record)?;
@@ -1037,22 +1037,25 @@ fn add_relationship_to_domain(
 }
 
 fn issue_description(issue: &BulkIssue) -> Option<String> {
-    let mut parts = Vec::new();
-    if let Some(description) = &issue.description {
-        if !description.trim().is_empty() {
-            parts.push(description.clone());
-        }
-    }
-    if !issue.acceptance.is_empty() {
-        parts.push(format!("Acceptance:\n{}", bullet_list(&issue.acceptance)));
-    }
-    if !issue.evidence_required.is_empty() {
-        parts.push(format!(
-            "Evidence required:\n{}",
-            bullet_list(&issue.evidence_required)
-        ));
-    }
-    (!parts.is_empty()).then(|| parts.join("\n\n"))
+    let description = issue
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Imported bulk-plan issue.");
+    let outcome = if issue.acceptance.is_empty() {
+        "Outcome was not specified in the bulk plan.".to_string()
+    } else {
+        bullet_list(&issue.acceptance)
+    };
+    let evidence = if issue.evidence_required.is_empty() {
+        "Evidence was not specified in the bulk plan.".to_string()
+    } else {
+        bullet_list(&issue.evidence_required)
+    };
+    Some(format!(
+        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n{evidence}"
+    ))
 }
 
 fn bullet_list(values: &[String]) -> String {

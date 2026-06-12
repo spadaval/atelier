@@ -7,8 +7,8 @@ use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::projection_index;
 use crate::record_store::{
-    self, AttachmentRelationship, CanonicalIssueRecord, RelatesRelationship, RelationshipTarget,
-    Relationships, FIRST_CLASS_RECORD_KINDS,
+    self, AttachmentRelationship, CanonicalIssueRecord, IssueSections, RelatesRelationship,
+    RelationshipTarget, Relationships, FIRST_CLASS_RECORD_KINDS,
 };
 use crate::storage_layout;
 
@@ -222,8 +222,7 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     record_store::render_issue_record(&CanonicalIssueRecord {
         issue: issue.clone(),
         labels,
-        acceptance: Vec::new(),
-        evidence_required: Vec::new(),
+        sections: IssueSections::unchecked_from_body(issue.description.as_deref()),
         relationships,
     })
 }

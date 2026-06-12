@@ -156,9 +156,37 @@ pub struct Relationships {
 pub struct CanonicalIssueRecord {
     pub issue: Issue,
     pub labels: Vec<String>,
-    pub acceptance: Vec<String>,
-    pub evidence_required: Vec<String>,
+    pub sections: IssueSections,
     pub relationships: Relationships,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IssueSections {
+    pub description: String,
+    pub outcome: String,
+    pub evidence: String,
+    pub notes: Option<String>,
+}
+
+impl IssueSections {
+    pub fn unchecked_from_body(body: Option<&str>) -> Self {
+        if let Some(body) = body {
+            if let Ok(sections) = parse_issue_sections(body, Path::new("<input>")) {
+                return sections;
+            }
+        }
+
+        let description = body
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("No description provided.");
+        Self {
+            description: description.to_string(),
+            outcome: "Outcome was not specified.".to_string(),
+            evidence: "Evidence was not specified.".to_string(),
+            notes: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -594,13 +622,11 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
 
     let mut output = String::new();
     output.push_str("---\n");
-    write_yaml_array(&mut output, "acceptance", &record.acceptance)?;
     write_yaml_scalar(
         &mut output,
         "created_at",
         Some(&record.issue.created_at.to_rfc3339()),
     )?;
-    write_yaml_array(&mut output, "evidence_required", &record.evidence_required)?;
     write_yaml_scalar(&mut output, "id", Some(&record.issue.id))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
@@ -620,11 +646,28 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
         Some(&record.issue.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&normalize_body(
-        record.issue.description.as_deref().unwrap_or(""),
-    ));
+    output.push_str(&render_issue_sections(&record.sections));
     output.push('\n');
     Ok(output)
+}
+
+fn render_issue_sections(sections: &IssueSections) -> String {
+    let mut body = format!(
+        "## Description\n\n{}\n\n## Outcome\n\n{}\n\n## Evidence\n\n{}",
+        sections.description.trim(),
+        sections.outcome.trim(),
+        sections.evidence.trim()
+    );
+    if let Some(notes) = sections
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|notes| !notes.is_empty())
+    {
+        body.push_str("\n\n## Notes\n\n");
+        body.push_str(notes);
+    }
+    normalize_body(&body)
 }
 
 pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
@@ -702,9 +745,8 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     }
 
     reject_legacy_relationship_keys(&front_matter, relative)?;
+    reject_legacy_issue_keys(&front_matter, relative)?;
     let relationships = parse_relationships(&front_matter, relative)?;
-    let acceptance = string_array(&front_matter, "acceptance", relative)?;
-    let evidence_required = string_array(&front_matter, "evidence_required", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
     crate::db::validate_status(&status)
         .with_context(|| format!("Invalid status in {}", display_state_path(relative)))?;
@@ -717,6 +759,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     } else {
         Some(body.to_string())
     };
+    let sections = parse_issue_sections(body, relative)?;
 
     Ok(CanonicalIssueRecord {
         issue: Issue {
@@ -733,8 +776,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
             closed_at: (status == "closed").then_some(updated_at),
         },
         labels: string_array(&front_matter, "labels", relative)?,
-        acceptance,
-        evidence_required,
+        sections,
         relationships,
     })
 }
@@ -1007,6 +1049,134 @@ fn reject_legacy_relationship_keys(
         }
     }
     Ok(())
+}
+
+fn reject_legacy_issue_keys(values: &BTreeMap<String, Value>, relative: &Path) -> Result<()> {
+    let keys = ["acceptance", "evidence_required"]
+        .into_iter()
+        .filter(|key| values.contains_key(*key))
+        .collect::<Vec<_>>();
+    if !keys.is_empty() {
+        bail!(
+            "Legacy issue front matter key(s) {} in {}; use issue body sections",
+            keys.join(", "),
+            display_state_path(relative)
+        );
+    }
+    Ok(())
+}
+
+pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections> {
+    let mut sections = BTreeMap::<String, String>::new();
+    let mut current_heading: Option<String> = None;
+    let mut current_body = String::new();
+
+    for line in body.lines() {
+        if let Some(heading) = issue_level_two_heading(line) {
+            if !matches!(
+                heading.as_str(),
+                "Description" | "Outcome" | "Evidence" | "Notes"
+            ) {
+                bail!(
+                    "Unknown issue body section '{}' in {}",
+                    heading,
+                    display_state_path(relative)
+                );
+            }
+            if let Some(previous) = current_heading.replace(heading.clone()) {
+                finish_issue_section(&mut sections, previous, &current_body, relative)?;
+                current_body.clear();
+            } else if !current_body.trim().is_empty() {
+                bail!(
+                    "Content before first recognized issue body section in {}",
+                    display_state_path(relative)
+                );
+            } else {
+                current_body.clear();
+            }
+            continue;
+        }
+
+        if current_heading.is_none() && !line.trim().is_empty() {
+            bail!(
+                "Content before first recognized issue body section in {}",
+                display_state_path(relative)
+            );
+        }
+        current_body.push_str(line);
+        current_body.push('\n');
+    }
+
+    if let Some(previous) = current_heading {
+        finish_issue_section(&mut sections, previous, &current_body, relative)?;
+    } else {
+        bail!(
+            "Missing required issue body section 'Description' in {}",
+            display_state_path(relative)
+        );
+    }
+
+    let description = required_issue_section(&sections, "Description", relative)?;
+    let outcome = required_issue_section(&sections, "Outcome", relative)?;
+    let evidence = required_issue_section(&sections, "Evidence", relative)?;
+    let notes = sections.get("Notes").cloned();
+
+    Ok(IssueSections {
+        description,
+        outcome,
+        evidence,
+        notes,
+    })
+}
+
+fn issue_level_two_heading(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("##")?;
+    if rest.starts_with('#') {
+        return None;
+    }
+    if !rest.is_empty() && !rest.chars().next().is_some_and(char::is_whitespace) {
+        return None;
+    }
+    Some(rest.trim().to_string())
+}
+
+fn finish_issue_section(
+    sections: &mut BTreeMap<String, String>,
+    heading: String,
+    body: &str,
+    relative: &Path,
+) -> Result<()> {
+    if sections.contains_key(&heading) {
+        bail!(
+            "Duplicate issue body section '{}' in {}",
+            heading,
+            display_state_path(relative)
+        );
+    }
+    let content = body.trim().to_string();
+    if content.is_empty() {
+        bail!(
+            "Empty issue body section '{}' in {}",
+            heading,
+            display_state_path(relative)
+        );
+    }
+    sections.insert(heading, content);
+    Ok(())
+}
+
+fn required_issue_section(
+    sections: &BTreeMap<String, String>,
+    heading: &str,
+    relative: &Path,
+) -> Result<String> {
+    sections.get(heading).cloned().ok_or_else(|| {
+        anyhow!(
+            "Missing required issue body section '{}' in {}",
+            heading,
+            display_state_path(relative)
+        )
+    })
 }
 
 pub fn parse_relationships(
@@ -1397,11 +1567,12 @@ mod tests {
     use tempfile::tempdir;
 
     fn issue_record(id: &str) -> CanonicalIssueRecord {
+        let body = "## Description\n\nCanonical body\n\n## Outcome\n\nIssue Markdown round-trips without losing fields.\n\n## Evidence\n\n- `cargo test record_store` passes.";
         CanonicalIssueRecord {
             issue: Issue {
                 id: id.to_string(),
                 title: "Write RecordStore".to_string(),
-                description: Some("Canonical body".to_string()),
+                description: Some(body.to_string()),
                 status: "open".to_string(),
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
@@ -1411,11 +1582,7 @@ mod tests {
                 closed_at: None,
             },
             labels: vec!["record-store".to_string(), "storage".to_string()],
-            acceptance: vec![
-                "Issue Markdown round-trips without losing fields".to_string(),
-                "Atomic writes do not expose partial state".to_string(),
-            ],
-            evidence_required: vec!["cargo test record_store".to_string()],
+            sections: parse_issue_sections(body, &issue_record_path(id)).unwrap(),
             relationships: Relationships {
                 blocks: vec![RelationshipTarget {
                     kind: "issue".to_string(),
@@ -1509,8 +1676,10 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains(
             "  relates:\n  - kind: \"issue\"\n    id: \"atelier-cccc\"\n    type: \"related\"\n"
         ));
-        assert!(text.contains("- \"Issue Markdown round-trips without losing fields\""));
-        assert!(text.contains("- \"cargo test record_store\""));
+        assert!(!text.contains("acceptance:"));
+        assert!(!text.contains("evidence_required:"));
+        assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
+        assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
     }
 
     #[test]
@@ -1539,19 +1708,31 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_accepts_sectioned_body_without_legacy_arrays() {
         let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Notes\n\nSequencing context.";
         let text = sectioned_issue_text("atelier-abcd", body);
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
 
-        assert_eq!(parsed.acceptance, Vec::<String>::new());
-        assert_eq!(parsed.evidence_required, Vec::<String>::new());
         assert_eq!(parsed.issue.description.as_deref(), Some(body));
+        assert_eq!(
+            parsed.sections.description,
+            "Canonical problem statement.".to_string()
+        );
+        assert_eq!(
+            parsed.sections.outcome,
+            "The desired finished world is observable.".to_string()
+        );
+        assert_eq!(
+            parsed.sections.evidence,
+            "- `atelier lint atelier-abcd` passes.".to_string()
+        );
+        assert_eq!(
+            parsed.sections.notes.as_deref(),
+            Some("Sequencing context.")
+        );
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_rejects_legacy_acceptance_and_evidence_front_matter() {
         let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body).replace(
@@ -1566,7 +1747,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_rejects_missing_required_sections() {
         let body = "## Description\n\nCanonical problem statement.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
@@ -1578,7 +1758,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_rejects_duplicate_recognized_headings() {
         let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.\n\n## Outcome\n\nA second outcome.";
         let text = sectioned_issue_text("atelier-abcd", body);
@@ -1590,7 +1769,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_rejects_content_before_first_recognized_heading() {
         let body = "Preamble is not part of the issue contract.\n\n## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
@@ -1602,7 +1780,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    #[ignore = "contract test for the upcoming issue body section parser"]
     fn issue_parser_contract_rejects_unknown_top_level_sections() {
         let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Acceptance\n\nLegacy section name.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
         let text = sectioned_issue_text("atelier-abcd", body);
@@ -1611,6 +1788,17 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(error
             .to_string()
             .contains("Unknown issue body section 'Acceptance'"));
+    }
+
+    #[test]
+    fn issue_parser_contract_rejects_empty_present_sections() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Empty issue body section 'Outcome'"));
     }
 
     #[test]

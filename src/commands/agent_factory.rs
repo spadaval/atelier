@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::db::Database;
 use crate::models::{Comment, Issue};
-use crate::record_store::{CanonicalIssueRecord, RecordStore, RelationshipTarget, Relationships};
+use crate::record_store::{
+    CanonicalIssueRecord, IssueSections, RecordStore, RelationshipTarget, Relationships,
+};
 use crate::utils::format_issue_id;
 
 #[derive(Debug, Clone)]
@@ -63,7 +65,7 @@ pub struct IssueObject {
     pub id: String,
     pub title: String,
     pub description: Option<String>,
-    pub acceptance_criteria: Option<String>,
+    pub sections: Option<IssueSections>,
     pub status: String,
     pub issue_type: String,
     pub priority: String,
@@ -99,46 +101,6 @@ fn label_value(labels: &[String], prefix: &str) -> Option<String> {
     labels
         .iter()
         .find_map(|label| label.strip_prefix(prefix).map(str::to_string))
-}
-
-fn split_acceptance(description: Option<&str>) -> (Option<String>, Option<String>) {
-    let Some(description) = description else {
-        return (None, None);
-    };
-    let marker = "## Acceptance Criteria";
-    if let Some(idx) = description.find(marker) {
-        let before = description[..idx].trim();
-        let after = description[idx + marker.len()..].trim();
-        let acceptance = after
-            .split("\n## ")
-            .next()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
-        let body = if before.is_empty() {
-            None
-        } else {
-            Some(before.to_string())
-        };
-        (body, acceptance)
-    } else {
-        (Some(description.to_string()), None)
-    }
-}
-
-fn front_matter_acceptance(criteria: &[String]) -> Option<String> {
-    if criteria.is_empty() {
-        return None;
-    }
-    let mut output = String::new();
-    for item in criteria {
-        if !output.is_empty() {
-            output.push('\n');
-        }
-        output.push_str("- ");
-        output.push_str(item);
-    }
-    Some(output)
 }
 
 fn note_object(comment: Comment) -> NoteObject {
@@ -252,19 +214,15 @@ fn issue_object_from_canonical(
     let mut issue = record.issue;
     issue.parent_id = projection_issue.parent_id;
     issue.closed_at = projection_issue.closed_at.or(issue.closed_at);
-    issue_object_from_parts(db, issue, record.labels, Some(record.acceptance))
+    issue_object_from_parts(db, issue, record.labels, Some(record.sections))
 }
 
 fn issue_object_from_parts(
     db: &Database,
     issue: Issue,
     labels: Vec<String>,
-    canonical_acceptance: Option<Vec<String>>,
+    sections: Option<IssueSections>,
 ) -> Result<IssueObject> {
-    let (description, acceptance_criteria) = split_acceptance(issue.description.as_deref());
-    let acceptance_criteria = canonical_acceptance
-        .and_then(|criteria| front_matter_acceptance(&criteria))
-        .or(acceptance_criteria);
     let parent = match &issue.parent_id {
         Some(parent_id) => Some(dependency_summary(db, parent_id)?.id),
         None => None,
@@ -285,8 +243,8 @@ fn issue_object_from_parts(
     Ok(IssueObject {
         id: issue_id_for_agent(db, &issue)?,
         title: issue.title,
-        description,
-        acceptance_criteria,
+        description: issue.description,
+        sections,
         status: issue.status,
         issue_type: issue.issue_type,
         priority: issue.priority,
@@ -381,8 +339,14 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
 
     render_parent_context(db, canonical_id)?;
 
-    print_text_section("Description", object.description.as_deref());
-    print_text_section("Acceptance Criteria", object.acceptance_criteria.as_deref());
+    if let Some(sections) = &object.sections {
+        print_text_section("Description", Some(&sections.description));
+        print_text_section("Outcome", Some(&sections.outcome));
+        print_text_section("Evidence", Some(&sections.evidence));
+        print_text_section("Notes", sections.notes.as_deref());
+    } else {
+        print_text_section("Description", object.description.as_deref());
+    }
     print_text_section("Close Reason", object.close_reason.as_deref());
 
     render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
@@ -1138,8 +1102,7 @@ pub fn create_lifecycle(
             closed_at: None,
         },
         labels: input.labels.to_vec(),
-        acceptance: Vec::new(),
-        evidence_required: Vec::new(),
+        sections: IssueSections::unchecked_from_body(input.description),
         relationships: Relationships::default(),
     };
     store.write_issue_atomic(&record)?;

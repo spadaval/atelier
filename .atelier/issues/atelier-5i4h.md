@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-5i4h"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "evidence"
 - "markdown"
 - "migration"
@@ -22,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Remove issue evidence_required frontmatter field"
-updated_at: "2026-06-12T04:53:56.961262790+00:00"
+updated_at: "2026-06-12T05:03:53.468188664+00:00"
 ---
 
 ## Description
