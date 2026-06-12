@@ -3,8 +3,11 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 use crate::db::Database;
+
+const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
 
 #[derive(Debug, Serialize)]
 pub struct ValidatorResult {
@@ -14,6 +17,7 @@ pub struct ValidatorResult {
     pub validator: String,
     pub passed: bool,
     pub reason: String,
+    pub elapsed_ms: u128,
 }
 
 pub fn validate(
@@ -51,7 +55,9 @@ pub fn evaluate(
     };
     let mut results = Vec::new();
     for validator in validators {
+        let started = Instant::now();
         let (passed, reason) = evaluate_builtin(db, target_kind, target_id, &validator)?;
+        let elapsed_ms = started.elapsed().as_millis();
         results.push(ValidatorResult {
             target_kind: target_kind.to_string(),
             target_id: target_id.to_string(),
@@ -59,6 +65,7 @@ pub fn evaluate(
             validator,
             passed,
             reason,
+            elapsed_ms,
         });
     }
 
@@ -90,6 +97,20 @@ pub fn print_validation_results(results: &[ValidatorResult]) {
         let status = if result.passed { "pass" } else { "fail" };
         println!("  {}  {}", status, result.validator);
         println!("      Reason: {}", result.reason);
+        if let Some(warning) = slow_validator_warning(result) {
+            println!("      Warning: {warning}");
+        }
+    }
+}
+
+fn slow_validator_warning(result: &ValidatorResult) -> Option<String> {
+    if result.elapsed_ms > SLOW_VALIDATOR_WARNING_MS {
+        Some(format!(
+            "validator took {}ms; validators should stay under {}ms",
+            result.elapsed_ms, SLOW_VALIDATOR_WARNING_MS
+        ))
+    } else {
+        None
     }
 }
 
@@ -313,5 +334,31 @@ fn repo_root() -> Result<PathBuf> {
         Ok(Path::new(String::from_utf8_lossy(&output.stdout).trim()).to_path_buf())
     } else {
         Ok(std::env::current_dir()?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn validator_result(elapsed_ms: u128) -> ValidatorResult {
+        ValidatorResult {
+            target_kind: "issue".to_string(),
+            target_id: "atelier-test".to_string(),
+            transition: "close".to_string(),
+            validator: "durable_state_current".to_string(),
+            passed: true,
+            reason: "canonical export is current".to_string(),
+            elapsed_ms,
+        }
+    }
+
+    #[test]
+    fn slow_validator_warning_starts_after_threshold() {
+        assert!(slow_validator_warning(&validator_result(100)).is_none());
+
+        let warning = slow_validator_warning(&validator_result(101)).unwrap();
+        assert!(warning.contains("validator took 101ms"));
+        assert!(warning.contains("under 100ms"));
     }
 }

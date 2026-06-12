@@ -22,19 +22,19 @@ EVENT_TYPES = {
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Migrate .atelier/state.db comments into .atelier-state issue activity sidecars."
+        description="Migrate .atelier/state.db comments into .atelier issue activity sidecars."
     )
     parser.add_argument(
         "--repo",
         default=".",
-        help="Repository root containing .atelier/ and .atelier-state/ (default: current directory)",
+        help="Repository root containing .atelier/ and .atelier/ (default: current directory)",
     )
     parser.add_argument("--dry-run", action="store_true", help="Report without writing files")
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
     db_path = repo / ".atelier" / "state.db"
-    state_dir = repo / ".atelier-state"
+    state_dir = repo / ".atelier"
     if not db_path.is_file():
         print(f"missing SQLite database: {db_path}", file=sys.stderr)
         return 2

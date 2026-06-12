@@ -149,7 +149,7 @@ fn write_command_event(
                 .canonical_dir()
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or(crate::storage_layout::LEGACY_CANONICAL_DIR)
+                .unwrap_or(crate::storage_layout::ATELIER_DIR)
                 .to_string()
         }
     });
@@ -293,11 +293,7 @@ fn diagnostics_root() -> Option<PathBuf> {
 fn workspace_root() -> Option<PathBuf> {
     let mut current = env::current_dir().ok()?;
     loop {
-        if current
-            .join(crate::storage_layout::LEGACY_CANONICAL_DIR)
-            .is_dir()
-            || current.join(crate::storage_layout::ATELIER_DIR).is_dir()
-        {
+        if current.join(crate::storage_layout::ATELIER_DIR).is_dir() {
             return Some(current);
         }
         if !current.pop() {

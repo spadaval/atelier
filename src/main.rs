@@ -49,7 +49,6 @@ Work:
 State management:
   export        Write or check canonical tracker records
   rebuild       Rebuild local SQLite state from canonical tracker records
-  migrate       Move legacy tracker state into the current layout
   import-beads  Import an external Beads JSONL backup
 
 Integrations:
@@ -125,12 +124,6 @@ enum Commands {
         /// Canonical state directory to rebuild from
         #[arg(short, long)]
         input: Option<String>,
-    },
-
-    /// Migrate tracker state between repository layouts
-    Migrate {
-        #[command(subcommand)]
-        action: MigrateCommands,
     },
 
     /// Import Beads JSONL backup into Atelier runtime and canonical state
@@ -640,12 +633,6 @@ enum WorkflowCommands {
         #[arg(long)]
         validator: Vec<String>,
     },
-}
-
-#[derive(Subcommand)]
-enum MigrateCommands {
-    /// Move legacy .atelier-state records into the single .atelier tree
-    MarkdownFirst,
 }
 
 #[derive(Subcommand)]
@@ -1284,13 +1271,6 @@ fn run() -> Result<()> {
             commands::agent_factory::rebuild(&state_dir, &db_path)
         }
 
-        Commands::Migrate { action } => match action {
-            MigrateCommands::MarkdownFirst => {
-                let repo_root = storage_layout::find_repo_root()?;
-                commands::migrate::markdown_first(&repo_root)
-            }
-        },
-
         Commands::ImportBeads { input, output } => {
             let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
             let state_dir = output
@@ -1670,9 +1650,6 @@ fn command_identity(command: &Commands) -> &'static str {
             }
         }
         Commands::Rebuild { .. } => "rebuild",
-        Commands::Migrate { action } => match action {
-            MigrateCommands::MarkdownFirst => "migrate markdown-first",
-        },
         Commands::ImportBeads { .. } => "import-beads",
         Commands::Integrations { action } => match action {
             IntegrationCommands::Claude { action } => match action {

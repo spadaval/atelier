@@ -362,7 +362,7 @@ fn issue_record_path(id: &str) -> PathBuf {
 
 fn display_state_path(relative_path: &Path) -> String {
     format!(
-        ".atelier-state/{}",
+        ".atelier/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
 }
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn test_canonical_noop_export_is_deterministic() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
 
         run_canonical(&db, &state_dir, false).unwrap();
         let first_files = canonical_files_under(&state_dir).unwrap();
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn test_canonical_export_preserves_issue_activity_sidecars() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let id = db.create_issue("Activity", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
         let activity_path = state_dir
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn test_canonical_changed_record_export_rewrites_issue() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let id = db
             .create_issue("Original title", Some("Original body"), "high")
             .unwrap();
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn test_canonical_check_ignores_sqlite_only_canonical_drift() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let id = db.create_issue("Original title", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
 
@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn test_canonical_check_reports_stale_projection_metadata() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let id = db.create_issue("Original title", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
 
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn test_canonical_export_removes_stale_record_file() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let id = db.create_issue("Temporary", None, "medium").unwrap();
         run_canonical(&db, &state_dir, false).unwrap();
         let issue_path = state_dir.join(issue_record_path(&id));
@@ -551,7 +551,7 @@ mod tests {
     fn test_canonical_check_reports_invalid_duplicate_id() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Original", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         run_canonical(&db, &state_dir, false).unwrap();
         let copy_path = state_dir.join(issue_record_path("atelier-zzzz"));
         fs::copy(state_dir.join(issue_record_path(&id)), copy_path).unwrap();
@@ -565,7 +565,7 @@ mod tests {
     fn test_canonical_check_reports_dangling_link() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Source", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         run_canonical(&db, &state_dir, false).unwrap();
         db.add_typed_relation(
             &id,
@@ -592,7 +592,7 @@ mod tests {
     #[test]
     fn test_canonical_markdown_serialization_stability() {
         let (db, dir) = setup_test_db();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let parent = db
             .create_issue("Parent", Some("Parent body\r\nline 2"), "high")
             .unwrap();

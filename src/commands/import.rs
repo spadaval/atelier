@@ -539,7 +539,7 @@ mod tests {
     fn test_import_beads_writes_canonical_state() {
         let (db, dir) = setup_test_db();
         let import_path = dir.path().join("issues.manual.jsonl");
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         fs::write(
             &import_path,
             include_str!("../../tests/fixtures/beads/issues.manual.jsonl"),

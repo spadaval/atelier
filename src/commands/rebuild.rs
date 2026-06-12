@@ -703,7 +703,7 @@ fn ensure_issue_exists(
 
 fn display_state_path(relative_path: &Path) -> String {
     format!(
-        ".atelier-state/{}",
+        ".atelier/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
 }
@@ -737,7 +737,7 @@ mod tests {
         db.add_dependency(&child, &parent).unwrap();
         db.add_typed_relation(&parent, &child, "derived").unwrap();
 
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let rebuilt_path = dir.path().join(".atelier/state.db");
@@ -773,7 +773,7 @@ mod tests {
             .unwrap();
         db.update_parent(&child, Some(&parent)).unwrap();
 
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let rebuilt_path = dir.path().join(".atelier/state.db");
@@ -825,7 +825,7 @@ mod tests {
         )
         .unwrap();
 
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         let mission_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let mission_markdown = fs::read_to_string(&mission_path).unwrap();
@@ -896,7 +896,7 @@ mod tests {
             .create_record("mission", "Mission", "open", None, "{}")
             .unwrap();
 
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         let old_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let new_path = state_dir.join("missions").join(format!("{issue_id}.md"));
@@ -917,7 +917,7 @@ mod tests {
     fn rebuild_succeeds_without_manifest_or_graph() {
         let (db, dir) = setup_test_db();
         db.create_issue("Standalone", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         assert!(!state_dir.join("manifest.json").exists());
@@ -929,7 +929,7 @@ mod tests {
     fn rebuild_recreates_canonical_projection_and_resets_runtime_state() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Runtime reset", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let session_id = db.start_session().unwrap();
@@ -958,7 +958,7 @@ mod tests {
         let id = db
             .create_issue("Runtime preserved", None, "medium")
             .unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let session_id = db.start_session().unwrap();
@@ -991,7 +991,7 @@ mod tests {
     fn rebuild_accepts_issue_activity_sidecars() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Activity", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         write_activity_sidecar(&state_dir, &id);
 
@@ -1003,7 +1003,7 @@ mod tests {
     fn rebuild_rejects_activity_for_missing_issue() {
         let (db, dir) = setup_test_db();
         db.create_issue("Only issue", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         write_activity_sidecar(&state_dir, "atelier-miss");
 
@@ -1017,7 +1017,7 @@ mod tests {
     fn rebuild_reports_path_id_mismatch() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Mismatch", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         let wrong_id = "atelier-zzzz";
         fs::rename(
@@ -1028,7 +1028,7 @@ mod tests {
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
-            "does not match canonical path .atelier-state/issues/{id}.md"
+            "does not match canonical path .atelier/issues/{id}.md"
         )));
     }
 
@@ -1036,13 +1036,13 @@ mod tests {
     fn rebuild_reports_malformed_front_matter() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Malformed", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         fs::write(state_dir.join(issue_record_path(&id)), "not front matter\n").unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
-            "Missing YAML front matter in .atelier-state/issues/{id}.md"
+            "Missing YAML front matter in .atelier/issues/{id}.md"
         )));
     }
 
@@ -1050,7 +1050,7 @@ mod tests {
     fn rebuild_reports_schema_mismatch() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Wrong schema", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path)
@@ -1068,7 +1068,7 @@ mod tests {
     fn rebuild_reports_dangling_dependency_and_duplicate_link() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Source", None, "medium").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let missing_id = "atelier-zzzz";
@@ -1108,7 +1108,7 @@ mod tests {
         let first = db.create_issue("First", None, "medium").unwrap();
         let second = db.create_issue("Second", None, "medium").unwrap();
         db.add_typed_relation(&first, &second, "related").unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
         let path = [first.as_str(), second.as_str()]

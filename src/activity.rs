@@ -353,7 +353,7 @@ fn normalize_body(body: &str) -> String {
 
 fn display_state_path(relative_path: &Path) -> String {
     format!(
-        ".atelier-state/{}",
+        ".atelier/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
 }

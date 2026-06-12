@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn freshness_reports_changed_missing_and_unindexed_sources() {
         let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         let issues = state_dir.join("issues");
         fs::create_dir_all(&issues).unwrap();
         fs::write(issues.join("atelier-aaaa.md"), "one").unwrap();
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn freshness_reports_missing_metadata_when_state_exists() {
         let dir = tempdir().unwrap();
-        let state_dir = dir.path().join(".atelier-state");
+        let state_dir = dir.path().join(".atelier");
         fs::create_dir_all(state_dir.join("issues")).unwrap();
         fs::write(state_dir.join("issues/atelier-aaaa.md"), "one").unwrap();
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();

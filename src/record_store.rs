@@ -1385,7 +1385,7 @@ fn normalize_body(body: &str) -> String {
 
 fn display_state_path(relative_path: &Path) -> String {
     format!(
-        ".atelier-state/{}",
+        ".atelier/{}",
         relative_path.to_string_lossy().replace('\\', "/")
     )
 }
@@ -1509,13 +1509,13 @@ mod tests {
         let path_error = parse_issue_record(&text, &issue_record_path("atelier-wxyz")).unwrap_err();
         assert!(path_error
             .to_string()
-            .contains("does not match canonical path .atelier-state/issues/atelier-abcd.md"));
+            .contains("does not match canonical path .atelier/issues/atelier-abcd.md"));
     }
 
     #[test]
     fn record_store_discovers_and_rejects_noncanonical_issue_paths() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let record = issue_record("atelier-abcd");
         store.write_issue_atomic(&record).unwrap();
         let duplicate_path = store
@@ -1529,13 +1529,13 @@ mod tests {
         let error = store.load_issues().unwrap_err();
         assert!(error
             .to_string()
-            .contains("does not match canonical path .atelier-state/issues/atelier-abcd.md"));
+            .contains("does not match canonical path .atelier/issues/atelier-abcd.md"));
     }
 
     #[test]
     fn record_store_allocates_ids_across_canonical_dirs() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let candidate = "atelier-0001";
         fs::create_dir_all(store.state_dir.join("missions")).unwrap();
         fs::write(
@@ -1555,7 +1555,7 @@ mod tests {
     #[test]
     fn record_store_label_unlabel_mutates_issue_front_matter() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let mut record = issue_record("atelier-abcd");
         record.labels.clear();
         store.write_issue_atomic(&record).unwrap();
@@ -1578,7 +1578,7 @@ mod tests {
     #[test]
     fn record_store_block_unblock_mutates_blocker_relationships() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let mut blocked = issue_record("atelier-abcd");
         blocked.relationships = Relationships::default();
         let mut blocker = issue_record("atelier-efgh");
@@ -1620,7 +1620,7 @@ mod tests {
     #[test]
     fn record_store_block_rejects_cycles_and_self_blocks() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         for id in ["atelier-abcd", "atelier-efgh", "atelier-ijkl"] {
             let mut record = issue_record(id);
             record.relationships = Relationships::default();
@@ -1647,7 +1647,7 @@ mod tests {
     #[test]
     fn record_store_relate_unrelate_mutates_both_issue_records() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let mut first = issue_record("atelier-abcd");
         first.relationships = Relationships::default();
         let mut second = issue_record("atelier-efgh");
@@ -1709,7 +1709,7 @@ mod tests {
     #[test]
     fn write_issue_atomic_ignores_stale_fixed_temp_artifact() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let record = issue_record("atelier-abcd");
         store.write_issue_atomic(&record).unwrap();
         let path = store.state_dir.join(issue_record_path("atelier-abcd"));
@@ -1728,17 +1728,13 @@ mod tests {
     #[test]
     fn write_issue_atomic_rejects_path_traversal_ids_before_writing() {
         let dir = tempdir().unwrap();
-        let store = RecordStore::new(dir.path().join(".atelier-state"));
+        let store = RecordStore::new(dir.path().join(".atelier"));
         let record = issue_record("../escaped");
 
         let error = store.write_issue_atomic(&record).unwrap_err();
 
         assert!(error.to_string().contains("Invalid issue id"));
-        assert!(!dir
-            .path()
-            .join(".atelier-state")
-            .join("escaped.md")
-            .exists());
+        assert!(!dir.path().join(".atelier").join("escaped.md").exists());
         assert!(!dir.path().join("escaped.md").exists());
     }
 }

@@ -3,7 +3,6 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 pub const ATELIER_DIR: &str = ".atelier";
-pub const LEGACY_CANONICAL_DIR: &str = ".atelier-state";
 pub const LEGACY_RUNTIME_DB: &str = "state.db";
 pub const TARGET_RUNTIME_DIR: &str = "runtime";
 pub const CACHE_DIR: &str = "cache";
@@ -46,10 +45,6 @@ impl StorageLayout {
         self.atelier_dir().join(TARGET_RUNTIME_DIR)
     }
 
-    pub fn legacy_canonical_dir(&self) -> PathBuf {
-        self.repo_root.join(LEGACY_CANONICAL_DIR)
-    }
-
     pub fn canonical_dir(&self) -> PathBuf {
         self.atelier_dir()
     }
@@ -71,7 +66,7 @@ pub fn find_atelier_dir() -> Result<PathBuf> {
 pub fn find_repo_root() -> Result<PathBuf> {
     let mut current = env::current_dir()?;
     loop {
-        if current.join(ATELIER_DIR).is_dir() || current.join(LEGACY_CANONICAL_DIR).is_dir() {
+        if current.join(ATELIER_DIR).is_dir() {
             return Ok(current);
         }
         if !current.pop() {
@@ -130,16 +125,12 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn canonical_dir_does_not_fall_back_to_legacy_state() {
+    fn canonical_dir_is_the_atelier_tree() {
         let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".atelier-state/issues")).unwrap();
+        fs::create_dir_all(dir.path().join(".atelier/issues")).unwrap();
 
         let layout = StorageLayout::new(dir.path());
 
         assert_eq!(layout.canonical_dir(), dir.path().join(".atelier"));
-        assert_eq!(
-            layout.legacy_canonical_dir(),
-            dir.path().join(".atelier-state")
-        );
     }
 }

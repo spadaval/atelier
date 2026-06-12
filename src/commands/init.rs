@@ -13,7 +13,6 @@ state_root = ".atelier"
 runtime_dir = ".atelier"
 runtime_database = ".atelier/state.db"
 cache_dir = ".atelier/cache"
-compatibility_state_root = ".atelier-state"
 "#;
 pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/.locks-cache/",
@@ -25,7 +24,6 @@ pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
     "/.atelier/runtime/",
     "/.atelier/cache/",
     "/.atelier-worktrees/",
-    "/.atelier-state/cache/",
 ];
 
 pub(crate) fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {

@@ -540,9 +540,6 @@ fn ensure_clean_worktree() -> Result<()> {
 
 fn is_workflow_generated_dirty_path(path: &str) -> bool {
     path.starts_with(".atelier/")
-        || (path.starts_with(".atelier-state/issues/")
-            && (path.ends_with(".activity/")
-                || (path.contains(".activity/") && path.ends_with(".md"))))
 }
 
 fn git_status_path(line: &str) -> Option<String> {
