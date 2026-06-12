@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Print canonical file paths in issue create and show output"
-updated_at: "2026-06-12T01:54:57.152137733+00:00"
+updated_at: "2026-06-12T03:33:18.922078643+00:00"
 ---
 
 Issue creation and inspection should make the file-first workflow obvious.

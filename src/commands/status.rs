@@ -5,6 +5,90 @@ use std::path::Path;
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
 
+pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
+    let active_work = db.get_active_work_association()?;
+    let active_mission = commands::mission::active_mission(db)?;
+    let open_missions = db.list_records("mission", Some("open"))?;
+    let ready = db.list_ready_issues()?;
+    let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
+    let tracker_state = if export_stale.is_empty() {
+        "current"
+    } else {
+        "stale"
+    };
+
+    if quiet {
+        println!(
+            "work={} active_mission={} open_missions={} ready={} tracker={}",
+            if active_work.is_some() {
+                "active"
+            } else {
+                "none"
+            },
+            active_mission
+                .as_ref()
+                .map(|mission| mission.id.as_str())
+                .unwrap_or("none"),
+            open_missions.len(),
+            ready.len(),
+            tracker_state
+        );
+        return Ok(());
+    }
+
+    println!("Atelier Status");
+    println!("==============");
+    println!("Tracker:       {tracker_state}");
+    println!("Ready work:    {}", ready.len());
+
+    match active_work {
+        Some(work) => {
+            let title = db
+                .get_issue(&work.issue_id)?
+                .map(|issue| issue.title)
+                .unwrap_or_else(|| "(issue missing)".to_string());
+            println!("Active work:   {} - {}", work.issue_id, title);
+            println!(
+                "Work branch:   {}",
+                work.branch.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "Worktree:      {}",
+                work.worktree_path.as_deref().unwrap_or("(none)")
+            );
+        }
+        None => println!("Active work:   none"),
+    }
+
+    match active_mission {
+        Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
+        None if open_missions.is_empty() => println!("Active mission: none"),
+        None => println!("Active mission: none ({} open)", open_missions.len()),
+    }
+
+    if !export_stale.is_empty() {
+        println!("Export issues: {}", export_stale.len());
+    }
+
+    println!();
+    println!("Next Actions");
+    println!("------------");
+    println!("  Inspect mission readiness: atelier mission status");
+    if ready.is_empty() {
+        println!("  Find blocked work: atelier issue blocked");
+    } else {
+        println!("  Choose ready work: atelier issue list --ready");
+        println!("  Start selected work: atelier work start <issue-id>");
+    }
+    if export_stale.is_empty() {
+        println!("  Check runtime health: atelier doctor");
+    } else {
+        println!("  Refresh canonical export: atelier export");
+        println!("  Check tracker records: atelier lint");
+    }
+    Ok(())
+}
+
 pub fn close_all(
     db: &Database,
     label_filter: Option<&str>,

@@ -748,6 +748,7 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for heading in [
         "Setup:",
+        "Orientation:",
         "Issues:",
         "Missions and planning:",
         "Records:",
@@ -762,6 +763,7 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for command in [
         "init",
+        "status",
         "issue",
         "dep",
         "mission",
@@ -783,9 +785,10 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
-        "atelier issue update <id> --claim",
         "atelier mission list",
         "atelier mission show <id>",
+        "atelier work start <issue-id>",
+        "atelier work finish <issue-id>",
         "atelier work status",
         "atelier doctor",
     ] {
@@ -833,6 +836,56 @@ fn test_mission_help_uses_show_not_view() {
 }
 
 #[test]
+fn test_root_status_summarizes_checkout_orientation() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Atelier Status"));
+    assert!(stdout.contains("Tracker:"));
+    assert!(stdout.contains("Ready work:"));
+    assert!(stdout.contains("Active work:"));
+    assert!(stdout.contains("Active mission:"));
+    assert!(stdout.contains("Next Actions"));
+    assert!(stdout.contains("atelier mission status"));
+    assert!(stdout.contains("atelier issue list --ready"));
+    assert!(stdout.contains("atelier work start <issue-id>"));
+
+    let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
+    assert!(success, "quiet status failed: {stderr}");
+    assert!(quiet.contains("work="));
+    assert!(quiet.contains("ready="));
+    assert!(quiet.contains("tracker="));
+}
+
+#[test]
+fn test_issue_next_uses_current_workflow_commands() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Next item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Next item");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "next"]);
+    assert!(success, "issue next failed: {stderr}");
+    assert!(stdout.contains("Next Actions"));
+    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
+    assert!(stdout.contains(&format!("atelier work start {issue_id}")));
+    assert!(stdout.contains("atelier status"));
+    assert!(
+        !stdout.contains("session work"),
+        "issue next must not suggest removed session workflow:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_removed_aliases_fail_as_unknown_commands() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -868,6 +921,9 @@ fn test_create_issue() {
         "Expected project-scoped issue id in output, got: {}",
         stdout
     );
+    let issue_id = issue_id_by_title(dir.path(), "Test issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
+    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
 }
 
 #[test]
@@ -924,10 +980,29 @@ fn test_create_subissue() {
         "Expected project-scoped subissue id in output, got: {}",
         stdout
     );
+    let child_id = issue_id_by_title(dir.path(), "Child issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{child_id}.md")));
+    assert!(stdout.contains(&format!("atelier lint {child_id}")));
 
     // Verify parent-child relationship in show
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("Child") || show_out.contains("subissue"));
+}
+
+#[test]
+fn test_create_issue_with_work_prints_canonical_path() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Work path issue", "--work"],
+    );
+    assert!(success, "issue create --work failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Work path issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
+    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
+    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
 }
 
 // ==================== Issue Listing Tests ====================
@@ -1170,6 +1245,8 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Status:   open"));
     assert!(stdout.contains("Type:     task"));
     assert!(stdout.contains("Priority: medium"));
+    let target_id = issue_id_by_title(dir.path(), "Target issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
     assert!(stdout.contains("Parent issue"));
     assert!(stdout.contains("1 total | status: open=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
@@ -5001,7 +5078,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let (success, human_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "human mission show failed: {stderr}");
-    assert!(human_out.contains(&format!("Mission {mission_id} [open] - Ship records")));
+    assert!(human_out.contains(&format!("Mission {mission_id} [ready] - Ship records")));
     assert!(human_out.contains("Constraints"));
     assert!(human_out.contains("Keep issues accountable"));
     assert!(human_out.contains("Progress"));
@@ -5235,7 +5312,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         success,
         "mission reopen should skip closeout validators: {stderr}"
     );
-    assert!(reopen_out.contains("Status: open"));
+    assert!(reopen_out.contains("Status: ready"));
 }
 
 #[test]
@@ -5478,15 +5555,15 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
     assert!(success, "mission list failed: {stderr}");
     assert!(stdout.contains("Missions"));
-    assert!(stdout.contains("2 open missions | 1 blocked"));
+    assert!(stdout.contains("2 ready missions | 1 blocked"));
     assert!(!stdout.contains("Updated:"));
     assert!(stdout.contains("Evidence gaps: 1"));
     assert!(!stdout.contains("ready="));
-    assert!(stdout.contains("Open"));
+    assert!(stdout.contains("Ready"));
     assert!(!stdout.contains("Closed"));
 
-    let active_row = format!("{active_id} [open] - Active mission");
-    let older_row = format!("{older_id} [open] - Older open");
+    let active_row = format!("{active_id} [ready] - Active mission");
+    let older_row = format!("{older_id} [ready] - Older open");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
     let active_pos = stdout.find(&active_row).expect("missing active row");
     let older_pos = stdout.find(&older_row).expect("missing older row");
@@ -5513,7 +5590,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let (success, all_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "all"]);
     assert!(success, "all mission list failed: {stderr}");
-    assert!(all_out.contains("3 missions | 1 closed, 2 open | 1 blocked"));
+    assert!(all_out.contains("3 missions | 1 closed, 2 ready | 1 blocked"));
     assert!(all_out.contains(&active_row));
     assert!(all_out.contains(&older_row));
     assert!(all_out.contains(&closed_row));
@@ -5532,7 +5609,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(!open_out.contains(&closed_row));
 
     let (success, empty_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "in_progress"]);
+        run_atelier(dir.path(), &["mission", "list", "--status", "draft"]);
     assert!(success, "empty filtered mission list failed: {stderr}");
     assert!(empty_out.contains("0 missions"));
     assert!(empty_out.contains("(none)"));
@@ -5596,7 +5673,7 @@ fn test_mission_status_cli_reports_control_state() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains(&format!(
-        "Mission Status {mission_id} [open] - Autonomy status"
+        "Mission Status {mission_id} [ready] - Autonomy status"
     )));
     assert!(status_out.contains("Health:   blocked"));
     assert!(status_out.contains("Tracker:  ok"));
@@ -5623,8 +5700,8 @@ fn test_mission_status_cli_reports_control_state() {
     let (success, dashboard_out, stderr) = run_atelier(dir.path(), &["mission", "status"]);
     assert!(success, "mission status dashboard failed: {stderr}");
     assert!(dashboard_out.contains("Mission Status"));
-    assert!(dashboard_out.contains("1 open mission | 1 blocked | tracker ok"));
-    assert!(dashboard_out.contains(&format!("{mission_id} [blocked] open - Autonomy status")));
+    assert!(dashboard_out.contains("1 ready mission | 1 blocked | tracker ok"));
+    assert!(dashboard_out.contains(&format!("{mission_id} [blocked] ready - Autonomy status")));
 
     let closeout_mission = {
         let (success, out, stderr) =
@@ -5737,7 +5814,7 @@ fn test_active_mission_focus_guides_status_and_work() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status"]);
     assert!(success, "active mission status failed: {stderr}");
     assert!(status_out.contains(&format!(
-        "Mission Status {mission_id} [open/active] - Active focus"
+        "Mission Status {mission_id} [active] - Active focus"
     )));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);

@@ -43,11 +43,12 @@ concrete files, commands, and product-specific skills.
   `cargo run -- ...` only when a one-off rebuild plus execution is specifically
   useful.
 - Mission commands:
+  - `atelier status`
   - `atelier mission list`
   - `atelier mission show <id>`
   - `atelier mission status [<id>]`
   - `atelier mission create "..."`
-  - `atelier mission update <id> --status <open|closed>`
+  - `atelier mission update <id> --status <draft|ready|active|closed>`
   - `atelier mission add-work <mission-id> <issue-id>`
   - `atelier workflow validate mission <id>`
 - Work and evidence commands:
@@ -71,7 +72,8 @@ concrete files, commands, and product-specific skills.
   output only for commands that naturally acknowledge one ID/count/status, and
   run explicit drill-down commands such as
   `atelier issue show <id>`, `atelier mission show <id>`,
-  `atelier mission status <id>`, `atelier issue list --ready`,
+  `atelier mission status <id>`, `atelier status`,
+  `atelier issue list --ready`,
   `atelier evidence show <id>`, `atelier workflow validate issue <id>`,
   `atelier workflow validate mission <id>`, `atelier export --check`,
   `atelier lint`, and `atelier doctor` when more state is needed.

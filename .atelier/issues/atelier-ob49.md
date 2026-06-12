@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-ob49"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define command removal and migration behavior"
-updated_at: "2026-06-12T02:13:27.252201331+00:00"
+updated_at: "2026-06-12T03:25:34.607296507+00:00"
 ---
 
 Define how command moves and removals should be handled in this refinement pass. The default policy is staged deprecation or a compatibility alias for moved commands when existing operator habits or Agent Factory guidance could break. Direct removal is acceptable only when the issue proves the command is redundant, the replacement is clear, tested, and documented, and no compatibility need remains.

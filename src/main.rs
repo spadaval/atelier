@@ -30,6 +30,9 @@ use record_store::RecordStore;
 #[command(after_help = "Setup:
   init          Initialize Atelier in the current repository
 
+Orientation:
+  status        Show checkout, mission, work, and tracker signposts
+
 Issues:
   issue         Create, list, show, update, close, and relate issues
   dep           Manage issue blockers with add, remove, and list
@@ -60,13 +63,15 @@ Maintenance:
   doctor        Check runtime and exported-state health
 
 Common commands:
+  atelier status
   atelier issue list
   atelier issue list --ready
   atelier issue show <id>
-  atelier issue update <id> --claim
   atelier mission list
   atelier mission show <id>
   atelier mission status
+  atelier work start <issue-id>
+  atelier work finish <issue-id>
   atelier work status
   atelier doctor
   atelier help <command>
@@ -102,6 +107,9 @@ enum Commands {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Show checkout, mission, work, and tracker signposts
+    Status,
 
     /// Issue lifecycle commands (create, show, list, close, ...)
     Issue {
@@ -1250,6 +1258,11 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force)
         }
 
+        Commands::Status => {
+            let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+            commands::status::run(storage.db(), &storage.state_dir(), quiet)
+        }
+
         Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Export { output, check } => {
@@ -1616,6 +1629,7 @@ fn run() -> Result<()> {
 fn command_identity(command: &Commands) -> &'static str {
     match command {
         Commands::Init { .. } => "init",
+        Commands::Status => "status",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::Quick { .. } => "issue quick",

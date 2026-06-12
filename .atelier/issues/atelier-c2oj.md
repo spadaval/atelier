@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Document file-first Markdown issue editing workflows"
-updated_at: "2026-06-12T01:54:59.376705533+00:00"
+updated_at: "2026-06-12T03:37:44.576687346+00:00"
 ---
 
 Document the preferred file-first issue authoring workflow wherever agents are

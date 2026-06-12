@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-xenr"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "ergonomics"
 priority: "P1"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Consolidate issue creation around file-first issue create"
-updated_at: "2026-06-12T01:38:07.057899391+00:00"
+updated_at: "2026-06-12T03:35:21.587689662+00:00"
 ---
 
 Make `atelier issue create <title>` the single normal path for creating issue

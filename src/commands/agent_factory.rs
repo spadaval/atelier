@@ -313,6 +313,15 @@ fn canonical_issue_detail(issue_id: &str) -> Result<Option<CanonicalIssueRecord>
     Ok(Some(store.load_issue_by_id(issue_id)?))
 }
 
+fn canonical_issue_path_from_state(state_dir: &Path, issue_id: &str) -> PathBuf {
+    state_dir.join("issues").join(format!("{issue_id}.md"))
+}
+
+fn canonical_issue_path(issue_id: &str) -> Result<Option<PathBuf>> {
+    Ok(find_state_dir_from_cwd()?
+        .map(|state_dir| canonical_issue_path_from_state(&state_dir, issue_id)))
+}
+
 fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
     Ok(IssueSummary {
         id: issue_id_for_agent(db, &issue)?,
@@ -367,6 +376,9 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     if !object.labels.is_empty() {
         println!("Labels:   {}", object.labels.join(", "));
     }
+    if let Some(path) = canonical_issue_path(canonical_id)? {
+        println!("File:     {}", path.display());
+    }
 
     render_parent_context(db, canonical_id)?;
 
@@ -378,7 +390,7 @@ fn render_issue_show_human(db: &Database, canonical_id: &str, object: &IssueObje
     render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
     render_subissue_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
-    render_command_footer(object);
+    render_command_footer(canonical_id, object)?;
     Ok(())
 }
 
@@ -540,16 +552,24 @@ fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> R
     Ok(())
 }
 
-fn render_command_footer(object: &IssueObject) {
+fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()> {
     println!("\nNext Commands");
     println!("-------------");
-    println!("  atelier issue comment {} \"...\"", object.id);
-    if object.status == "closed" {
-        println!("  atelier issue reopen {}", object.id);
-    } else {
-        println!("  atelier work start {}", object.id);
-        println!("  atelier issue close {} --reason \"...\"", object.id);
+    if let Some(path) = canonical_issue_path(canonical_id)? {
+        println!("  Edit issue Markdown: {}", path.display());
     }
+    println!("  Validate this issue: atelier lint {}", object.id);
+    println!("  Add a note: atelier issue comment {} \"...\"", object.id);
+    if object.status == "closed" {
+        println!("  Reopen this issue: atelier issue reopen {}", object.id);
+    } else {
+        println!("  Start tracked work: atelier work start {}", object.id);
+        println!(
+            "  Close when complete: atelier issue close {} --reason \"...\"",
+            object.id
+        );
+    }
+    Ok(())
 }
 
 fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec<String>> {
@@ -1145,6 +1165,7 @@ pub fn create_lifecycle(
     }
     let issue = refreshed.require_issue(&id)?;
     let object = issue_object(&refreshed, issue)?;
+    let file_path = canonical_issue_path_from_state(state_dir, &id);
     if input.quiet {
         println!("{}", object.id);
     } else if parent_id.is_some() {
@@ -1153,21 +1174,31 @@ pub fn create_lifecycle(
             object.id,
             format_issue_id(parent_id.as_deref().unwrap_or_default())
         );
-        if input.work && session.is_some() {
-            println!("Now working on: {} {}", object.id, object.title);
-        }
-    } else {
-        println!("Created issue {} - {}", object.id, object.title);
-        println!("Type:     {}", object.issue_type);
-        println!("Priority: {}", object.priority);
+        println!("File: {}", file_path.display());
         if input.work && session.is_some() {
             println!("Now working on: {} {}", object.id, object.title);
         }
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier issue show {}", object.id);
-        println!("  atelier work start {}", object.id);
+        println!("  Edit issue Markdown: {}", file_path.display());
+        println!("  Validate this issue: atelier lint {}", object.id);
+        println!("  Inspect this issue: atelier issue show {}", object.id);
+    } else {
+        println!("Created issue {} - {}", object.id, object.title);
+        println!("Type:     {}", object.issue_type);
+        println!("Priority: {}", object.priority);
+        println!("File:     {}", file_path.display());
+        if input.work && session.is_some() {
+            println!("Now working on: {} {}", object.id, object.title);
+        }
+        println!();
+        println!("Next Commands");
+        println!("-------------");
+        println!("  Edit issue Markdown: {}", file_path.display());
+        println!("  Validate this issue: atelier lint {}", object.id);
+        println!("  Inspect this issue: atelier issue show {}", object.id);
+        println!("  Start tracked work: atelier work start {}", object.id);
     }
     Ok(())
 }

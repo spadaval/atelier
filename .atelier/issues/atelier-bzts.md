@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-bzts"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "workflow"
 priority: "P1"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Specify an Atelier prime workflow command"
-updated_at: "2026-06-12T01:54:58.558494612+00:00"
+updated_at: "2026-06-12T03:24:23.831000963+00:00"
 ---
 
 Consider an `atelier prime` command that prints the most important workflow

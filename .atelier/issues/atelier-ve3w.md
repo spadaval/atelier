@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Standardize mutation output around explicit change summaries"
-updated_at: "2026-06-12T01:54:57.864059395+00:00"
+updated_at: "2026-06-12T03:35:45.167209738+00:00"
 ---
 
 Mutation commands should state exactly what changed instead of relying on

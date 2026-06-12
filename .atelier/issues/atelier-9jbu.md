@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-9jbu"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "ergonomics"
 priority: "P1"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Reduce issue subcommands to lifecycle essentials"
-updated_at: "2026-06-12T01:41:31.009321638+00:00"
+updated_at: "2026-06-12T03:35:44.546255361+00:00"
 ---
 
 Redesign the `atelier issue` command group so it exposes only ordinary issue

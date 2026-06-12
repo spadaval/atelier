@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Remove large text-field editing from issue update"
-updated_at: "2026-06-12T01:55:00.088845078+00:00"
+updated_at: "2026-06-12T03:35:43.788915385+00:00"
 ---
 
 Remove large body-field editing from `atelier issue update`. Long descriptions,

@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-o3w3"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Specify issue start and work command relationship"
-updated_at: "2026-06-12T02:51:55.208701880+00:00"
+updated_at: "2026-06-12T03:25:29.887215590+00:00"
 ---
 
 Decide how the intuitive start surface relates to existing work-start and worktree behavior. Direction for this mission: `atelier start <issue-id>` should be the normal entrypoint. It marks/associates the issue as in progress, runs fast start gate checks, and follows configurable workspace policy. The default policy should be low-friction for prototypes and single-person projects: allow working directly in the current checkout/main branch without forcing branch or worktree setup. Projects can opt into stricter branch or worktree modes when they need review workflows, parallelism, isolation for untracked support files, or cross-system collaboration. Explicit worktree commands remain advanced/orchestrator-facing for preparing, inspecting, merging, or removing Git worktrees outside the normal start flow.

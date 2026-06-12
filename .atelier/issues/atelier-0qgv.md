@@ -5,6 +5,7 @@ evidence_required: []
 id: "atelier-0qgv"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -74,9 +75,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Capture current CLI surface and output pain points"
-updated_at: "2026-06-12T01:19:19.155058246+00:00"
+updated_at: "2026-06-12T03:20:46.055118125+00:00"
 ---
 
 First executable slice. Inventory root commands, key subcommands, representative outputs, confusing placement, generic next-command blocks, missing state context, and commands with too much or too little output. Acceptance: the inventory names concrete commands and examples, distinguishes clarity issues from ergonomics issues, and recommends which implementation issues should be split next.

@@ -119,7 +119,11 @@ pub fn run(db: &Database, atelier_dir: &Path) -> Result<()> {
     }
 
     println!();
-    println!("Run: atelier session work {}", top.id);
+    println!("Next Actions");
+    println!("------------");
+    println!("  Inspect this issue: atelier issue show {}", top.id);
+    println!("  Start tracked work: atelier work start {}", top.id);
+    println!("  Check checkout status: atelier status");
 
     // Show runners-up if any
     if scored.len() > 1 {

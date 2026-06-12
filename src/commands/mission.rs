@@ -36,7 +36,7 @@ pub fn create(
         "work": []
     });
     let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(KIND, title, "open", body, &data.to_string())?;
+    let created = store.create_domain_record(KIND, title, "ready", body, &data.to_string())?;
     refresh_projection(state_dir, db_path)?;
     let db = Database::open(db_path)?;
     let record = db.require_record(KIND, &created.record.id)?;
@@ -50,7 +50,7 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
     let db = Database::open(db_path)?;
     let mission = db.require_record(KIND, id)?;
-    let open_missions = db.list_records(KIND, Some("open"))?;
+    let open_missions = open_mission_records(&db)?;
     let active = open_missions
         .iter()
         .filter(|record| is_active_mission(record))
@@ -75,7 +75,7 @@ pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) ->
     for record in open_missions {
         let mut canonical = store.load_domain_record_by_id(KIND, &record.id)?;
         let should_be_active = canonical.record.id == mission.id;
-        if set_active_flag(&mut canonical.record, should_be_active)? {
+        if set_mission_active_state(&mut canonical.record, should_be_active)? {
             canonical.record.updated_at = Utc::now();
             store.write_domain_record_atomic(&canonical)?;
             changed = true;
@@ -103,7 +103,7 @@ pub fn status(db: &Database, state_dir: &Path, id: Option<&str>, quiet: bool) ->
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
-    let records = db.list_records(KIND, Some("open"))?;
+    let records = open_mission_records(db)?;
     let mut rows = records
         .into_iter()
         .map(|record| {
@@ -202,7 +202,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
             summary.evidence_gap_count(),
             validator_failures,
             tracker.status_token(),
-            if mission.status == "closed" {
+            if mission_lifecycle_status(&mission) == "closed" {
                 "complete"
             } else if closeout.ready() {
                 "yes"
@@ -225,7 +225,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     println!("Tracker:  {}", tracker.status_text());
     println!(
         "Closeout: {}",
-        if mission.status == "closed" {
+        if mission_lifecycle_status(&mission) == "closed" {
             "complete"
         } else if closeout.ready() {
             "ready"
@@ -276,7 +276,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     }
 
     print_mission_heading("Closeout Gates");
-    if mission.status == "closed" {
+    if mission_lifecycle_status(&mission) == "closed" {
         println!("Mission is closed.");
     } else {
         closeout.print_human();
@@ -323,7 +323,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
     if summary.evidence_gap_count() > 0 {
         println!("  atelier evidence add --kind validation --result pass \"...\"");
     }
-    if mission.status != "closed" && closeout.ready() {
+    if mission_lifecycle_status(&mission) != "closed" && closeout.ready() {
         println!("  atelier mission update {} --status closed", mission.id);
     }
     println!("  atelier doctor");
@@ -406,8 +406,7 @@ fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>>
 }
 
 pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
-    let active = db
-        .list_records(KIND, Some("open"))?
+    let active = open_mission_records(db)?
         .into_iter()
         .filter(is_active_mission)
         .collect::<Vec<_>>();
@@ -424,6 +423,49 @@ pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
     Ok(active.into_iter().next())
 }
 
+fn open_mission_records(db: &Database) -> Result<Vec<DomainRecord>> {
+    mission_records_for_filter(db, Some("open"))
+}
+
+fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec<DomainRecord>> {
+    let records = db.list_records(KIND, None)?;
+    Ok(match status {
+        None | Some("all") => records,
+        Some("open") => records
+            .into_iter()
+            .filter(|record| mission_lifecycle_status(record) != "closed")
+            .collect(),
+        Some(status) => {
+            let status = normalize_mission_status(status)?;
+            records
+                .into_iter()
+                .filter(|record| mission_lifecycle_status(record) == status)
+                .collect()
+        }
+    })
+}
+
+fn normalize_mission_status(status: &str) -> Result<&str> {
+    match status {
+        "open" => Ok("ready"),
+        "draft" | "ready" | "active" | "closed" => Ok(status),
+        _ => bail!(
+            "Invalid mission status '{}'. Must be one of: draft, ready, active, closed",
+            status
+        ),
+    }
+}
+
+fn mission_lifecycle_status(record: &DomainRecord) -> String {
+    if is_active_mission(record) {
+        "active".to_string()
+    } else if record.status == "open" {
+        "ready".to_string()
+    } else {
+        record.status.clone()
+    }
+}
+
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
     Ok(mission_issue_ids(db, mission_id)?.contains(issue_id))
 }
@@ -438,7 +480,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
         Some(status) => Some(status),
         None => Some("open"),
     };
-    let records = db.list_records(KIND, status_filter)?;
+    let records = mission_records_for_filter(db, status_filter)?;
     let mut rows = records
         .into_iter()
         .map(|record| {
@@ -482,6 +524,7 @@ pub fn update(
         current.record.title = title.to_string();
     }
     if let Some(status) = status {
+        let status = normalize_mission_status(status)?;
         if status == "closed" && current.record.status != "closed" {
             let db = Database::open(db_path)?;
             enforce_closeout(&db, id)?;
@@ -839,30 +882,50 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
     }
 
     print_mission_list_group(
-        "Open",
-        rows.iter().filter(|row| row.record.status == "open"),
+        "Active",
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "active"),
+    );
+
+    print_mission_list_group(
+        "Ready",
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "ready"),
+    );
+
+    print_mission_list_group(
+        "Draft",
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "draft"),
     );
 
     let other_statuses = rows
         .iter()
-        .filter(|row| row.record.status != "open" && row.record.status != "closed")
-        .map(|row| row.record.status.as_str())
+        .filter(|row| {
+            !matches!(
+                mission_lifecycle_status(&row.record).as_str(),
+                "active" | "ready" | "draft" | "closed"
+            )
+        })
+        .map(|row| mission_lifecycle_status(&row.record))
         .collect::<BTreeSet<_>>();
     for status in other_statuses.iter() {
         print_mission_list_group(
             &status_heading(status),
-            rows.iter().filter(|row| row.record.status == *status),
+            rows.iter()
+                .filter(|row| mission_lifecycle_status(&row.record) == *status),
         );
     }
 
     print_mission_list_group(
         "Closed",
-        rows.iter().filter(|row| row.record.status == "closed"),
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "closed"),
     );
 
     let first_actionable = rows
         .iter()
-        .find(|row| row.record.status != "closed")
+        .find(|row| mission_lifecycle_status(&row.record) != "closed")
         .or_else(|| rows.first());
     print_mission_list_next_commands(first_actionable);
     Ok(())
@@ -872,7 +935,9 @@ fn mission_list_summary_line(rows: &[MissionListRow]) -> String {
     let mut statuses = BTreeMap::<String, usize>::new();
     let mut blocked_missions = 0;
     for row in rows {
-        *statuses.entry(row.record.status.clone()).or_default() += 1;
+        *statuses
+            .entry(mission_lifecycle_status(&row.record))
+            .or_default() += 1;
         if row.summary.open_blockers > 0 || row.summary.total_work().blocked > 0 {
             blocked_missions += 1;
         }
@@ -892,9 +957,11 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
     for row in rows {
         println!(
             "  {} [{}] - {}",
-            row.record.id, row.record.status, row.record.title
+            row.record.id,
+            mission_lifecycle_status(&row.record),
+            row.record.title
         );
-        if row.record.status == "open" {
+        if mission_lifecycle_status(&row.record) != "closed" {
             print_mission_list_open_work(row);
         }
     }
@@ -911,11 +978,13 @@ fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
 }
 
 fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp::Ordering {
-    mission_status_rank(&a.record.status)
-        .cmp(&mission_status_rank(&b.record.status))
+    mission_status_rank(&mission_lifecycle_status(&a.record))
+        .cmp(&mission_status_rank(&mission_lifecycle_status(&b.record)))
         .then_with(|| {
-            if a.record.status != "open" && b.record.status != "open" {
-                a.record.status.cmp(&b.record.status)
+            if mission_lifecycle_status(&a.record) != "ready"
+                && mission_lifecycle_status(&b.record) != "ready"
+            {
+                mission_lifecycle_status(&a.record).cmp(&mission_lifecycle_status(&b.record))
             } else {
                 std::cmp::Ordering::Equal
             }
@@ -926,9 +995,11 @@ fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp
 
 fn mission_status_rank(status: &str) -> u8 {
     match status {
-        "open" => 0,
-        "closed" => 2,
-        _ => 1,
+        "active" => 0,
+        "ready" | "open" => 1,
+        "draft" => 2,
+        "closed" => 4,
+        _ => 3,
     }
 }
 
@@ -1141,7 +1212,7 @@ fn mission_health(summary: &MissionListSummary) -> &'static str {
 }
 
 fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &'static str {
-    if mission.status == "closed" {
+    if mission_lifecycle_status(mission) == "closed" {
         "closed"
     } else {
         mission_health(summary)
@@ -1174,33 +1245,31 @@ fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>
 }
 
 fn is_active_mission(record: &DomainRecord) -> bool {
+    if record.status == "active" {
+        return true;
+    }
     serde_json::from_str::<Value>(&record.data_json)
         .ok()
         .and_then(|data| data.get("active").and_then(Value::as_bool))
         .unwrap_or(false)
 }
 
-fn set_active_flag(record: &mut DomainRecord, active: bool) -> Result<bool> {
+fn set_mission_active_state(record: &mut DomainRecord, active: bool) -> Result<bool> {
     let mut data: Value = serde_json::from_str(&record.data_json)?;
-    let current = data.get("active").and_then(Value::as_bool).unwrap_or(false);
-    if current == active {
+    let target_status = if active { "active" } else { "ready" };
+    if is_active_mission(record) == active && record.status == target_status {
         return Ok(false);
     }
-    if active {
-        data["active"] = Value::Bool(true);
-    } else if let Some(object) = data.as_object_mut() {
+    if let Some(object) = data.as_object_mut() {
         object.remove("active");
     }
+    record.status = target_status.to_string();
     record.data_json = serde_json::to_string(&data)?;
     Ok(true)
 }
 
 fn mission_focus_label(record: &DomainRecord) -> String {
-    if is_active_mission(record) {
-        format!("{}/active", record.status)
-    } else {
-        record.status.clone()
-    }
+    mission_lifecycle_status(record)
 }
 
 fn collect_issue_and_descendants(
@@ -1238,13 +1307,11 @@ fn render_mission_show_human(
     mission_blockers: &[Value],
 ) -> Result<()> {
     let data: Value = serde_json::from_str(&mission.data_json)?;
-    let identity = format!(
-        "Mission {} [{}] - {}",
-        mission.id, mission.status, mission.title
-    );
+    let status = mission_lifecycle_status(mission);
+    let identity = format!("Mission {} [{}] - {}", mission.id, status, mission.title);
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
-    println!("Status:   {}", mission.status);
+    println!("Status:   {}", status);
     println!("Created:  {}", format_human_datetime(mission.created_at));
     println!("Updated:  {}", format_human_datetime(mission.updated_at));
 
@@ -1371,8 +1438,8 @@ fn print_mission_next_commands(mission: &DomainRecord) {
     print_mission_heading("Next Commands");
     println!("  atelier mission status {}", mission.id);
     println!("  atelier mission show {}", mission.id);
-    if mission.status == "closed" {
-        println!("  atelier mission update {} --status open", mission.id);
+    if mission_lifecycle_status(mission) == "closed" {
+        println!("  atelier mission update {} --status ready", mission.id);
     } else {
         println!("  atelier mission add-work {} <issue-id>", mission.id);
         println!("  atelier workflow validate mission {}", mission.id);

@@ -33,9 +33,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Improve human output and next-action guidance"
-updated_at: "2026-06-12T01:54:57.864059395+00:00"
+updated_at: "2026-06-12T03:36:03.367841847+00:00"
 ---
 
 Improve output usefulness without restoring command-result JSON. Acceptance: next actions explain why an agent would run them, empty states are concise, and quiet output remains minimal and script-friendly.

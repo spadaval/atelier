@@ -35,7 +35,9 @@ Every human view should be built from the same primitives:
 - Row prefix: two spaces for child rows; deeper hierarchy uses two additional
   spaces per level.
 - Empty state: an explicit `(none)` or a short sentence naming what is absent.
-- Footer: next useful commands when a follow-up action is obvious.
+- Footer: intent-labeled next actions when a follow-up action is obvious.
+  The command supplies the actions; shared formatting may align labels and
+  commands but must not invent generic advice.
 
 The current `atelier issue show` output already uses much of this grammar:
 identity line, metadata rows, section headings, hierarchy, blockers, subissues,
@@ -59,13 +61,15 @@ Detail views should answer these questions in order:
 Required sections for issue detail views:
 
 - identity and metadata;
+- canonical Markdown file path when a `.atelier/issues/<id>.md` record exists;
 - hierarchy parent;
 - description and acceptance criteria when present;
 - close reason when present;
 - blockers and dependents;
 - subissue summary and bounded child rows;
 - recent activity;
-- next commands.
+- next actions for editing the Markdown record, validating the issue, adding a
+  note, starting work, reopening, or closing as appropriate.
 
 Required sections for mission detail views:
 
@@ -127,10 +131,13 @@ Empty queue output should say what was searched and what to try next. For
 example, `issue list --ready` may include the blocked count, while
 `issue search` should echo the search query.
 
-Quiet mode remains the terse path. For read commands, quiet output should omit
-headings, footers, explanatory prose, and color while preserving the minimum
-record identifiers needed to act on the result. Automation should use durable
-tracker state and explicit command workflows rather than command-result JSON.
+Quiet mode remains the terse path for strict composition values only. Quiet
+output may contain IDs, counts, paths, status tokens, and pass/fail tokens. It
+must omit headings, footers, explanatory prose, and partial human detail views.
+Commands that cannot provide meaningful terse output should prefer the normal
+human view instead of pretending that a truncated human report is script-safe.
+Automation should use durable tracker state and explicit command workflows
+rather than command-result JSON.
 
 Example shape:
 
@@ -153,9 +160,10 @@ agents should migrate by choosing the smallest supported surface that matches
 their need:
 
 - Use quiet acknowledgements for simple command composition. Mutating commands
-  should print only the affected ID, changed fields, and recovery guidance when
-  quiet output is requested. Scripts may branch on exit status and the stable
-  IDs or paths in quiet output, but should not parse full detail views.
+  should print only the affected ID, changed fields, stable paths, and recovery
+  guidance when quiet output is requested. Scripts may branch on exit status
+  and the stable IDs or paths in quiet output, but should not parse full detail
+  views.
 - Read canonical records under `.atelier/` when durable tracker state is
   needed. These Markdown records are the reviewable, mergeable source of truth
   for issues, missions, milestones, plans, evidence, and activity sidecars.

@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate and document the refinement pass"
-updated_at: "2026-06-12T01:54:59.376705533+00:00"
+updated_at: "2026-06-12T03:42:47.456351736+00:00"
 ---
 
 Prove and document the final refinement. Acceptance: docs, tests, workflow validation, and linked evidence show the new CLI surfaces are coherent for agent workflows.

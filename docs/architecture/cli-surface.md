@@ -3,7 +3,8 @@
 Atelier's public CLI presents the agent-native workflow first. Inherited
 Chainlink utilities are not kept as command aliases once their replacement path
 is documented; deleting old surfaces and their command code is preferred over
-compatibility shims.
+compatibility shims. Compatibility aliases are retained only when a staged
+migration protects current Agent Factory guidance or existing operator habits.
 
 ## Core
 
@@ -11,6 +12,7 @@ Core commands are stable enough to appear in `atelier --help` and are expected
 in normal Agent Factory workflows:
 
 - `atelier init`
+- `atelier status`
 - `atelier issue ...`
 - `atelier dep add/remove/list`
 - `atelier mission create/show/list/status/update`
@@ -30,15 +32,34 @@ in normal Agent Factory workflows:
 `.atelier/config.toml`, local runtime storage, and root ignore rules; it does
 not install editor or assistant hooks.
 
+`atelier status` is the root checkout signpost. It summarizes active work,
+active mission focus, ready work count, tracker freshness, and the next
+mission/work/health drill-down commands. It does not replace `mission status`;
+it points operators to the scoped status surface that owns closeout readiness.
+
+Mission lifecycle statuses are `draft`, `ready`, `active`, and `closed`.
+Mission creation defaults to `ready`; `atelier mission start <id>` transitions
+the selected mission to `active` and transitions any previous active mission
+back to `ready` when `--switch` is supplied. Legacy `open` mission records are
+read as `ready`, and legacy `data.active` records are read as `active` until
+the canonical record is next rewritten. `atelier mission list --status open`
+remains a compatibility filter for all non-closed missions, and
+`atelier mission update <id> --status open` is accepted as a staged alias for
+`ready`.
+
 There is no `atelier mission close` command in v1. Closing a mission uses
 `atelier mission update <id> --status closed`, which routes through the
 configured close transition validators. Reopening with
-`atelier mission update <id> --status open` does not run closeout validators.
+`atelier mission update <id> --status ready` does not run closeout validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
 such as list, ready, search, impact, lint, and Mission Control views may use
 SQLite after freshness checks.
+Issue creation and issue detail output print the canonical Markdown path under
+`.atelier/issues/<id>.md` so large-field editing stays file-first. Human
+footers point to editing that Markdown file, `atelier lint <id>`, and focused
+drill-down commands rather than generic command dumps.
 
 First-class mission, milestone, plan, evidence, relationship, workflow validation,
 and work lifecycle commands are now core as a staged implementation. Mission,

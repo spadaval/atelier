@@ -37,9 +37,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Reshape command hierarchy for workflow ergonomics"
-updated_at: "2026-06-12T03:08:50.805471803+00:00"
+updated_at: "2026-06-12T03:36:04.665698736+00:00"
 ---
 
 Plan intuitive command placement and remove redundant command surfaces that make agent workflows harder to explain. Acceptance: command placement is documented with old-to-new mappings, explicit staged-deprecation or alias decisions, and validation expectations for issue lifecycle, dependencies, links, search, notes/activity, work/start, setup/integrations, rebuild, maintenance, and state commands. Prefer compatibility aliases or staged deprecation for moved commands; direct removal is allowed only when a specific issue proves the replacement is clear, tested, documented, and safe for Agent Factory guidance and existing operator habits.
