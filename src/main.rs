@@ -431,9 +431,6 @@ enum IssueCommands {
         /// New title
         #[arg(short, long)]
         title: Option<String>,
-        /// New description
-        #[arg(short, long)]
-        description: Option<String>,
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
@@ -1460,7 +1457,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Update {
             id,
             title,
-            description,
             priority,
             issue_type,
             label,
@@ -1477,7 +1473,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 commands::agent_factory::UpdateInput {
                     issue_ref: &id,
                     title: title.as_deref(),
-                    description: description.as_deref(),
                     priority: priority.as_deref(),
                     issue_type: issue_type.as_deref(),
                     labels: &label,

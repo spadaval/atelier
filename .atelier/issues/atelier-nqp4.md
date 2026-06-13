@@ -3,6 +3,7 @@ created_at: "2026-06-13T20:37:07.010119181+00:00"
 id: "atelier-nqp4"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cleanup"
 - "data-model"
 priority: "P2"
@@ -13,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Remove issue body and description duplication"
-updated_at: "2026-06-13T20:37:07.010119181+00:00"
+updated_at: "2026-06-13T23:33:39.715246238+00:00"
 ---
 
 ## Description

@@ -9,12 +9,15 @@ use crate::activity::IssueActivity;
 use crate::db::Database;
 use crate::models::Issue;
 use crate::projection_index;
-use crate::record_store::{self, CanonicalDomainRecord, Relationships, FIRST_CLASS_RECORD_KINDS};
+use crate::record_store::{
+    self, CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
+};
 
 #[derive(Debug)]
 struct CanonicalIssue {
     issue: Issue,
     labels: Vec<String>,
+    sections: IssueSections,
     relationships: Relationships,
 }
 
@@ -66,6 +69,7 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
         let issue = CanonicalIssue {
             issue: record.issue,
             labels: record.labels,
+            sections: record.sections,
             relationships: record.relationships,
         };
         if !issue_ids.insert(issue.issue.id.clone()) {
@@ -394,6 +398,7 @@ fn write_rebuilt_database(
             for issue in &rebuild.issues {
                 let mut row = issue.issue.clone();
                 row.parent_id = None;
+                row.description = Some(issue.sections.searchable_text());
                 db.insert_issue_rebuild(&row)?;
             }
             for (child_id, parent_id) in &rebuild.child_edges {

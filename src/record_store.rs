@@ -942,18 +942,13 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
-    let description = if body.is_empty() {
-        None
-    } else {
-        Some(body.to_string())
-    };
     let sections = parse_issue_sections(body, relative)?;
 
     Ok(CanonicalIssueRecord {
         issue: Issue {
             id,
             title: require_scalar(&front_matter, "title", relative)?,
-            description,
+            description: None,
             status: status.clone(),
             issue_type,
             priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
@@ -3122,7 +3117,7 @@ Legacy missions used free-form body headings.
         let text = sectioned_issue_text("atelier-abcd", body);
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
 
-        assert_eq!(parsed.issue.description.as_deref(), Some(body));
+        assert_eq!(parsed.issue.description, None);
         assert_eq!(
             parsed.sections.description,
             "Canonical problem statement.".to_string()

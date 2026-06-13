@@ -2062,6 +2062,7 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
     let (success, update_help, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
     assert!(success, "issue update help failed: {stderr}");
     assert!(!update_help.contains("--status"));
+    assert!(!update_help.contains("--description"));
 }
 
 #[test]
@@ -2621,6 +2622,64 @@ fn test_issue_show_reads_detail_body_from_record_store() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Canonical Markdown body"));
     assert!(!stdout.contains("SQLite shadow body"));
+}
+
+#[test]
+fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Canonical section source",
+            "-d",
+            "Original section text",
+        ],
+    );
+    let issue_id = issue_id_by_title(dir.path(), "Canonical section source");
+    let issue_path = dir
+        .path()
+        .join(".atelier")
+        .join("issues")
+        .join(format!("{issue_id}.md"));
+    let edited_body = "Edited direct Markdown section";
+    let edited_outcome = "Direct edits are projected from issue body sections.";
+    let edited_evidence = "- `atelier rebuild` refreshes derived search text.";
+    let issue_text = std::fs::read_to_string(&issue_path)
+        .unwrap()
+        .replace("Original section text", edited_body)
+        .replace("Outcome was not specified.", edited_outcome)
+        .replace("Evidence was not specified.", edited_evidence);
+    std::fs::write(&issue_path, issue_text).unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "show failed: {stderr}");
+    assert!(stdout.contains(edited_body), "{stdout}");
+    assert!(stdout.contains(edited_outcome), "{stdout}");
+    assert!(stdout.contains(edited_evidence), "{stdout}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["search", "projected from issue body"]);
+    assert!(success, "search failed: {stderr}");
+    assert!(stdout.contains(&issue_id), "{stdout}");
+
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    let projected_text: String = conn
+        .query_row(
+            "SELECT description FROM issues WHERE id = ?1",
+            [&issue_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(projected_text.contains(edited_body));
+    assert!(projected_text.contains(edited_outcome));
+    assert!(!projected_text.contains("## Description"));
 }
 
 #[test]
@@ -5141,20 +5200,22 @@ fn test_list_all_statuses() {
 // ==================== Additional Update Edge Cases ====================
 
 #[test]
-fn test_update_description() {
+fn test_update_description_flag_is_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
-    let (success, _, _) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "update", "1", "-d", "New description"],
     );
 
-    assert!(success);
+    assert!(!success);
+    assert!(stderr.contains("unexpected argument '-d'"), "{stderr}");
 
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
-    assert!(show_out.contains("New description"));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
+    assert!(success, "issue update help failed: {stderr}");
+    assert!(!stdout.contains("--description"), "{stdout}");
 }
 
 #[test]
