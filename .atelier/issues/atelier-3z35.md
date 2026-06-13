@@ -20,9 +20,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T19:21:14.603079799+00:00"
+status: "done"
 title: "Replace start close and abandon workflow commands"
-updated_at: "2026-06-13T19:20:50.957226017+00:00"
+updated_at: "2026-06-13T19:21:14.603079799+00:00"
 ---
 
 ## Description
