@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Improve wrong-kind record ID errors"
-updated_at: "2026-06-13T04:01:39.751997298+00:00"
+updated_at: "2026-06-13T15:53:22.608299399+00:00"
 ---
 
 ## Description
