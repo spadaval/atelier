@@ -910,6 +910,8 @@ enum WorktreeCommands {
         #[arg(long)]
         force: bool,
     },
+    /// Clear a stale local worktree association after interrupted setup/removal
+    Repair { id: String },
 }
 
 #[derive(Subcommand)]
@@ -2279,6 +2281,10 @@ fn run() -> Result<()> {
                     let id = resolve_issue_arg(&db, &id)?;
                     commands::work::worktree_remove(&db, &id, force)
                 }
+                WorktreeCommands::Repair { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::worktree_repair(&db, &id)
+                }
             }
         }
 
@@ -2439,6 +2445,7 @@ fn command_identity(command: &Commands) -> &'static str {
             WorktreeCommands::Status => "worktree status",
             WorktreeCommands::Merge { .. } => "worktree merge",
             WorktreeCommands::Remove { .. } => "worktree remove",
+            WorktreeCommands::Repair { .. } => "worktree repair",
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",

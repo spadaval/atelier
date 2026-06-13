@@ -10093,11 +10093,65 @@ hooks:
     assert!(!status_human.contains("work:"));
     assert!(!status_human.contains("export:"));
 
-    let (success, remove_out, stderr) =
-        run_atelier(dir.path(), &["worktree", "remove", &issue_id, "--force"]);
-    assert!(success, "worktree remove failed: {stderr}");
-    assert!(remove_out.contains("Removed worktree"));
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["worktree", "remove", "--force", &worktree_arg])
+        .status()
+        .unwrap();
+    assert!(status.success(), "manual git worktree remove failed");
     assert!(!worktree_path.exists());
+    let (success, repair_out, stderr) = run_atelier(dir.path(), &["worktree", "repair", &issue_id]);
+    assert!(success, "worktree repair failed: {stderr}");
+    assert!(repair_out.contains("Cleared stale worktree association"));
+    let (success, repaired_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(success, "worktree status after repair failed: {stderr}");
+    assert!(!repaired_status.contains(&format!("{issue_id} [active]")));
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Failed setup worktree"]);
+    assert!(success, "failed setup issue create failed: {stderr}");
+    let failed_issue_id = issue_id_by_title(dir.path(), "Failed setup worktree");
+    std::fs::write(
+        dir.path().join("atelier.workflow.yaml"),
+        r#"schema: atelier.workflow_config
+schema_version: 1
+record_types: {}
+workflows: {}
+validators: {}
+hooks:
+  fail_setup:
+    event: worktree_setup
+    command:
+      argv: [sh, -c, "exit 12"]
+      env: {}
+"#,
+    )
+    .unwrap();
+    commit_all(dir.path(), "failing worktree hook");
+    let failed_worktree_path = dir.path().join(".atelier-worktrees").join(&failed_issue_id);
+    let failed_worktree_arg = failed_worktree_path.to_string_lossy().to_string();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "worktree",
+            "for",
+            &failed_issue_id,
+            "--path",
+            &failed_worktree_arg,
+        ],
+    );
+    assert!(!success, "failing setup hook should reject worktree setup");
+    assert!(
+        stderr.contains("worktree setup failed before active work association was changed")
+            && stderr.contains("worktree_setup hook fail_setup failed"),
+        "failed setup should name setup failure and association safety: {stderr}"
+    );
+    let (success, failed_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(
+        success,
+        "worktree status after failed setup failed: {stderr}"
+    );
+    assert!(!failed_status.contains(&format!("{failed_issue_id} [active]")));
 }
 
 #[test]

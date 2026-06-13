@@ -272,12 +272,19 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let state_dir = crate::storage_layout::StorageLayout::new(&worktree_path).canonical_dir();
     if state_dir.is_dir() {
         let exe = env::current_exe().context("failed to locate current atelier executable")?;
-        let _ = Command::new(exe)
+        let status = Command::new(exe)
             .current_dir(&worktree_path)
             .arg("rebuild")
-            .status();
+            .status()
+            .context("worktree setup failed while rebuilding runtime projection")?;
+        if !status.success() {
+            bail!(
+                "worktree setup failed while rebuilding runtime projection; active work association was not changed"
+            );
+        }
     }
-    run_worktree_setup_hooks(&root, &worktree_path, id, &branch)?;
+    run_worktree_setup_hooks(&root, &worktree_path, id, &branch)
+        .context("worktree setup failed before active work association was changed")?;
     db.start_work_association(id, Some(&branch), Some(&worktree_path.to_string_lossy()))?;
     crate::commands::activity_log::record_work_started(
         id,
@@ -374,6 +381,23 @@ pub fn worktree_remove(db: &Database, id: &str, force: bool) -> Result<()> {
     }
     db.remove_work_association(id)?;
     println!("Removed worktree {path}");
+    Ok(())
+}
+
+pub fn worktree_repair(db: &Database, id: &str) -> Result<()> {
+    let work = db
+        .get_work_association(id)?
+        .ok_or_else(|| anyhow::anyhow!("No worktree association for {id}"))?;
+    let Some(path) = work.worktree_path.as_deref() else {
+        bail!("No worktree path association for {id}");
+    };
+    if Path::new(path).exists() {
+        bail!(
+            "Worktree path still exists for {id}: {path}. Use `atelier worktree remove {id}` or inspect with `atelier worktree status`."
+        );
+    }
+    db.remove_work_association(id)?;
+    println!("Cleared stale worktree association for {id}: {path}");
     Ok(())
 }
 
