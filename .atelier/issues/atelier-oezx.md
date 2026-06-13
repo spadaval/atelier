@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Unify issue creation type and template options"
-updated_at: "2026-06-13T03:07:33.292197602+00:00"
+updated_at: "2026-06-13T16:04:04.851089621+00:00"
 ---
 
 ## Description
