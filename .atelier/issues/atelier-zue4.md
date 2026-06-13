@@ -65,13 +65,15 @@ relationships:
     id: "atelier-w8e3"
   - kind: "issue"
     id: "atelier-wvpb"
+  - kind: "issue"
+    id: "atelier-xala"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Overhaul mission validation and reliability system"
-updated_at: "2026-06-13T01:08:17.135459296+00:00"
+updated_at: "2026-06-13T01:27:15.818383607+00:00"
 ---
 
 ## Description
