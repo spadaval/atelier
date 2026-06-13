@@ -214,8 +214,9 @@ transitions. Root `atelier status`, `atelier mission status`, and `atelier issue
 transition <id> --options` expose current-work orientation, so operators should
 not need the hidden `atelier work start/finish/status` command group for normal
 workflow. Worktree helpers expose scan-friendly JSON status, create/remove
-associated Git worktrees, prepare local runtime state in new worktrees, and run
-`worktree_setup` hooks from the configured workflow policy.
+associated Git worktrees, and prepare local runtime state in new worktrees.
+Workflow-defined hooks are deferred in v1 and are not part of the normal
+worktree helper contract.
 Mission closeout is ready only when all linked work is closed, required proof is
 attached to the accountable implementation, review, validation, or closeout
 work, the contract audit passes, linked issue records are parseable, docs/help

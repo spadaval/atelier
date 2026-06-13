@@ -5,6 +5,7 @@ issue_type: "task"
 labels:
 - "architecture"
 - "artifact"
+- "assignee:root"
 - "workflow"
 priority: "P1"
 relationships:
@@ -18,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Record workflow-state architecture decision"
-updated_at: "2026-06-13T17:36:50.095412891+00:00"
+updated_at: "2026-06-13T17:46:59.126452885+00:00"
 ---
 
 ## Description

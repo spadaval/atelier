@@ -4,6 +4,7 @@ id: "atelier-c64h"
 issue_type: "task"
 labels:
 - "artifact"
+- "assignee:root"
 - "contract"
 - "docs"
 - "workflow"
@@ -23,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define v1 workflow YAML contract"
-updated_at: "2026-06-13T17:36:48.694293176+00:00"
+updated_at: "2026-06-13T17:48:45.708871912+00:00"
 ---
 
 ## Description
