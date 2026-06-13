@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add docs and agent-command freshness checks"
-updated_at: "2026-06-13T23:31:17.375621336+00:00"
+updated_at: "2026-06-13T23:40:19.347247259+00:00"
 ---
 
 ## Description
