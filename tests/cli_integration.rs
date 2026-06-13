@@ -177,6 +177,88 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
+fn write_workflow_policy(dir: &Path, include_archived_status: bool) {
+    let archived_status = if include_archived_status {
+        "  archived:\n    category: done\n"
+    } else {
+        ""
+    };
+    let standard_done_statuses = if include_archived_status {
+        "[closed, archived]"
+    } else {
+        "[closed]"
+    };
+    let archive_transition = if include_archived_status {
+        "      archive:\n        from: [open]\n        to: archived\n"
+    } else {
+        ""
+    };
+    let policy = format!(
+        r#"schema: atelier.workflow
+schema_version: 1
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
+statuses:
+  open:
+    category: todo
+  closed:
+    category: done
+{archived_status}validators:
+  durable_current:
+    builtin: durable_state_current
+  review_ready:
+    builtin: review_complete
+  proof_attached:
+    builtin: evidence_attached
+    params:
+      min_count: 1
+  blockers_clear:
+    builtin: no_open_blockers
+  lint_clear:
+    builtin: no_blocking_lints
+  closeout_clean:
+    builtin: git_worktree_clean
+guidance_templates:
+  close_with_proof:
+    format: markdown
+    template: |
+      Closing {{{{ issue.id }}}} requires attached evidence and no open blockers.
+  record_spike_outcome:
+    format: markdown
+    template: |
+      Record a concise close reason that captures what {{{{ issue.id }}}} learned.
+workflows:
+  standard_review_proof:
+    initial_status: open
+    done_statuses: {standard_done_statuses}
+    transitions:
+      close:
+        from: [open]
+        to: closed
+        required_fields: [close_reason]
+        validators: [proof_attached, blockers_clear, lint_clear, durable_current, closeout_clean]
+        guidance: [close_with_proof]
+{archive_transition}  lightweight_spike:
+    initial_status: open
+    done_statuses: [closed]
+    transitions:
+      close:
+        from: [open]
+        to: closed
+        required_fields: [close_reason]
+        validators: [review_ready, durable_current]
+        guidance: [record_spike_outcome]
+"#
+    );
+    std::fs::write(dir.join(".atelier").join("workflow.yaml"), policy).unwrap();
+}
+
 fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
     let path = dir
         .join(".atelier")
@@ -7698,6 +7780,72 @@ fn test_workflow_validate_defaults_for_evidence_and_tracker_health_targets() {
     assert!(
         !stdout.contains("issue_sections_parseable"),
         "tracker health defaults must not run issue validators:\n{stdout}"
+    );
+}
+
+#[test]
+fn test_workflow_check_reports_policy_and_issue_record_health() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_workflow_policy(dir.path(), true);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow check task"]);
+    assert!(success, "issue create failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Workflow check spike",
+            "--issue-type",
+            "spike",
+        ],
+    );
+    assert!(success, "spike issue create failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+    assert!(success, "workflow check failed: {stderr}");
+    assert!(stdout.contains("Workflow Check"));
+    assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
+    assert!(stdout.contains("Policy:         pass"));
+    assert!(stdout.contains("Issue Types:    7"));
+    assert!(stdout.contains("Statuses:       3"));
+    assert!(stdout.contains("Workflows:      2"));
+    assert!(stdout.contains("Record Health:  pass"));
+    assert!(stdout.contains("Issues Checked: 2"));
+}
+
+#[test]
+fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_workflow_policy(dir.path(), false);
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow mismatch"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Workflow mismatch");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let issue_text = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        issue_text.replace("status: \"open\"", "status: \"archived\""),
+    )
+    .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+    assert!(!success, "workflow check should reject status mismatch");
+    assert!(
+        stderr.contains("workflow_issue_status_invalid"),
+        "stderr: {stderr}"
+    );
+    assert!(stderr.contains(&issue_id), "stderr: {stderr}");
+    assert!(stderr.contains("archived"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("allowed statuses: closed, open"),
+        "stderr: {stderr}"
     );
 }
 
