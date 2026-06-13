@@ -259,6 +259,37 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         println!("Other: {}", summary.other_work.to_compact_text());
     }
 
+    print_mission_heading("Selectable Work");
+    if summary.selectable_work.is_empty() {
+        println!("(none)");
+    } else {
+        for issue in summary.selectable_work.iter().take(5) {
+            println!(
+                "  {} - {} | ready: no open blockers; {}; {}",
+                issue.id,
+                issue.title,
+                parent_context(issue),
+                proof_context(db, &issue.id)?
+            );
+        }
+    }
+
+    print_mission_heading("Blocked Work");
+    if summary.blocked_work.is_empty() {
+        println!("(none)");
+    } else {
+        for blocked in summary.blocked_work.iter().take(5) {
+            println!(
+                "  {} - {} | blocked by {}; {}; {}",
+                blocked.issue.id,
+                blocked.issue.title,
+                compact_strings(&blocked.blockers),
+                parent_context(&blocked.issue),
+                proof_context(db, &blocked.issue.id)?
+            );
+        }
+    }
+
     print_mission_heading("Blockers");
     if summary.open_blockers == 0 && summary.total_work().blocked == 0 {
         println!("(none)");
@@ -381,10 +412,11 @@ fn print_status_next_commands(
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
             println!("  Resolve open blockers before assigning more implementation work");
-        } else if summary.total_work().ready > 0 {
+        } else if let Some(issue) = summary.selectable_work.first() {
             println!(
-                "  Choose ready work ({} ready item(s)): atelier issue list --ready",
-                summary.total_work().ready
+                "  Start selectable mission work ({} selectable issue(s)): atelier start {}",
+                summary.selectable_work.len(),
+                issue.id
             );
         }
         if summary.evidence_gap_count() > 0 {
@@ -1510,6 +1542,8 @@ struct MissionListSummary {
     work: WorkCounts,
     other_work: WorkCounts,
     epics: Vec<MissionListEpic>,
+    selectable_work: Vec<Issue>,
+    blocked_work: Vec<BlockedMissionWork>,
     open_blockers: usize,
     evidence_count: usize,
 }
@@ -1517,6 +1551,11 @@ struct MissionListSummary {
 struct MissionListEpic {
     issue: Issue,
     work: WorkCounts,
+}
+
+struct BlockedMissionWork {
+    issue: Issue,
+    blockers: Vec<String>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1583,7 +1622,36 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         }
     }
 
+    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    for issue_id in mission_issue_ids(db, mission_id)? {
+        let issue = db.require_issue(&issue_id)?;
+        if !is_selectable_work(db, &issue)? {
+            continue;
+        }
+        let blockers = open_blockers(db, &issue.id)?;
+        if !blockers.is_empty() {
+            summary
+                .blocked_work
+                .push(BlockedMissionWork { issue, blockers });
+            continue;
+        }
+        if matches!(
+            crate::commands::agent_factory::issue_start_readiness(
+                db,
+                workflow_policy.as_ref(),
+                &issue
+            )?,
+            crate::commands::agent_factory::IssueStartReadiness::Ready
+        ) {
+            summary.selectable_work.push(issue);
+        }
+    }
+
     summary.epics.sort_by(compare_mission_list_epics);
+    summary.selectable_work.sort_by(|a, b| a.id.cmp(&b.id));
+    summary
+        .blocked_work
+        .sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
     Ok(summary)
 }
 
@@ -2338,6 +2406,37 @@ fn open_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
     }
     blockers.sort();
     Ok(blockers)
+}
+
+fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
+    Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
+}
+
+fn parent_context(issue: &Issue) -> String {
+    match issue.parent_id.as_deref() {
+        Some(parent_id) => format!("parent {parent_id}"),
+        None => "mission-linked root".to_string(),
+    }
+}
+
+fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
+    if has_validating_evidence(db, issue_id)? {
+        Ok("proof attached")
+    } else {
+        Ok("proof missing")
+    }
+}
+
+fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        if link.source_kind == "evidence" || link.target_kind == "evidence" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn replace_section_list(section: &mut String, values: Vec<String>) {

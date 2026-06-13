@@ -1232,6 +1232,9 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Work:     ready 1, blocked 1, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
     assert!(stdout.contains(ready_id));
+    assert!(stdout.contains(&format!(
+        "{ready_id} - Ready focus | ready: no open blockers; mission-linked root; proof missing"
+    )));
     assert!(stdout.contains("Immediate Blockers"));
     assert!(stdout.contains(blocker_id));
     assert!(stdout.contains("Recent Activity"));
@@ -1241,7 +1244,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
         "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Start ready active-mission work (1 ready issue(s)): atelier start {ready_id}"
+        "Start selectable active-mission work (1 selectable issue(s)): atelier start {ready_id}"
     )));
     assert!(
         !stdout.contains("workflow validate"),
@@ -1275,8 +1278,16 @@ fn test_root_status_guides_active_work_to_transition_or_abandon() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "active status baseline");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", issue_id]);
     assert!(success, "start failed: {stderr}");
+    assert!(start_out.contains("Next Commands"));
+    assert!(start_out.contains("Inspect checkout status: atelier status"));
+    assert!(start_out.contains(&format!(
+        "Inspect mission selection and blockers: atelier mission status {mission_id}"
+    )));
+    assert!(start_out.contains(&format!(
+        "Inspect work transitions: atelier issue transition {issue_id} --options"
+    )));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
@@ -9125,6 +9136,14 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Work"));
     assert!(status_out.contains("ready"));
     assert!(status_out.contains("blocked"));
+    assert!(status_out.contains("Selectable Work"));
+    assert!(status_out.contains(&format!(
+        "Ready status work | ready: no open blockers; parent {epic_id}; proof missing"
+    )));
+    assert!(status_out.contains("Blocked Work"));
+    assert!(status_out.contains(&format!(
+        "Blocked status work | blocked by {blocker_id}; parent {epic_id}; proof missing"
+    )));
     assert!(status_out.contains("Blockers"));
     assert!(status_out.contains("Evidence"));
     assert!(status_out.contains("Gap: no evidence records are linked to this mission."));
@@ -9156,6 +9175,7 @@ fn test_mission_status_cli_reports_control_state() {
     )));
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
+    assert!(!status_out.contains("selectable issue(s)): atelier start"));
     assert!(status_out.contains(
         "Record validation proof (1 evidence gap(s)): atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
     ));

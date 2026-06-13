@@ -33,6 +33,14 @@ fn start_work_association(db: &Database, id: &str) -> Result<()> {
         println!("Branch: {branch}");
     }
     println!("Worktree: {path}");
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Inspect checkout status: atelier status");
+    if let Some(mission_id) = containing_mission(db, id)? {
+        println!("  Inspect mission selection and blockers: atelier mission status {mission_id}");
+    }
+    println!("  Inspect work transitions: atelier issue transition {id} --options");
     Ok(())
 }
 
@@ -184,6 +192,18 @@ fn active_mission_context(db: &Database, issue_id: &str) -> Result<Option<(Strin
     };
     let advances = crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)?;
     Ok(Some((mission.id, advances)))
+}
+
+fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
+    for mission in db.list_records("mission", None)? {
+        if mission.status == "closed" {
+            continue;
+        }
+        if crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)? {
+            return Ok(Some(mission.id));
+        }
+    }
+    Ok(None)
 }
 
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {

@@ -37,7 +37,8 @@ This file binds Agent Factory to this repository.
 ## Orchestration Guidance
 
 - Missions are durable active-focus records. Link executable issues to missions
-  and select worker issues from the active mission or epic graph.
+  and use `atelier status` or `atelier mission status <mission-id>` to select
+  worker issues from the active mission or epic graph.
 - Issues are executable tracker items. When sectioned Markdown is supported,
   executable issues use `Description`, `Outcome`, `Evidence`, and optional
   `Notes`.
