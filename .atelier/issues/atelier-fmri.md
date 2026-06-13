@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Epic: Define repo-owned workflow contract"
-updated_at: "2026-06-13T17:36:51.662209623+00:00"
+updated_at: "2026-06-13T18:10:51.052326785+00:00"
 ---
 
 ## Description
