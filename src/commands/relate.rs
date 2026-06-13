@@ -4,6 +4,7 @@ use crate::db::{validate_relation_type, Database};
 use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
 
+#[cfg(test)]
 pub fn add_typed(
     db: &Database,
     issue_id: &str,
@@ -63,6 +64,7 @@ pub fn add_typed_canonical(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn remove_typed(
     db: &Database,
     issue_id: &str,

@@ -47,6 +47,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn create_issue(
         &self,
         title: &str,
@@ -56,6 +57,7 @@ impl Database {
         self.create_issue_with_parent(title, description, priority, "task", None)
     }
 
+    #[cfg(test)]
     pub fn create_subissue(
         &self,
         parent_id: &str,
@@ -66,6 +68,7 @@ impl Database {
         self.create_issue_with_parent(title, description, priority, "task", Some(parent_id))
     }
 
+    #[cfg(test)]
     pub fn create_issue_with_type(
         &self,
         title: &str,
@@ -76,17 +79,7 @@ impl Database {
         self.create_issue_with_parent(title, description, priority, issue_type, None)
     }
 
-    pub fn create_subissue_with_type(
-        &self,
-        parent_id: &str,
-        title: &str,
-        description: Option<&str>,
-        priority: &str,
-        issue_type: &str,
-    ) -> Result<String> {
-        self.create_issue_with_parent(title, description, priority, issue_type, Some(parent_id))
-    }
-
+    #[cfg(test)]
     fn create_issue_with_parent(
         &self,
         title: &str,
@@ -242,6 +235,7 @@ impl Database {
         Ok(issues)
     }
 
+    #[cfg(test)]
     pub fn update_issue(
         &self,
         id: impl ToString,
@@ -301,27 +295,7 @@ impl Database {
         Ok(rows > 0)
     }
 
-    pub fn update_issue_type(&self, id: impl ToString, issue_type: &str) -> Result<bool> {
-        validate_issue_type(issue_type)?;
-        let id = id.to_string();
-        let now = Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE issues SET issue_type = ?1, updated_at = ?2 WHERE id = ?3",
-            params![issue_type, now, id],
-        )?;
-        Ok(rows > 0)
-    }
-
-    pub fn update_issue_status(&self, id: impl ToString, status: &str) -> Result<bool> {
-        let id = id.to_string();
-        let now = Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE issues SET status = ?1, updated_at = ?2 WHERE id = ?3",
-            params![status, now, id],
-        )?;
-        Ok(rows > 0)
-    }
-
+    #[cfg(test)]
     pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
@@ -332,6 +306,7 @@ impl Database {
         Ok(rows > 0)
     }
 
+    #[cfg(test)]
     pub fn reopen_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
@@ -342,6 +317,7 @@ impl Database {
         Ok(rows > 0)
     }
 
+    #[cfg(test)]
     pub fn delete_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let rows = self
@@ -350,6 +326,7 @@ impl Database {
         Ok(rows > 0)
     }
 
+    #[cfg(test)]
     pub fn update_parent(&self, id: impl ToString, parent_id: Option<&str>) -> Result<bool> {
         let id = id.to_string();
         let now = chrono::Utc::now().to_rfc3339();
@@ -375,6 +352,7 @@ impl Database {
     }
 
     /// Search issues by query string across titles, descriptions, and comments
+    #[cfg(test)]
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
         let escaped = query.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{}%", escaped);

@@ -3,6 +3,7 @@ created_at: "2026-06-13T21:51:16.438009990+00:00"
 id: "atelier-10qm"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cleanup"
 - "dead-code"
 - "stabilization"
@@ -17,9 +18,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Inventory and remove dead code paths"
-updated_at: "2026-06-13T21:51:16.438009990+00:00"
+updated_at: "2026-06-13T23:58:05.682962894+00:00"
 ---
 
 ## Description

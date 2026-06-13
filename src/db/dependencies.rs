@@ -50,6 +50,7 @@ impl Database {
         Ok(false)
     }
 
+    #[cfg(test)]
     pub fn remove_dependency(
         &self,
         blocked_id: impl ToString,

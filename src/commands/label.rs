@@ -4,6 +4,7 @@ use crate::db::Database;
 use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
 
+#[cfg(test)]
 pub fn add(db: &Database, issue_id: &str, label: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
@@ -47,6 +48,7 @@ pub fn add_canonical(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn remove(db: &Database, issue_id: &str, label: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 

@@ -4,7 +4,7 @@ use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::db::Database;
 use crate::models::Issue;
@@ -88,7 +88,6 @@ pub enum ValidatorParams {
 
 #[derive(Debug, Clone)]
 pub struct GuidanceTemplate {
-    pub format: String,
     pub template: String,
 }
 
@@ -110,7 +109,6 @@ pub struct TransitionDefinition {
 
 #[derive(Debug, Clone)]
 pub struct WorkflowCheckReport {
-    pub policy_path: PathBuf,
     pub issue_count: usize,
     pub policy: WorkflowPolicy,
 }
@@ -355,7 +353,6 @@ pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
         validate_issue_against_policy(&policy, issue, &policy_path)?;
     }
     Ok(WorkflowCheckReport {
-        policy_path,
         issue_count: issues.len(),
         policy,
     })
@@ -872,7 +869,6 @@ fn parse_guidance_templates(
         templates.insert(
             name.to_string(),
             GuidanceTemplate {
-                format: raw.format,
                 template: raw.template,
             },
         );

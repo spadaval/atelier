@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::db::Database;
 use crate::utils::format_issue_id;
 
+#[cfg(test)]
 pub fn run(db: &Database, id: &str, force: bool) -> Result<()> {
     // Check if issue exists first
     let issue = match db.get_issue(&id)? {

@@ -312,13 +312,6 @@ pub enum MissionSectionName {
 }
 
 impl MissionSections {
-    pub const REQUIRED_NAMES: [MissionSectionName; 4] = [
-        MissionSectionName::Intent,
-        MissionSectionName::Constraints,
-        MissionSectionName::Risks,
-        MissionSectionName::Validation,
-    ];
-
     pub const ALL_NAMES: [MissionSectionName; 6] = [
         MissionSectionName::Intent,
         MissionSectionName::Constraints,
@@ -327,17 +320,6 @@ impl MissionSections {
         MissionSectionName::CloseoutNotes,
         MissionSectionName::Notes,
     ];
-
-    pub fn section(&self, name: MissionSectionName) -> Option<&str> {
-        match name {
-            MissionSectionName::Intent => Some(&self.intent),
-            MissionSectionName::Constraints => Some(&self.constraints),
-            MissionSectionName::Risks => Some(&self.risks),
-            MissionSectionName::Validation => Some(&self.validation),
-            MissionSectionName::CloseoutNotes => self.closeout_notes.as_deref(),
-            MissionSectionName::Notes => self.notes.as_deref(),
-        }
-    }
 }
 
 impl MissionSectionName {
@@ -350,16 +332,6 @@ impl MissionSectionName {
             MissionSectionName::CloseoutNotes => "Closeout Notes",
             MissionSectionName::Notes => "Notes",
         }
-    }
-
-    pub fn required(self) -> bool {
-        matches!(
-            self,
-            MissionSectionName::Intent
-                | MissionSectionName::Constraints
-                | MissionSectionName::Risks
-                | MissionSectionName::Validation
-        )
     }
 }
 
@@ -684,12 +656,6 @@ impl RecordStore {
     pub fn delete_issue_atomic(&self, id: &str) -> Result<()> {
         record_id::validate_record_id(id)?;
         self.delete_atomic(&issue_record_path(id))
-    }
-
-    pub fn delete_domain_record_atomic(&self, kind: &str, id: &str) -> Result<()> {
-        record_id::validate_record_id(id)?;
-        let spec = canonical_record_kind(kind)?;
-        self.delete_atomic(&canonical_record_path(spec, id)?)
     }
 
     fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {

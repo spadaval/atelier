@@ -1,4 +1,5 @@
 use anyhow::Result;
+#[cfg(test)]
 use chrono::Utc;
 use rusqlite::params;
 
@@ -6,6 +7,7 @@ use super::{parse_datetime, Database, MAX_COMMENT_LEN};
 use crate::models::Comment;
 
 impl Database {
+    #[cfg(test)]
     pub fn add_comment(&self, issue_id: impl ToString, content: &str, kind: &str) -> Result<i64> {
         let issue_id = issue_id.to_string();
         if content.len() > MAX_COMMENT_LEN {

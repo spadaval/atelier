@@ -19,6 +19,7 @@ impl Database {
         Ok(result > 0)
     }
 
+    #[cfg(test)]
     pub fn remove_label(&self, issue_id: impl ToString, label: &str) -> Result<bool> {
         let issue_id = issue_id.to_string();
         let rows = self.conn.execute(

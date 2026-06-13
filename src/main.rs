@@ -2,6 +2,7 @@ mod activity;
 mod command_surface;
 mod commands;
 mod db;
+#[cfg(test)]
 mod identity;
 mod models;
 mod projection_index;
@@ -813,45 +814,6 @@ enum EvidenceCommands {
         /// Manual evidence summary. Command-backed evidence should pass commands after `--`.
         summary_text: Option<String>,
         #[arg(last = true, num_args = 0..)]
-        command: Vec<String>,
-    },
-    /// Add validation evidence
-    #[command(hide = true)]
-    Add {
-        #[arg(long = "kind")]
-        evidence_kind: String,
-        #[arg(long)]
-        result: String,
-        summary: String,
-        #[arg(long)]
-        path: Option<String>,
-        #[arg(long)]
-        uri: Option<String>,
-        #[arg(long)]
-        producer: Option<String>,
-    },
-    /// Capture a command transcript as validation evidence
-    #[command(hide = true)]
-    Capture {
-        #[arg(long = "kind")]
-        evidence_kind: String,
-        #[arg(long)]
-        result: String,
-        #[arg(long)]
-        summary: Option<String>,
-        #[arg(long)]
-        path: Option<String>,
-        #[arg(long)]
-        uri: Option<String>,
-        #[arg(long)]
-        producer: Option<String>,
-        #[arg(long)]
-        target_kind: Option<String>,
-        #[arg(long)]
-        target_id: Option<String>,
-        #[arg(long, default_value = "validates")]
-        role: String,
-        #[arg(last = true, required = true, num_args = 1..)]
         command: Vec<String>,
     },
     /// Show an evidence record
@@ -2096,63 +2058,6 @@ fn run() -> Result<()> {
                     )
                 }
             }
-            EvidenceCommands::Add {
-                evidence_kind,
-                result,
-                summary,
-                path,
-                uri,
-                producer,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                commands::evidence::add(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &evidence_kind,
-                    &result,
-                    &summary,
-                    path.as_deref(),
-                    uri.as_deref(),
-                    producer.as_deref(),
-                )
-            }
-            EvidenceCommands::Capture {
-                evidence_kind,
-                result,
-                summary,
-                path,
-                uri,
-                producer,
-                target_kind,
-                target_id,
-                role,
-                command,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let target_id = match (target_kind.as_deref(), target_id.as_deref()) {
-                    (Some(kind), Some(id)) => {
-                        Some(resolve_evidence_target_arg(storage.db(), kind, id)?)
-                    }
-                    (None, None) => None,
-                    _ => bail!("--target-kind and --target-id must be supplied together"),
-                };
-                commands::evidence::capture(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    commands::evidence::CaptureOptions {
-                        evidence_kind: &evidence_kind,
-                        result: &result,
-                        summary: summary.as_deref(),
-                        path: path.as_deref(),
-                        uri: uri.as_deref(),
-                        producer: producer.as_deref(),
-                        target_kind: target_kind.as_deref(),
-                        target_id: target_id.as_deref(),
-                        role: &role,
-                        command: &command,
-                    },
-                )
-            }
             EvidenceCommands::Show { id } => {
                 let db = projection_query_db()?;
                 commands::evidence::show(&db, &id)
@@ -2389,9 +2294,7 @@ fn command_identity(command: &Commands) -> &'static str {
             PlanCommands::Link { .. } => "plan link",
         },
         Commands::Evidence { action } => match action {
-            EvidenceCommands::Add { .. } => "evidence add",
             EvidenceCommands::Record { .. } => "evidence record",
-            EvidenceCommands::Capture { .. } => "evidence capture",
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
