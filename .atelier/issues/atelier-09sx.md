@@ -9,7 +9,9 @@ labels:
 - "workflow"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-q5r6"
   children: []
   attachments: []
   relates: []
@@ -17,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Workflow docs overstate repo-defined workflow implementation"
-updated_at: "2026-06-13T03:12:37.812133932+00:00"
+updated_at: "2026-06-13T17:37:03.146921348+00:00"
 ---
 
 ## Description

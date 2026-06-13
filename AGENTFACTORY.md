@@ -65,8 +65,10 @@ This file binds Agent Factory to this repository.
   - Mutating subagents should use isolated issue worktrees unless the
     assignment explicitly explains why a shared checkout is safer.
   - If setup or removal is interrupted and the recorded worktree path no
-    longer exists, use `atelier worktree repair <issue-id>` to clear the stale
-    local runtime association instead of editing runtime state by hand.
+    longer exists, inspect with `atelier worktree status`, clear the stale
+    association with `atelier worktree remove <issue-id>` when appropriate,
+    then rerun `atelier worktree for <issue-id>`; do not edit runtime state by
+    hand.
   - `atelier start <issue-id>`
   - `atelier status`
   - `atelier finish [issue-id]`
