@@ -19,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "active"
+status: "closed"
 title: "Implement repo-defined issue workflows"
-updated_at: "2026-06-13T17:36:47.375207173+00:00"
+updated_at: "2026-06-13T19:56:45.442000645+00:00"
 ---
 
 ## Intent
