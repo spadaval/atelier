@@ -33,4 +33,5 @@ Revise delegation guidance so subagents receive narrow, evidence-producing assig
 ## Evidence
 
 - File-change review of Agent Factory procedure docs shows the updated template.
-- Review artifact or validation evidence record confirms the template would have caught the atelier-tcmr weak-proof pattern earlier.
+- Review artifact compares at least one weak atelier-tcmr delegation pattern with the revised template and explains which required fields would have exposed the proof gap earlier.
+- `atelier lint`, `atelier export --check`, and docs whitespace check commands pass.

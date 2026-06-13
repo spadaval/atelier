@@ -33,4 +33,5 @@ Reduce overwhelming mission output by making default status failure/gap oriented
 ## Evidence
 
 - Snapshot or transcript tests compare compact default output and verbose output.
-- Manual review confirms a mission with many closed children remains scannable.
+- Manual review uses a mission fixture with many closed children, records the reviewer role, baseline output, decision criteria, and pass/fail rationale for scannability.
+- `atelier lint`, `atelier export --check`, and relevant CLI tests pass.

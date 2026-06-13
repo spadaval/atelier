@@ -27,11 +27,12 @@ Reduce evidence-output noise while preserving inspectability. Mission and issue 
 
 ## Outcome
 
-- Mission and issue output summarizes evidence by ID, result, kind, target, and covered claims.
+- Mission and issue output summarizes evidence by ID, result, kind, target, and covered outcomes or validation areas.
 - Full evidence bodies are available through an explicit drill-down command.
 - Long evidence records no longer dominate default mission output.
 
 ## Evidence
 
 - Snapshot or transcript tests cover default compact rendering and verbose drill-down.
-- Manual transcript demonstrates a mission with long evidence remains scannable.
+- Manual transcript uses a mission fixture with long evidence records and records the reviewer role, baseline output, decision criteria, and pass/fail rationale for scannability.
+- `atelier lint`, `atelier export --check`, and relevant CLI tests pass.

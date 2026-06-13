@@ -34,3 +34,4 @@ Implement command-backed recording inside the unified evidence workflow so opera
 
 - Focused CLI tests cover successful command-backed evidence recording, failed command recording, and attachment to accountable work.
 - Transcript proves a real check can be captured without manually writing the evidence body.
+- `atelier lint`, `atelier export --check`, and relevant CLI tests pass.

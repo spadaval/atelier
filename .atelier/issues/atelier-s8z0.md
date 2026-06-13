@@ -39,4 +39,4 @@ Define the target structure for evidence records and how proof coverage is summa
 
 - File-change review of schema or architecture documentation captures the evidence contract and accountable-work target model.
 - Review artifact includes examples for one command transcript, one audit table, one failed validation, and one deferred result.
-- `atelier lint`, `atelier export --check`, and relevant docs check commands pass.
+- `atelier lint`, `atelier export --check`, and docs whitespace check commands pass.

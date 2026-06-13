@@ -36,3 +36,4 @@ Make mission next actions context-aware so closed, draft, ready, active, blocked
 
 - Transcript or snapshot tests cover next actions for every mission state.
 - Regression test covers the closed-mission stale-ready suggestion.
+- `atelier lint`, `atelier export --check`, and relevant CLI tests pass.

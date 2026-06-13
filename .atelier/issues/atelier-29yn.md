@@ -33,3 +33,4 @@ Validate the new delegation and model-routing policy by using it on a small boun
 
 - Evidence record attached to this validation issue includes assignment summaries, model choices, outputs inspected, and follow-up findings.
 - File-change review or tracker note records any policy changes needed after dogfooding.
+- `atelier lint`, `atelier export --check`, and any focused checks used during the dogfood run pass or are recorded with residual risk.

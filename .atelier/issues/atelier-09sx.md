@@ -37,3 +37,10 @@ The product docs describe a repo-defined workflow system with configured record 
 - Residue scan artifact classifies references to repo-defined workflows, workflow config, transition hooks, and `workflow validate` as implemented, diagnostic-only, historical, or future/deferred.
 - Focused transcript proves normal command help/status surfaces do not promise repo-defined workflow enforcement.
 - `atelier lint`, `atelier export --check`, and docs whitespace check commands pass.
+
+## Notes
+
+This is a free-floating known bug, not part of the current proof/evidence/CLI
+simplification mission. Do not treat it as selected work unless a future
+operator explicitly creates or activates a workflow-configuration cleanup
+mission or issue graph.

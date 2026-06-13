@@ -35,3 +35,4 @@ Implement the decided command model so mission audit information is available wi
 
 - CLI tests cover compact audit/status output and verbose line-by-line output.
 - Negative tests prove obsolete or confusing normal paths are absent or redirected according to the command contract.
+- `atelier lint`, `atelier export --check`, and relevant CLI tests pass.
