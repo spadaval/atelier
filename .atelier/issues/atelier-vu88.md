@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T22:53:07.296398117+00:00"
+status: "done"
 title: "Remove inherited lock sync and daemon code"
-updated_at: "2026-06-13T22:51:53.000432335+00:00"
+updated_at: "2026-06-13T22:53:07.296398117+00:00"
 ---
 
 ## Description
