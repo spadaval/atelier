@@ -8,6 +8,7 @@
 /.atelier/agent.json
 /.atelier/hook-config.json
 /.atelier/hook-config.local.json
+/.atelier/state.db
 /.atelier/.cache/
 /.atelier/rules/
 /.atelier/rules.local/

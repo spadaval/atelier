@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Build stabilization audit inventory and follow-up map"
-updated_at: "2026-06-13T20:37:16.425147848+00:00"
+updated_at: "2026-06-13T23:28:05.682272088+00:00"
 ---
 
 ## Description
