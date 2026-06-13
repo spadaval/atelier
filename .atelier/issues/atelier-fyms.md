@@ -3,6 +3,7 @@ created_at: "2026-06-13T17:29:11.074541262+00:00"
 id: "atelier-fyms"
 issue_type: "validation"
 labels:
+- "assignee:root"
 - "validation"
 - "workflow"
 priority: "P0"
@@ -17,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Independently validate repo-defined workflow behavior"
-updated_at: "2026-06-13T17:37:00.399256285+00:00"
+updated_at: "2026-06-13T19:49:43.356711848+00:00"
 ---
 
 ## Description
