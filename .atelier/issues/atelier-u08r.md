@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:19:08.842895507+00:00"
+status: "done"
 title: "Remove predecessor and compatibility command leakage"
-updated_at: "2026-06-13T23:18:46.731788333+00:00"
+updated_at: "2026-06-13T23:19:08.842895507+00:00"
 ---
 
 ## Description
