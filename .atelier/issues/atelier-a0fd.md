@@ -25,9 +25,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T22:52:30.456745416+00:00"
+status: "done"
 title: "Define Atelier and Agent Factory ownership boundary"
-updated_at: "2026-06-13T22:41:45.148231456+00:00"
+updated_at: "2026-06-13T22:52:30.456745416+00:00"
 ---
 
 ## Description
