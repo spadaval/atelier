@@ -15,6 +15,8 @@ relationships:
   - kind: "issue"
     id: "atelier-2bpd"
   - kind: "issue"
+    id: "atelier-eovw"
+  - kind: "issue"
     id: "atelier-ewpk"
   - kind: "issue"
     id: "atelier-fyms"
@@ -24,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Validate and close repo-defined workflow rollout"
-updated_at: "2026-06-13T17:37:03.146921348+00:00"
+updated_at: "2026-06-13T19:39:11.362324974+00:00"
 ---
 
 ## Description
