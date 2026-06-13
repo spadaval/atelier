@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T22:52:34.215999765+00:00"
+status: "done"
 title: "Define canonical record field ownership"
-updated_at: "2026-06-13T22:43:23.748041527+00:00"
+updated_at: "2026-06-13T22:52:34.215999765+00:00"
 ---
 
 ## Description
