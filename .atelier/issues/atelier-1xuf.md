@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:16:12.045439126+00:00"
+status: "done"
 title: "Decide repository ownership and contribution templates"
-updated_at: "2026-06-13T23:10:46.710213507+00:00"
+updated_at: "2026-06-13T23:16:12.045439126+00:00"
 ---
 
 ## Description
