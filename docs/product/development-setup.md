@@ -10,11 +10,14 @@ committed devcontainer.
 - Rust `1.95.0` from [rust-toolchain.toml](../../rust-toolchain.toml)
 - Rust components: `rustfmt`, `clippy`
 - `cargo-nextest` for the default Rust test workflow
+- `cargo-machete` for the repo-supported unused dependency scan when
+  dependency manifests change
 
-Install `cargo-nextest` once with:
+Install cargo subcommands once with:
 
 ```bash
 cargo install cargo-nextest --locked
+cargo install cargo-machete --locked
 ```
 
 `rusqlite` is built with the `bundled` feature, so normal development does not
@@ -61,6 +64,10 @@ Diagnostics storage and retention details are defined in
 The repository includes optional integration assets under `resources/`. Core
 tracker setup does not install them automatically. Use `atelier integrations`
 only when you explicitly need one of those tool-specific setups.
+
+`cargo udeps` is not part of required setup. It remains an advisory
+nightly-toolchain cross-check for deeper dependency review when a reviewer asks
+for it.
 
 ## Devcontainer Decision
 

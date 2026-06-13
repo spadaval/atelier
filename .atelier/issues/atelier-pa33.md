@@ -3,6 +3,7 @@ created_at: "2026-06-13T22:59:16.510809734+00:00"
 id: "atelier-pa33"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "dependencies"
 - "quality"
 - "readiness"
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Decide a repo-supported unused dependency scan"
-updated_at: "2026-06-13T22:59:16.510809734+00:00"
+updated_at: "2026-06-13T23:12:40.883130056+00:00"
 ---
 
 ## Description

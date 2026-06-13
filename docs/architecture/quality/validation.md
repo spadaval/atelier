@@ -195,6 +195,13 @@ than "make mission status faster."
 | Epic closeout | Closeout issue maps each epic Outcome line to child work and evidence, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured closeout check, and records residual risks. | First-class evidence attached to the closeout issue; the epic derives readiness from that linked closeout plus child evidence. | Always required, performed by a closeout or validation worker that did not implement the bulk of the children. |
 | Mission closeout | Contract audit maps each mission validation expectation and linked epic outcome to evidence; run mission status, workflow validation, lint, doctor, export, docs/help parity, and stale-test inventory checks. | First-class evidence attached to the mission closeout issue; a direct mission link is retained only when the closeout workflow explicitly mirrors the same artifact for legacy closeout gates. | Always required, including an adversarial validation pass by a worker that did not implement the mission slices. |
 
+Unavailable optional tooling should not be converted into an implicit failure.
+When a repo-supported tool has an install path, install it and rerun before
+handoff when the slice requires that check. When an advisory or
+environment-specific tool is unavailable, record `deferred` evidence that names
+the missing tool, the reason it is not required for the current slice, and any
+follow-up owner.
+
 Parent coverage summaries should classify each parent Outcome or validation
 line as `covered`, `missing`, `failed`, `blocked`, `deferred`, or
 `not-applicable`, then cite the accountable child issue IDs and evidence IDs.
