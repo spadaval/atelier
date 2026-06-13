@@ -166,7 +166,11 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             );
             if let Some(issue) = snapshot.active_issue.as_ref() {
                 println!(
-                    "  Finish active work ({}): atelier finish {}",
+                    "  Inspect active work transitions ({}): atelier issue transition {} --options",
+                    issue.id, issue.id
+                );
+                println!(
+                    "  Abandon local work ({}) if you are switching away: atelier abandon {} --reason \"...\"",
                     issue.id, issue.id
                 );
             } else if let Some(issue) = snapshot.ready_issues.first() {
@@ -262,6 +266,7 @@ fn mission_snapshot(
     mission: &DomainRecord,
     active_issue_id: Option<&str>,
 ) -> Result<MissionSnapshot> {
+    let workflow_policy = load_workflow_policy()?;
     let mut snapshot = MissionSnapshot::default();
     snapshot.issue_ids = mission_issue_ids(db, &mission.id)?;
 
@@ -276,7 +281,7 @@ fn mission_snapshot(
     snapshot.open_blockers = blocker_ids
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| issue.status == "open")
+        .filter(|issue| issue_blocks_work(workflow_policy.as_ref(), issue))
         .map(|issue| issue.id)
         .collect();
     snapshot.open_blockers.sort();
@@ -285,7 +290,7 @@ fn mission_snapshot(
         let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
-        match issue_bucket(db, &issue, active_issue_id)? {
+        match issue_bucket(db, &issue, active_issue_id, workflow_policy.as_ref())? {
             IssueBucket::Active => {
                 snapshot.active += 1;
                 snapshot.active_issue = Some(issue);
@@ -315,27 +320,32 @@ fn issue_bucket(
     db: &Database,
     issue: &Issue,
     active_issue_id: Option<&str>,
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
 ) -> Result<IssueBucket> {
-    if issue.status == "closed" {
-        return Ok(IssueBucket::Done);
-    }
-    if issue.status != "open" {
-        return Ok(IssueBucket::Backlog);
-    }
     if Some(issue.id.as_str()) == active_issue_id {
         return Ok(IssueBucket::Active);
     }
-    if open_issue_blockers(db, &issue.id)?.is_empty() {
+    if issue_is_done(workflow_policy, issue) {
+        return Ok(IssueBucket::Done);
+    }
+    if !issue_is_ready_candidate(workflow_policy, issue) {
+        return Ok(IssueBucket::Backlog);
+    }
+    if open_issue_blockers(db, &issue.id, workflow_policy)?.is_empty() {
         Ok(IssueBucket::Ready)
     } else {
         Ok(IssueBucket::Blocked)
     }
 }
 
-fn open_issue_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
+fn open_issue_blockers(
+    db: &Database,
+    issue_id: &str,
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
     for blocker_id in db.get_blockers(issue_id)? {
-        if db.require_issue(&blocker_id)?.status == "open" {
+        if issue_blocks_work(workflow_policy, &db.require_issue(&blocker_id)?) {
             blockers.push(blocker_id);
         }
     }
@@ -416,6 +426,44 @@ fn recent_mission_activity(state_dir: &Path, issue_ids: &BTreeSet<String>) -> Re
             )
         })
         .collect())
+}
+
+fn load_workflow_policy() -> Result<Option<crate::workflow_policy::WorkflowPolicy>> {
+    let repo_root = crate::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok(None);
+    }
+    crate::workflow_policy::load(&repo_root).map(Some)
+}
+
+fn issue_is_done(
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> bool {
+    match workflow_policy.and_then(|policy| policy.status_category(&issue.status)) {
+        Some("done") => true,
+        Some(_) => false,
+        None => issue.status == "closed",
+    }
+}
+
+fn issue_is_ready_candidate(
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> bool {
+    match workflow_policy.and_then(|policy| policy.status_category(&issue.status)) {
+        Some("todo") => true,
+        Some(_) => false,
+        None => issue.status == "open",
+    }
+}
+
+fn issue_blocks_work(
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> bool {
+    !issue_is_done(workflow_policy, issue)
 }
 
 fn print_git_state() {
@@ -511,7 +559,13 @@ pub fn close_all_lifecycle(
 
     let mut closed_count = 0;
     for issue in &issues {
-        match commands::agent_factory::close_lifecycle(state_dir, db_path, &issue.id, None) {
+        match commands::agent_factory::close_lifecycle(
+            state_dir,
+            db_path,
+            &issue.id,
+            "bulk close",
+            None,
+        ) {
             Ok(()) => closed_count += 1,
             Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
         }

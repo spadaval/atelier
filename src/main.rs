@@ -37,7 +37,7 @@ Orientation:
   prime         Show repository operating guidance for recovery and onboarding
   status        Show checkout, mission, work, and tracker signposts
   start         Start tracked work on an issue
-  finish        Finish tracked work, defaulting to active work
+  abandon       Clear active local work without changing issue status
 
 Issues:
   issue         Create, list, show, update, and close issues
@@ -84,7 +84,9 @@ Common commands:
   atelier history --mission <id>
   atelier history --issue <id>
   atelier start <issue-id>
-  atelier finish [issue-id]
+  atelier abandon [issue-id] --reason \"...\"
+  atelier issue transition <issue-id> --options
+  atelier issue close <issue-id> --reason \"...\"
   atelier doctor
   atelier help <command>
 ")]
@@ -129,8 +131,14 @@ enum Commands {
     /// Start tracked work on an issue
     Start { id: String },
 
-    /// Finish tracked work, defaulting to active work
-    Finish { id: Option<String> },
+    /// Clear active local work without changing issue status
+    Abandon {
+        /// Issue ID; defaults to the active work association
+        id: Option<String>,
+        /// Reason for abandoning the local work association
+        #[arg(long)]
+        reason: String,
+    },
 
     /// Issue lifecycle commands (create, show, list, close, ...)
     Issue {
@@ -466,9 +474,12 @@ enum IssueCommands {
     Close {
         /// Issue ID
         id: String,
-        /// Closure reason
+        /// Explicit terminal workflow status when multiple done targets are available
+        #[arg(long)]
+        to: Option<String>,
+        /// Close reason recorded in issue activity
         #[arg(short, long)]
-        reason: Option<String>,
+        reason: String,
     },
 
     /// Close all issues matching filters
@@ -901,8 +912,6 @@ enum WorkflowCommands {
 enum WorkCommands {
     /// Start tracked work on an issue
     Start { id: String },
-    /// Finish tracked work on an issue
-    Finish { id: String },
     /// Show current work association
     Status,
 }
@@ -1532,10 +1541,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             )
         }
 
-        IssueCommands::Close { id, reason } => {
+        IssueCommands::Close { id, to, reason } => {
             let (state_dir, db_path) = state_and_db_paths()?;
             let _ = quiet;
-            commands::agent_factory::close_lifecycle(&state_dir, &db_path, &id, reason.as_deref())
+            commands::agent_factory::close_lifecycle(
+                &state_dir,
+                &db_path,
+                &id,
+                &reason,
+                to.as_deref(),
+            )
         }
 
         IssueCommands::CloseAll { label, priority } => {
@@ -1724,12 +1739,13 @@ fn run() -> Result<()> {
         }
 
         Commands::Start { id } => {
-            let db = runtime_db()?;
+            let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
-            commands::work::start(&db, &id)
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::work::start_lifecycle(&state_dir, &db_path, &id)
         }
 
-        Commands::Finish { id } => {
+        Commands::Abandon { id, reason } => {
             let db = runtime_db()?;
             let id = match id {
                 Some(id) => resolve_issue_arg(&db, &id)?,
@@ -1740,7 +1756,7 @@ fn run() -> Result<()> {
                         anyhow::anyhow!("No active work. Use `atelier start <issue-id>` first.")
                     })?,
             };
-            commands::work::finish(&db, &id)
+            commands::work::abandon(&db, &id, &reason)
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -2315,10 +2331,6 @@ fn run() -> Result<()> {
                     let id = resolve_issue_arg(&db, &id)?;
                     commands::work::start(&db, &id)
                 }
-                WorkCommands::Finish { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::finish(&db, &id)
-                }
                 WorkCommands::Status => commands::work::status(&db),
             }
         }
@@ -2402,7 +2414,7 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Prime => "prime",
         Commands::Status => "status",
         Commands::Start { .. } => "start",
-        Commands::Finish { .. } => "finish",
+        Commands::Abandon { .. } => "abandon",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::Quick { .. } => "issue quick",
@@ -2498,7 +2510,6 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Work { action } => match action {
             WorkCommands::Start { .. } => "work start",
-            WorkCommands::Finish { .. } => "work finish",
             WorkCommands::Status => "work status",
         },
         Commands::Worktree { action } => match action {

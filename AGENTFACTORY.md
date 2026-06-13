@@ -71,7 +71,9 @@ This file binds Agent Factory to this repository.
     hand.
   - `atelier start <issue-id>`
   - `atelier status`
-  - `atelier finish [issue-id]`
+  - `atelier issue transition <issue-id> --options`
+  - `atelier issue close <issue-id> --reason "..."`
+  - `atelier abandon [issue-id] --reason "..."`
   - `atelier evidence record --target issue/<issue-id> --kind <kind> --result <result> "summary"`
   - `atelier evidence record --target issue/<issue-id> --kind <kind> --result <result> -- <command>`
   - `atelier evidence attach <evidence-id> issue <issue-id>`

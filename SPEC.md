@@ -368,7 +368,8 @@ Desired commands:
 atelier agent init <name>
 atelier start atelier-z1p8
 atelier worktree for atelier-z1p8
-atelier finish atelier-z1p8
+atelier issue close atelier-z1p8 --reason "done"
+atelier abandon atelier-z1p8 --reason "handoff"
 atelier worktree merge
 ```
 

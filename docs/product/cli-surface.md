@@ -29,7 +29,7 @@ in normal Agent Factory workflows:
 - `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier start`
-- `atelier finish`
+- `atelier abandon`
 - `atelier worktree for/status/merge/remove`
 - `atelier maintenance delete`
 - `atelier import-beads`
@@ -62,9 +62,10 @@ time pressure:
   Owned by `atelier status`, `atelier issue show/list`, `atelier mission show`,
   `atelier mission status`, `atelier history`, and `atelier search`.
 - Select and run work: claim a clear slice, prepare the right worktree, start
-  it, leave notes, finish it, and close it with proof. Owned by
+  it, leave notes, advance or close it with proof, and abandon it locally when
+  needed. Owned by
   `atelier issue ...`, `atelier worktree ...`, root `atelier start`, root
-  `atelier finish`, `atelier note add`, and `atelier evidence ...`.
+  `atelier abandon`, `atelier note add`, and `atelier evidence ...`.
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, closeout readiness, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
@@ -207,14 +208,15 @@ and separates canonical tracker history from local runtime diagnostics. Issue
 and mission show surfaces may include compact recent activity or record context,
 but they point to scoped history for full activity instead of expanding
 unbounded logs.
-Root `atelier start <issue-id>` and `atelier finish [issue-id]` are the normal
-work lifecycle commands. They store local work association in runtime state and
-enforce clean worktree plus current-export checks where they affect workflow
-transitions. Root `atelier status`, `atelier mission status`, and `atelier issue
-transition <id> --options` expose current-work orientation, so operators should
-not need the hidden `atelier work start/finish/status` command group for normal
-workflow. Worktree helpers expose scan-friendly JSON status, create/remove
-associated Git worktrees, and prepare local runtime state in new worktrees.
+Root `atelier start <issue-id>`, `atelier issue close <issue-id> --reason "..."`,
+and `atelier abandon [issue-id] --reason "..."` are the normal work lifecycle
+commands. They store local work association in runtime state and enforce clean
+worktree plus current-export checks where they affect workflow transitions.
+Root `atelier status`, `atelier mission status`, and `atelier issue transition
+<id> --options` expose current-work orientation, so operators should not need
+the hidden `atelier work start/status` command group for normal workflow.
+Worktree helpers expose scan-friendly JSON status, create/remove associated Git
+worktrees, and prepare local runtime state in new worktrees.
 Workflow-defined hooks are deferred in v1 and are not part of the normal
 worktree helper contract.
 Mission closeout is ready only when all linked work is closed, required proof is
@@ -258,8 +260,8 @@ surface is `delete` unless it is in the core list above.
 Removed command surfaces:
 
 - `mission view`; use `mission show`.
-- The normal `work start/finish/status` group; use root `start`, root `finish`,
-  and `status`.
+- The normal `work start/finish/status` group; use root `start`, root
+  `abandon`, `issue close`, and `status`.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
   `update`, `block`, `unblock`, `search`, `relate`, `related`, and `tree`; use
   `atelier issue ...`.

@@ -69,26 +69,48 @@ fn ensure_canonical_issue_sections_valid(id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn finish(db: &Database, id: &str) -> Result<()> {
-    let issue = db.require_issue(id)?;
+pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()> {
+    let db = Database::open(db_path)?;
+    db.require_issue(id)?;
+    print_active_mission_context(&db, id)?;
     ensure_clean_worktree()?;
-    let export_stale = crate::commands::export::canonical_stale_entries(
-        db,
-        &crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir(),
-    )?;
-    if !export_stale.is_empty() {
-        bail!("Canonical export is stale:\n{}", export_stale.join("\n"));
+    let branch = current_branch().ok();
+    let path = env::current_dir()?.to_string_lossy().to_string();
+    crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
+    drop(db);
+
+    let db = Database::open(db_path)?;
+    db.start_work_association(id, branch.as_deref(), Some(&path))?;
+    crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
+    ensure_session_work(&db, id)?;
+    let issue = db.require_issue(id)?;
+    println!("Started work on {} {}", issue.id, issue.title);
+    if let Some(branch) = branch {
+        println!("Branch: {branch}");
     }
-    let finished = db.finish_work_association(id)?;
-    if finished {
-        crate::commands::activity_log::record_work_finished(id)?;
-    }
-    if finished {
-        println!("Finished work on {} {}", issue.id, issue.title);
+    println!("Worktree: {path}");
+    Ok(())
+}
+
+pub fn abandon(db: &Database, id: &str, reason: &str) -> Result<()> {
+    let issue = db.require_issue(id)?;
+    let abandoned = db.abandon_work_association(id)?;
+    if abandoned {
+        crate::commands::activity_log::record_work_abandoned(id, reason)?;
+        println!("Abandoned work on {} {}", issue.id, issue.title);
+        println!("Reason:   {reason}");
     } else {
         println!("No active work association for {}", issue.id);
     }
     Ok(())
+}
+
+pub fn finish_active_association(db: &Database, id: &str) -> Result<bool> {
+    let finished = db.finish_work_association(id)?;
+    if finished {
+        crate::commands::activity_log::record_work_finished(id)?;
+    }
+    Ok(finished)
 }
 
 pub fn status(db: &Database) -> Result<()> {

@@ -29,12 +29,20 @@ impl Database {
     }
 
     pub fn finish_work_association(&self, issue_id: &str) -> Result<bool> {
+        self.complete_work_association(issue_id, "finished")
+    }
+
+    pub fn abandon_work_association(&self, issue_id: &str) -> Result<bool> {
+        self.complete_work_association(issue_id, "abandoned")
+    }
+
+    fn complete_work_association(&self, issue_id: &str, status: &str) -> Result<bool> {
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
             "UPDATE work_associations
-             SET status = 'finished', finished_at = ?1
-             WHERE issue_id = ?2 AND status = 'active'",
-            params![now, issue_id],
+             SET status = ?1, finished_at = ?2
+             WHERE issue_id = ?3 AND status = 'active'",
+            params![status, now, issue_id],
         )?;
         Ok(rows > 0)
     }

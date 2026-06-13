@@ -1940,37 +1940,11 @@ pub fn close_lifecycle(
     state_dir: &Path,
     db_path: &Path,
     issue_ref: &str,
-    reason: Option<&str>,
+    reason: &str,
+    to_status: Option<&str>,
 ) -> Result<()> {
     let db = Database::open(db_path)?;
-    let id = resolve_id(&db, issue_ref)?;
-    let previous = db.require_issue(&id)?;
-    let store = RecordStore::new(state_dir);
-    let mut record = store.load_issue_by_id(&id)?;
-    if previous.status != "closed" {
-        ensure_issue_closeout_ready(&db, state_dir, &id, &record)?;
-    }
-    drop(db);
-
-    let now = Utc::now();
-    record.issue.status = "closed".to_string();
-    record.issue.closed_at = Some(now);
-    record.issue.updated_at = now;
-    store.write_issue_atomic(&record)?;
-    crate::commands::activity_log::record_status_changed(&id, &previous.status, "closed")?;
-    if let Some(reason) = reason {
-        crate::commands::activity_log::record_close_reason(&id, reason)?;
-    }
-
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let object = issue_object(&db, db.require_issue(&id)?)?;
-    println!(
-        "Closed issue {}{}",
-        object.id,
-        reason.map(|r| format!(": {r}")).unwrap_or_default()
-    );
-    Ok(())
+    crate::commands::workflow::close_issue(&db, state_dir, db_path, issue_ref, to_status, reason)
 }
 
 fn ensure_canonical_issue_sections_valid(issue_id: &str) -> Result<()> {

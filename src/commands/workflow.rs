@@ -439,6 +439,105 @@ pub fn transition_issue(
     Ok(())
 }
 
+pub fn close_issue(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    to_status: Option<&str>,
+    close_reason: &str,
+) -> Result<()> {
+    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let repo_root = repo_root()?;
+    let policy = crate::workflow_policy::load(&repo_root)?;
+    let issue = db.require_issue(&issue_id)?;
+    ensure_transitionable_status(&policy, &issue)?;
+    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
+
+    let mut candidates = workflow
+        .transitions
+        .iter()
+        .filter(|(_, transition)| {
+            transition.from.iter().any(|from| from == &issue.status)
+                && policy.status_category(&transition.to) == Some("done")
+        })
+        .map(|(name, transition)| (name.as_str(), transition.to.as_str()))
+        .collect::<Vec<_>>();
+
+    if candidates.is_empty() {
+        bail!(
+            "Issue {} has no terminal done-category transitions from status '{}'; inspect `atelier issue transition {} --options`",
+            issue.id,
+            issue.status,
+            issue.id
+        );
+    }
+
+    if let Some(to_status) = to_status {
+        candidates.retain(|(_, destination)| *destination == to_status);
+        if candidates.is_empty() {
+            let available = workflow
+                .transitions
+                .iter()
+                .filter(|(_, transition)| {
+                    transition.from.iter().any(|from| from == &issue.status)
+                        && policy.status_category(&transition.to) == Some("done")
+                })
+                .map(|(_, transition)| transition.to.as_str())
+                .collect::<BTreeSet<_>>();
+            bail!(
+                "Issue {} cannot close to status '{}'; available done targets from '{}' are: {}",
+                issue.id,
+                to_status,
+                issue.status,
+                available.into_iter().collect::<Vec<_>>().join(", ")
+            );
+        }
+    } else {
+        let destinations = candidates
+            .iter()
+            .map(|(_, destination)| *destination)
+            .collect::<BTreeSet<_>>();
+        if destinations.len() > 1 {
+            bail!(
+                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue close {} --to <status> --reason \"...\"` (available: {})",
+                issue.id,
+                issue.status,
+                issue.id,
+                destinations.into_iter().collect::<Vec<_>>().join(", ")
+            );
+        }
+    }
+
+    if candidates.len() > 1 {
+        let transitions = candidates
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "Issue {} has multiple terminal transitions to status '{}': {}; use `atelier issue transition {} <transition> --reason \"...\"`",
+            issue.id,
+            candidates[0].1,
+            transitions,
+            issue.id
+        );
+    }
+
+    transition_issue(
+        db,
+        state_dir,
+        db_path,
+        &issue.id,
+        candidates[0].0,
+        Some(close_reason),
+    )?;
+
+    let refreshed = Database::open(db_path)?;
+    let _ = crate::commands::work::finish_active_association(&refreshed, &issue.id)?;
+    Ok(())
+}
+
 pub fn validate(
     db: &Database,
     target_kind: &str,

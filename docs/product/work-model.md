@@ -256,8 +256,10 @@ An agent tasked with a mission should be able to:
    criteria it supports, and what remains.
 
 `atelier status` is the normal current-work orientation surface. Root `atelier
-finish [issue-id]` completes tracked work without requiring operators to
-discover the hidden `atelier work` command group.
+issue close <issue-id> --reason "..."` is the normal completion path for
+tracked work, and `atelier abandon [issue-id] --reason "..."` clears only the
+local active-work association without requiring operators to discover hidden
+work lifecycle helpers.
 
 `atelier worktree for <issue-id>` creates or locates a Git worktree using the
 configured branch/path policy, rebuilds local SQLite state from

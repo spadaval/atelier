@@ -99,8 +99,10 @@ fn print_essential_commands(
     );
     println!("  `atelier issue list --ready` - Find executable open work with no open blockers.");
     println!("  `atelier issue show <id>` - Read Description, Outcome, Evidence, blockers, and next commands.");
-    println!("  `atelier start <issue-id>` - Record the current issue as active local work.");
-    println!("  `atelier finish [issue-id]` - Finish active local work after validation and evidence are recorded.");
+    println!("  `atelier start <issue-id>` - Apply the configured start transition and record active local work.");
+    println!("  `atelier issue transition <id> --options` - Inspect the next configured workflow steps for an issue.");
+    println!("  `atelier issue close <id> --reason \"summary\"` - Apply the configured terminal transition and clear active local work.");
+    println!("  `atelier abandon [issue-id] --reason \"...\"` - Clear local active work without changing issue status.");
     println!("  `atelier evidence add --kind validation --result pass \"summary\"` - Create first-class proof for non-trivial claims.");
     println!("  `atelier evidence attach <evidence-id> issue <issue-id>` - Link proof to the issue it validates.");
     println!("  `atelier history --mission <id>` - Inspect mission and linked-work activity without expanding show output.");
@@ -129,7 +131,9 @@ fn print_common_workflows(
     println!("----------------");
     println!("  Start assigned issue: `atelier issue show <id>` to verify the contract, then `atelier start <id>` to record active work.");
     println!("  Recover after checkout: `atelier prime` to reload rules, then `atelier status` to inspect live state.");
+    println!("  Advance active work: `atelier issue transition <id> --options` to inspect the next workflow step before review, validation, close, or archive.");
     println!("  Validate and close an issue: `atelier evidence add`, `atelier evidence attach`, `atelier issue transition <id> --options`, then `atelier issue close <id> --reason \"summary\"`.");
+    println!("  Stop local work without closing: `atelier abandon [issue-id] --reason \"...\"`.");
     println!("  Inspect activity: `atelier history --issue <id>` for one issue or `atelier history --mission <id>` for mission-linked work.");
     match active_mission {
         Some(mission) => println!(
