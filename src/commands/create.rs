@@ -133,6 +133,7 @@ pub fn run(
     }
 
     let id = db.create_issue(title, final_description.as_deref(), &final_priority)?;
+    apply_workflow_initial_status(db, &id, "task")?;
 
     // Auto-add label from template
     if let Some(lbl) = template_label {
@@ -195,6 +196,7 @@ pub fn run_subissue(
     }
 
     let id = db.create_subissue(&parent_id, title, description, priority)?;
+    apply_workflow_initial_status(db, &id, "task")?;
 
     // Add user-specified labels
     for lbl in opts.labels {
@@ -226,6 +228,15 @@ pub fn run_subissue(
         }
     }
 
+    Ok(())
+}
+
+fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> Result<()> {
+    let repo_root = crate::storage_layout::find_repo_root()?;
+    if let Some(status) = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
+    {
+        db.update_issue_status(id, &status)?;
+    }
     Ok(())
 }
 

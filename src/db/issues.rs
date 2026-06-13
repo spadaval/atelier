@@ -312,6 +312,16 @@ impl Database {
         Ok(rows > 0)
     }
 
+    pub fn update_issue_status(&self, id: impl ToString, status: &str) -> Result<bool> {
+        let id = id.to_string();
+        let now = Utc::now().to_rfc3339();
+        let rows = self.conn.execute(
+            "UPDATE issues SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            params![status, now, id],
+        )?;
+        Ok(rows > 0)
+    }
+
     pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();

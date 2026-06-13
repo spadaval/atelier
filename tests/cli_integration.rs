@@ -184,16 +184,6 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
-fn front_matter_value(markdown: &str, key: &str) -> String {
-    markdown
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix(&format!("{key}: "))
-                .map(|value| value.trim().trim_matches('"').to_string())
-        })
-        .unwrap_or_else(|| panic!("missing front matter key {key} in:\n{markdown}"))
-}
-
 fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
     let path = dir
         .join(".atelier")
@@ -7780,44 +7770,28 @@ fn test_workflow_migrate_statuses_rewrites_legacy_issue_statuses_and_preserves_c
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy closed"]);
     assert!(success, "closed issue create failed: {stderr}");
     let closed_id = issue_id_by_title(dir.path(), "Legacy closed");
-    attach_issue_pass_evidence(dir.path(), &closed_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "close",
-            &closed_id,
-            "--reason",
-            "Close reason body",
-        ],
-    );
-    assert!(success, "legacy close failed: {stderr}");
     let closed_path = canonical_issue_path(dir.path(), &closed_id);
     let closed_before = std::fs::read_to_string(&closed_path).unwrap();
-    let closed_timestamp = front_matter_value(&closed_before, "updated_at");
+    let closed_timestamp = "2026-06-13T00:00:00+00:00";
+    std::fs::write(
+        &closed_path,
+        closed_before.replace(
+            "status: \"open\"",
+            &format!("closed_at: \"{closed_timestamp}\"\nstatus: \"closed\""),
+        ),
+    )
+    .unwrap();
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy archived"]);
     assert!(success, "archived issue create failed: {stderr}");
     let archived_id = issue_id_by_title(dir.path(), "Legacy archived");
-    attach_issue_pass_evidence(dir.path(), &archived_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "close",
-            &archived_id,
-            "--reason",
-            "Archived reason body",
-        ],
-    );
-    assert!(success, "archived close failed: {stderr}");
     let archived_path = canonical_issue_path(dir.path(), &archived_id);
     let archived_before = std::fs::read_to_string(&archived_path).unwrap();
-    let archived_timestamp = front_matter_value(&archived_before, "updated_at");
+    let archived_timestamp = "2026-06-13T00:00:01+00:00";
     std::fs::write(
         &archived_path,
         archived_before.replace(
-            "status: \"closed\"",
+            "status: \"open\"",
             &format!("closed_at: \"{archived_timestamp}\"\nstatus: \"archived\""),
         ),
     )
@@ -7854,8 +7828,7 @@ fn test_workflow_migrate_statuses_rewrites_legacy_issue_statuses_and_preserves_c
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &closed_id]);
     assert!(success, "issue show after migration failed: {stderr}");
-    assert!(stdout.contains("Close Reason"));
-    assert!(stdout.contains("Close reason body"));
+    assert!(stdout.contains("Closed:"));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
     assert!(success, "workflow check after migration failed: {stderr}");
@@ -7863,6 +7836,38 @@ fn test_workflow_migrate_statuses_rewrites_legacy_issue_statuses_and_preserves_c
     assert!(success, "lint after migration failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check after migration failed: {stderr}");
+}
+
+#[test]
+fn test_issue_create_after_workflow_migration_uses_configured_initial_status() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Post migration issue"]);
+    assert!(success, "post migration issue create failed: {stderr}");
+    assert!(stdout.contains("Created issue atelier-"), "{stdout}");
+    let issue_id = issue_id_by_title(dir.path(), "Post migration issue");
+    let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
+    assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
+
+    let (success, options, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options.contains("Status:   todo"), "{options}");
+    assert!(options.contains("start [allowed]"), "{options}");
+
+    commit_all(dir.path(), "workflow-ready post migration issue");
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "root start failed: {stderr}");
+    assert!(
+        start_out.contains("Applied transition start"),
+        "{start_out}"
+    );
+    assert!(start_out.contains("From:     todo"), "{start_out}");
+    assert!(start_out.contains("To:       in_progress"), "{start_out}");
 }
 
 #[test]

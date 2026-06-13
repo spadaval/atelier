@@ -1724,12 +1724,13 @@ pub fn create_lifecycle(
     let store = RecordStore::new(state_dir);
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
+    let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
             title: input.title.to_string(),
             description: input.description.map(str::to_string),
-            status: "open".to_string(),
+            status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
             parent_id: None,
@@ -1822,6 +1823,7 @@ pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
             db.create_issue_with_type(input.title, input.description, input.priority, issue_type)?
         }
     };
+    apply_workflow_initial_status(db, &id, issue_type)?;
     for label in input.labels {
         db.add_label(&id, label)?;
     }
@@ -1835,6 +1837,25 @@ pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
     println!("-------------");
     println!("  atelier issue show {}", object.id);
     println!("  atelier start {}", object.id);
+    Ok(())
+}
+
+fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String> {
+    let Some(repo_root) = state_dir.parent() else {
+        return Ok("open".to_string());
+    };
+    Ok(
+        crate::workflow_policy::configured_initial_status(repo_root, issue_type)?
+            .unwrap_or_else(|| "open".to_string()),
+    )
+}
+
+fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> Result<()> {
+    let repo_root = crate::storage_layout::find_repo_root()?;
+    if let Some(status) = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
+    {
+        db.update_issue_status(id, &status)?;
+    }
     Ok(())
 }
 

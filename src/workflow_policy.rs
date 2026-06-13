@@ -383,6 +383,16 @@ pub fn load(repo_root: &Path) -> Result<WorkflowPolicy> {
     parse_policy_text(&text, &display_path)
 }
 
+pub fn configured_initial_status(repo_root: &Path, issue_type: &str) -> Result<Option<String>> {
+    let policy_path = repo_root.join(WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok(None);
+    }
+    let policy = load(repo_root)?;
+    let workflow = policy.workflow_for_issue_type(issue_type)?;
+    Ok(Some(workflow.initial_status.clone()))
+}
+
 fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     let root = parse_yaml(text, display_path)?;
     let root = root.as_mapping().ok_or_else(|| {
