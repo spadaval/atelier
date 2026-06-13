@@ -6235,6 +6235,80 @@ fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
 }
 
 #[test]
+fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Target proof"]);
+    assert!(success, "target issue create failed: {stderr}");
+    let target_id = issue_id_by_title(dir.path(), "Target proof");
+    let target_id = target_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Donor proof"]);
+    assert!(success, "donor issue create failed: {stderr}");
+    let donor_id = issue_id_by_title(dir.path(), "Donor proof");
+    let donor_id = donor_id.as_str();
+
+    let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
+
+    let (success, donor_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            donor_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "donor evidence validation failed: {stderr}");
+    assert!(donor_validate.contains("pass  evidence_attached"));
+
+    let (success, target_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            target_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(!success, "target should not inherit donor proof");
+    assert!(target_validate.contains("fail  evidence_attached"));
+    assert!(target_validate.contains("no validating evidence link found"));
+    assert!(stderr.contains("workflow validation failed"));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", target_id, "--reason", "done"],
+    );
+    assert!(
+        !success,
+        "issue closeout must reject evidence linked only to another issue"
+    );
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("no validating evidence is linked"));
+    assert!(stderr.contains(target_id));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "issue", target_id],
+    );
+    assert!(success, "target evidence attach failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", target_id, "--reason", "target proof"],
+    );
+    assert!(
+        success,
+        "target closeout should pass after direct proof: {stderr}"
+    );
+}
+
+#[test]
 fn test_workflow_validate_fails_without_required_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -6517,7 +6591,8 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
         "mission closeout should block undeferred obsolete-command tests"
     );
     assert!(stdout.contains("Mission closeout blocked"));
-    assert!(stdout.contains("validator command_surface_current failed"));
+    assert!(stdout.contains("docs/help drift: detected"));
+    assert!(stdout.contains("update docs, help text, or command-surface tests"));
     assert!(stdout.contains("tests/legacy_session.rs"));
     assert!(stdout.contains("legacy_session_still_works"));
     assert!(stdout.contains("atelier session start"));

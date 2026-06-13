@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate validation failure scenarios end to end"
-updated_at: "2026-06-12T19:39:59.450087808+00:00"
+updated_at: "2026-06-12T23:59:50.155104498+00:00"
 ---
 
 ## Description
