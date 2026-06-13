@@ -24,6 +24,27 @@ pub struct CaptureOptions<'a> {
     pub command: &'a [String],
 }
 
+#[derive(Debug, Clone)]
+struct EvidenceMetadata<'a> {
+    proof_scope: &'a str,
+    agent_identity: Option<&'a str>,
+    independence_level: &'a str,
+    residual_risks: Vec<String>,
+    follow_up_ids: Vec<String>,
+}
+
+impl<'a> EvidenceMetadata<'a> {
+    fn from_producer(producer: Option<&'a str>) -> Self {
+        Self {
+            proof_scope: "scoped to the attached target or summary",
+            agent_identity: producer,
+            independence_level: "unspecified",
+            residual_risks: Vec::new(),
+            follow_up_ids: Vec::new(),
+        }
+    }
+}
+
 pub fn add(
     state_dir: &Path,
     db_path: &Path,
@@ -59,13 +80,19 @@ pub fn add_returning_id(
     uri: Option<&str>,
     producer: Option<&str>,
 ) -> Result<String> {
+    let metadata = EvidenceMetadata::from_producer(producer);
     let data = json!({
         "kind": evidence_kind,
         "result": result,
         "path": path,
         "uri": uri,
         "producer": producer,
-        "captured_at": chrono::Utc::now().to_rfc3339()
+        "captured_at": chrono::Utc::now().to_rfc3339(),
+        "proof_scope": metadata.proof_scope,
+        "agent_identity": metadata.agent_identity,
+        "independence_level": metadata.independence_level,
+        "residual_risks": metadata.residual_risks,
+        "follow_up_ids": metadata.follow_up_ids
     });
     let store = RecordStore::new(state_dir);
     let created =
@@ -116,6 +143,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         .summary
         .map(str::to_string)
         .unwrap_or_else(|| command_display.clone());
+    let metadata = EvidenceMetadata::from_producer(options.producer);
     let body = command_capture_body(
         &summary,
         &command_display,
@@ -138,6 +166,11 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         "uri": options.uri,
         "producer": options.producer,
         "captured_at": captured_at,
+        "proof_scope": metadata.proof_scope,
+        "agent_identity": metadata.agent_identity,
+        "independence_level": metadata.independence_level,
+        "residual_risks": metadata.residual_risks,
+        "follow_up_ids": metadata.follow_up_ids,
         "command": command_display,
         "exit_code": exit_code,
         "exit_status": exit_status,

@@ -118,6 +118,23 @@ impl Database {
         Ok(count > 0)
     }
 
+    pub fn record_kind_for_id(&self, id: &str) -> Result<Option<String>> {
+        if record_id::validate_record_id(id).is_err() {
+            return Ok(None);
+        }
+        if self.get_issue(id)?.is_some() {
+            return Ok(Some("issue".to_string()));
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT kind FROM records WHERE id = ?1 ORDER BY kind LIMIT 1")?;
+        let kind = stmt
+            .query_row(params![id], |row| row.get::<_, String>(0))
+            .ok();
+        Ok(kind)
+    }
+
     pub fn require_record(&self, kind: &str, id: &str) -> Result<DomainRecord> {
         self.get_record(kind, id)?
             .ok_or_else(|| anyhow::anyhow!("{} record {} not found", kind, id))

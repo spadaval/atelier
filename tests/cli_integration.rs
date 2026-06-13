@@ -177,6 +177,26 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
+fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
+    let path = dir
+        .join(".atelier")
+        .join("evidence")
+        .join(format!("{evidence_id}.md"));
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    let front = text
+        .strip_prefix("---\n")
+        .and_then(|rest| rest.split_once("\n---\n"))
+        .map(|(front, _)| front)
+        .unwrap_or_else(|| panic!("missing front matter in {}", path.display()));
+    let yaml: serde_yaml::Value = serde_yaml::from_str(front).unwrap();
+    let data = yaml
+        .get("data")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_else(|| panic!("missing data scalar in {}", path.display()));
+    serde_json::from_str(data).unwrap()
+}
+
 fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
     format!("#[test]\n#[{ignore_attribute}]\nfn {test_name}() {{}}\n")
 }
@@ -5881,6 +5901,31 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let evidence_id = record_id_by_title(dir.path(), "evidence", "cargo test passed");
     let evidence_id = evidence_id.as_str();
 
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    assert!(!success, "mission ID should not resolve as an issue");
+    assert!(
+        stderr.contains(&format!(
+            "{mission_id} is a mission record, not an issue record"
+        )),
+        "wrong-kind error should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier mission show {mission_id}")),
+        "wrong-kind error should suggest mission show: {stderr}"
+    );
+
+    let unknown_id = "atelier-zzzz";
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", unknown_id]);
+    assert!(!success, "unknown ID should fail");
+    assert!(
+        stderr.contains("was not found"),
+        "unknown ID should keep concise not-found error: {stderr}"
+    );
+    assert!(
+        !stderr.contains("is a mission record"),
+        "unknown ID should not imply a wrong-kind match: {stderr}"
+    );
+
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -6235,6 +6280,30 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stdout"));
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
+    let issue_evidence_data = canonical_evidence_data(dir.path(), &issue_evidence_id);
+    assert_eq!(
+        issue_evidence_data["proof_scope"],
+        "scoped to the attached target or summary"
+    );
+    assert_eq!(issue_evidence_data["independence_level"], "unspecified");
+    assert_eq!(
+        issue_evidence_data["agent_identity"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        issue_evidence_data["residual_risks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        issue_evidence_data["follow_up_ids"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
 
     let (success, record_capture, stderr) = run_atelier(
         dir.path(),
@@ -6261,6 +6330,75 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(record_capture.contains("Exit Status: 0"));
     assert!(record_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
     assert!(record_capture.contains("record stdout"));
+
+    let positional_summary = "unified positional manual proof";
+    let (success, positional_record_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "deferred",
+            "--target",
+            &format!("issue/{issue_id}"),
+            positional_summary,
+        ],
+    );
+    assert!(success, "positional manual record failed: {stderr}");
+    assert!(positional_record_out.contains("[evidence] deferred - unified positional manual proof"));
+    assert!(positional_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    let positional_evidence_id = record_id_by_title(dir.path(), "evidence", positional_summary);
+    let positional_evidence_data = canonical_evidence_data(dir.path(), &positional_evidence_id);
+    assert_eq!(positional_evidence_data["kind"], "validation");
+    assert_eq!(positional_evidence_data["result"], "deferred");
+    assert_eq!(
+        positional_evidence_data["proof_scope"],
+        "scoped to the attached target or summary"
+    );
+    assert_eq!(
+        positional_evidence_data["independence_level"],
+        "unspecified"
+    );
+    assert_eq!(
+        positional_evidence_data["agent_identity"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        positional_evidence_data["residual_risks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        positional_evidence_data["follow_up_ids"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--summary",
+            "flag summary",
+            "positional summary",
+        ],
+    );
+    assert!(!success, "conflicting summaries should fail");
+    assert!(
+        stderr.contains("use either --summary or a positional summary"),
+        "conflict error should be actionable: {stderr}"
+    );
 
     let (success, issue_validate, stderr) = run_atelier(
         dir.path(),

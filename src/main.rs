@@ -810,6 +810,8 @@ enum EvidenceCommands {
         uri: Option<String>,
         #[arg(long)]
         producer: Option<String>,
+        /// Manual evidence summary. Command-backed evidence should pass commands after `--`.
+        summary_text: Option<String>,
         #[arg(last = true, num_args = 0..)]
         command: Vec<String>,
     },
@@ -1174,14 +1176,43 @@ fn issue_create_parts(
 }
 
 fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
-    commands::agent_factory::resolve_id(db, issue_ref)
+    match commands::agent_factory::resolve_id(db, issue_ref) {
+        Ok(id) => Ok(id),
+        Err(error) => match db.record_kind_for_id(issue_ref)? {
+            Some(actual_kind) if actual_kind != "issue" => {
+                bail!("{}", wrong_kind_message("issue", &actual_kind, issue_ref));
+            }
+            _ => Err(error),
+        },
+    }
 }
 
 fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     if kind == "issue" {
         resolve_issue_arg(db, id)
+    } else if db.get_record(kind, id)?.is_some() {
+        Ok(id.to_string())
+    } else if let Some(actual_kind) = db.record_kind_for_id(id)? {
+        bail!("{}", wrong_kind_message(kind, &actual_kind, id));
     } else {
         Ok(id.to_string())
+    }
+}
+
+fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
+    let suggested = show_command_for_kind(actual_kind)
+        .map(|command| format!(" Use `{command} {id}`."))
+        .unwrap_or_default();
+    format!("{id} is a {actual_kind} record, not a {expected_kind} record.{suggested}")
+}
+
+fn show_command_for_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "issue" | "epic" => Some("atelier issue show"),
+        "mission" => Some("atelier mission show"),
+        "plan" => Some("atelier plan show"),
+        "evidence" => Some("atelier evidence show"),
+        _ => None,
     }
 }
 
@@ -1830,6 +1861,7 @@ fn run() -> Result<()> {
             }
             MissionCommands::Show { id } => {
                 let db = degraded_projection_query_db()?;
+                let id = resolve_record_arg(&db, "mission", &id)?;
                 commands::mission::show(&db, &id)
             }
             MissionCommands::Start { id, switch_active } => {
@@ -1981,6 +2013,7 @@ fn run() -> Result<()> {
                 path,
                 uri,
                 producer,
+                summary_text,
                 command,
             } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
@@ -1993,8 +2026,14 @@ fn run() -> Result<()> {
                     None => None,
                 };
                 if command.is_empty() {
-                    let Some(summary) = summary.as_deref() else {
-                        bail!("evidence record without a command requires --summary");
+                    let summary = match (summary.as_deref(), summary_text.as_deref()) {
+                        (Some(_), Some(_)) => {
+                            bail!("use either --summary or a positional summary, not both")
+                        }
+                        (Some(summary), None) | (None, Some(summary)) => summary,
+                        (None, None) => {
+                            bail!("evidence record without a command requires a summary")
+                        }
                     };
                     let evidence_id = commands::evidence::add_returning_id(
                         &storage.state_dir(),
@@ -2020,13 +2059,20 @@ fn run() -> Result<()> {
                     let record = db.require_record("evidence", &evidence_id)?;
                     commands::evidence::print_record(&db, &record)
                 } else {
+                    let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
+                        (Some(_), Some(_)) => {
+                            bail!("use either --summary or a positional summary, not both")
+                        }
+                        (Some(summary), None) | (None, Some(summary)) => Some(summary),
+                        (None, None) => None,
+                    };
                     commands::evidence::capture(
                         &storage.state_dir(),
                         &storage.db_path(),
                         commands::evidence::CaptureOptions {
                             evidence_kind: &evidence_kind,
                             result: &result,
-                            summary: summary.as_deref(),
+                            summary: command_summary,
                             path: path.as_deref(),
                             uri: uri.as_deref(),
                             producer: producer.as_deref(),

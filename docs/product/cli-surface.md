@@ -83,6 +83,11 @@ validator detail, but normal operators should only run them when a binding,
 assignment, or closeout contract names them. Destructive maintenance is a third
 category: commands such as `atelier maintenance delete issue <id> --force`
 exist for explicit record surgery and must not appear as routine next actions.
+Common read and orientation commands correct record-kind mistakes directly:
+when an operator passes an existing mission, plan, or evidence ID to an issue
+command, the error names the actual record kind and suggests the matching show
+command. Genuinely unknown IDs remain concise not-found errors without implying
+a false record match.
 
 Every command-consolidation proposal must pass a red-tape check before it is
 implemented: the new shape must remove a real duplicate, reduce the chance of

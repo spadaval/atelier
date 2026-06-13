@@ -89,8 +89,29 @@ pub struct NoteObject {
 }
 
 pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
-    db.resolve_issue_ref(issue_ref)?
-        .ok_or_else(|| anyhow!("Issue {issue_ref} was not found"))
+    if let Some(id) = db.resolve_issue_ref(issue_ref)? {
+        return Ok(id);
+    }
+
+    if let Some(actual_kind) = db.record_kind_for_id(issue_ref)? {
+        bail!(
+            "{} is a {} record, not an issue record. Use `{}`.",
+            issue_ref,
+            actual_kind,
+            show_command_for_kind(&actual_kind, issue_ref)
+        );
+    }
+
+    Err(anyhow!("Issue {issue_ref} was not found"))
+}
+
+fn show_command_for_kind(kind: &str, id: &str) -> String {
+    match kind {
+        "mission" => format!("atelier mission show {id}"),
+        "plan" => format!("atelier plan show {id}"),
+        "evidence" => format!("atelier evidence show {id}"),
+        _ => format!("atelier {kind} show {id}"),
+    }
 }
 
 fn issue_id_for_agent(db: &Database, issue: &Issue) -> Result<String> {
