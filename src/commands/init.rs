@@ -10,15 +10,11 @@ project_slug = "atelier"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier"
-runtime_database = ".atelier/state.db"
+runtime_dir = ".atelier/runtime"
+runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
 "#;
 pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
-    "/.atelier/state.db",
-    "/.atelier/state.db-shm",
-    "/.atelier/state.db-wal",
-    "/.atelier/.state.db.*.rebuild-tmp*",
     "/.atelier/agent.json",
     "/.atelier/.cache/",
     "/.atelier/runtime/",
@@ -84,6 +80,8 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         println!("Created {}", project_config_path.display());
     }
 
+    fs::create_dir_all(layout.target_runtime_dir())
+        .context("Failed to create .atelier/runtime directory")?;
     let db_path = layout.runtime_db_path();
     let db_existed = db_path.exists();
     Database::open(&db_path)?;
@@ -120,7 +118,7 @@ mod tests {
         assert!(dir.path().join(".atelier/milestones").exists());
         assert!(dir.path().join(".atelier/plans").exists());
         assert!(dir.path().join(".atelier/evidence").exists());
-        assert!(dir.path().join(".atelier/state.db").exists());
+        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".atelier/rules").exists());
         assert!(!dir.path().join(".atelier/rules.local").exists());
         assert!(!dir.path().join(".atelier/hook-config.json").exists());
@@ -129,8 +127,9 @@ mod tests {
         assert!(!dir.path().join(".atelier/.gitignore").exists());
 
         let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        assert!(gitignore.contains("/.atelier/state.db"));
-        assert!(gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
+        assert!(!gitignore.contains("/.atelier/state.db"));
+        assert!(!gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
+        assert!(gitignore.contains("/.atelier/runtime/"));
         assert!(gitignore.contains("/.atelier/cache/"));
         assert!(!gitignore.contains("/.atelier/rules/"));
         assert!(!gitignore.contains("/.atelier/rules.local/"));
@@ -139,7 +138,8 @@ mod tests {
 
         let config = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
         assert!(config.contains("state_root = \".atelier\""));
-        assert!(config.contains("runtime_database = \".atelier/state.db\""));
+        assert!(config.contains("runtime_dir = \".atelier/runtime\""));
+        assert!(config.contains("runtime_database = \".atelier/runtime/state.db\""));
     }
 
     #[test]
@@ -182,7 +182,7 @@ project_slug = "custom"
         run(dir.path(), true).unwrap();
 
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/state.db").exists());
+        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".atelier/rules").exists());
         assert!(!dir.path().join(".claude").exists());
         assert!(!dir.path().join(".mcp.json").exists());
@@ -199,7 +199,7 @@ project_slug = "custom"
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/state.db").exists());
+        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".claude").exists());
     }
 
@@ -215,7 +215,7 @@ project_slug = "custom"
 
         assert!(dir.path().join(".atelier").exists());
         assert!(dir.path().join(".atelier/config.toml").exists());
-        assert!(dir.path().join(".atelier/state.db").exists());
+        assert!(dir.path().join(".atelier/runtime/state.db").exists());
     }
 
     #[test]
@@ -224,7 +224,7 @@ project_slug = "custom"
         run(dir.path(), false).unwrap();
 
         // Open the created database and verify it works
-        let db_path = dir.path().join(".atelier/state.db");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
         let db = Database::open(&db_path).unwrap();
 
         // Should be able to create an issue
@@ -237,7 +237,7 @@ project_slug = "custom"
         let dir = tempdir().unwrap();
         run(dir.path(), false).unwrap();
 
-        let db_path = dir.path().join(".atelier/state.db");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::remove_file(&db_path).unwrap();
 
         run(dir.path(), false).unwrap();
@@ -256,7 +256,7 @@ project_slug = "custom"
         }
 
         // All files should still exist
-        assert!(dir.path().join(".atelier/state.db").exists());
+        assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".claude/settings.json").exists());
         assert!(!dir.path().join(".atelier/rules").exists());
     }

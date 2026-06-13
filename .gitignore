@@ -5,10 +5,6 @@
 # local runtime, projection, cache, identity, lock, and generated integration
 # artifacts.
 /.atelier/.locks-cache/
-/.atelier/state.db
-/.atelier/state.db-shm
-/.atelier/state.db-wal
-/.atelier/.state.db.*.rebuild-tmp*
 /.atelier/agent.json
 /.atelier/hook-config.json
 /.atelier/hook-config.local.json

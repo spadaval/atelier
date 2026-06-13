@@ -149,7 +149,7 @@ impl SmokeHarness {
 
     /// Path to the SQLite database.
     pub fn db_path(&self) -> PathBuf {
-        self.atelier_dir().join("state.db")
+        self.atelier_dir().join("runtime/state.db")
     }
 
     pub fn issue_id(&self, ordinal: usize) -> String {

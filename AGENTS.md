@@ -13,7 +13,7 @@
 - Do not plan or validate work by parsing command-result JSON. Use focused
   show/list/ready/status/workflow commands and drill down explicitly.
 - Treat `.atelier/` canonical Markdown and tracked config as the committed
-  durable tracker state. Treat `.atelier/state.db`, `.atelier/runtime/`,
+  durable tracker state. Treat `.atelier/runtime/state.db`, `.atelier/runtime/`,
   identity, locks, diagnostics, and `.atelier/cache/` as ignored local
   runtime/cache state that can be rebuilt or recreated.
 - Do not add compatibility aliases, staged deprecations, fallback behavior, or

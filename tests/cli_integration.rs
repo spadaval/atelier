@@ -575,7 +575,7 @@ fn test_init_creates_atelier_directory() {
     assert!(success);
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
     assert!(dir.path().join(".atelier").exists());
-    assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
     assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".atelier").join("rules.local").exists());
@@ -597,7 +597,7 @@ fn test_init_twice_is_idempotent() {
 
     assert!(success);
     assert!(stdout.contains("Atelier initialized successfully"));
-    assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".claude").exists());
 }
@@ -665,7 +665,7 @@ fn test_doctor_distinguishes_missing_runtime_projection_database() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(success, "doctor failed: {stderr}");
@@ -2614,7 +2614,7 @@ fn test_issue_show_reads_detail_body_from_record_store() {
         ],
     );
     let issue_id = issue_id_by_title(dir.path(), "Canonical detail issue");
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE issues SET description = 'SQLite shadow body' WHERE id = ?1",
         [&issue_id],
@@ -2676,7 +2676,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(success, "evidence add failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Canonical evidence summary");
 
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE records SET body = 'SQLite mission body', data_json = ?1 WHERE id = ?2",
         [
@@ -2749,7 +2749,7 @@ fn test_issue_search_reads_payloads_from_record_store_and_activity() {
     );
     assert!(success, "issue comment failed: {stderr}");
 
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE issues SET description = 'sqlite body needle' WHERE id = ?1",
         [&issue_id],
@@ -2808,7 +2808,7 @@ fn test_show_issue_prefers_activity_sidecars_for_recent_activity() {
 
     run_atelier(dir.path(), &["issue", "create", "Activity issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Activity issue");
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "INSERT INTO comments (issue_id, content, created_at, kind) VALUES (?1, ?2, ?3, ?4)",
         rusqlite::params![
@@ -3250,7 +3250,7 @@ fn test_close_all_is_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed after close-all: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -3357,7 +3357,7 @@ fn test_delete_issue_is_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed after delete: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -3569,7 +3569,7 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     );
     assert!(success, "close failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -3604,7 +3604,7 @@ fn test_issue_create_is_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed after create: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -3667,7 +3667,7 @@ fn test_issue_mutations_are_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed before rebuild: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -3754,7 +3754,7 @@ fn test_dep_alias_mutations_are_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed after dep add: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after dep add failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
@@ -3767,7 +3767,7 @@ fn test_dep_alias_mutations_are_durable_without_manual_export() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check failed after dep remove: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after dep remove failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
@@ -5278,7 +5278,7 @@ fn test_init_force_update() {
 
     assert!(success);
     assert!(stdout.contains("Atelier initialized successfully"));
-    assert!(dir.path().join(".atelier").join("state.db").exists());
+    assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".claude").exists());
     assert!(!dir.path().join(".mcp.json").exists());
@@ -6674,7 +6674,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(evidence_markdown.contains("schema: \"atelier.evidence\""));
     assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
@@ -8437,7 +8437,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     let malformed_evidence =
         evidence_markdown.replace("\n## Evidence\n\nEvidence was not specified.\n", "\n");
     std::fs::write(&evidence_issue_path, malformed_evidence).unwrap();
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     for (path, id) in [
         (&issue_path, issue_id),
         (&evidence_issue_path, evidence_issue_id),
@@ -9298,7 +9298,7 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
         mission_markdown.replace("schema: \"atelier.mission\"", "schema: \"atelier.issue\""),
     )
     .unwrap();
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(!success, "rebuild should reject mission schema drift");
@@ -9324,7 +9324,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
         markdown.replace("schema_version: 1", "schema_version: 99"),
     )
     .unwrap();
-    std::fs::remove_file(schema_dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(schema_dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
     assert!(!success, "schema drift should block projection query");
@@ -9355,7 +9355,7 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
         markdown.replace("title: \"Malformed source\"", "title: [Malformed source"),
     )
     .unwrap();
-    std::fs::remove_file(malformed_dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(malformed_dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["issue", "list"]);
     assert!(!success, "malformed records should block projection query");
@@ -9655,11 +9655,13 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let temp_path = dir.path().join(".atelier/.state.db.123.456.rebuild-tmp");
+    let temp_path = dir
+        .path()
+        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp");
     std::fs::write(&temp_path, "partial sqlite rebuild").unwrap();
     let temp_journal_path = dir
         .path()
-        .join(".atelier/.state.db.123.456.rebuild-tmp-journal");
+        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp-journal");
     std::fs::write(&temp_journal_path, "partial sqlite rebuild journal").unwrap();
 
     let issue_path = dir
@@ -9792,7 +9794,7 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
     let mut hasher = Sha256::new();
     hasher.update(invalid_markdown.as_bytes());
     let invalid_hash = format!("{:x}", hasher.finalize());
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/state.db")).unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE projection_index_sources
          SET size_bytes = ?1, sha256 = ?2
@@ -9840,7 +9842,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(success, "lint should rebuild missing state.db: {stderr}");
@@ -10203,7 +10205,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(success, "export check after bulk apply failed: {stderr}");
 
-    std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after bulk apply failed: {stderr}");
 
@@ -10334,7 +10336,7 @@ hooks:
     );
     assert!(success, "worktree for failed: {stderr}");
     assert!(worktree_out.contains(&worktree_arg));
-    assert!(worktree_path.join(".atelier/state.db").exists());
+    assert!(worktree_path.join(".atelier/runtime/state.db").exists());
     assert!(
         !worktree_path.join(".atelier/setup-marker").exists(),
         "root atelier.workflow.yaml hooks should not run during worktree setup"

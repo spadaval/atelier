@@ -34,7 +34,7 @@ and skill bindings were updated.
   command-result `--json` as the workflow proof.
 - Clean rebuild: `/tmp/atelier-rebuild-check` was populated with
   `.atelier` and an empty `.atelier`; from that directory, `atelier
-  rebuild --input .atelier` rebuilt `/tmp/atelier-rebuild-check/.atelier/state.db`,
+  rebuild --input .atelier` rebuilt `/tmp/atelier-rebuild-check/.atelier/runtime/state.db`,
   and `atelier export --check` confirmed freshness.
 - Final freshness recovery: after closing `atelier-z1p.6`, `atelier export
   --check` reported stale `ISS-0041.md` and `manifest.json`; `atelier export`

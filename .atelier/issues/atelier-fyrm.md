@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Align runtime and cache paths with the product contract"
-updated_at: "2026-06-13T21:59:31.036731196+00:00"
+updated_at: "2026-06-13T23:12:49.566332953+00:00"
 ---
 
 ## Description

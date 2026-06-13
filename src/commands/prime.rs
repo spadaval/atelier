@@ -54,7 +54,9 @@ fn print_context_recovery(
         "  Durable tracker state: {} canonical Markdown",
         state_dir.display()
     );
-    println!("  Ignored local state: .atelier/state.db, .atelier/runtime/, .atelier/cache/");
+    println!(
+        "  Ignored local state: .atelier/runtime/state.db, .atelier/runtime/, .atelier/cache/"
+    );
     match active_mission {
         Some(mission) => println!("  Active mission: {} - {}", mission.id, mission.title),
         None => println!(
@@ -80,7 +82,9 @@ fn print_core_rules() {
     println!("----------");
     println!("  `atelier status` - Check current checkout state before acting.");
     println!("  `.atelier/` Markdown - Treat committed records as durable tracker state.");
-    println!("  `.atelier/state.db` - Treat the SQLite file as rebuildable local runtime state.");
+    println!(
+        "  `.atelier/runtime/state.db` - Treat the SQLite file as rebuildable local runtime state."
+    );
     println!("  `atelier issue show <id>` - Read the assigned issue contract before editing.");
     println!("  `atelier history --issue <id>` - Inspect full canonical activity instead of relying on chat memory.");
 }

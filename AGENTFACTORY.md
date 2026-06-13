@@ -23,7 +23,7 @@ This file binds Agent Factory to this repository.
 - Tracker: Atelier
 - Durable tracker state: committed canonical Markdown and tracked config under
   `.atelier/`
-- Runtime tracker database: local `.atelier/state.db`, rebuilt from
+- Runtime tracker database: local `.atelier/runtime/state.db`, rebuilt from
   committed `.atelier/` records
 - Other runtime/cache state under `.atelier/` is local and rebuildable; do not
   treat `.atelier/runtime/`, `.atelier/cache/`, locks, diagnostics, or local

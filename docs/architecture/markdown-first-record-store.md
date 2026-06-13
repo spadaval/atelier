@@ -207,7 +207,7 @@ records that share the common `title`/`status` contract.
 | --- | --- |
 | Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`, `runtime_dir`, `runtime_database`, and `cache_dir`. |
 | Compatibility-only config | `[paths].compatibility_state_root` remains tracked only while `.atelier-state/` compatibility flows still exist. |
-| Local runtime state | `.atelier/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work associations are ignored machine-local state. |
+| Local runtime state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work associations are ignored machine-local state. |
 | Projection provenance | `projection_index_sources` rows, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
 | Forbidden durable provenance | Runtime branch names, worktree paths, session IDs, lock ownership, local diagnostic output, and cache payloads must not be promoted into canonical record front matter without a separate artifact update. |
 
@@ -306,7 +306,7 @@ lists without treating every Markdown body or record payload as cached UI state.
 ## Rebuild And Freshness
 
 `atelier rebuild` recreates the canonical portion of
-`.atelier/state.db` from Markdown records discovered under tracked
+`.atelier/runtime/state.db` from Markdown records discovered under tracked
 `.atelier/` record directories. It ignores local-only runtime state except
 where runtime tables must be recreated empty or migrated for schema
 compatibility.
@@ -444,7 +444,7 @@ Runtime state remains useful for coordination and operator ergonomics:
 Runtime state may reference canonical record IDs, but those references are local
 and disposable unless a future durable record explicitly captures them. A fresh
 checkout must be able to rebuild canonical query behavior from tracked
-`.atelier/` records without copying `.atelier/state.db`.
+`.atelier/` records without copying `.atelier/runtime/state.db`.
 
 ## Migration Plan
 

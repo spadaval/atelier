@@ -344,7 +344,7 @@ mod tests {
         fs::write(issues.join("atelier-aaaa.md"), "one").unwrap();
         fs::write(issues.join("atelier-bbbb.md"), "two").unwrap();
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();
-        let db = Database::open(&dir.path().join(".atelier/state.db")).unwrap();
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
 
         refresh(&db, &state_dir).unwrap();
         assert!(check(&db, &state_dir).unwrap().is_fresh());
@@ -375,7 +375,7 @@ mod tests {
         fs::create_dir_all(state_dir.join("issues")).unwrap();
         fs::write(state_dir.join("issues/atelier-aaaa.md"), "one").unwrap();
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();
-        let db = Database::open(&dir.path().join(".atelier/state.db")).unwrap();
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
 
         let report = check(&db, &state_dir).unwrap();
 

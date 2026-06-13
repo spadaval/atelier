@@ -2,7 +2,7 @@
 
 This document defines the target `.atelier/` canonical record tree. Tracked
 Markdown records under `.atelier/` are the committed rebuild source for the
-local SQLite projection at `.atelier/state.db`; runtime and cache files remain
+local SQLite projection at `.atelier/runtime/state.db`; runtime and cache files remain
 ignored local state.
 
 ## Goals
@@ -42,7 +42,7 @@ ignored local state.
 
 Tracked canonical paths are `config.toml`, `issues/`, `missions/`,
 `milestones/`, `plans/`, `evidence/`, and canonical activity sidecars.
-`.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/` are ignored.
+`.atelier/runtime/state.db`, `.atelier/runtime/`, and `.atelier/cache/` are ignored.
 Copied rule trees, editor integration files, hook scaffolding, and UI caches
 are not project tracker state unless a future contract explicitly promotes a
 file into the tracked config surface.
@@ -300,7 +300,7 @@ For unsupported files or stale runtime state:
   as generated caches, local databases, copied rule trees, or editor artifacts.
 - Do not commit `.atelier/runtime/`, `.atelier/cache/`, SQLite databases, lock
   caches, diagnostics, or local identity.
-- If `.atelier/state.db` is missing or stale, rebuild it from canonical
+- If `.atelier/runtime/state.db` is missing or stale, rebuild it from canonical
   records instead of resolving it as a Git conflict.
 
 When `atelier lint` reports invalid canonical Markdown, fix the Markdown rather
@@ -626,7 +626,7 @@ defines its durable layout.
 `atelier export` remains the deterministic repair/check surface for canonical
 records, and normal durable writes target `.atelier/` directly.
 
-`atelier rebuild` recreates `.atelier/state.db` from tracked
+`atelier rebuild` recreates `.atelier/runtime/state.db` from tracked
 `.atelier/` canonical records and may create ignored runtime/cache directories
 in a fresh checkout. Backup export formats are no longer command surfaces;
 predecessor imports use `atelier import-beads`.
@@ -635,7 +635,7 @@ Rebuild also recreates local `ProjectionIndex` source metadata in SQLite. The
 metadata records canonical file paths, size and modified-time hints, and content
 hashes so query commands can detect stale projections before reading SQLite.
 This metadata is intentionally not tracked and can be discarded with
-`.atelier/state.db`. Issue activity sidecars are canonical files
+`.atelier/runtime/state.db`. Issue activity sidecars are canonical files
 but are read directly by history/show commands, so they are validated by rebuild
 rather than tracked as query-projection sources.
 

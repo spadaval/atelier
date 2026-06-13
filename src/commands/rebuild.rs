@@ -745,7 +745,7 @@ mod tests {
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
-        let rebuilt_path = dir.path().join(".atelier/state.db");
+        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
@@ -781,7 +781,7 @@ mod tests {
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
-        let rebuilt_path = dir.path().join(".atelier/state.db");
+        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
@@ -857,7 +857,7 @@ mod tests {
         let evidence_markdown = fs::read_to_string(&evidence_path).unwrap();
         assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
 
-        let rebuilt_path = dir.path().join(".atelier/state.db");
+        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
@@ -947,7 +947,7 @@ mod tests {
         fs::write(&new_path, mission_markdown).unwrap();
         fs::remove_file(old_path).unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
             "Duplicate record ID in canonical projection: {issue_id}"
         )));
@@ -962,7 +962,7 @@ mod tests {
 
         assert!(!state_dir.join("manifest.json").exists());
         assert!(!state_dir.join("graph.json").exists());
-        run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap();
+        run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap();
     }
 
     #[test]
@@ -979,7 +979,7 @@ mod tests {
         assert!(db.get_current_session().unwrap().is_some());
         assert!(db.get_active_work_association().unwrap().is_some());
 
-        let db_path = dir.path().join(".atelier/state.db");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &db_path).unwrap();
         let rebuilt = Database::open(&db_path).unwrap();
 
@@ -992,7 +992,7 @@ mod tests {
     #[test]
     fn refresh_projection_preserves_valid_runtime_state() {
         let dir = tempdir().unwrap();
-        let db_path = dir.path().join(".atelier/state.db");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::create_dir_all(db_path.parent().unwrap()).unwrap();
         let db = Database::open(&db_path).unwrap();
         let id = db
@@ -1035,7 +1035,7 @@ mod tests {
         export::run_canonical(&db, &state_dir, false).unwrap();
         write_activity_sidecar(&state_dir, &id);
 
-        run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap();
+        run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap();
         validate_canonical_state(&state_dir).unwrap();
     }
 
@@ -1047,7 +1047,7 @@ mod tests {
         export::run_canonical(&db, &state_dir, false).unwrap();
         write_activity_sidecar(&state_dir, "atelier-miss");
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error
             .to_string()
             .contains("Issue atelier-miss has activity reference to missing issue atelier-miss"));
@@ -1066,7 +1066,7 @@ mod tests {
         )
         .unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
             "does not match canonical path .atelier/issues/{id}.md"
         )));
@@ -1080,7 +1080,7 @@ mod tests {
         export::run_canonical(&db, &state_dir, false).unwrap();
         fs::write(state_dir.join(issue_record_path(&id)), "not front matter\n").unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
             "Missing YAML front matter in .atelier/issues/{id}.md"
         )));
@@ -1098,7 +1098,7 @@ mod tests {
             .replace("schema: \"atelier.issue\"", "schema: \"atelier.graph\"");
         fs::write(path, text).unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error
             .to_string()
             .contains("Unsupported schema 'atelier.graph'"));
@@ -1118,7 +1118,7 @@ mod tests {
             &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{missing_id}\""),
         );
         fs::write(&path, text).unwrap();
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
             "{id} has blocks reference to missing issue {missing_id}"
         )));
@@ -1136,7 +1136,7 @@ mod tests {
                 ),
             );
         fs::write(&path, text).unwrap();
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains(&format!(
             "Duplicate relationships.relates target issue {id} (related)"
         )));
@@ -1165,7 +1165,7 @@ mod tests {
             .replace("type: \"related\"", "type: \"\"");
         fs::write(path, text).unwrap();
 
-        let error = run(&state_dir, &dir.path().join(".atelier/state.db")).unwrap_err();
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
         assert!(error.to_string().contains("Relation type cannot be empty"));
     }
 

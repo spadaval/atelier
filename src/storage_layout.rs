@@ -3,7 +3,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 pub const ATELIER_DIR: &str = ".atelier";
-pub const LEGACY_RUNTIME_DB: &str = "state.db";
+pub const RUNTIME_DB_FILE: &str = "state.db";
 pub const TARGET_RUNTIME_DIR: &str = "runtime";
 pub const CACHE_DIR: &str = "cache";
 pub const CONFIG_FILE: &str = "config.toml";
@@ -50,12 +50,7 @@ impl StorageLayout {
     }
 
     pub fn runtime_db_path(&self) -> PathBuf {
-        // Compatibility path until the runtime relocation migration lands.
-        self.atelier_dir().join(LEGACY_RUNTIME_DB)
-    }
-
-    pub fn target_runtime_db_path(&self) -> PathBuf {
-        self.target_runtime_dir().join(LEGACY_RUNTIME_DB)
+        self.target_runtime_dir().join(RUNTIME_DB_FILE)
     }
 }
 
@@ -113,9 +108,6 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || first == "rules"
         || first == "rules.local"
         || relative_path == Path::new(CONFIG_FILE)
-        || relative_path == Path::new("state.db")
-        || relative_path == Path::new("state.db-shm")
-        || relative_path == Path::new("state.db-wal")
         || relative_path == Path::new("agent.json")
         || relative_path == Path::new("hook-config.json")
         || relative_path == Path::new("hook-config.local.json")
@@ -128,7 +120,7 @@ fn is_runtime_rebuild_temp_path(relative_path: &Path) -> bool {
     let Some(file_name) = relative_path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    file_name.starts_with(&format!(".{LEGACY_RUNTIME_DB}."))
+    file_name.starts_with(&format!(".{RUNTIME_DB_FILE}."))
         && (file_name.ends_with(".rebuild-tmp")
             || file_name.ends_with(".rebuild-tmp-shm")
             || file_name.ends_with(".rebuild-tmp-wal")
@@ -154,16 +146,17 @@ mod tests {
     #[test]
     fn rebuild_temp_database_paths_are_local_atelier_paths() {
         assert!(is_local_atelier_path(Path::new(
-            ".state.db.123.456.rebuild-tmp"
+            "runtime/.state.db.123.456.rebuild-tmp"
         )));
         assert!(is_local_atelier_path(Path::new(
-            ".state.db.123.456.rebuild-tmp-wal"
+            "runtime/.state.db.123.456.rebuild-tmp-wal"
         )));
         assert!(is_local_atelier_path(Path::new(
-            ".state.db.123.456.rebuild-tmp-journal"
+            "runtime/.state.db.123.456.rebuild-tmp-journal"
         )));
         assert!(!is_local_atelier_path(Path::new(
             "issues/.state.db.123.456.rebuild-tmp"
         )));
+        assert!(!is_local_atelier_path(Path::new("state.db")));
     }
 }
