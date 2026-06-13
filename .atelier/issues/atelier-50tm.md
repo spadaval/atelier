@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Triage large-function hotspots from clippy too_many_lines"
-updated_at: "2026-06-13T22:59:14.676327671+00:00"
+updated_at: "2026-06-13T23:11:19.283899510+00:00"
 ---
 
 ## Description

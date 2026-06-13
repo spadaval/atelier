@@ -22,6 +22,8 @@ relationships:
   - kind: "issue"
     id: "atelier-e723"
   - kind: "issue"
+    id: "atelier-gzel"
+  - kind: "issue"
     id: "atelier-pa33"
   attachments: []
   relates: []
@@ -29,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Improve agent readiness and mechanical guardrails"
-updated_at: "2026-06-13T22:59:16.510809734+00:00"
+updated_at: "2026-06-13T23:12:00.253045347+00:00"
 ---
 
 ## Description

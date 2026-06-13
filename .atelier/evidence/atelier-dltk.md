@@ -7,6 +7,9 @@ relationships:
   children: []
   attachments:
   - kind: "issue"
+    id: "atelier-50tm"
+    role: "validates"
+  - kind: "issue"
     id: "atelier-e723"
     role: "validates"
   relates: []
@@ -14,7 +17,7 @@ schema: "atelier.evidence"
 schema_version: 1
 status: "pass"
 title: "bash -lc 'cargo clippy --all-targets -- -W clippy::too_many_lines 2>&1 | rg \"too many lines|-->\"'"
-updated_at: "2026-06-13T23:02:05.138976634+00:00"
+updated_at: "2026-06-13T23:11:09.036583828+00:00"
 ---
 
 bash -lc 'cargo clippy --all-targets -- -W clippy::too_many_lines 2>&1 | rg "too many lines|-->"'

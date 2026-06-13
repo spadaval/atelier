@@ -19,6 +19,8 @@ relationships:
   - kind: "issue"
     id: "atelier-d7lw"
   - kind: "issue"
+    id: "atelier-ggls"
+  - kind: "issue"
     id: "atelier-ihz0"
   - kind: "issue"
     id: "atelier-ja3o"
@@ -27,6 +29,8 @@ relationships:
   - kind: "issue"
     id: "atelier-kpm8"
   - kind: "issue"
+    id: "atelier-wj05"
+  - kind: "issue"
     id: "atelier-yqj6"
   attachments: []
   relates: []
@@ -34,7 +38,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Reduce code complexity and module boundary drift"
-updated_at: "2026-06-13T21:58:03.424579938+00:00"
+updated_at: "2026-06-13T23:10:38.230151438+00:00"
 ---
 
 ## Description
