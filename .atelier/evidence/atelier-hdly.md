@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-12T23:36:33.404216765+00:00"
 id: "atelier-hdly"
-data: "{\"captured_at\":\"2026-06-12T23:36:33.271950375+00:00\",\"command\":\"atelier lint\",\"exit_code\":0,\"exit_status\":\"0\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false},\"stdout\":{\"bytes\":13,\"summary\":\"Lint passed.\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"result\":\"pass\",\"spawn_error\":null,\"success\":true,\"target\":{\"id\":\"atelier-a4sn\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-12T23:36:33.271950375+00:00"
+command: "atelier lint"
+exit_status: "0"
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

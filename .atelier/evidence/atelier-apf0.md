@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T04:23:42.295270330+00:00"
 id: "atelier-apf0"
-data: "{\"captured_at\":\"2026-06-13T04:23:42.295252055+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-13T04:23:42.295252055+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

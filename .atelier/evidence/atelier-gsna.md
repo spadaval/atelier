@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T04:19:24.390734389+00:00"
 id: "atelier-gsna"
-data: "{\"captured_at\":\"2026-06-13T04:19:24.390702993+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T04:19:24.390702993+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

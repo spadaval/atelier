@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T23:11:19.566361780+00:00"
 id: "atelier-uybh"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T23:11:19.454850179+00:00\",\"command\":\"cargo machete\",\"exit_code\":1,\"exit_status\":\"1\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":60,\"summary\":\"Analyzing dependencies of crates in this directory...\\nDone!\\n\",\"truncated\":false},\"stdout\":{\"bytes\":538,\"summary\":\"cargo-machete found the following unused dependencies in this directory:\\natelier-tracker -- ./Cargo.toml:\\n\\tsignal-hook\\n\\nIf you believe cargo-machete has detected an unused dependency incorrectly,\\nyou can add the dependency to the list of dependencies to ignore in the\\n`[package.metadata.cargo-machete]` section of the appropriate Cargo.toml.\\nFor example:\\n\\n[package.metadata.cargo-machete]\\nignored = [\\\"prost\\\"]\\n\\nYou can also try running it with the `--with-metadata` flag for better accuracy,\\nthough this may modify your Cargo.lock files.\\n\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"fail\",\"spawn_error\":null,\"success\":false,\"target\":{\"id\":\"atelier-pa33\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T23:11:19.454850179+00:00"
+command: "cargo machete"
+exit_status: "1"
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

@@ -191,7 +191,7 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
-fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
+fn canonical_evidence_front_matter(dir: &Path, evidence_id: &str) -> serde_json::Value {
     let path = dir
         .join(".atelier")
         .join("evidence")
@@ -204,11 +204,7 @@ fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
         .map(|(front, _)| front)
         .unwrap_or_else(|| panic!("missing front matter in {}", path.display()));
     let yaml: serde_yaml::Value = serde_yaml::from_str(front).unwrap();
-    let data = yaml
-        .get("data")
-        .and_then(serde_yaml::Value::as_str)
-        .unwrap_or_else(|| panic!("missing data scalar in {}", path.display()));
-    serde_json::from_str(data).unwrap()
+    serde_json::to_value(yaml).unwrap()
 }
 
 fn ignored_test_source(ignore_attribute: &str, test_name: &str) -> String {
@@ -6671,6 +6667,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
         .join(format!("{evidence_id}.md"));
     let evidence_markdown = std::fs::read_to_string(&evidence_path).unwrap();
     assert!(evidence_markdown.contains("schema: \"atelier.evidence\""));
+    assert!(!evidence_markdown.contains("\ndata: "));
+    assert!(evidence_markdown.contains("evidence_type: \"test\""));
     assert!(evidence_markdown.contains(&format!("id: \"{mission_id}\"")));
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
@@ -6885,30 +6883,39 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stdout"));
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
-    let issue_evidence_data = canonical_evidence_data(dir.path(), &issue_evidence_id);
+    let issue_evidence_front_matter =
+        canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
     assert_eq!(
-        issue_evidence_data["proof_scope"],
+        issue_evidence_front_matter["proof_scope"],
         "scoped to the attached target or summary"
     );
-    assert_eq!(issue_evidence_data["independence_level"], "unspecified");
     assert_eq!(
-        issue_evidence_data["agent_identity"],
+        issue_evidence_front_matter["independence_level"],
+        "unspecified"
+    );
+    assert_eq!(
+        issue_evidence_front_matter["agent_identity"],
         serde_json::Value::Null
     );
     assert_eq!(
-        issue_evidence_data["residual_risks"]
+        issue_evidence_front_matter["residual_risks"]
             .as_array()
             .unwrap()
             .len(),
         0
     );
     assert_eq!(
-        issue_evidence_data["follow_up_ids"]
+        issue_evidence_front_matter["follow_up_ids"]
             .as_array()
             .unwrap()
             .len(),
         0
     );
+    assert_eq!(issue_evidence_front_matter["evidence_type"], "validation");
+    assert!(issue_evidence_front_matter["command"]
+        .as_str()
+        .unwrap()
+        .starts_with("sh -c"));
 
     let (success, record_capture, stderr) = run_atelier(
         dir.path(),
@@ -6955,35 +6962,39 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(positional_record_out.contains("[evidence] deferred - unified positional manual proof"));
     assert!(positional_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
     let positional_evidence_id = record_id_by_title(dir.path(), "evidence", positional_summary);
-    let positional_evidence_data = canonical_evidence_data(dir.path(), &positional_evidence_id);
-    assert_eq!(positional_evidence_data["kind"], "validation");
-    assert_eq!(positional_evidence_data["result"], "deferred");
+    let positional_evidence_front_matter =
+        canonical_evidence_front_matter(dir.path(), &positional_evidence_id);
     assert_eq!(
-        positional_evidence_data["proof_scope"],
+        positional_evidence_front_matter["evidence_type"],
+        "validation"
+    );
+    assert_eq!(
+        positional_evidence_front_matter["proof_scope"],
         "scoped to the attached target or summary"
     );
     assert_eq!(
-        positional_evidence_data["independence_level"],
+        positional_evidence_front_matter["independence_level"],
         "unspecified"
     );
     assert_eq!(
-        positional_evidence_data["agent_identity"],
+        positional_evidence_front_matter["agent_identity"],
         serde_json::Value::Null
     );
     assert_eq!(
-        positional_evidence_data["residual_risks"]
+        positional_evidence_front_matter["residual_risks"]
             .as_array()
             .unwrap()
             .len(),
         0
     );
     assert_eq!(
-        positional_evidence_data["follow_up_ids"]
+        positional_evidence_front_matter["follow_up_ids"]
             .as_array()
             .unwrap()
             .len(),
         0
     );
+    assert_eq!(positional_evidence_front_matter["status"], "deferred");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),

@@ -305,19 +305,6 @@ fn classify_record_link_for_owner(
                 relation_type: link.relation_type.clone(),
             });
         }
-    } else if link.target_kind == owner_kind
-        && link.target_id == owner_id
-        && is_attachment_kind(&link.source_kind)
-        && is_attachment_role(&link.relation_type)
-        && !(owner_kind == "mission"
-            && link.source_kind == "evidence"
-            && link.relation_type == "validates")
-    {
-        relationships.attachments.push(AttachmentRelationship {
-            kind: link.source_kind.clone(),
-            id: link.source_id.clone(),
-            role: link.relation_type.clone(),
-        });
     }
 }
 

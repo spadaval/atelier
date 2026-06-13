@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T23:02:28.174669025+00:00"
 id: "atelier-574b"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T23:02:28.174565459+00:00\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"validation\",\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T23:02:28.174565459+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

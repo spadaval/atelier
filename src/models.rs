@@ -64,6 +64,69 @@ pub struct DomainRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceStreamSummary {
+    pub summary: String,
+    pub bytes: usize,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceOutputSummary {
+    pub limit_bytes_per_stream: usize,
+    pub stdout: EvidenceStreamSummary,
+    pub stderr: EvidenceStreamSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceTarget {
+    pub kind: String,
+    pub id: String,
+    #[serde(default = "default_evidence_target_role")]
+    pub role: String,
+}
+
+fn default_evidence_target_role() -> String {
+    "validates".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceRecordData {
+    #[serde(alias = "kind")]
+    pub evidence_type: String,
+    pub captured_at: DateTime<Utc>,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub uri: Option<String>,
+    #[serde(default)]
+    pub producer: Option<String>,
+    #[serde(default)]
+    pub proof_scope: Option<String>,
+    #[serde(default)]
+    pub agent_identity: Option<String>,
+    #[serde(default)]
+    pub independence_level: Option<String>,
+    #[serde(default)]
+    pub residual_risks: Vec<String>,
+    #[serde(default)]
+    pub follow_up_ids: Vec<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub exit_status: Option<String>,
+    #[serde(default)]
+    pub success: Option<bool>,
+    #[serde(default)]
+    pub spawn_error: Option<String>,
+    #[serde(default)]
+    pub output: Option<EvidenceOutputSummary>,
+    #[serde(default)]
+    pub target: Option<EvidenceTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordLink {
     pub source_kind: String,
     pub source_id: String,

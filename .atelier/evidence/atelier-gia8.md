@@ -1,15 +1,26 @@
 ---
 created_at: "2026-06-12T05:00:51.962388570+00:00"
 id: "atelier-gia8"
-data: "{\"captured_at\":\"2026-06-12T05:00:51.962367260+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-12T05:00:51.962367260+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "issue"
     id: "atelier-4eot"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T04:18:41.293399805+00:00"
 id: "atelier-5rat"
-data: "{\"captured_at\":\"2026-06-13T04:18:41.293368705+00:00\",\"kind\":\"review\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "review"
+captured_at: "2026-06-13T04:18:41.293368705+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

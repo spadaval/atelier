@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T16:07:45.743205667+00:00"
 id: "atelier-cz17"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T16:07:45.740321550+00:00\",\"command\":\"sh -c 'printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' '\\\"'\\\"'Parent closeout audit for atelier-bfuv.'\\\"'\\\"' '\\\"'\\\"'PASS: all seven child issues are closed: atelier-0vjq, atelier-dv3d, atelier-h2tq, atelier-n9up, atelier-rzsg, atelier-s8z0, atelier-xmss.'\\\"'\\\"' '\\\"'\\\"'PASS: validation evidence atelier-dl99 proves evidence command tests, failed-pass rejection, closeout coverage checks, and required metadata fields.'\\\"'\\\"' '\\\"'\\\"'PASS: evidence records now carry accountable target, kind, result, command/artifact, proof_scope, agent_identity, independence_level, residual_risks, and follow_up_ids.'\\\"'\\\"' '\\\"'\\\"'PASS: compact rendering and parent closeout proof lookup are covered by focused tests and validation handoff.'\\\"'\\\"''\",\"exit_code\":0,\"exit_status\":\"0\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"audit\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false},\"stdout\":{\"bytes\":607,\"summary\":\"Parent closeout audit for atelier-bfuv.\\nPASS: all seven child issues are closed: atelier-0vjq, atelier-dv3d, atelier-h2tq, atelier-n9up, atelier-rzsg, atelier-s8z0, atelier-xmss.\\nPASS: validation evidence atelier-dl99 proves evidence command tests, failed-pass rejection, closeout coverage checks, and required metadata fields.\\nPASS: evidence records now carry accountable target, kind, result, command/artifact, proof_scope, agent_identity, independence_level, residual_risks, and follow_up_ids.\\nPASS: compact rendering and parent closeout proof lookup are covered by focused tests and validation handoff.\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"spawn_error\":null,\"success\":true,\"target\":{\"id\":\"atelier-bfuv\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "audit"
+captured_at: "2026-06-13T16:07:45.740321550+00:00"
+command: "sh -c 'printf '\"'\"'%s\\n'\"'\"' '\"'\"'Parent closeout audit for atelier-bfuv.'\"'\"' '\"'\"'PASS: all seven child issues are closed: atelier-0vjq, atelier-dv3d, atelier-h2tq, atelier-n9up, atelier-rzsg, atelier-s8z0, atelier-xmss.'\"'\"' '\"'\"'PASS: validation evidence atelier-dl99 proves evidence command tests, failed-pass rejection, closeout coverage checks, and required metadata fields.'\"'\"' '\"'\"'PASS: evidence records now carry accountable target, kind, result, command/artifact, proof_scope, agent_identity, independence_level, residual_risks, and follow_up_ids.'\"'\"' '\"'\"'PASS: compact rendering and parent closeout proof lookup are covered by focused tests and validation handoff.'\"'\"''"
+exit_status: "0"
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

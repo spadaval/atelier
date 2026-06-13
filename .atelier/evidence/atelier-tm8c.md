@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-11T02:08:17.497035484+00:00"
 id: "atelier-tm8c"
-data: "{\"captured_at\":\"2026-06-11T02:08:17.496914710+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":\"codex\",\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-11T02:08:17.496914710+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: "codex"
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

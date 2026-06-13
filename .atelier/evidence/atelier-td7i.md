@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T17:46:27.219308683+00:00"
 id: "atelier-td7i"
-data: "{\"captured_at\":\"2026-06-13T17:46:27.219273717+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":\"gpt-5.4 docs\",\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T17:46:27.219273717+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: "gpt-5.4 docs"
+independence_level: null
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

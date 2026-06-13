@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T23:07:17.834951608+00:00"
 id: "atelier-zk1j"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T23:07:17.834884923+00:00\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-13T23:07:17.834884923+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

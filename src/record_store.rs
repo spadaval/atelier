@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{DomainRecord, Issue};
+use crate::models::{DomainRecord, EvidenceOutputSummary, EvidenceRecordData, Issue};
 use crate::record_id;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -488,7 +488,7 @@ impl RecordStore {
                 title: title.to_string(),
                 status: status.to_string(),
                 body: normalized_domain_body(kind, title, body, data_json)?,
-                data_json: normalized_domain_data_json(kind, data_json)?.to_string(),
+                data_json: normalized_domain_data_json(kind, data_json)?,
                 created_at: now,
                 updated_at: now,
             },
@@ -849,6 +849,8 @@ pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
     let mut record = record.clone();
     if spec.kind == "mission" {
         record.relationships = normalize_legacy_mission_relationships(record.relationships);
+    } else if spec.kind == "evidence" {
+        record.relationships = normalize_legacy_evidence_relationships(record.relationships);
     }
     validate_domain_record(&record, Path::new("<record>"), spec)?;
     let mut relationships = record.relationships.clone();
@@ -856,6 +858,9 @@ pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
 
     if spec.kind == "mission" {
         return render_mission_record(&record, &relationships, spec);
+    }
+    if spec.kind == "evidence" {
+        return render_evidence_record(&record, &relationships, spec);
     }
 
     let mut output = String::new();
@@ -1012,6 +1017,9 @@ pub fn parse_domain_record(
     if spec.kind == "mission" {
         return parse_mission_domain_record(front_matter, body, relative, spec, id);
     }
+    if spec.kind == "evidence" {
+        return parse_evidence_domain_record(front_matter, body, relative, spec, id);
+    }
     let data_json = require_scalar(&front_matter, "data", relative)?;
     let _: Value = serde_json::from_str(&data_json)
         .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
@@ -1078,6 +1086,10 @@ fn validate_domain_record(
     })?;
     if spec.kind == "mission" {
         validate_mission_record(record, relative)?;
+        return Ok(());
+    }
+    if spec.kind == "evidence" {
+        validate_evidence_record(record, relative)?;
         return Ok(());
     }
     let _: Value = serde_json::from_str(&record.record.data_json)
@@ -1204,6 +1216,141 @@ fn validate_mission_record(record: &CanonicalDomainRecord, relative: &Path) -> R
     Ok(())
 }
 
+fn render_evidence_record(
+    record: &CanonicalDomainRecord,
+    relationships: &Relationships,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let data = normalized_evidence_data(&record.record.data_json)?;
+
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.record.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "evidence_type", Some(&data.evidence_type))?;
+    write_yaml_scalar(
+        &mut output,
+        "captured_at",
+        Some(&data.captured_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "command", data.command.as_deref())?;
+    write_yaml_scalar(&mut output, "exit_status", data.exit_status.as_deref())?;
+    write_yaml_scalar(&mut output, "path", data.path.as_deref())?;
+    write_yaml_scalar(&mut output, "uri", data.uri.as_deref())?;
+    write_yaml_scalar(&mut output, "proof_scope", data.proof_scope.as_deref())?;
+    write_yaml_scalar(
+        &mut output,
+        "agent_identity",
+        data.agent_identity.as_deref().or(data.producer.as_deref()),
+    )?;
+    write_yaml_scalar(
+        &mut output,
+        "independence_level",
+        data.independence_level.as_deref(),
+    )?;
+    write_yaml_array(&mut output, "follow_up_ids", &data.follow_up_ids)?;
+    write_yaml_array(&mut output, "residual_risks", &data.residual_risks)?;
+    write_evidence_output_summary(&mut output, data.output.as_ref())?;
+    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.record.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n\n");
+    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push('\n');
+    Ok(output)
+}
+
+fn parse_evidence_domain_record(
+    front_matter: BTreeMap<String, Value>,
+    body: &str,
+    relative: &Path,
+    spec: &RecordKindSpec,
+    id: String,
+) -> Result<CanonicalDomainRecord> {
+    let relationships =
+        normalize_legacy_evidence_relationships(parse_relationships(&front_matter, relative)?);
+    let title = require_scalar(&front_matter, "title", relative)?;
+    let status = require_scalar(&front_matter, "status", relative)?;
+    let created_at = require_datetime(&front_matter, "created_at", relative)?;
+    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
+
+    let data_json = if front_matter.contains_key("data") {
+        let data_json = require_scalar(&front_matter, "data", relative)?;
+        serde_json::to_string(&normalized_evidence_data(&data_json)?)?
+    } else {
+        let data = EvidenceRecordData {
+            evidence_type: require_scalar(&front_matter, "evidence_type", relative)?,
+            captured_at: require_datetime(&front_matter, "captured_at", relative)?,
+            command: optional_scalar(&front_matter, "command")?,
+            path: optional_scalar(&front_matter, "path")?,
+            uri: optional_scalar(&front_matter, "uri")?,
+            producer: None,
+            proof_scope: optional_scalar(&front_matter, "proof_scope")?,
+            agent_identity: optional_scalar(&front_matter, "agent_identity")?,
+            independence_level: optional_scalar(&front_matter, "independence_level")?,
+            residual_risks: optional_string_array(&front_matter, "residual_risks", relative)?
+                .unwrap_or_default(),
+            follow_up_ids: optional_string_array(&front_matter, "follow_up_ids", relative)?
+                .unwrap_or_default(),
+            exit_code: optional_i32(&front_matter, "exit_code", relative)?,
+            exit_status: optional_scalar(&front_matter, "exit_status")?,
+            success: optional_bool(&front_matter, "success", relative)?,
+            spawn_error: optional_scalar(&front_matter, "spawn_error")?,
+            output: optional_yaml_value::<EvidenceOutputSummary>(
+                &front_matter,
+                "output",
+                relative,
+            )?,
+            target: None,
+        };
+        serde_json::to_string(&data)?
+    };
+    let body = if body.is_empty() {
+        None
+    } else {
+        Some(body.to_string())
+    };
+
+    Ok(CanonicalDomainRecord {
+        record: DomainRecord {
+            id,
+            kind: spec.kind.to_string(),
+            title,
+            status,
+            body,
+            data_json,
+            created_at,
+            updated_at,
+        },
+        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+        relationships,
+    })
+}
+
+fn validate_evidence_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
+    let data = normalized_evidence_data(&record.record.data_json)
+        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
+    if data.evidence_type.trim().is_empty() {
+        bail!(
+            "Evidence record {} must include evidence_type",
+            display_state_path(relative)
+        );
+    }
+    validate_relationships(&record.relationships, relative)?;
+    Ok(())
+}
+
 fn validate_mission_status(status: &str, relative: &Path) -> Result<()> {
     match status {
         "draft" | "ready" | "active" | "closed" => Ok(()),
@@ -1314,6 +1461,25 @@ fn normalize_legacy_mission_relationships(mut relationships: Relationships) -> R
     relationships
 }
 
+fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> Relationships {
+    let mut normalized_attachments = relationships.attachments.clone();
+    for relation in &relationships.relates {
+        if relation.relation_type == "validates" {
+            normalized_attachments.push(AttachmentRelationship {
+                kind: relation.kind.clone(),
+                id: relation.id.clone(),
+                role: "validates".to_string(),
+            });
+        }
+    }
+    relationships.attachments = normalized_attachments;
+    relationships
+        .relates
+        .retain(|relation| relation.relation_type != "validates");
+    sort_relationships(&mut relationships);
+    relationships
+}
+
 fn default_domain_labels(kind: &str) -> Vec<String> {
     match kind {
         "mission" => vec!["mission".to_string()],
@@ -1321,12 +1487,16 @@ fn default_domain_labels(kind: &str) -> Vec<String> {
     }
 }
 
-fn normalized_domain_data_json<'a>(kind: &str, data_json: &'a str) -> Result<&'a str> {
+fn normalized_domain_data_json(kind: &str, data_json: &str) -> Result<String> {
     let _: Value = serde_json::from_str(data_json)?;
     if kind == "mission" {
-        Ok(MISSION_EMPTY_DATA_JSON)
+        Ok(MISSION_EMPTY_DATA_JSON.to_string())
+    } else if kind == "evidence" {
+        Ok(serde_json::to_string(&normalized_evidence_data(
+            data_json,
+        )?)?)
     } else {
-        Ok(data_json)
+        Ok(data_json.to_string())
     }
 }
 
@@ -1351,6 +1521,15 @@ fn normalized_domain_body(
         legacy_mission_sections(body, data_json, title, Path::new("<record>"))?
     };
     Ok(Some(render_mission_sections(&sections)))
+}
+
+fn normalized_evidence_data(data_json: &str) -> Result<EvidenceRecordData> {
+    let mut data: EvidenceRecordData = serde_json::from_str(data_json)?;
+    if data.agent_identity.is_none() {
+        data.agent_identity = data.producer.clone();
+    }
+    data.follow_up_ids.sort();
+    Ok(data)
 }
 
 pub fn mission_sections_from_inputs(
@@ -1734,6 +1913,66 @@ fn optional_datetime(
         })
 }
 
+fn optional_scalar(values: &BTreeMap<String, Value>, key: &str) -> Result<Option<String>> {
+    let Some(value) = values.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value
+        .as_str()
+        .map(|value| Some(value.to_string()))
+        .ok_or_else(|| anyhow!("Front matter key '{}' must be a string", key))
+}
+
+fn optional_i32(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Option<i32>> {
+    let Some(value) = values.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let value = value.as_i64().ok_or_else(|| {
+        anyhow!(
+            "Front matter key '{}' in {} must be an integer",
+            key,
+            display_state_path(relative)
+        )
+    })?;
+    Ok(Some(i32::try_from(value).with_context(|| {
+        format!(
+            "Front matter key '{}' in {} exceeds i32 range",
+            key,
+            display_state_path(relative)
+        )
+    })?))
+}
+
+fn optional_bool(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Option<bool>> {
+    let Some(value) = values.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value.as_bool().map(Some).ok_or_else(|| {
+        anyhow!(
+            "Front matter key '{}' in {} must be a boolean",
+            key,
+            display_state_path(relative)
+        )
+    })
+}
+
 fn string_array(
     values: &BTreeMap<String, Value>,
     key: &str,
@@ -1789,6 +2028,28 @@ fn optional_string_array(
             })
         })
         .collect::<Result<Vec<_>>>()
+        .map(Some)
+}
+
+fn optional_yaml_value<T: serde::de::DeserializeOwned>(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Option<T>> {
+    let Some(value) = values.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(value.clone())
+        .with_context(|| {
+            format!(
+                "Front matter key '{}' in {} has invalid nested YAML",
+                key,
+                display_state_path(relative)
+            )
+        })
         .map(Some)
 }
 
@@ -2266,6 +2527,40 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
     Ok(())
 }
 
+fn write_evidence_output_summary(
+    output: &mut String,
+    summary: Option<&EvidenceOutputSummary>,
+) -> Result<()> {
+    let Some(summary) = summary else {
+        output.push_str("output: null\n");
+        return Ok(());
+    };
+    output.push_str("output:\n");
+    output.push_str(&format!(
+        "  limit_bytes_per_stream: {}\n",
+        summary.limit_bytes_per_stream
+    ));
+    write_evidence_stream_summary(output, "stdout", &summary.stdout)?;
+    write_evidence_stream_summary(output, "stderr", &summary.stderr)?;
+    Ok(())
+}
+
+fn write_evidence_stream_summary(
+    output: &mut String,
+    key: &str,
+    stream: &crate::models::EvidenceStreamSummary,
+) -> Result<()> {
+    output.push_str("  ");
+    output.push_str(key);
+    output.push_str(":\n");
+    output.push_str(&format!("    bytes: {}\n", stream.bytes));
+    output.push_str("    summary: ");
+    output.push_str(&serde_json::to_string(&stream.summary)?);
+    output.push('\n');
+    output.push_str(&format!("    truncated: {}\n", stream.truncated));
+    Ok(())
+}
+
 pub fn write_yaml_relationships(output: &mut String, relationships: &Relationships) -> Result<()> {
     output.push_str("relationships:\n");
     write_relationship_targets(output, "blocks", &relationships.blocks)?;
@@ -2474,6 +2769,51 @@ mod tests {
         }
     }
 
+    fn evidence_record(id: &str) -> CanonicalDomainRecord {
+        let data = EvidenceRecordData {
+            evidence_type: "validation".to_string(),
+            captured_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 30, 0).unwrap(),
+            command: Some("cargo test record_store".to_string()),
+            path: Some("docs/architecture/markdown-first-record-store.md".to_string()),
+            uri: None,
+            producer: None,
+            proof_scope: Some("Outcome: canonical evidence front matter is readable".to_string()),
+            agent_identity: Some("gpt-5.4 implementer".to_string()),
+            independence_level: Some("implementer".to_string()),
+            residual_risks: vec!["Need focused export/rebuild verification.".to_string()],
+            follow_up_ids: vec!["atelier-follow".to_string()],
+            exit_status: Some("0".to_string()),
+            exit_code: None,
+            success: None,
+            spawn_error: None,
+            output: None,
+            target: None,
+        };
+        CanonicalDomainRecord {
+            record: DomainRecord {
+                id: id.to_string(),
+                kind: "evidence".to_string(),
+                title: "RecordStore evidence proof".to_string(),
+                status: "pass".to_string(),
+                body: Some("RecordStore evidence proof summary.".to_string()),
+                data_json: serde_json::to_string(&data).unwrap(),
+                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
+                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
+            },
+            labels: Vec::new(),
+            relationships: Relationships {
+                blocks: Vec::new(),
+                children: Vec::new(),
+                attachments: vec![AttachmentRelationship {
+                    kind: "issue".to_string(),
+                    id: "atelier-proof".to_string(),
+                    role: "validates".to_string(),
+                }],
+                relates: Vec::new(),
+            },
+        }
+    }
+
     fn sectioned_issue_text(id: &str, body: &str) -> String {
         format!(
             r#"---
@@ -2591,6 +2931,68 @@ updated_at: "2026-06-10T13:00:00+00:00"
         ));
         assert!(text.contains("    type: \"advances\""));
         assert!(text.contains("    type: \"related\""));
+    }
+
+    #[test]
+    fn evidence_record_renders_and_parses_deterministically_without_data_blob() {
+        let record = evidence_record("atelier-evdn");
+        let spec = canonical_record_kind("evidence").unwrap();
+        let path = canonical_record_path(spec, "atelier-evdn").unwrap();
+        let text = render_domain_record(&record).unwrap();
+        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert!(text.contains("schema: \"atelier.evidence\""));
+        assert!(!text.contains("\ndata: "));
+        assert!(text.contains("evidence_type: \"validation\""));
+        assert!(text.contains("captured_at: \"2026-06-10T12:30:00+00:00\""));
+        assert!(text.contains("command: \"cargo test record_store\""));
+        assert!(text.contains("agent_identity: \"gpt-5.4 implementer\""));
+        assert!(text.contains("follow_up_ids:\n- \"atelier-follow\"\n"));
+        assert!(text.contains("RecordStore evidence proof summary."));
+    }
+
+    #[test]
+    fn legacy_evidence_data_record_loads_into_typed_front_matter() {
+        let spec = canonical_record_kind("evidence").unwrap();
+        let path = canonical_record_path(spec, "atelier-eleg").unwrap();
+        let text = r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-eleg"
+data: "{\"captured_at\":\"2026-06-10T12:30:00Z\",\"command\":\"cargo test record_store\",\"exit_code\":0,\"exit_status\":\"0\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stdout\":{\"bytes\":25,\"summary\":\"record_store tests passed\\n\",\"truncated\":false},\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false}},\"path\":\"docs/architecture/markdown-first-record-store.md\",\"producer\":\"legacy agent\",\"proof_scope\":\"Outcome: readable evidence metadata\",\"result\":\"pass\",\"success\":true,\"target\":{\"id\":\"atelier-proof\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates:
+  - kind: "issue"
+    id: "atelier-proof"
+    type: "validates"
+schema: "atelier.evidence"
+schema_version: 1
+status: "pass"
+title: "Legacy evidence proof"
+updated_at: "2026-06-10T13:00:00+00:00"
+---
+
+Legacy evidence summary.
+"#;
+        let parsed = parse_domain_record(text, &path, spec).unwrap();
+        let rendered = render_domain_record(&parsed).unwrap();
+
+        assert!(parsed
+            .relationships
+            .attachments
+            .iter()
+            .any(|attachment| attachment.kind == "issue"
+                && attachment.id == "atelier-proof"
+                && attachment.role == "validates"));
+        assert!(!rendered.contains("\ndata: "));
+        assert!(rendered.contains("evidence_type: \"validation\""));
+        assert!(rendered.contains("agent_identity: \"legacy agent\""));
+        assert!(!rendered.contains("type: \"validates\""));
+        assert!(parse_domain_record(&rendered, &path, spec).is_ok());
     }
 
     #[test]

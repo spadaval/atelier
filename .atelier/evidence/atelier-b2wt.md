@@ -1,7 +1,18 @@
 ---
 created_at: "2026-06-13T16:08:49.860588267+00:00"
 id: "atelier-b2wt"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T16:08:49.857862959+00:00\",\"command\":\"sh -c 'printf '\\\"'\\\"'%s\\\\n'\\\"'\\\"' '\\\"'\\\"'Contract audit line-by-line classification maps each atelier-ey4y epic outcome line to closed child proof and parent evidence atelier-u7bd.'\\\"'\\\"' '\\\"'\\\"'PASS: early bounded delegation mapped to Agent Factory guidance.'\\\"'\\\"' '\\\"'\\\"'PASS: Mini routing and higher-reasoning reservations mapped to model policy docs.'\\\"'\\\"' '\\\"'\\\"'PASS: prompt requirements mapped to delegation template work.'\\\"'\\\"' '\\\"'\\\"'PASS: evidence-producing handoffs mapped to dogfood evidence atelier-tezi.'\\\"'\\\"''\",\"exit_code\":0,\"exit_status\":\"0\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false},\"stdout\":{\"bytes\":424,\"summary\":\"Contract audit line-by-line classification maps each atelier-ey4y epic outcome line to closed child proof and parent evidence atelier-u7bd.\\nPASS: early bounded delegation mapped to Agent Factory guidance.\\nPASS: Mini routing and higher-reasoning reservations mapped to model policy docs.\\nPASS: prompt requirements mapped to delegation template work.\\nPASS: evidence-producing handoffs mapped to dogfood evidence atelier-tezi.\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"spawn_error\":null,\"success\":true,\"target\":{\"id\":\"atelier-ey4y\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T16:08:49.857862959+00:00"
+command: "sh -c 'printf '\"'\"'%s\\n'\"'\"' '\"'\"'Contract audit line-by-line classification maps each atelier-ey4y epic outcome line to closed child proof and parent evidence atelier-u7bd.'\"'\"' '\"'\"'PASS: early bounded delegation mapped to Agent Factory guidance.'\"'\"' '\"'\"'PASS: Mini routing and higher-reasoning reservations mapped to model policy docs.'\"'\"' '\"'\"'PASS: prompt requirements mapped to delegation template work.'\"'\"' '\"'\"'PASS: evidence-producing handoffs mapped to dogfood evidence atelier-tezi.'\"'\"''"
+exit_status: "0"
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []
