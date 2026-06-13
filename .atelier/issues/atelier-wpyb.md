@@ -24,13 +24,15 @@ relationships:
     id: "atelier-trr2"
   - kind: "issue"
     id: "atelier-u4nx"
+  - kind: "issue"
+    id: "atelier-ywe6"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Repair status start history prime and transition surfaces"
-updated_at: "2026-06-13T00:15:44.796943006+00:00"
+updated_at: "2026-06-13T00:20:47.457798158+00:00"
 ---
 
 ## Description

@@ -331,9 +331,9 @@ Desired commands:
 
 ```text
 atelier agent init <name>
-atelier work start atelier-z1p8
+atelier start atelier-z1p8
 atelier worktree for atelier-z1p8
-atelier work finish atelier-z1p8
+atelier finish atelier-z1p8
 atelier worktree merge
 ```
 
@@ -417,23 +417,22 @@ Representative commands:
 
 ```text
 atelier init
-atelier issue next
+atelier prime
+atelier status
 atelier issue list --ready
 atelier issue show atelier-z1p8
 atelier issue create
+atelier issue transition atelier-z1p8 --options
 atelier mission create
 atelier mission status
+atelier mission show atelier-k7mq
+atelier mission add-work atelier-k7mq atelier-z1p8
 atelier milestone create
 atelier plan create
-atelier mission add-work
-atelier work start
-atelier work finish
 atelier evidence add
-atelier workflow validate
+atelier evidence capture -- <command>
 atelier lint
-atelier export
 atelier export --check
-atelier rebuild
 atelier doctor
 ```
 

@@ -1218,6 +1218,21 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
 }
 
 #[test]
+fn test_spec_representative_commands_match_signpost_surfaces() {
+    let spec =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("SPEC.md")).unwrap();
+
+    assert!(!spec.contains("atelier work start"));
+    assert!(!spec.contains("atelier work finish"));
+    assert!(!spec.contains("atelier workflow validate"));
+    assert!(spec.contains("atelier start atelier-z1p8"));
+    assert!(spec.contains("atelier finish atelier-z1p8"));
+    assert!(spec.contains("atelier status"));
+    assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
+    assert!(spec.contains("atelier evidence capture -- <command>"));
+}
+
+#[test]
 fn test_prime_guides_empty_checkout_without_repeating_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
