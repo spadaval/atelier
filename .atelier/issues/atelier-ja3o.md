@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T22:53:03.444820588+00:00"
+status: "done"
 title: "Remove hidden work start workflow bypass"
-updated_at: "2026-06-13T22:47:02.590229814+00:00"
+updated_at: "2026-06-13T22:53:03.444820588+00:00"
 ---
 
 ## Description
