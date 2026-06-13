@@ -1025,10 +1025,8 @@ fn ensure_fresh_projection_db(
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
         if !runtime_db_existed {
-            commands::rebuild::validate_canonical_state(&state_dir).with_context(|| {
-                "Runtime projection database is missing and canonical tracker Markdown is not rebuild-ready; \
-                 run `atelier lint` for details, then fix canonical tracker records before querying."
-                    .to_string()
+            commands::rebuild::validate_canonical_state(&state_dir).map_err(|error| {
+                projection_validation_error(error, "Runtime projection database is missing")
             })?;
             let db_path = layout.runtime_db_path();
             drop(db);
@@ -1060,11 +1058,10 @@ fn ensure_fresh_projection_db(
                     eprintln!("Canonical diagnostic: {error:#}");
                     return Ok(db);
                 }
-                return Err(error).with_context(|| {
-                    "Canonical tracker Markdown is invalid; run `atelier lint` for details, \
-                     then fix canonical tracker records before querying."
-                        .to_string()
-                });
+                return Err(projection_validation_error(
+                    error,
+                    "Canonical tracker Markdown is invalid",
+                ));
             }
             let db_path = layout.runtime_db_path();
             drop(db);
@@ -1083,6 +1080,24 @@ fn ensure_fresh_projection_db(
         }
     }
     Ok(db)
+}
+
+fn projection_validation_error(error: anyhow::Error, prefix: &str) -> anyhow::Error {
+    let detail = format!("{error:#}");
+    if looks_like_schema_drift(&detail) {
+        error.context(format!(
+            "{prefix}: canonical tracker records use a schema this atelier binary does not understand. \
+             Rebuild and use `target/debug/atelier` when testing local CLI changes, or update the installed `atelier` binary before continuing."
+        ))
+    } else {
+        error.context(format!(
+            "{prefix}; run `atelier lint` for details, then fix canonical tracker records before querying."
+        ))
+    }
+}
+
+fn looks_like_schema_drift(detail: &str) -> bool {
+    detail.contains("Unsupported schema") || detail.contains("Unsupported schema_version")
 }
 
 fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {

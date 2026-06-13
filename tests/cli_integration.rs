@@ -9077,6 +9077,68 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
 }
 
 #[test]
+fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
+    let schema_dir = tempdir().unwrap();
+    init_atelier(schema_dir.path());
+
+    let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "create", "Schema drift"]);
+    assert!(success, "issue create failed: {stderr}");
+    let schema_issue_id = issue_id_by_title(schema_dir.path(), "Schema drift");
+    let schema_issue_path = canonical_issue_path(schema_dir.path(), &schema_issue_id);
+    let markdown = std::fs::read_to_string(&schema_issue_path).unwrap();
+    std::fs::write(
+        &schema_issue_path,
+        markdown.replace("schema_version: 1", "schema_version: 99"),
+    )
+    .unwrap();
+    std::fs::remove_file(schema_dir.path().join(".atelier/state.db")).unwrap();
+
+    let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
+    assert!(!success, "schema drift should block projection query");
+    assert!(
+        stderr.contains("schema this atelier binary does not understand")
+            && stderr.contains("target/debug/atelier")
+            && stderr.contains("update the installed `atelier` binary")
+            && stderr.contains("Unsupported schema_version 99"),
+        "schema drift diagnostic should name stale-binary repair: {stderr}"
+    );
+    assert!(
+        !stderr.contains("fix canonical tracker records before querying"),
+        "schema drift should not be presented as ordinary malformed records: {stderr}"
+    );
+
+    let malformed_dir = tempdir().unwrap();
+    init_atelier(malformed_dir.path());
+    let (success, _, stderr) = run_atelier(
+        malformed_dir.path(),
+        &["issue", "create", "Malformed source"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let malformed_issue_id = issue_id_by_title(malformed_dir.path(), "Malformed source");
+    let malformed_issue_path = canonical_issue_path(malformed_dir.path(), &malformed_issue_id);
+    let markdown = std::fs::read_to_string(&malformed_issue_path).unwrap();
+    std::fs::write(
+        &malformed_issue_path,
+        markdown.replace("title: \"Malformed source\"", "title: [Malformed source"),
+    )
+    .unwrap();
+    std::fs::remove_file(malformed_dir.path().join(".atelier/state.db")).unwrap();
+
+    let (success, _, stderr) = run_atelier(malformed_dir.path(), &["issue", "list"]);
+    assert!(!success, "malformed records should block projection query");
+    assert!(
+        stderr.contains("run `atelier lint` for details")
+            && stderr.contains("fix canonical tracker records before querying")
+            && stderr.contains("Invalid YAML front matter"),
+        "malformed diagnostic should stay record-focused: {stderr}"
+    );
+    assert!(
+        !stderr.contains("schema this atelier binary does not understand"),
+        "malformed records should not be presented as stale binary drift: {stderr}"
+    );
+}
+
+#[test]
 fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

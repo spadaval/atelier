@@ -229,6 +229,16 @@ required user workflow. `atelier diagnostics slow` summarizes local command
 telemetry for command-performance investigations; it is visible help, but it is
 not a normal mission or issue workflow step.
 
+Installed-binary drift is distinct from malformed records. Normal tracker work
+uses the installed `atelier` command. When a command reports that canonical
+records use a schema the binary does not understand, operators should rebuild
+and use `target/debug/atelier` for local CLI changes or update the installed
+binary before continuing. Use `cargo run -- ...` only when a one-off rebuild
+plus execution is specifically useful. When canonical Markdown is malformed,
+the repair path remains `atelier lint`, editing the named record, and
+`atelier export --check`; ordinary record syntax errors are not stale-binary
+drift.
+
 ## Removed Behavior
 
 The inherited command layer has been classified and removed from the public
