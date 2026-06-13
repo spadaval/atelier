@@ -250,6 +250,11 @@ fn write_valid_command_guidance(dir: &Path) {
     fs::create_dir_all(&docs_dir).unwrap();
     fs::write(docs_dir.join("cli-surface.md"), valid_command_surface_doc()).unwrap();
     fs::write(
+        dir.join("AGENTS.md"),
+        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
+    )
+    .unwrap();
+    fs::write(
         dir.join("AGENTFACTORY.md"),
         "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission audit <id>`\n- `atelier issue show <id>`\n",
     )
@@ -7754,6 +7759,56 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Workflows:      2"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
+    assert!(stdout.contains("Docs/Help Drift: clear"));
+}
+
+#[test]
+fn test_workflow_check_rejects_stale_agent_guidance_commands() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+    fs::write(
+        dir.path().join("AGENTS.md"),
+        "# Agent Instructions\n\n- `atelier session start`\n",
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        !success,
+        "workflow check should reject stale AGENTS command"
+    );
+    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
+    assert!(stdout.contains("AGENTS.md"), "{stdout}");
+    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(
+        stderr.contains("workflow_command_surface_drift"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_workflow_check_rejects_stale_agent_guidance_options() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+    fs::write(
+        dir.path().join("AGENTS.md"),
+        "# Agent Instructions\n\n- `atelier issue list --not-a-real-option`\n",
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(!success, "workflow check should reject stale AGENTS option");
+    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
+    assert!(stdout.contains("AGENTS.md"), "{stdout}");
+    assert!(stdout.contains("--not-a-real-option"), "{stdout}");
+    assert!(
+        stderr.contains("workflow_command_surface_drift"),
+        "{stderr}"
+    );
 }
 
 #[test]

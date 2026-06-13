@@ -3,6 +3,7 @@ created_at: "2026-06-13T20:44:46.646892265+00:00"
 id: "atelier-c9ej"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "docs"
 - "readiness"
 priority: "P2"
@@ -17,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Add docs and agent-command freshness checks"
-updated_at: "2026-06-13T20:55:09.157083606+00:00"
+updated_at: "2026-06-13T23:31:17.375621336+00:00"
 ---
 
 ## Description

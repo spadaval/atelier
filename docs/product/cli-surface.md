@@ -228,6 +228,9 @@ detail; normal closeout output names the operator-facing blocker class and the
 next domain command. `workflow check`, `issue transition --options`, `mission
 status`, and `mission audit` are the supported inspection surfaces; removed
 policy-debug commands do not replace them.
+`workflow check` also runs the fast docs/help drift guard for `AGENTS.md`,
+`AGENTFACTORY.md`, product command docs, visible root help, and obsolete
+command-test references so stale agent recipes fail before handoff.
 `atelier evidence record` is the normal evidence-recording surface. It records
 manual summaries, command transcripts, audits, failed validations, deferred
 proof, and artifact references as one operator workflow. The target is supplied

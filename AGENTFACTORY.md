@@ -121,6 +121,8 @@ category aliases such as `in_progress`.
 - Rust test suite: `cargo nextest run`
 - Extended property tests:
   `cargo nextest run --profile extended --run-ignored=only`
+- Docs/help and Agent Factory command freshness:
+  `atelier workflow check`
 - Tracker export freshness: `atelier export --check`
 - Tracker lint: `atelier lint`
 - Tracker health: `atelier doctor`

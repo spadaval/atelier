@@ -85,6 +85,15 @@ pub fn check(db: &Database) -> Result<()> {
     println!("Workflows:      {}", report.policy.workflows.len());
     println!("Record Health:  pass");
     println!("Issues Checked: {}", report.issue_count);
+    let (command_surface_passed, command_surface_reason) =
+        crate::command_surface::status_reason(&repo_root)?;
+    if command_surface_passed {
+        println!("Docs/Help Drift: clear");
+    } else {
+        println!("Docs/Help Drift: detected");
+        println!("{command_surface_reason}");
+        bail!("workflow_command_surface_drift: {command_surface_reason}");
+    }
     Ok(())
 }
 
