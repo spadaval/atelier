@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:34:09.152821437+00:00"
+status: "done"
 title: "Remove issue body and description duplication"
-updated_at: "2026-06-13T23:33:39.715246238+00:00"
+updated_at: "2026-06-13T23:34:09.152821437+00:00"
 ---
 
 ## Description
