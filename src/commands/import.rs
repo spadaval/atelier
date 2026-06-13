@@ -253,18 +253,21 @@ fn imported_issue(
 }
 
 fn imported_description(record: &BeadsIssue) -> String {
-    let mut sections = Vec::new();
-    if let Some(description) = record.description.as_deref() {
-        if !description.trim().is_empty() {
-            sections.push(description.trim().to_string());
-        }
-    }
-    if let Some(acceptance) = record.acceptance_criteria.as_deref() {
-        if !acceptance.trim().is_empty() {
-            sections.push(format!("## Acceptance Criteria\n\n{}", acceptance.trim()));
-        }
-    }
-    sections.join("\n\n")
+    let description = record
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Imported Beads issue did not include a description.");
+    let outcome = record
+        .acceptance_criteria
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Imported Beads issue did not include acceptance criteria.");
+    format!(
+        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier export --check` validates canonical Markdown."
+    )
 }
 
 fn import_priority(priority: i64, source_id: &str, lossy_fields: &mut Vec<LossyField>) -> String {
@@ -408,6 +411,7 @@ fn lossy(source_id: &str, field: impl Into<String>, handling: impl Into<String>)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::record_store::{parse_issue_sections, IssueSectionName};
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -533,6 +537,52 @@ mod tests {
         assert_eq!(issue.title, "Imported record updated");
         assert_eq!(issue.priority, "critical");
         assert_eq!(issue.status, "closed");
+    }
+
+    #[test]
+    fn test_imported_beads_description_uses_current_issue_sections() {
+        let record = BeadsIssue {
+            record_type: "issue".to_string(),
+            id: "atelier-source".to_string(),
+            title: "Imported source".to_string(),
+            description: Some("Source description.".to_string()),
+            acceptance_criteria: Some("Source acceptance criteria.".to_string()),
+            status: "open".to_string(),
+            priority: 1,
+            issue_type: Some("task".to_string()),
+            owner: None,
+            assignee: None,
+            created_at: None,
+            created_by: None,
+            updated_at: None,
+            started_at: None,
+            closed_at: None,
+            close_reason: None,
+            notes: None,
+            labels: None,
+            dependencies: None,
+            dependency_count: None,
+            dependent_count: None,
+            comment_count: None,
+            extra: BTreeMap::new(),
+        };
+
+        let body = imported_description(&record);
+        let sections = parse_issue_sections(&body, Path::new("imported.md")).unwrap();
+
+        assert_eq!(
+            sections.section(IssueSectionName::Description),
+            Some("Source description.")
+        );
+        assert_eq!(
+            sections.section(IssueSectionName::Outcome),
+            Some("Source acceptance criteria.")
+        );
+        assert!(sections
+            .section(IssueSectionName::Evidence)
+            .unwrap()
+            .contains("atelier import-beads <path>"));
+        assert!(!body.contains("Acceptance Criteria"));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::params;
+use std::path::Path;
 
 use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
@@ -19,12 +20,7 @@ impl Database {
             );
         }
         if let Some(description) = &issue.description {
-            if description.len() > MAX_DESCRIPTION_LEN {
-                anyhow::bail!(
-                    "Description exceeds maximum length of {} bytes",
-                    MAX_DESCRIPTION_LEN
-                );
-            }
+            validate_rebuild_description_length(description)?;
         }
 
         self.conn.execute(
@@ -390,6 +386,25 @@ impl Database {
 
         Ok(issues)
     }
+}
+
+fn validate_rebuild_description_length(description: &str) -> Result<()> {
+    if description.len() <= MAX_DESCRIPTION_LEN {
+        return Ok(());
+    }
+
+    if let Ok(sections) =
+        crate::record_store::parse_issue_sections(description, Path::new("<issue description>"))
+    {
+        if sections.description.len() <= MAX_DESCRIPTION_LEN {
+            return Ok(());
+        }
+    }
+
+    bail!(
+        "Description exceeds maximum length of {} bytes",
+        MAX_DESCRIPTION_LEN
+    )
 }
 
 fn is_partial_issue_key(value: &str) -> bool {

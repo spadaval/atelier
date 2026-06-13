@@ -913,8 +913,22 @@ mod tests {
     fn rebuild_rejects_global_id_collision_across_record_kinds() {
         let (db, dir) = setup_test_db();
         let issue_id = db.create_issue("Issue", None, "medium").unwrap();
+        let mission_sections = record_store::mission_sections_from_inputs(
+            "Mission",
+            Some("Mission body"),
+            vec!["global ID collision is rejected".to_string()],
+            Vec::new(),
+            Vec::new(),
+        );
+        let mission_body = record_store::render_mission_sections(&mission_sections);
         let mission_id = db
-            .create_record("mission", "Mission", "ready", None, "{}")
+            .create_record(
+                "mission",
+                "Mission",
+                "ready",
+                Some(&mission_body),
+                record_store::MISSION_EMPTY_DATA_JSON,
+            )
             .unwrap();
 
         let state_dir = dir.path().join(".atelier");

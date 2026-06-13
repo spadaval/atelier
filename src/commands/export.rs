@@ -423,7 +423,9 @@ mod tests {
         let issue_path = state_dir.join(issue_record_path(&id));
         let first_issue = fs::read_to_string(&issue_path).unwrap();
         assert!(first_issue.contains("title: \"Original title\""));
-        assert!(first_issue.ends_with("Original body\n"));
+        assert!(first_issue.contains("## Description\n\nOriginal body"));
+        assert!(first_issue.contains("## Outcome\n\nOutcome was not specified."));
+        assert!(first_issue.contains("## Evidence\n\nEvidence was not specified."));
 
         db.update_issue(&id, Some("Changed title"), Some("Changed body"), None)
             .unwrap();
@@ -432,7 +434,9 @@ mod tests {
 
         assert_ne!(first_issue, second_issue);
         assert!(second_issue.contains("title: \"Changed title\""));
-        assert!(second_issue.ends_with("Changed body\n"));
+        assert!(second_issue.contains("## Description\n\nChanged body"));
+        assert!(second_issue.contains("## Outcome\n\nOutcome was not specified."));
+        assert!(second_issue.contains("## Evidence\n\nEvidence was not specified."));
     }
 
     #[test]
@@ -579,7 +583,9 @@ mod tests {
         assert_eq!(first, second);
         let issue_text = String::from_utf8(issue.bytes.clone()).unwrap();
         assert!(issue_text.contains("labels:\n- \"alpha\"\n- \"zeta\"\n"));
-        assert!(issue_text.ends_with("Child body\n"));
+        assert!(issue_text.contains("## Description\n\nChild body"));
+        assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
+        assert!(issue_text.contains("## Evidence\n\nEvidence was not specified."));
 
         let parent_text = String::from_utf8(parent_issue.bytes.clone()).unwrap();
         assert!(parent_text.contains(&format!(

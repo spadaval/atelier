@@ -346,6 +346,9 @@ fn register_issue_id(dir: &Path, id: String) {
     if !is_record_id(&id) {
         return;
     }
+    if !canonical_issue_path(dir, &id).exists() {
+        return;
+    }
     let mut map = registry().lock().unwrap();
     let ids = map.entry(dir.to_path_buf()).or_default();
     if !ids.contains(&id) {
@@ -1713,7 +1716,7 @@ fn test_list_filter_by_status() {
 
     run_atelier(dir.path(), &["issue", "create", "Open issue"]);
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
-    run_atelier(dir.path(), &["issue", "close", "2"]);
+    close_issue_with_evidence(dir.path(), "2", None);
 
     let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "open"]);
     assert!(open_list.contains("Open issue"));
@@ -2673,7 +2676,11 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(show_out.contains("Blocked by"));
     assert!(show_out.contains("atelier-0002 [open]"));
     assert!(show_out.contains("(open blocker)"));
-    assert!(show_out.contains("Acceptance Criteria"));
+    assert!(show_out.contains("Outcome"));
+    assert!(show_out.contains("AGENTFACTORY.md declares Atelier as the tracker"));
+    assert!(show_out.contains("Evidence"));
+    assert!(show_out.contains("atelier import-beads <path>"));
+    assert!(!show_out.contains("Acceptance Criteria"));
 
     let (updated, _, update_err) = run_atelier(
         dir.path(),
@@ -2686,8 +2693,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
         ],
     );
     assert!(updated, "update failed: {update_err}");
-    let (closed, _, close_err) = run_atelier(dir.path(), &["issue", "close", "2"]);
-    assert!(closed, "close failed: {close_err}");
+    close_issue_with_evidence(dir.path(), "2", None);
 
     let (_, closed_show, _) = run_atelier(dir.path(), &["issue", "show", "2"]);
     assert!(closed_show.contains("Imported Beads issue updated"));
@@ -2855,6 +2861,7 @@ fn test_issue_mutations_create_activity_sidecars() {
     );
     assert!(success, "issue update fields failed: {stderr}");
 
+    attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "update", &issue_id, "--status", "closed"],
@@ -2951,6 +2958,7 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
         ],
     );
     assert!(success, "append-notes/claim failed: {stderr}");
+    attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "Canonical close"],
@@ -3051,6 +3059,9 @@ fn test_issue_mutations_are_durable_without_manual_export() {
         vec!["issue", "reopen", &source_id],
         vec!["issue", "block", &source_id, &target_id],
     ] {
+        if args.starts_with(&["issue", "close"]) {
+            attach_issue_pass_evidence(dir.path(), &source_id);
+        }
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
     }
@@ -3866,7 +3877,7 @@ fn test_tree_with_status_filter() {
 
     run_atelier(dir.path(), &["issue", "create", "Open parent"]);
     run_atelier(dir.path(), &["issue", "create", "Closed parent"]);
-    run_atelier(dir.path(), &["issue", "close", "2"]);
+    close_issue_with_evidence(dir.path(), "2", None);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree", "-s", "open"]);
 
@@ -4441,7 +4452,7 @@ fn test_list_all_statuses() {
 
     run_atelier(dir.path(), &["issue", "create", "Open issue"]);
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
-    run_atelier(dir.path(), &["issue", "close", "2"]);
+    close_issue_with_evidence(dir.path(), "2", None);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "-s", "all"]);
 
@@ -4614,7 +4625,7 @@ fn test_full_issue_lifecycle() {
     run_atelier(dir.path(), &["issue", "update", "1", "-p", "critical"]);
 
     // Close
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     // Verify final state
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
@@ -4647,7 +4658,7 @@ fn test_dependency_chain() {
     assert!(!stdout.contains("Middle task"));
 
     // Close 3, now 2 should be ready
-    run_atelier(dir.path(), &["issue", "close", "3"]);
+    close_issue_with_evidence(dir.path(), "3", None);
     let (_, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(stdout.contains("Middle task") || stdout.contains("#2"));
 }
@@ -4728,7 +4739,7 @@ fn test_next_with_subissue_progress() {
     run_atelier(dir.path(), &["issue", "subissue", "1", "Sub 3"]);
 
     // Close one subissue to create progress
-    run_atelier(dir.path(), &["issue", "close", "2"]);
+    close_issue_with_evidence(dir.path(), "2", None);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
@@ -4757,7 +4768,7 @@ fn test_next_only_subissues_ready() {
     run_atelier(dir.path(), &["issue", "subissue", "2", "Subissue"]);
 
     // Close the blocker - now parent has only subissue as ready issue
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "next"]);
 
@@ -5581,7 +5592,7 @@ fn test_stress_rapid_operations() {
         let title = format!("Rapid issue {}", i);
         run_atelier(dir.path(), &["issue", "create", &title]);
         let id = (i + 1).to_string();
-        run_atelier(dir.path(), &["issue", "close", &id]);
+        close_issue_with_evidence(dir.path(), &id, None);
         run_atelier(dir.path(), &["issue", "reopen", &id]);
         run_atelier(dir.path(), &["issue", "comment", &id, "Rapid comment"]);
         run_atelier(dir.path(), &["issue", "label", &id, "rapid"]);
@@ -5705,6 +5716,8 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
             "feature",
             "--label",
             "agent-factory",
+            "--description",
+            "## Description\n\nWork item.\n\n## Outcome\n\nFactory task remains valid for human command-result checks.\n\n## Evidence\n\n- `atelier lint` passes for the command-result fixture.",
         ],
     );
     assert!(success, "create failed: {stderr}");
@@ -5740,7 +5753,16 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("1 total"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Blocker"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Blocker",
+            "--description",
+            "## Description\n\nBlocking fixture issue.\n\n## Outcome\n\nBlocker issue participates in dependency command-result checks.\n\n## Evidence\n\n- `atelier lint` passes for the command-result fixture.",
+        ],
+    );
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
     let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "add", "1", "2"]);
@@ -8055,6 +8077,19 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(closed_out.contains("Mission atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Newest closed");
     let closed_id = closed_id.as_str();
+    let (success, closed_work_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Newest closed work"]);
+    assert!(success, "closed work create failed: {stderr}");
+    assert!(closed_work_out.contains("Created issue atelier-"));
+    let closed_work_id = issue_id_by_title(dir.path(), "Newest closed work");
+    let closed_work_id = closed_work_id.as_str();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-work", closed_id, closed_work_id],
+    );
+    assert!(success, "closed mission add work failed: {stderr}");
+    close_issue_with_evidence(dir.path(), closed_work_id, Some("done"));
+
     let (success, closed_evidence, stderr) = run_atelier(
         dir.path(),
         &[
@@ -8124,6 +8159,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(done_out.contains(epic_id));
     let done_id = issue_id_by_title(dir.path(), "Done work");
     let done_id = done_id.as_str();
+    attach_issue_pass_evidence(dir.path(), done_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &done_id, "--reason", "done"],
@@ -8585,6 +8621,18 @@ fn test_mission_list_default_current_empty_state() {
     assert!(success, "mission create failed: {stderr}");
     assert!(closed_out.contains("Mission atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Closed only");
+    let (success, closed_work_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Closed only work"]);
+    assert!(success, "closed-only work create failed: {stderr}");
+    assert!(closed_work_out.contains("Created issue atelier-"));
+    let closed_work_id = issue_id_by_title(dir.path(), "Closed only work");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-work", &closed_id, &closed_work_id],
+    );
+    assert!(success, "closed-only mission add work failed: {stderr}");
+    close_issue_with_evidence(dir.path(), &closed_work_id, Some("done"));
+
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -8923,7 +8971,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, export, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- `atelier lint`, `atelier export --check`, and `atelier doctor` ignore rebuild temp files.";
+    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, export, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- Manual check: `test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor` confirms `atelier lint`, `atelier export --check`, and `atelier doctor` ignore rebuild temp files.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[

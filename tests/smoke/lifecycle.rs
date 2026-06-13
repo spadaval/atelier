@@ -239,7 +239,7 @@ fn test_issue_tree_status_filter() {
     h.run_ok(&["issue", "create", "Filterable parent"]);
     h.run_ok(&["issue", "subissue", "1", "Open child"]);
     h.run_ok(&["issue", "subissue", "1", "Closed child"]);
-    h.run_ok(&["issue", "close", "3"]);
+    h.close_issue_with_evidence("3");
 
     let tree = h.run_ok(&["issue", "tree", "-s", "open"]);
     assert!(tree.stdout.contains("Open child"));
@@ -273,13 +273,13 @@ fn test_dependency_chain_and_ready() {
     assert!(!ready.stdout.contains("Issue B"));
 
     // Close C, then B should become ready
-    h.run_ok(&["issue", "close", "3"]);
+    h.close_issue_with_evidence("3");
     let ready2 = h.run_ok(&["issue", "list", "--ready"]);
     assert!(ready2.stdout.contains("Issue B"));
     assert!(!ready2.stdout.contains("Issue A"));
 
     // Close B, then A should become ready
-    h.run_ok(&["issue", "close", "2"]);
+    h.close_issue_with_evidence("2");
     let ready3 = h.run_ok(&["issue", "list", "--ready"]);
     assert!(ready3.stdout.contains("Issue A"));
 }
@@ -331,8 +331,8 @@ fn test_milestone_full_lifecycle() {
     assert!(show.stdout.contains("Feature 2"));
 
     // Close issues and milestone
-    h.run_ok(&["issue", "close", "1"]);
-    h.run_ok(&["issue", "close", "2"]);
+    h.close_issue_with_evidence("1");
+    h.close_issue_with_evidence("2");
     h.run_ok(&["milestone", "close", "1"]);
 
     let show_closed = h.run_ok(&["milestone", "show", "1"]);

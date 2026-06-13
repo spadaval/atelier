@@ -96,6 +96,31 @@ impl SmokeHarness {
         result
     }
 
+    /// Attach minimal validation proof to an issue fixture.
+    pub fn attach_issue_pass_evidence(&self, issue_ref: &str) -> String {
+        let issue_id = self.translate_issue_ref(issue_ref);
+        let summary = format!("issue close proof for {issue_id}");
+        let evidence = self.run_ok(&[
+            "evidence",
+            "add",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            &summary,
+        ]);
+        let evidence_id =
+            first_record_id(&evidence.stdout).expect("evidence add did not print an evidence id");
+        self.run_ok(&["evidence", "attach", &evidence_id, "issue", &issue_id]);
+        evidence_id
+    }
+
+    /// Close an issue fixture through the current proof-backed closeout path.
+    pub fn close_issue_with_evidence(&self, issue_ref: &str) {
+        self.attach_issue_pass_evidence(issue_ref);
+        self.run_ok(&["issue", "close", issue_ref]);
+    }
+
     /// Run an Atelier CLI command and assert it fails.
     pub fn run_err(&self, args: &[&str]) -> CmdResult {
         let result = self.run(args);
@@ -194,11 +219,38 @@ impl SmokeHarness {
         if !is_record_id(&id) {
             return;
         }
+        if !self
+            .temp_dir
+            .path()
+            .join(".atelier/issues")
+            .join(format!("{id}.md"))
+            .exists()
+        {
+            return;
+        }
         let mut ids = self.issue_ids.lock().unwrap();
         if !ids.contains(&id) {
             ids.push(id);
         }
     }
+}
+
+fn first_record_id(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while let Some(offset) = value[index..].find("atelier-") {
+        let start = index + offset;
+        let mut end = start;
+        while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'-') {
+            end += 1;
+        }
+        let candidate = &value[start..end];
+        if is_record_id(candidate) {
+            return Some(candidate.to_string());
+        }
+        index = end;
+    }
+    None
 }
 
 fn is_record_id(value: &str) -> bool {

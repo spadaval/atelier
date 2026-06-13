@@ -65,7 +65,7 @@ fn test_export_markdown_format() {
 
     h.run_ok(&["issue", "create", "Open issue", "-p", "high"]);
     h.run_ok(&["issue", "create", "Closed issue"]);
-    h.run_ok(&["issue", "close", "2"]);
+    h.close_issue_with_evidence("2");
 
     let export_path = h.temp_dir.path().join("export.md");
     h.run_ok(&[
@@ -174,8 +174,8 @@ fn test_import_export_roundtrip() {
     h.run_ok(&["issue", "comment", "1", "Comment on issue 1"]);
     h.run_ok(&["issue", "comment", "2", "Comment on issue 2"]);
     h.run_ok(&["issue", "comment", "5", "Comment on issue 5"]);
-    h.run_ok(&["issue", "close", "4"]);
-    h.run_ok(&["issue", "close", "7"]);
+    h.close_issue_with_evidence("4");
+    h.close_issue_with_evidence("7");
 
     // Export
     let export1_path = h.temp_dir.path().join("export1.json");
@@ -234,7 +234,7 @@ fn test_archive_full_lifecycle() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Archive me"]);
-    h.run_ok(&["issue", "close", "1"]);
+    h.close_issue_with_evidence("1");
 
     let result = h.run_ok(&["archive", "add", "1"]);
     assert_stdout_contains(&result, "Archived");
@@ -296,7 +296,7 @@ fn test_archive_older_batch() {
         h.run_ok(&["issue", "create", &format!("Issue {}", i)]);
     }
     for i in 1..=5 {
-        h.run_ok(&["issue", "close", &i.to_string()]);
+        h.close_issue_with_evidence(&i.to_string());
     }
 
     let result = h.run_ok(&["archive", "older", "0"]);
