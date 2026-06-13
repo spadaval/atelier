@@ -11,6 +11,8 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-a4rz"
+  - kind: "issue"
     id: "atelier-cany"
   - kind: "issue"
     id: "atelier-f3p6"
@@ -28,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Repair status start history prime and transition surfaces"
-updated_at: "2026-06-13T00:01:19.768971860+00:00"
+updated_at: "2026-06-13T00:15:44.796943006+00:00"
 ---
 
 ## Description

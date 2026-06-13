@@ -1131,6 +1131,60 @@ fn test_root_status_reports_active_mission_contract_fields() {
 }
 
 #[test]
+fn test_root_status_guides_active_work_to_finish_not_start() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Active focus"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Active focus");
+    let mission_id = mission_id.as_str();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "mission activate failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Active item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Active item");
+    let issue_id = issue_id.as_str();
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    commit_all(dir.path(), "active status baseline");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Ready work:    0"));
+    assert!(stdout.contains(&format!("Active work:   {issue_id} - Active item")));
+    assert!(stdout.contains("Health:   active"));
+    assert!(stdout.contains("Work:     ready 0, active 1, blocked 0, done 0, backlog 0"));
+    assert!(stdout.contains("Ready In Active Mission"));
+    let ready_section = stdout
+        .split("Ready In Active Mission")
+        .nth(1)
+        .expect("ready section missing")
+        .split("Immediate Blockers")
+        .next()
+        .expect("immediate blockers section missing");
+    assert!(!ready_section.contains(&format!("{issue_id} - Active item")));
+    assert!(stdout.contains(&format!(
+        "Finish active work ({issue_id}): atelier finish {issue_id}"
+    )));
+    assert!(!stdout.contains("Start ready active-mission work"));
+    assert!(!stdout.contains(&format!("atelier start {issue_id}")));
+    assert!(
+        !stdout.contains("workflow validate"),
+        "normal status next actions must not route to raw workflow validators:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

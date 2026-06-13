@@ -11,12 +11,17 @@ use crate::{commands, db::Database};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let active_work = db.get_active_work_association()?;
+    let active_issue_id = active_work.as_ref().map(|work| work.issue_id.as_str());
     let active_mission = commands::mission::active_mission(db)?;
     let open_missions = db.list_records("mission", Some("open"))?;
-    let ready = db.list_ready_issues()?;
+    let ready = db
+        .list_ready_issues()?
+        .into_iter()
+        .filter(|issue| Some(issue.id.as_str()) != active_issue_id)
+        .collect::<Vec<_>>();
     let mission_snapshot = active_mission
         .as_ref()
-        .map(|mission| mission_snapshot(db, mission))
+        .map(|mission| mission_snapshot(db, mission, active_issue_id))
         .transpose()?;
     let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
     let tracker_state = if export_stale.is_empty() {
@@ -90,10 +95,17 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("--------------");
         println!("{} - {}", mission.id, mission.title);
         println!("Health:   {}", snapshot.health());
-        println!(
-            "Work:     ready {}, blocked {}, done {}, backlog {}",
-            snapshot.ready, snapshot.blocked, snapshot.done, snapshot.backlog
-        );
+        if snapshot.active > 0 {
+            println!(
+                "Work:     ready {}, active {}, blocked {}, done {}, backlog {}",
+                snapshot.ready, snapshot.active, snapshot.blocked, snapshot.done, snapshot.backlog
+            );
+        } else {
+            println!(
+                "Work:     ready {}, blocked {}, done {}, backlog {}",
+                snapshot.ready, snapshot.blocked, snapshot.done, snapshot.backlog
+            );
+        }
 
         println!();
         println!("Ready In Active Mission");
@@ -152,7 +164,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 "  Open active mission record ({}): atelier mission show {}",
                 mission.id, mission.id
             );
-            if let Some(issue) = snapshot.ready_issues.first() {
+            if let Some(issue) = snapshot.active_issue.as_ref() {
+                println!(
+                    "  Finish active work ({}): atelier finish {}",
+                    issue.id, issue.id
+                );
+            } else if let Some(issue) = snapshot.ready_issues.first() {
                 println!(
                     "  Start ready active-mission work ({} ready issue(s)): atelier start {}",
                     snapshot.ready_issues.len(),
@@ -214,8 +231,10 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
 #[derive(Default)]
 struct MissionSnapshot {
     issue_ids: BTreeSet<String>,
+    active_issue: Option<Issue>,
     ready_issues: Vec<Issue>,
     open_blockers: Vec<String>,
+    active: usize,
     ready: usize,
     blocked: usize,
     done: usize,
@@ -226,6 +245,8 @@ impl MissionSnapshot {
     fn health(&self) -> &'static str {
         if !self.open_blockers.is_empty() || self.blocked > 0 {
             "blocked"
+        } else if self.active > 0 {
+            "active"
         } else if self.ready > 0 {
             "ready"
         } else if self.done > 0 {
@@ -236,7 +257,11 @@ impl MissionSnapshot {
     }
 }
 
-fn mission_snapshot(db: &Database, mission: &DomainRecord) -> Result<MissionSnapshot> {
+fn mission_snapshot(
+    db: &Database,
+    mission: &DomainRecord,
+    active_issue_id: Option<&str>,
+) -> Result<MissionSnapshot> {
     let mut snapshot = MissionSnapshot::default();
     snapshot.issue_ids = mission_issue_ids(db, &mission.id)?;
 
@@ -260,7 +285,11 @@ fn mission_snapshot(db: &Database, mission: &DomainRecord) -> Result<MissionSnap
         let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
-        match issue_bucket(db, &issue)? {
+        match issue_bucket(db, &issue, active_issue_id)? {
+            IssueBucket::Active => {
+                snapshot.active += 1;
+                snapshot.active_issue = Some(issue);
+            }
             IssueBucket::Ready => {
                 snapshot.ready += 1;
                 snapshot.ready_issues.push(issue);
@@ -275,18 +304,26 @@ fn mission_snapshot(db: &Database, mission: &DomainRecord) -> Result<MissionSnap
 }
 
 enum IssueBucket {
+    Active,
     Ready,
     Blocked,
     Done,
     Backlog,
 }
 
-fn issue_bucket(db: &Database, issue: &Issue) -> Result<IssueBucket> {
+fn issue_bucket(
+    db: &Database,
+    issue: &Issue,
+    active_issue_id: Option<&str>,
+) -> Result<IssueBucket> {
     if issue.status == "closed" {
         return Ok(IssueBucket::Done);
     }
     if issue.status != "open" {
         return Ok(IssueBucket::Backlog);
+    }
+    if Some(issue.id.as_str()) == active_issue_id {
+        return Ok(IssueBucket::Active);
     }
     if open_issue_blockers(db, &issue.id)?.is_empty() {
         Ok(IssueBucket::Ready)
