@@ -290,7 +290,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         closeout.print_human();
     }
 
-    if verbose {
+    let show_advanced_validator_detail = verbose
+        || closeout
+            .validator_results
+            .iter()
+            .any(|result| !result.passed && result.validator == "ignored_tests_reviewed");
+    if show_advanced_validator_detail {
         print_mission_heading("Advanced Validator Detail");
         if validator_failures == 0 {
             println!("All advanced closeout validators passed.");

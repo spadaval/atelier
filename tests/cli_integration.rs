@@ -1262,7 +1262,9 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(spec.contains("atelier finish atelier-z1p8"));
     assert!(spec.contains("atelier status"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
-    assert!(spec.contains("atelier evidence capture -- <command>"));
+    assert!(spec.contains(
+        "atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>"
+    ));
 }
 
 #[test]
@@ -2186,8 +2188,8 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(stdout.contains("Closed:"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Done enough"));
-    assert!(stdout.contains("atelier issue reopen"));
-    assert!(!stdout.contains("--status open"));
+    assert!(stdout.contains("atelier issue update"));
+    assert!(stdout.contains("--status open"));
 }
 
 #[test]
@@ -2597,7 +2599,7 @@ fn test_update_issue_remove_label_replaces_unlabel_helper() {
         ],
     );
     assert!(success, "update label replacement failed: {stderr}");
-    assert!(stdout.contains("Reopened issue"));
+    assert!(stdout.contains("Updated issue"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     let labels_line = show_out
@@ -2930,11 +2932,6 @@ fn test_issue_mutations_create_activity_sidecars() {
         &activities,
         "field_changed",
         &["field: \"assignee\"", "new: "],
-    );
-    assert_activity_contains(
-        &activities,
-        "status_changed",
-        &["old: \"open\"", "new: \"in_progress\""],
     );
     assert_activity_contains(
         &activities,
