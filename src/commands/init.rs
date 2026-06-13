@@ -93,8 +93,9 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  atelier issue create \"Task\"     # Create an issue");
-    println!("  atelier start <issue-id>         # Start tracked work");
+    println!("  atelier workflow init            # Create the issue workflow policy");
+    println!("  atelier workflow check           # Verify tracker workflow setup");
+    println!("  atelier issue create \"Task\"     # Create an issue after workflow setup");
 
     Ok(())
 }
