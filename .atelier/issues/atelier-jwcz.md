@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Rework ready queues and orientation surfaces for workflows"
-updated_at: "2026-06-13T17:36:57.374944280+00:00"
+updated_at: "2026-06-13T19:32:30.225079942+00:00"
 ---
 
 ## Description
