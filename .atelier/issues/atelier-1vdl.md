@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Document reproducible dev environment and env template"
-updated_at: "2026-06-13T20:44:49.590075966+00:00"
+updated_at: "2026-06-13T22:57:10.051786588+00:00"
 ---
 
 ## Description

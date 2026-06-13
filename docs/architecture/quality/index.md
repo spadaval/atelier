@@ -1,6 +1,9 @@
 # Quality Index
 
 - `architecture-quality.md`: vocabulary for architecture review.
+- `rust-quality-hazard-scans.md`: required, extended, and advisory Rust hazard
+  scan commands for debt markers, dead/unused code, large functions, and
+  unused dependencies.
 - `standards.md`: code and documentation standards.
 - `validation.md`: validation commands, proof routing, evidence policy, and
   result states.

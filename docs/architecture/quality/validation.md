@@ -268,6 +268,9 @@ Install `cargo-nextest` before running the default Rust test command:
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker install, local runtime, diagnostics, and workflow health |
 
+Rust hazard scan classifications live in
+`docs/architecture/quality/rust-quality-hazard-scans.md`.
+
 Workflow and closeout validation failures are command failures by default.
 Mission completion is valid only when all linked work is closed, required
 evidence is attached, configured transition gates pass, docs/help/Agent Factory

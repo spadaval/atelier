@@ -23,6 +23,9 @@
   compatibility/repair path during migration.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
+- [docs/product/development-setup.md](product/development-setup.md): required
+  tools, Rust toolchain, `cargo-nextest`, optional integrations, local
+  environment/secrets policy, and devcontainer decision.
 - [docs/product/zen.md](product/zen.md): product principles for
   semi-autonomous mission work, evidence, validation, and closeout.
 - [docs/architecture/index.md](architecture/index.md): implementation

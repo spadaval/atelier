@@ -27,6 +27,9 @@ that can be implemented and validated.
 
 ## Interfaces
 
+- [Development Setup](development-setup.md): required tools, fresh-checkout
+  commands, local env/secrets policy, optional integrations, and devcontainer
+  rationale.
 - [CLI Surface Tiers](cli-surface.md): public CLI core command surface, removed
   compatibility commands, and inherited utility disposition.
 - [Human CLI Output](human-cli-output.md): human-readable CLI output grammar,

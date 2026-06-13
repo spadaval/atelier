@@ -3,6 +3,9 @@
 ## Rust
 
 - Run `cargo fmt` before handing off code changes.
+- Use [rust-quality-hazard-scans.md](./rust-quality-hazard-scans.md) for the
+  classified debt-marker, dead/unused-code, large-function, and unused-
+  dependency review commands.
 - Prefer `anyhow::Context` on fallible IO, database, and external-command
   boundaries.
 - Keep command output stable when tests or agents depend on it.

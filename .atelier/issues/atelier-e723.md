@@ -16,9 +16,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Introduce Rust quality hazard scans"
-updated_at: "2026-06-13T20:44:48.184079325+00:00"
+updated_at: "2026-06-13T22:55:12.067702234+00:00"
 ---
 
 ## Description
