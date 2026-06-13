@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:58:24.015009728+00:00"
+status: "done"
 title: "Define canonical activity sidecar ownership"
-updated_at: "2026-06-13T23:58:07.952741567+00:00"
+updated_at: "2026-06-13T23:58:24.015009728+00:00"
 ---
 
 ## Description
