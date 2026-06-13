@@ -378,10 +378,11 @@ Read-only projections may display the last valid config only if they also show
 the current reload failure. They must not silently fall back for transitions,
 validators, hooks, or guidance.
 
-The future `atelier workflow validate` command should validate the config and
-emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`.
-Until that command is promoted by its owning implementation issue, config health
-may be surfaced through `atelier lint` and `atelier doctor`.
+Hidden advanced/internal workflow diagnostics may inspect workflow policy when a
+binding, assignment, or closeout contract explicitly names that diagnostic path.
+They are not normal operator guidance and do not replace domain status,
+transition, lint, or doctor surfaces. Routine config health is surfaced through
+`atelier lint` and `atelier doctor`.
 
 ## Tiny Task Example
 

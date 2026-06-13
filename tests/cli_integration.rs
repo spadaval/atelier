@@ -1056,6 +1056,81 @@ fn test_root_status_summarizes_checkout_orientation() {
 }
 
 #[test]
+fn test_root_status_reports_active_mission_contract_fields() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Status focus"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Status focus");
+    let mission_id = mission_id.as_str();
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "mission activate failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready focus"]);
+    assert!(success, "ready issue create failed: {stderr}");
+    let ready_id = issue_id_by_title(dir.path(), "Ready focus");
+    let ready_id = ready_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Blocked focus"]);
+    assert!(success, "blocked issue create failed: {stderr}");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked focus");
+    let blocked_id = blocked_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Focus blocker"]);
+    assert!(success, "blocker issue create failed: {stderr}");
+    let blocker_id = issue_id_by_title(dir.path(), "Focus blocker");
+    let blocker_id = blocker_id.as_str();
+
+    for issue_id in [ready_id, blocked_id] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+        assert!(success, "mission add work failed for {issue_id}: {stderr}");
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
+    assert!(success, "block issue failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["note", "add", "issue", ready_id, "Recent focus note"],
+    );
+    assert!(success, "note add failed: {stderr}");
+    commit_all(dir.path(), "status focus baseline");
+    std::fs::write(dir.path().join("status-dirty.txt"), "dirty").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Local State"));
+    assert!(stdout.contains("Worktree: dirty"));
+    assert!(stdout.contains("status-dirty.txt"));
+    assert!(stdout.contains("Branch:"));
+    assert!(stdout.contains("Active Mission"));
+    assert!(stdout.contains(&format!("{mission_id} - Status focus")));
+    assert!(stdout.contains("Health:   blocked"));
+    assert!(stdout.contains("Work:     ready 1, blocked 1, done 0, backlog 0"));
+    assert!(stdout.contains("Ready In Active Mission"));
+    assert!(stdout.contains(ready_id));
+    assert!(stdout.contains("Immediate Blockers"));
+    assert!(stdout.contains(blocker_id));
+    assert!(stdout.contains("Recent Activity"));
+    assert!(stdout.contains(ready_id));
+    assert!(stdout.contains("Added note"));
+    assert!(stdout.contains(&format!(
+        "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
+    )));
+    assert!(stdout.contains(&format!(
+        "Start ready active-mission work (1 ready issue(s)): atelier start {ready_id}"
+    )));
+    assert!(
+        !stdout.contains("workflow validate"),
+        "normal status next actions must not route to raw workflow validators:\n{stdout}"
+    );
+}
+
+#[test]
 fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1071,6 +1146,21 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
     let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
     assert!(success, "suggested blocked-list command failed: {stderr}");
     assert!(blocked_out.contains("No blocked issues."));
+}
+
+#[test]
+fn test_workflow_configuration_docs_describe_internal_diagnostics() {
+    let docs = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/product/workflow-configuration.md"),
+    )
+    .unwrap();
+    assert!(!docs.contains("The future `atelier workflow validate` command"));
+    assert!(
+        !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
+    );
+    assert!(docs.contains("Hidden advanced/internal workflow diagnostics"));
+    assert!(docs.contains("atelier lint"));
+    assert!(docs.contains("atelier doctor"));
 }
 
 #[test]

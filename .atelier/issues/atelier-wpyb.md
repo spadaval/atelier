@@ -17,6 +17,8 @@ relationships:
   - kind: "issue"
     id: "atelier-sckq"
   - kind: "issue"
+    id: "atelier-sdmo"
+  - kind: "issue"
     id: "atelier-trr2"
   - kind: "issue"
     id: "atelier-u4nx"
@@ -26,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Repair status start history prime and transition surfaces"
-updated_at: "2026-06-12T20:29:46.679510166+00:00"
+updated_at: "2026-06-13T00:01:19.768971860+00:00"
 ---
 
 ## Description
