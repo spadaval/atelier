@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair rebuild temp-file lint fixture"
-updated_at: "2026-06-13T00:56:48.121711594+00:00"
+updated_at: "2026-06-13T01:17:20.283212493+00:00"
 ---
 
 ## Description

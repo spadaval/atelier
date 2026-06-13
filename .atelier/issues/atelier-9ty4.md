@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair command-result lint fixture"
-updated_at: "2026-06-13T00:42:42.717322890+00:00"
+updated_at: "2026-06-13T01:17:13.275356336+00:00"
 ---
 
 ## Description

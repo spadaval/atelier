@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair close-all proof test helper"
-updated_at: "2026-06-13T00:40:58.232341947+00:00"
+updated_at: "2026-06-13T01:17:09.620913268+00:00"
 ---
 
 ## Description

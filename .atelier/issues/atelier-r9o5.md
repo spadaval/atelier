@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair full lifecycle closeout fixture"
-updated_at: "2026-06-13T00:45:40.556687481+00:00"
+updated_at: "2026-06-13T01:17:15.095425741+00:00"
 ---
 
 ## Description

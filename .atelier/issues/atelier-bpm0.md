@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair rebuild ID-collision mission fixture"
-updated_at: "2026-06-13T01:05:13.808839808+00:00"
+updated_at: "2026-06-13T01:17:23.777761648+00:00"
 ---
 
 ## Description

@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair description length boundary validation"
-updated_at: "2026-06-13T00:54:25.169887041+00:00"
+updated_at: "2026-06-13T01:17:18.531699590+00:00"
 ---
 
 ## Description
