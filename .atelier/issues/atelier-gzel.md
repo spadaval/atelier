@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:32:33.087714149+00:00"
+status: "done"
 title: "Triage cargo machete signal-hook finding"
-updated_at: "2026-06-13T23:32:01.042208323+00:00"
+updated_at: "2026-06-13T23:32:33.087714149+00:00"
 ---
 
 ## Description
