@@ -537,6 +537,7 @@ mod tests {
                 "evidence_attached",
                 "no_open_blockers",
                 "no_blocking_lints",
+                "command_surface_current",
                 "ignored_tests_reviewed",
                 "git_worktree_clean"
             ]
@@ -550,6 +551,7 @@ mod tests {
             vec![
                 "durable_state_current",
                 "no_blocking_lints",
+                "command_surface_current",
                 "ignored_tests_reviewed",
                 "git_worktree_clean"
             ]
