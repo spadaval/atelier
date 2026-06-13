@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Align runtime and cache paths with the product contract"
-updated_at: "2026-06-13T20:37:08.560368636+00:00"
+updated_at: "2026-06-13T21:59:31.036731196+00:00"
 ---
 
 ## Description

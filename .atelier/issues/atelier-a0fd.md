@@ -12,6 +12,8 @@ relationships:
   - kind: "issue"
     id: "atelier-3iom"
   - kind: "issue"
+    id: "atelier-4u5h"
+  - kind: "issue"
     id: "atelier-4ykl"
   - kind: "issue"
     id: "atelier-i9ob"
@@ -23,9 +25,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Define Atelier and Agent Factory ownership boundary"
-updated_at: "2026-06-13T20:55:07.102444536+00:00"
+updated_at: "2026-06-13T22:41:45.148231456+00:00"
 ---
 
 ## Description

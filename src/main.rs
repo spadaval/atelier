@@ -3,14 +3,11 @@ mod command_surface;
 mod commands;
 mod db;
 mod identity;
-mod lock_check;
-mod locks;
 mod models;
 mod projection_index;
 mod record_id;
 mod record_store;
 mod storage_layout;
-mod sync;
 mod telemetry;
 mod test_inventory;
 mod utils;
@@ -892,8 +889,6 @@ enum WorkflowCommands {
 
 #[derive(Subcommand)]
 enum WorkCommands {
-    /// Start tracked work on an issue
-    Start { id: String },
     /// Show current work association
     Status,
 }
@@ -1328,7 +1323,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             work,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            let atelier_dir = find_atelier_dir().ok();
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
                 description.as_deref(),
@@ -1348,7 +1342,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     parent: parent.as_deref(),
                     work,
                     quiet,
-                    atelier_dir: atelier_dir.as_deref(),
                 },
             )
         }
@@ -1362,7 +1355,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         } => {
             issue_compat_guidance("atelier issue create <title> --work");
             let (state_dir, db_path) = state_and_db_paths()?;
-            let atelier_dir = find_atelier_dir().ok();
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
                 description.as_deref(),
@@ -1382,7 +1374,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     parent: None,
                     work: true,
                     quiet,
-                    atelier_dir: atelier_dir.as_deref(),
                 },
             )
         }
@@ -1397,7 +1388,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         } => {
             issue_compat_guidance("atelier issue create <title> --parent <id>");
             let (state_dir, db_path) = state_and_db_paths()?;
-            let atelier_dir = find_atelier_dir().ok();
             commands::agent_factory::create_lifecycle(
                 &state_dir,
                 &db_path,
@@ -1410,7 +1400,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     parent: Some(&parent),
                     work,
                     quiet,
-                    atelier_dir: atelier_dir.as_deref(),
                 },
             )
         }
@@ -1658,8 +1647,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Next => {
             issue_compat_guidance("atelier status");
             let db = projection_query_db()?;
-            let atelier_dir = find_atelier_dir()?;
-            commands::next::run(&db, &atelier_dir)
+            commands::next::run(&db)
         }
 
         IssueCommands::Tree { status, compact } => {
@@ -2279,10 +2267,6 @@ fn run() -> Result<()> {
         Commands::Work { action } => {
             let db = runtime_db()?;
             match action {
-                WorkCommands::Start { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::start(&db, &id)
-                }
                 WorkCommands::Status => commands::work::status(&db),
             }
         }
@@ -2458,7 +2442,6 @@ fn command_identity(command: &Commands) -> &'static str {
             WorkflowCommands::Check => "workflow check",
         },
         Commands::Work { action } => match action {
-            WorkCommands::Start { .. } => "work start",
             WorkCommands::Status => "work status",
         },
         Commands::Worktree { action } => match action {

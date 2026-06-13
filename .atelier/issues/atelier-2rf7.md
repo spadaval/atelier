@@ -9,6 +9,8 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-5a73"
+  - kind: "issue"
     id: "atelier-d7lw"
   - kind: "issue"
     id: "atelier-rgd1"
@@ -19,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Define command-purpose and output contract"
-updated_at: "2026-06-13T20:36:58.492825952+00:00"
+updated_at: "2026-06-13T22:41:56.094803697+00:00"
 ---
 
 ## Description

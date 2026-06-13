@@ -1550,7 +1550,6 @@ pub struct LifecycleCreateInput<'a> {
     pub parent: Option<&'a str>,
     pub work: bool,
     pub quiet: bool,
-    pub atelier_dir: Option<&'a Path>,
 }
 
 pub fn create_lifecycle(
@@ -1570,13 +1569,6 @@ pub fn create_lifecycle(
     } else {
         None
     };
-    if input.work {
-        if let (Some(dir), Some(_)) = (input.atelier_dir, session.as_ref()) {
-            // The issue does not exist yet, so the lock can only be enforced after
-            // projection refresh. Keep the existing warning behavior otherwise.
-            let _ = dir;
-        }
-    }
     drop(db);
 
     let store = RecordStore::new(state_dir);
@@ -1612,9 +1604,6 @@ pub fn create_lifecycle(
     let refreshed = Database::open(db_path)?;
     if input.work {
         if let Some(session) = &session {
-            if let Some(dir) = input.atelier_dir {
-                crate::lock_check::enforce_lock(dir, &id, &refreshed)?;
-            }
             refreshed.set_session_issue(session.id, &id)?;
         } else if !input.quiet {
             tracing::warn!("--work specified but no active session");

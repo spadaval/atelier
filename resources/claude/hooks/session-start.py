@@ -144,16 +144,6 @@ def main():
     if session_status:
         context_parts.append(f"## Current Session\n{session_status}")
 
-    # Sync lock state from remote (best-effort, non-blocking)
-    sync_result = run_atelier(["sync"], timeout=10)
-    if sync_result:
-        context_parts.append(f"## Lock Sync\n{sync_result}")
-
-    # Show current lock status
-    locks_result = run_atelier(["locks", "list"])
-    if locks_result and "No locks" not in locks_result:
-        context_parts.append(f"## Active Locks\n{locks_result}")
-
     # Show agent identity if configured
     agent_result = run_atelier(["agent", "status"])
     if agent_result and "No agent" not in agent_result:
@@ -176,8 +166,7 @@ def main():
 - Use `atelier session action "..."` to record breadcrumbs before context compression
 - Add comments as you discover things: `atelier comment <id> "..."`
 - End with handoff notes: `atelier session end --notes "..."`
-- Use `atelier locks list` to see which issues are claimed by agents
-- Use `atelier sync` to fetch latest lock state from remote
+- Use `atelier next` and `atelier issue list --ready` to pick the next tracked issue
 </atelier-session-context>""")
 
     print("\n\n".join(context_parts))

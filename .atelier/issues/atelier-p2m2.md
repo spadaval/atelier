@@ -13,6 +13,8 @@ relationships:
   - kind: "issue"
     id: "atelier-2rf7"
   - kind: "issue"
+    id: "atelier-5a73"
+  - kind: "issue"
     id: "atelier-i9ob"
   - kind: "issue"
     id: "atelier-rgd1"
@@ -27,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Make the CLI surface purposeful and compact"
-updated_at: "2026-06-13T20:55:09.170535879+00:00"
+updated_at: "2026-06-13T21:58:03.428554959+00:00"
 ---
 
 ## Description

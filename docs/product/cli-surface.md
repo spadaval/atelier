@@ -9,10 +9,10 @@ usually harmful. Do not add staged deprecations, aliases, fallback readers, or
 old-output shims unless a human explicitly asks for them for a specific
 transition.
 
-## Core
+## Workflow-First Core
 
-Core commands are stable enough to appear in `atelier --help` and are expected
-in normal Agent Factory workflows:
+Workflow-first commands are stable enough to appear in `atelier --help` and are
+expected in normal Agent Factory workflows:
 
 - `atelier init`
 - `atelier prime`
@@ -26,13 +26,11 @@ in normal Agent Factory workflows:
 - `atelier mission create/show/list/status/update`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
-- `atelier evidence record/show/list/attach`
+- `atelier evidence record/show/list`
 - `atelier history`
 - `atelier start`
 - `atelier abandon`
 - `atelier worktree for/status/merge/remove`
-- `atelier maintenance delete`
-- `atelier import-beads`
 - `atelier lint`
 - `atelier doctor`
 
@@ -52,6 +50,52 @@ prints must have a concrete reason.
 active mission focus, ready work count, tracker freshness, and the next
 mission/work/health drill-down commands. It does not replace `mission status`;
 it points operators to the scoped status surface that owns closeout readiness.
+
+`atelier --help` may also expose specialized surfaces that are intentionally
+visible but are not part of the default operator loop: `atelier export`,
+`atelier rebuild`, `atelier import-beads`, `atelier integrations`,
+`atelier maintenance`, `atelier diagnostics`, and targeted evidence attachment.
+Visibility alone does not make a command a routine next action.
+
+## Visible Help Contract
+
+Every help-visible command group needs one job, one default information budget,
+one quiet-output contract, and a named drill-down path. Quiet mode stays terse:
+IDs, counts, paths, status tokens, and pass/fail tokens only.
+
+### Workflow-First Surfaces
+
+| Surface | Job | Default output | Quiet output | Drill-down path |
+| --- | --- | --- | --- | --- |
+| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus the next orientation command. | Created path(s) and a success token. | `prime`, `status`, inspect `.atelier/config.toml`. |
+| `prime` | Recovery and onboarding signpost for this checkout. | Small dynamic repo header plus concise workflow guidance and named commands. | Repo path, active mission/work IDs, ready count, freshness token. | `status`, `mission status`, `issue list --ready`. |
+| `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
+| `start` | Claim local work on one issue. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree for <id>`, `status`. |
+| `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |
+| `issue` | Create, list, show, update, transition, and close issue-shaped work. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. | IDs, status tokens, changed fields, and canonical paths. | `issue show <id>`, `issue transition <id> --options`, edit the Markdown record, `history --issue <id>`. |
+| `dep` | Manage blocking dependencies only. | Mutations name blocked and blocker IDs; list output shows current blockers and dependents. | IDs and counts only. | `issue show <id>`, `graph impact <id>`. |
+| `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
+| `link` | Manage non-blocking typed links. | Mutations acknowledge both records and the link type; list output groups links by type. | IDs and link-type tokens only. | `graph impact <id>`, `link list <kind> <id>`, `issue show <id>`. |
+| `graph` | Inspect hierarchy and downstream impact shape. | `impact` prints a bounded downstream set; `tree` prints compact hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, and status or priority tokens only. | `issue show <id>`, `link list <id>`, `dep list <id>`. |
+| `note` | Add a durable activity note to a record. | Note acknowledgement with target, timestamp, and any canonical path or activity cue needed for follow-up. | Note ID or target ID only. | `history --issue <id>`, `issue show <id>`, `mission show <id>`. |
+| `mission` | Create, focus, inspect, update, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
+| `plan` | Author, inspect, revise, link, and apply durable plans. | `show` and `list` are readable plan views; `apply` prints preview or created-record summaries rather than raw JSON internals. | Plan IDs, affected-record counts, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
+| `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
+| `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
+| `worktree` | Create, inspect, merge, repair, and remove issue worktrees. | `for`, `merge`, `repair`, and `remove` acknowledge the affected issue/path; `status` stays scan-friendly and bounded. | Issue IDs, paths, and worktree-state tokens. | `worktree status`, `status`, `issue show <id>`. |
+
+### Specialized But Visible Surfaces
+
+| Surface | Job | Default output | Quiet output | Drill-down path |
+| --- | --- | --- | --- | --- |
+| `export` | Explicit canonical-state freshness and repair surface. | `--check` reports fresh or stale state with named paths; plain `export` reports what was rendered or refreshed. | Pass/fail token plus named paths or counts only. | `lint`, edit the named record, `rebuild`, rerun `export --check`. |
+| `rebuild` | Recreate local projection and runtime state from canonical records after checkout drift, recovery, or test setup. | Source state dir, rebuilt runtime path, record counts, and any schema or parse failures. | Pass/fail token plus runtime path and counts. | `doctor`, `export --check`, `status`. |
+| `import-beads` | One-way predecessor import bridge. | Imported, skipped, lossy, and failed counts with the canonical output location. | IDs and counts only. | `export --check`, `lint`, `history`. |
+| `integrations` | Optional tool setup, not tracker workflow. | Concrete files written or merged, prerequisites checked, and any manual follow-up. | Changed paths and success token only. | Inspect generated files, rerun the targeted integration command, `prime`. |
+| `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
+| `diagnostics` | Inspect local command telemetry for Atelier itself. | Stable diagnostic output for the named probe, currently `slow`; never a normal mission or issue next action. | Same diagnostic result trimmed to essential rows or counts. | `doctor`, performance follow-up issues, or the owning architecture docs. |
+| `lint` | Validate canonical tracker records. | Pass summary or named record and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record, `export --check`, `doctor`. |
+| `doctor` | Validate runtime, install, and exported-state health. | Named health checks, degraded-state reason, and repair guidance. | Pass/fail token and degraded check names only. | `lint`, `export --check`, `rebuild`, `status`. |
 
 ## Operator Jobs
 
@@ -196,6 +240,12 @@ mode preserves the old capture behavior by storing the command, exit status,
 success flag, timestamp, result, and bounded stdout/stderr summaries so
 validation proof does not require manual transcript copy/paste.
 
+`atelier evidence attach` is not the default proof-capture workflow. Its only
+distinct job is reusing an already-created evidence record on an additional
+target, such as an explicit closeout mirror or another accountable issue. New
+help, next-action text, and Agent Factory guidance should teach
+`atelier evidence record`; they should mention `evidence attach` only when the
+operator is reusing existing proof instead of capturing it.
 `atelier evidence add` and `atelier evidence capture` are predecessor shapes
 that split one operator job into two verbs. New help and Agent Factory guidance
 should teach `evidence record`; implementation may keep old entrypoints only as
@@ -215,7 +265,8 @@ commands. They store local work association in runtime state and enforce clean
 worktree plus current-export checks where they affect workflow transitions.
 Root `atelier status`, `atelier mission status`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
-the hidden `atelier work start/status` command group for normal workflow.
+the hidden `atelier work status` helper or any legacy `work start` path for
+normal workflow.
 Worktree helpers expose scan-friendly JSON status, create/remove associated Git
 worktrees, and prepare local runtime state in new worktrees.
 Workflow-defined hooks are deferred in v1 and are not part of the normal
@@ -258,10 +309,26 @@ The inherited command layer has been classified and removed from the public
 command surface. The default classification for an inherited or duplicate
 surface is `delete` unless it is in the core list above.
 
+## Compatibility Classification
+
+| Shape | Disposition | Reason | Replacement or boundary |
+| --- | --- | --- | --- |
+| `atelier evidence add` | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
+| `atelier evidence capture` | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
+| `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
+| `atelier export --check` | Keep with distinct purpose | Explicit handoff and transition freshness gate. | Health and closeout contracts may require it, but routine read/write commands should not. |
+| `atelier export` | Keep with distinct purpose | Explicit repair and deterministic render surface for committed state. | Not a default next action from issue or mission workflow surfaces. |
+| `atelier rebuild` | Keep with distinct purpose | Checkout recovery, test setup, and projection repair. | Use when local runtime state is missing, stale, or deliberately recreated. |
+| Hidden `atelier work status` helper and any legacy `work start` path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and `work start` is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
+| `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
+| Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue`, `dep`, `link`, and `graph` own those jobs. |
+| Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `import-beads` for migration, canonical `.atelier/` plus `export` and `rebuild` for repair. |
+| `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | `graph impact`, `link`, `note`, and lifecycle commands. |
+
 Removed command surfaces:
 
 - `mission view`; use `mission show`.
-- The normal `work start/finish/status` group; use root `start`, root
+- The normal `work start` and `work status` group; use root `start`, root
   `abandon`, `issue close`, and `status`.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
   `update`, `block`, `unblock`, `search`, `relate`, `related`, and `tree`; use

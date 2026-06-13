@@ -107,8 +107,7 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         return false;
     };
     let first = first.as_os_str();
-    first == ".locks-cache"
-        || first == ".cache"
+    first == ".cache"
         || first == "runtime"
         || first == "cache"
         || first == "rules"

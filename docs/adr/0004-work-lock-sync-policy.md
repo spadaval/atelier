@@ -30,8 +30,8 @@ Root `atelier start`, root `atelier finish`, root `atelier status`, and
 - check canonical export freshness before finish;
 - never launch or supervise coding agents.
 
-The lower-level `atelier work start/finish/status` helpers are implementation
-or compatibility surfaces, not the normal operator workflow.
+The hidden `atelier work status` helper and runtime-association internals are
+implementation surfaces, not the normal operator workflow.
 
 Inherited lock and sync commands are removed from the CLI surface. Internal
 lock-checking helpers may remain only where core workflow code still needs

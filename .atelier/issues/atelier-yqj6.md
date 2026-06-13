@@ -8,14 +8,16 @@ labels:
 priority: "P2"
 relationships:
   blocks: []
-  children: []
+  children:
+  - kind: "issue"
+    id: "atelier-vu88"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Delete or isolate inherited lock sync and compatibility residue"
-updated_at: "2026-06-13T20:37:13.456958042+00:00"
+updated_at: "2026-06-13T22:31:40.448328159+00:00"
 ---
 
 ## Description

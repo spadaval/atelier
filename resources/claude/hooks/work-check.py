@@ -212,41 +212,8 @@ def main():
         # atelier not available — don't block
         sys.exit(0)
 
-    # If already working on an issue, check lock status
+    # If already working on an issue, allow work to continue.
     if "Working on: #" in status:
-        # Extract issue ID from status
-        match = re.search(r'Working on: #(\d+)', status)
-        if match:
-            issue_id = match.group(1)
-            lock_result = run_atelier(["locks", "check", issue_id])
-            if lock_result and "locked by" in lock_result.lower():
-                # Check if locked by another agent (not us)
-                agent_json_path = os.path.join(atelier_dir, "agent.json") if atelier_dir else None
-                our_agent_id = None
-                if agent_json_path and os.path.isfile(agent_json_path):
-                    try:
-                        with open(agent_json_path, "r", encoding="utf-8") as f:
-                            agent_data = json.load(f)
-                            our_agent_id = agent_data.get("agent_id")
-                    except (json.JSONDecodeError, OSError):
-                        our_agent_id = None  # best-effort; treat as unknown agent
-
-                if our_agent_id and our_agent_id in lock_result:
-                    # Locked by us — allow
-                    sys.exit(0)
-                else:
-                    lock_msg = (
-                        f"Lock conflict: Issue #{issue_id} is {lock_result}\n\n"
-                        "This issue is claimed by another agent. You should work on a different issue.\n"
-                        "Use `atelier locks list` to see all locks, or `atelier next` to find available work."
-                    )
-                    if tracking_mode == "strict":
-                        print(lock_msg)
-                        sys.exit(2)
-                    else:
-                        # Normal/relaxed: warn but allow
-                        print(f"Warning: {lock_msg}")
-                        sys.exit(0)
         sys.exit(0)
 
     # No active work item — behavior depends on mode

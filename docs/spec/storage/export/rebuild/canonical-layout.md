@@ -20,6 +20,7 @@ ignored local state.
 ```text
 .atelier/
   config.toml
+  state.db
   issues/
     atelier-z1p8.md
     atelier-z1p8.activity/
@@ -33,7 +34,6 @@ ignored local state.
   evidence/
     atelier-n8da.md
   runtime/
-    state.db
     agent.json
     locks/
     diagnostics/
@@ -42,10 +42,10 @@ ignored local state.
 
 Tracked canonical paths are `config.toml`, `issues/`, `missions/`,
 `milestones/`, `plans/`, `evidence/`, and canonical activity sidecars.
-`.atelier/runtime/` and `.atelier/cache/` are ignored. Copied rule trees,
-editor integration files, hook scaffolding, and UI caches are not project
-tracker state unless a future contract explicitly promotes a file into the
-tracked config surface.
+`.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/` are ignored.
+Copied rule trees, editor integration files, hook scaffolding, and UI caches
+are not project tracker state unless a future contract explicitly promotes a
+file into the tracked config surface.
 
 ## Project Config
 
@@ -53,7 +53,9 @@ tracked config surface.
 project config schema, project slug, canonical state root, local runtime
 directory, runtime SQLite path, and cache directory. Runtime and cache paths
 named by the config remain local-only and must stay ignored; the config records
-where they live, not their contents.
+where they live, not their contents. The current tracked config also carries
+`compatibility_state_root` as a compatibility-only path while `.atelier-state/`
+repair and migration flows still exist.
 
 ## Schema Identity
 
@@ -164,7 +166,10 @@ Required common fields are `schema`, `schema_version`, `id`, `title`, `status`,
 `created_at`, `updated_at`, `labels`, and `relationships`. Record-kind sections
 below define additional required fields. Unknown required-field omissions are
 lint/rebuild errors; unknown extra front matter keys are rejected unless the
-record kind explicitly permits an extension map.
+record kind explicitly permits an extension map. Generic escaped payload keys
+such as `data` or duplicate relationship arrays such as `targets`, `validates`,
+`missions`, `contributing_work`, `depends_on`, or `blocked_by` are not part of
+the target canonical layout.
 
 Relationship buckets are the only canonical relationship surface:
 
@@ -190,7 +195,7 @@ id: atelier-z1p8
 issue_type: task
 labels:
   - docs
-priority: high
+priority: P1
 relationships:
   attachments: []
   blocks: []
@@ -198,7 +203,7 @@ relationships:
   relates: []
 schema: atelier.issue
 schema_version: 1
-status: open
+status: todo
 title: "Define direct edit behavior"
 updated_at: "2026-06-11T20:00:00Z"
 ---
@@ -310,8 +315,8 @@ Issue front matter adds:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `priority` | string | Stable priority value, such as `P1`. |
-| `issue_type` | string | `task`, `feature`, `story`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `priority` | string | Stable issue priority token. Version 1 uses `P0`, `P1`, `P2`, and `P3`; human labels such as `critical`, `high`, `medium`, and `low` are derived display text. |
+| `issue_type` | string | `task`, `feature`, `epic`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 
 Issue front matter does not carry large human-authored acceptance or proof
 text. The canonical issue schema removes the legacy `acceptance` and
@@ -319,6 +324,12 @@ text. The canonical issue schema removes the legacy `acceptance` and
 section parser enforcement slice lands. Acceptance intent is authored in the
 `Outcome` body section, and proof requirements are authored in the `Evidence`
 body section.
+
+Issue `status` is the workflow-owned durable token defined by
+`.atelier/workflow.yaml`. In the current repository the allowed values are
+`todo`, `in_progress`, `blocked`, `review`, `validation`, `done`, and
+`archived`. Workflow categories such as `active` or `done` are derived
+orientation metadata, not alternate stored status fields.
 
 Issue bodies are structured Markdown. The only recognized top-level issue body
 headings are `## Description`, `## Outcome`, `## Evidence`, and `## Notes`.
@@ -514,22 +525,26 @@ relationships:
 Path: `.atelier/milestones/<record-id>.md`
 
 Milestone front matter adds `desired_state`, `scope`,
-`validation_criteria`, `accepted_evidence`, `completion_state`, `missions`, and
-`contributing_work`. ID arrays are sorted lexically; text arrays preserve author
-order. Milestones are checkpoint records, not work containers; epics and issues
-link to them as contributing work.
+`validation_criteria`, `accepted_evidence`, and `completion_state`. Mission
+membership and contributing work are modeled through canonical
+`relationships`, not duplicate `missions` or `contributing_work` arrays. ID
+arrays are sorted lexically; text arrays preserve author order. Milestones are
+checkpoint records, not work containers; epics and issues link to them through
+typed relationships.
 
 ## Plans
 
 Path: `.atelier/plans/<record-id>.md`
 
-Current staged support writes plan records with common front matter fields plus
-a quoted JSON `data` field containing `revision` and `revisions`. The body is
-the latest durable execution intent.
+Required plan front matter is the common record contract plus `revision`.
+Optional plan front matter is `owner`, `applies_to`, `supersedes`, and
+`drift_status`. `applies_to` and `supersedes` are sorted lexically. The body is
+the durable execution intent. Version 1 does not require a section grammar for
+plan bodies.
 
-The target expanded front matter remains `owner`, `applies_to`, `revision`,
-`supersedes`, and `drift_status`. `applies_to` and `supersedes` are sorted
-lexically. Plan body is the durable execution intent.
+Current staged support still writes some plan records with a quoted JSON `data`
+field containing `revision` and `revisions`. That payload is compatibility
+residue and must not remain the long-term field owner.
 
 ## Evidence
 
@@ -539,12 +554,21 @@ Evidence front matter adds:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `evidence_type` | string | `test`, `log`, `screenshot`, `report`, `benchmark`, or `external`. |
+| `evidence_type` | string | Durable proof kind, such as `test`, `validation`, `review`, `audit`, `transcript`, `artifact`, or `migration`. |
 | `captured_at` | string | UTC RFC 3339 timestamp. |
-| `validates` | array | Linked record IDs, sorted lexically. |
 | `command` | string or null | Command that produced the evidence. |
-| `result` | string | `pass`, `fail`, `blocked`, or `informational`. |
+| `proof_scope` | string or null | Claim, validator, criterion, audit row, or local outcome line being proven. |
+| `agent_identity` | string or null | Producer or validator identity when known. |
+| `independence_level` | string or null | Review distance such as `implementer`, `peer`, `independent`, `closeout`, or `adversarial`. |
+| `follow_up_ids` | array | Related issue IDs, sorted lexically. |
+| `residual_risks` | array | Remaining caveats in author order. |
 | `artifact` | string or null | Repo path or external reference. |
+
+Evidence `status` is the canonical proof result token. Target values are
+`pass`, `fail`, `blocked`, `deferred`, `not_applicable`, or `informational`.
+Validating targets belong in `relationships.attachments[]` entries with
+`role: validates`; `validates` arrays or duplicate `targets` fields are not
+canonical front matter.
 
 Evidence body summarizes what was proven and any limits of the proof.
 
@@ -552,7 +576,7 @@ Current staged support writes evidence records with common front matter fields
 plus a quoted JSON `data` field containing `kind`, `result`, `path`, `uri`,
 `producer`, and `captured_at`. The body carries the evidence summary. The
 expanded front matter above remains the target shape for a later Markdown-first
-RecordStore slice.
+RecordStore slice, and the generic `data` payload is compatibility residue.
 
 ## Mission Control Projection
 

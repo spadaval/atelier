@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Record agent-readiness audit and score"
-updated_at: "2026-06-13T20:44:45.160859105+00:00"
+updated_at: "2026-06-13T22:43:45.301881687+00:00"
 ---
 
 ## Description

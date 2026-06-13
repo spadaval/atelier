@@ -64,6 +64,30 @@ public behavior, or workflow gate can be reproduced before the fix.
 | Test-first CLI rejection | A failing-before/passing-after test or transcript shows the rejected command and error text, with docs/help parity when public help changes. | Full test suite passes without showing the rejected command path. |
 | Canonical write or projection refresh | Round-trip or rebuild transcript, concurrency or scenario proof, and attached evidence show canonical files remain source of truth. | End-of-mission audit only, with no early proof of the write or refresh path. |
 
+## Agent Factory Boundary
+
+`AGENTFACTORY.md` is the repository binding and delegation bridge, not the full
+Atelier command or workflow contract. When a rule is durable product behavior,
+Atelier must own the operator-facing surface and Agent Factory should route to
+it instead of restating it as private process lore.
+
+| AGENTFACTORY topic | Classification | Durable owner or destination | Notes |
+| --- | --- | --- | --- |
+| `Sources`; tracker identity; durable `.atelier/` state; ignored runtime/cache state; preferred binary for ordinary work | Repository binding | `AGENTFACTORY.md`, `docs/index.md`, repository instructions | Keep in the binding so a fresh worker can locate the repository's authoritative docs and tracker shape. |
+| Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
+| Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
+| Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
+| Proof routing, evidence placement, independent-validation triggers, and parent closeout expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission audit`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Tracker freshness, health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier mission status`, `atelier lint`, `atelier export --check`, `atelier doctor` | Missing proof, blockers, stale state, and health failures should be surfaced by Atelier-owned commands or validators. |
+| Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
+
+For the current binding, this means the retained `Sources` and tracker-shape
+material are repository binding; the retained model-routing, worktree, and
+assignment rules are orchestration-only; and the former command-family cookbook
+(`Mission`, `Work/evidence`, `Issues`, `Sync/state`, `Health`, and mission
+completion detail) should be routed to Atelier-owned help, docs, status, audit,
+lint, doctor, export, and workflow-policy surfaces.
+
 ## Default Proof By Issue Type
 
 | Issue type | Default proof expectation | Escalate when |

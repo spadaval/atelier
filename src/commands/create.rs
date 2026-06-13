@@ -1,9 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 
-use std::path::Path;
-
 use crate::db::Database;
-use crate::lock_check;
 use crate::utils::format_issue_id;
 
 const VALID_PRIORITIES: [&str; 4] = ["low", "medium", "high", "critical"];
@@ -80,7 +77,6 @@ pub struct CreateOpts<'a> {
     pub labels: &'a [String],
     pub work: bool,
     pub quiet: bool,
-    pub atelier_dir: Option<&'a Path>,
 }
 
 pub fn run(
@@ -157,10 +153,6 @@ pub fn run(
     // Set as active session work item
     if opts.work {
         if let Ok(Some(session)) = db.get_current_session() {
-            // Enforce lock check if atelier_dir is available
-            if let Some(dir) = opts.atelier_dir {
-                lock_check::enforce_lock(dir, &id, db)?;
-            }
             db.set_session_issue(session.id, &id)?;
             if !opts.quiet {
                 println!("Now working on: {} {}", format_issue_id(&id), title);
@@ -216,9 +208,6 @@ pub fn run_subissue(
     // Set as active session work item
     if opts.work {
         if let Ok(Some(session)) = db.get_current_session() {
-            if let Some(dir) = opts.atelier_dir {
-                lock_check::enforce_lock(dir, &id, db)?;
-            }
             db.set_session_issue(session.id, &id)?;
             if !opts.quiet {
                 println!("Now working on: {} {}", format_issue_id(&id), title);

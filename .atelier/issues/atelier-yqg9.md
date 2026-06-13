@@ -11,11 +11,21 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-10qm"
+  - kind: "issue"
     id: "atelier-2ehd"
+  - kind: "issue"
+    id: "atelier-4u5h"
   - kind: "issue"
     id: "atelier-d7lw"
   - kind: "issue"
     id: "atelier-ihz0"
+  - kind: "issue"
+    id: "atelier-ja3o"
+  - kind: "issue"
+    id: "atelier-k3vs"
+  - kind: "issue"
+    id: "atelier-kpm8"
   - kind: "issue"
     id: "atelier-yqj6"
   attachments: []
@@ -24,7 +34,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Reduce code complexity and module boundary drift"
-updated_at: "2026-06-13T20:37:14.944847400+00:00"
+updated_at: "2026-06-13T21:58:03.424579938+00:00"
 ---
 
 ## Description

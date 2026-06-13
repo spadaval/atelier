@@ -21,11 +21,8 @@ struct WorktreeStatus {
     export_errors: Vec<String>,
 }
 
-pub fn start(db: &Database, id: &str) -> Result<()> {
+fn start_work_association(db: &Database, id: &str) -> Result<()> {
     let issue = db.require_issue(id)?;
-    print_active_mission_context(db, id)?;
-    ensure_canonical_issue_sections_valid(id)?;
-    ensure_clean_worktree()?;
     let branch = current_branch().ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
     db.start_work_association(id, branch.as_deref(), Some(&path))?;
@@ -39,36 +36,16 @@ pub fn start(db: &Database, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn ensure_canonical_issue_sections_valid(id: &str) -> Result<()> {
-    let Ok(Some(state_dir)) = crate::storage_layout::find_canonical_dir_from_cwd() else {
-        return Ok(());
-    };
-    let store = crate::record_store::RecordStore::new(state_dir);
-    store.load_issue_by_id(id)?;
-    Ok(())
-}
-
 pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()> {
     let db = Database::open(db_path)?;
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
     ensure_clean_worktree()?;
-    let branch = current_branch().ok();
-    let path = env::current_dir()?.to_string_lossy().to_string();
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
     drop(db);
 
     let db = Database::open(db_path)?;
-    db.start_work_association(id, branch.as_deref(), Some(&path))?;
-    crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
-    ensure_session_work(&db, id)?;
-    let issue = db.require_issue(id)?;
-    println!("Started work on {} {}", issue.id, issue.title);
-    if let Some(branch) = branch {
-        println!("Branch: {branch}");
-    }
-    println!("Worktree: {path}");
-    Ok(())
+    start_work_association(&db, id)
 }
 
 pub fn abandon(db: &Database, id: &str, reason: &str) -> Result<()> {

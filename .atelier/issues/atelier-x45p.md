@@ -15,6 +15,8 @@ relationships:
   - kind: "issue"
     id: "atelier-ihz0"
   - kind: "issue"
+    id: "atelier-k3vs"
+  - kind: "issue"
     id: "atelier-nqp4"
   - kind: "issue"
     id: "atelier-of3h"
@@ -23,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Define canonical record field ownership"
-updated_at: "2026-06-13T20:37:03.573130806+00:00"
+updated_at: "2026-06-13T22:43:23.748041527+00:00"
 ---
 
 ## Description

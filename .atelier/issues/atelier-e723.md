@@ -10,7 +10,10 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-10qm"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"

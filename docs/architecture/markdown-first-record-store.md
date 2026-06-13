@@ -64,6 +64,168 @@ Its target role is to re-render canonical records, remove obsolete derived files
 and check deterministic output, not to be the normal path that makes a mutation
 durable.
 
+## Canonical Field Ownership
+
+This section defines the durable field contract for Markdown-first records. Each
+field belongs to exactly one of these classes:
+
+| Class | Meaning |
+| --- | --- |
+| Required | Must be present in canonical Markdown for that record kind. Missing data is a lint/rebuild error. |
+| Optional | May be present when the record needs the field. Omit it instead of writing an empty compatibility placeholder unless the record kind says otherwise. |
+| Derived | Never authored directly in canonical Markdown. Commands, rebuild, or projections compute it from canonical fields. |
+| Compatibility-only | Allowed only while migration residue still exists. New writers must stop creating it, and cleanup work may delete it once readers no longer depend on it. |
+| Forbidden | Not allowed in canonical Markdown because another field or section already owns the meaning. |
+
+Common front matter ownership for first-class records (`issue`, `mission`,
+`plan`, `milestone`, and `evidence`) is:
+
+| Field | Class | Notes |
+| --- | --- | --- |
+| `schema`, `schema_version`, `id`, `title`, `status`, `created_at`, `updated_at`, `labels`, `relationships` | Required | Shared record identity, lifecycle, timestamps, labels, and typed links. |
+| Canonical file path | Derived | Computed from record kind plus `id`; it is never duplicated in front matter. |
+| Status category, ready/done grouping, priority display label, reverse-link views, and query/projection rows | Derived | Commands and projections compute these from durable fields. |
+| Generic escaped payload fields such as `data` or `data_json` | Compatibility-only | Legacy migration residue. New canonical writers must not introduce new generic payload blobs. |
+| Duplicate convenience links such as `validates`, `targets`, `missions`, `contributing_work`, `depends_on`, or `blocked_by` | Forbidden unless a record-kind contract explicitly assigns them | Use `relationships` as the canonical cross-record surface. |
+
+### Relationships
+
+`relationships` is the only canonical cross-record field. Bucket direction is
+always from the source record to the target record named in that entry.
+
+| Bucket | Required/optional | Canonical meaning | Derived or forbidden companions |
+| --- | --- | --- | --- |
+| `attachments` | Required bucket; entries optional | Supporting links with a `role`, such as `planned_by`, `has_checkpoint`, or `validates`. Evidence targets live here with `role: validates`. | `targets`, `validates`, `plans`, `milestones`, and direct evidence ID arrays are forbidden duplicates. |
+| `blocks` | Required bucket; entries optional | Sequencing blockers from the source record to blocked issue-like work. | Inverse `depends_on` and `blocked_by` views are derived only. |
+| `children` | Required bucket; entries optional | Structural hierarchy when the source owns the child record. | Mission execution work must not be authored here; use `relates` with `type: advances`. |
+| `relates` | Required bucket; entries optional | Peer semantic links with a precise `type`, such as `advances`, `blocked_by`, `related`, `derived_from`, or `supersedes`. | Ad hoc link arrays or prose-only link inventories are forbidden duplicates. |
+
+### Issue Records
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | Common fields plus `priority` and `issue_type`. |
+| Optional front matter | None in V1 beyond record-generic labels and relationships. |
+| Required body | `## Description`, `## Outcome`, and `## Evidence`. |
+| Optional body | `## Notes`. |
+| Derived | Workflow status category from `.atelier/workflow.yaml`; display priority bucket; inverse blockers/parents; recent activity preview from sidecars. |
+| Compatibility-only | Legacy SQLite `description` mirror columns; imported prose that has not yet been normalized into the required sections. |
+| Forbidden | Front matter or duplicate body fields named `description`, `outcome`, `acceptance`, `evidence_required`, `depends_on`, or `blocked_by`. |
+
+Issue priority is durable front matter owned by the issue record. The current
+canonical vocabulary is `P0`, `P1`, `P2`, and `P3`; human-facing terms such as
+`critical`, `high`, `medium`, and `low` are derived presentation labels, not
+separate canonical fields.
+
+Issue status is durable workflow state owned by `.atelier/workflow.yaml`. The
+current repository-defined values are `todo`, `in_progress`, `blocked`,
+`review`, `validation`, `done`, and `archived`. Human-ready groupings such as
+`todo`, `active`, `blocked`, `review`, `validation`, and `done` are derived
+categories, not alternate stored tokens.
+
+### Mission Records
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | Common fields only. Mission semantics do not own extra scalar or JSON payload keys in front matter. |
+| Optional front matter | None in V1 beyond record-generic labels and relationships. |
+| Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
+| Optional body | `## Closeout Notes` and `## Notes`. |
+| Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
+| Compatibility-only | Escaped mission `data` payloads and front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `closeout_notes`. |
+| Forbidden | Any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose must not become a shadow graph. |
+
+Mission status is mission-lifecycle state, not issue workflow state. The current
+durable vocabulary is `draft`, `ready`, `active`, and `closed`.
+
+### Plan Records
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | Common fields plus `revision`. |
+| Optional front matter | `owner`, `applies_to`, `supersedes`, and `drift_status`. `applies_to` and `supersedes` are sorted lexically. |
+| Required body | The durable execution intent in Markdown prose. V1 does not require a section grammar for plan bodies. |
+| Optional body | Any additional Markdown structure inside that execution intent. |
+| Derived | Superseded-by views from other plans' `supersedes` arrays; applicability rollups from `applies_to` plus `relationships`; plan freshness summaries from `drift_status`. |
+| Compatibility-only | Quoted JSON `data` payloads that carry `revision` or `revisions`. |
+| Forbidden | Generic front matter arrays such as `revisions`, `steps`, or `targets` when their meaning is already owned by `revision`, the body, or `relationships`. |
+
+Plan status owns the lifecycle of the plan record itself. Exact plan status
+tokens may evolve with the dedicated plan command surface, but they must remain
+plan-specific lifecycle values rather than borrowed issue workflow aliases.
+
+### Evidence Records
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | Common fields plus `evidence_type`, `captured_at`, and any validating targets expressed as `relationships.attachments[]` entries with `role: validates`. |
+| Optional front matter | `command`, `artifact`, `agent_identity`, `independence_level`, `proof_scope`, `residual_risks`, and `follow_up_ids`. |
+| Required body | Human-readable proof summary and any important limits not already captured in front matter. |
+| Optional body | Additional bounded transcript excerpts, audit notes, or artifact context. |
+| Derived | Evidence coverage views for issues, missions, plans, or milestones; command success summaries from structured transcript metadata; reverse lookup of which records this evidence validates. |
+| Compatibility-only | Escaped `data` payloads carrying fields such as `kind`, `result`, `path`, `uri`, `producer`, `output`, `exit_code`, or `target`. |
+| Forbidden | Separate `targets` or `validates` front matter arrays, because validating links belong in `relationships.attachments[]`. |
+
+Evidence `status` is the canonical proof result token. The target vocabulary is
+`pass`, `fail`, `blocked`, `deferred`, `not_applicable`, or `informational`.
+Older records that still mirror result-like fields inside escaped `data` are
+compatibility residue rather than a second canonical status surface.
+
+### Milestone Records
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | Common fields plus `desired_state`, `scope`, `validation_criteria`, `accepted_evidence`, and `completion_state`. |
+| Optional front matter | None beyond record-generic labels and relationships in V1. |
+| Required body | Milestone narrative and checkpoint context in Markdown prose. |
+| Optional body | Additional headings or notes that explain the checkpoint without duplicating front matter fields. |
+| Derived | Mission membership and contributing work from canonical relationships instead of separate scalar arrays; acceptance rollups from `accepted_evidence` plus validating evidence links. |
+| Compatibility-only | None yet in committed canonical records; this kind is still target-state contract work. |
+| Forbidden | Separate `missions` or `contributing_work` front matter arrays when the same links are already modeled through `relationships`. |
+
+Milestone `status` owns the record lifecycle. `completion_state` is separate and
+describes checkpoint acceptance, not authoring lifecycle or issue workflow
+progress.
+
+### Activity Sidecars
+
+Activity sidecars are canonical durable history, but they are not first-class
+records that share the common `title`/`status` contract.
+
+| Slice | Ownership |
+| --- | --- |
+| Required front matter | `schema`, `schema_version`, `id`, `subject_kind`, `subject_id`, `event_type`, `actor`, `created_at`, and `summary`. |
+| Optional front matter | Event-specific lightweight fields such as `evidence_id`, `result`, `field`, `old`, or `new` when the event kind needs them. |
+| Required body | User-authored text or lightweight event detail. Empty body is allowed only when the event-specific front matter fully carries the event payload. |
+| Derived | Sidecar path from `subject_id` plus timestamp ID; chronological ordering; recent-activity previews. |
+| Compatibility-only | Legacy SQLite `comments` rows and imported close-reason history not yet converted into sidecars. |
+| Forbidden | `relationships`, `labels`, `priority`, or generic record payload blobs. Activity sidecars are event logs, not another record graph. |
+
+### Runtime, Cache, Config, And Provenance
+
+| Surface | Ownership |
+| --- | --- |
+| Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`, `runtime_dir`, `runtime_database`, and `cache_dir`. |
+| Compatibility-only config | `[paths].compatibility_state_root` remains tracked only while `.atelier-state/` compatibility flows still exist. |
+| Local runtime state | `.atelier/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work associations are ignored machine-local state. |
+| Projection provenance | `projection_index_sources` rows, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
+| Forbidden durable provenance | Runtime branch names, worktree paths, session IDs, lock ownership, local diagnostic output, and cache payloads must not be promoted into canonical record front matter without a separate artifact update. |
+
+### Manual Classification Check
+
+Manual classification run date: 2026-06-13. This is a representative check of
+current committed records against the target contract above.
+
+| Sample | Record kind | Result | Notes |
+| --- | --- | --- | --- |
+| `.atelier/issues/atelier-x45p.md` | Issue | Pass | Uses required issue front matter plus `Description`/`Outcome`/`Evidence`; blocker intent lives in `relationships.blocks`; durable priority/status tokens are `P1` and `todo`. |
+| `.atelier/missions/atelier-man9.md` | Mission | Pass | Uses mission required sections and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
+| `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (compatibility residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
+| `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |
+| `.atelier/config.toml` | Project config/runtime boundary | Pass with compatibility note | Correctly tracks canonical path ownership and local runtime/cache locations. `compatibility_state_root` remains compatibility-only until old `.atelier-state/` flows are removed. |
+| `.atelier/plans/` | Plan | Defer | No committed plan records exist yet, so the contract is target-state only in this manual check. |
+| `.atelier/milestones/` | Milestone | Defer | No committed milestone records exist yet, so the contract is target-state only in this manual check. |
+
 ## Query Path
 
 Query commands use `ProjectionIndex` when they need global state:

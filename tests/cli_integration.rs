@@ -1550,6 +1550,19 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
         "work_started",
         &["branch: ", "worktree_path: "],
     );
+    let transition_index = activities
+        .iter()
+        .position(|text| text.contains("event_type: \"transition_applied\""))
+        .expect("missing transition_applied activity");
+    let work_started_index = activities
+        .iter()
+        .position(|text| text.contains("event_type: \"work_started\""))
+        .expect("missing work_started activity");
+    assert!(
+        transition_index < work_started_index,
+        "workflow transition should be recorded before work association:\n{}",
+        activities.join("\n--- activity ---\n")
+    );
 }
 
 #[test]
@@ -8113,7 +8126,7 @@ fn test_lint_rejects_duplicate_recognized_issue_heading() {
 }
 
 #[test]
-fn test_work_start_refuses_structurally_invalid_issue() {
+fn test_root_start_refuses_structurally_invalid_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -8127,8 +8140,8 @@ fn test_work_start_refuses_structurally_invalid_issue() {
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "start", &issue_id]);
-    assert!(!success, "work start should refuse invalid issue");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(!success, "root start should refuse invalid issue");
     assert!(
         stderr.contains(&format!("issue {issue_id}"))
             && stderr.contains("section Outcome")
@@ -9097,6 +9110,7 @@ fn test_active_mission_focus_guides_status_and_work() {
         .args(["init", "-q"])
         .status()
         .unwrap();
+    migrate_default_issue_workflow(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Active focus"]);
     assert!(success, "mission create failed: {stderr}");
@@ -9124,6 +9138,7 @@ fn test_active_mission_focus_guides_status_and_work() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
+    migrate_default_issue_workflow(dir.path());
     Command::new("git")
         .current_dir(dir.path())
         .args(["add", "."])
@@ -9135,8 +9150,8 @@ fn test_active_mission_focus_guides_status_and_work() {
         .status()
         .unwrap();
 
-    let (success, work_out, stderr) = run_atelier(dir.path(), &["work", "start", issue_id]);
-    assert!(success, "work start failed: {stderr}");
+    let (success, work_out, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    assert!(success, "root start failed: {stderr}");
     assert!(work_out.contains(&format!("Mission: {mission_id} (active)")));
     assert!(work_out.contains(&format!("Started work on {issue_id}")));
 }
@@ -9150,6 +9165,7 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
         .args(["init", "-q"])
         .status()
         .unwrap();
+    migrate_default_issue_workflow(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "First mission"]);
     assert!(success, "first mission create failed: {stderr}");
@@ -9178,6 +9194,7 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
     let issue_id = issue_id.as_str();
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
+    migrate_default_issue_workflow(dir.path());
     Command::new("git")
         .current_dir(dir.path())
         .args(["add", "."])
@@ -9189,8 +9206,8 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
         .status()
         .unwrap();
 
-    let (success, work_out, stderr) = run_atelier(dir.path(), &["work", "start", issue_id]);
-    assert!(success, "outside work start failed: {stderr}");
+    let (success, work_out, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    assert!(success, "outside root start failed: {stderr}");
     assert!(work_out.contains(&format!(
         "Warning: {issue_id} is outside active mission {second_id}"
     )));
@@ -10197,6 +10214,21 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
 }
 
 #[test]
+fn test_hidden_work_start_is_unsupported() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "start", "atelier-z1p8"]);
+    assert!(!success, "hidden work start should be unsupported");
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        transcript.contains("unrecognized subcommand 'start'")
+            && transcript.contains("Usage: atelier work"),
+        "missing unsupported-command transcript: {transcript}"
+    );
+}
+
+#[test]
 fn test_work_lifecycle_human_output_and_guards() {
     let dir = tempdir().unwrap();
     Command::new("git")
@@ -10215,6 +10247,7 @@ fn test_work_lifecycle_human_output_and_guards() {
         .status()
         .unwrap();
     init_atelier(dir.path());
+    migrate_default_issue_workflow(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Work item"]);
     assert!(success, "issue create failed: {stderr}");
@@ -10224,11 +10257,12 @@ fn test_work_lifecycle_human_output_and_guards() {
         .unwrap()
         .to_string();
 
-    let (success, _, _) = run_atelier(dir.path(), &["work", "start", &issue_id]);
-    assert!(!success, "dirty worktree should reject work start");
+    let (success, _, _) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(!success, "dirty worktree should reject root start");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
+    migrate_default_issue_workflow(dir.path());
     std::fs::write(
         dir.path().join("atelier.workflow.yaml"),
         r#"schema: atelier.workflow_config
@@ -10256,8 +10290,8 @@ hooks:
         .status()
         .unwrap();
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["work", "start", &issue_id]);
-    assert!(success, "work start failed: {stderr}");
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "root start failed: {stderr}");
     assert!(start_out.contains(&format!("Started work on {issue_id}")));
     assert!(start_out.contains("Branch:"));
     assert!(start_out.contains("Worktree:"));
