@@ -1,6 +1,4 @@
 use anyhow::{bail, Context, Result};
-use serde::Deserialize;
-use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,25 +19,6 @@ struct WorktreeStatus {
     associated_work: Vec<WorkAssociation>,
     export_fresh: Option<bool>,
     export_errors: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowConfig {
-    #[serde(default)]
-    hooks: BTreeMap<String, WorkflowHook>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowHook {
-    event: String,
-    command: HookCommand,
-}
-
-#[derive(Debug, Deserialize)]
-struct HookCommand {
-    argv: Vec<String>,
-    #[serde(default)]
-    env: BTreeMap<String, String>,
 }
 
 pub fn start(db: &Database, id: &str) -> Result<()> {
@@ -305,8 +284,6 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
             );
         }
     }
-    run_worktree_setup_hooks(&root, &worktree_path, id, &branch)
-        .context("worktree setup failed before active work association was changed")?;
     db.start_work_association(id, Some(&branch), Some(&worktree_path.to_string_lossy()))?;
     crate::commands::activity_log::record_work_started(
         id,
@@ -315,47 +292,6 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     )?;
     let _ = issue;
     println!("{}", worktree_path.display());
-    Ok(())
-}
-
-fn run_worktree_setup_hooks(
-    root: &Path,
-    worktree_path: &Path,
-    issue_id: &str,
-    branch: &str,
-) -> Result<()> {
-    let config_path = root.join("atelier.workflow.yaml");
-    if !config_path.is_file() {
-        return Ok(());
-    }
-    let text = std::fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    let config: WorkflowConfig = serde_yaml::from_str(&text)
-        .with_context(|| format!("failed to parse {}", config_path.display()))?;
-    for (id, hook) in config.hooks {
-        if hook.event != "worktree_setup" {
-            continue;
-        }
-        if hook.command.argv.is_empty() {
-            bail!("worktree_setup hook {id} has empty command argv");
-        }
-        let mut command = Command::new(&hook.command.argv[0]);
-        command
-            .current_dir(worktree_path)
-            .args(&hook.command.argv[1..])
-            .env("ATELIER_WORKTREE_PATH", worktree_path)
-            .env("ATELIER_WORK_ISSUE_ID", issue_id)
-            .env("ATELIER_WORK_BRANCH", branch);
-        for (key, value) in hook.command.env {
-            command.env(key, value);
-        }
-        let output = command
-            .output()
-            .with_context(|| format!("failed to run worktree_setup hook {id}"))?;
-        if !output.status.success() {
-            bail!("worktree_setup hook {id} failed");
-        }
-    }
     Ok(())
 }
 

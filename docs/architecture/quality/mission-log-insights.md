@@ -93,7 +93,7 @@ Confidence: high.
 ### 5. Mission readiness and closeout were split across too many surfaces
 
 Controllers repeatedly stitched together `atelier status`, `mission status`,
-`mission audit`, `workflow validate`, `lint`, `doctor`, `export --check`,
+`mission audit`, `workflow check`, `lint`, `doctor`, `export --check`,
 evidence commands, and manual issue drill-down. The information was usually
 available, but the path to a closeout decision was noisy.
 
@@ -103,8 +103,8 @@ Improvement:
   missing proof, stale projection, next action, and closeout readiness.
 - CLI: fold mission audit output into contextual status or verbose/advanced
   modes.
-- Docs and Agent Factory: keep `workflow validate` as advanced diagnostics, not
-  the routine closeout proof path.
+- Docs and Agent Factory: keep `workflow check`, `issue transition --options`,
+  and mission closeout surfaces as the documented proof path.
 
 Confidence: high.
 

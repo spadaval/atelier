@@ -12,6 +12,7 @@ use crate::record_store::{
     IssueSections, RecordStore, RelationshipTarget, Relationships,
 };
 use crate::utils::format_issue_id;
+use crate::workflow_policy::WorkflowPolicy;
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -28,6 +29,7 @@ struct QueueRow {
     id: String,
     title: String,
     status: String,
+    status_category: Option<String>,
     issue_type: String,
     priority: String,
     parent: Option<String>,
@@ -54,6 +56,230 @@ struct DependencyListRow {
     blocker_title: String,
     blocker_status: String,
     blocker_priority: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IssueStartReadiness {
+    Ready,
+    Blocked,
+    NotReady,
+}
+
+#[derive(Debug, Clone)]
+enum IssueStatusFilter {
+    All,
+    Exact(String),
+    Category(String),
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct WorkflowReadContext {
+    missing_policy: bool,
+    unmigrated_filter: bool,
+}
+
+pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
+    let repo_root = crate::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok(None);
+    }
+    crate::workflow_policy::load(&repo_root).map(Some)
+}
+
+impl IssueStatusFilter {
+    fn from_input(policy: Option<&WorkflowPolicy>, input: &str) -> Self {
+        if input == "all" {
+            return Self::All;
+        }
+        let category = operator_category_filter(input);
+        if policy.is_none() {
+            return category
+                .map(Self::Category)
+                .unwrap_or_else(|| Self::Exact(input.to_string()));
+        }
+        if let Some(category) = category {
+            return Self::Category(category);
+        }
+        if let Some(policy) = policy {
+            if policy.statuses.contains_key(input) {
+                return Self::Exact(input.to_string());
+            }
+            if policy
+                .statuses
+                .values()
+                .any(|status| status.category == input)
+            {
+                return Self::Category(input.to_string());
+            }
+        }
+        Self::Exact(input.to_string())
+    }
+
+    fn matches(
+        &self,
+        policy: Option<&WorkflowPolicy>,
+        issue: &Issue,
+        context: &mut WorkflowReadContext,
+    ) -> bool {
+        match self {
+            Self::All => true,
+            Self::Exact(status) => {
+                if policy.is_some()
+                    && !policy
+                        .and_then(|policy| policy.status_category(status))
+                        .is_some()
+                    && issue.status == *status
+                {
+                    context.unmigrated_filter = true;
+                }
+                issue.status == *status
+            }
+            Self::Category(category) => {
+                let issue_category = workflow_category(policy, &issue.status);
+                if policy.is_some()
+                    && issue_category.is_some()
+                    && !policy_status_known(policy, &issue.status)
+                {
+                    context.unmigrated_filter = true;
+                }
+                issue_category.as_deref() == Some(category.as_str())
+            }
+        }
+    }
+}
+
+fn policy_status_known(policy: Option<&WorkflowPolicy>, status: &str) -> bool {
+    policy
+        .and_then(|policy| policy.status_category(status))
+        .is_some()
+}
+
+fn operator_category_filter(input: &str) -> Option<String> {
+    match input {
+        "todo" => Some("todo".to_string()),
+        "in_progress" => Some("active".to_string()),
+        "active" => Some("active".to_string()),
+        "blocked" => Some("blocked".to_string()),
+        "review" => Some("review".to_string()),
+        "validation" => Some("validation".to_string()),
+        "done" => Some("done".to_string()),
+        _ => None,
+    }
+}
+
+fn legacy_status_category(status: &str) -> Option<&'static str> {
+    match status {
+        "open" => Some("todo"),
+        "in_progress" => Some("active"),
+        "blocked" => Some("blocked"),
+        "review" => Some("review"),
+        "validation" => Some("validation"),
+        "closed" | "archived" => Some("done"),
+        _ => None,
+    }
+}
+
+pub(crate) fn issue_status_category(
+    policy: Option<&WorkflowPolicy>,
+    status: &str,
+) -> Option<String> {
+    policy
+        .and_then(|policy| policy.status_category(status))
+        .or_else(|| legacy_status_category(status))
+        .map(operator_category_label)
+}
+
+fn workflow_category(policy: Option<&WorkflowPolicy>, status: &str) -> Option<String> {
+    policy
+        .and_then(|policy| policy.status_category(status))
+        .or_else(|| legacy_status_category(status))
+        .map(str::to_string)
+}
+
+fn operator_category_label(category: &str) -> String {
+    match category {
+        "active" => "in_progress".to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub(crate) fn issue_status_label(policy: Option<&WorkflowPolicy>, status: &str) -> String {
+    format_status_with_category(issue_status_category(policy, status).as_deref(), status)
+}
+
+fn format_status_with_category(category: Option<&str>, status: &str) -> String {
+    match category {
+        Some(category) => format!("{category}/{status}"),
+        None => format!("unknown/{status}"),
+    }
+}
+
+pub(crate) fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
+    workflow_category(policy, &issue.status).as_deref() == Some("done")
+}
+
+pub(crate) fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
+    !issue_is_done(policy, issue)
+}
+
+pub(crate) fn issue_start_readiness(
+    db: &Database,
+    policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<IssueStartReadiness> {
+    if policy.is_none() {
+        return if workflow_category(None, &issue.status).as_deref() == Some("todo") {
+            if open_blocker_ids_with_policy(db, None, &issue.id)?.is_empty() {
+                Ok(IssueStartReadiness::Ready)
+            } else {
+                Ok(IssueStartReadiness::Blocked)
+            }
+        } else {
+            Ok(IssueStartReadiness::NotReady)
+        };
+    }
+    let Some(policy) = policy else {
+        unreachable!("handled missing policy above")
+    };
+    let options = match crate::commands::workflow::issue_transition_options(db, &issue.id) {
+        Ok(options) => options,
+        Err(_) => return Ok(IssueStartReadiness::NotReady),
+    };
+    let mut has_start_target = false;
+    let mut blocked = false;
+    for option in options {
+        if workflow_category(Some(policy), &option.to).as_deref() != Some("active") {
+            continue;
+        }
+        has_start_target = true;
+        if option.allowed {
+            return Ok(IssueStartReadiness::Ready);
+        }
+        blocked = true;
+    }
+    if blocked {
+        Ok(IssueStartReadiness::Blocked)
+    } else if has_start_target {
+        Ok(IssueStartReadiness::NotReady)
+    } else {
+        Ok(IssueStartReadiness::NotReady)
+    }
+}
+
+fn print_workflow_read_guidance(context: WorkflowReadContext) {
+    if context.missing_policy {
+        println!();
+        println!(
+            "Workflow policy missing: run `atelier workflow init`, then `atelier workflow migrate-statuses`."
+        );
+    }
+    if context.unmigrated_filter {
+        println!();
+        println!(
+            "Unmigrated issue statuses are present: run `atelier workflow migrate-statuses`, then `atelier workflow check`."
+        );
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -335,13 +561,22 @@ fn render_issue_show_human(
     object: &IssueObject,
     degraded: Option<&str>,
 ) -> Result<()> {
+    let workflow_policy = load_issue_workflow_policy()?;
+    let status_category = issue_status_category(workflow_policy.as_ref(), &object.status);
     let identity = format!(
         "{} [{}] {} - {}",
-        object.id, object.issue_type, object.status, object.title
+        object.id,
+        object.issue_type,
+        format_status_with_category(status_category.as_deref(), &object.status),
+        object.title
     );
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
     println!("Status:   {}", object.status);
+    println!(
+        "Category: {}",
+        status_category.unwrap_or_else(|| "(unknown)".to_string())
+    );
     println!("Type:     {}", object.issue_type);
     println!("Priority: {}", object.priority);
     println!(
@@ -686,8 +921,9 @@ fn collect_open_descendant_issue_ids(
     issue_id: &str,
     open: &mut Vec<String>,
 ) -> Result<()> {
+    let workflow_policy = load_issue_workflow_policy()?;
     for child in db.get_subissues(issue_id)? {
-        if child.status != "closed" {
+        if !issue_is_done(workflow_policy.as_ref(), &child) {
             open.push(format_issue_id(&child.id));
         }
         collect_open_descendant_issue_ids(db, &child.id, open)?;
@@ -747,10 +983,11 @@ fn dependency_rows_for_text(
     ids: Vec<String>,
     blockers: bool,
 ) -> Result<Vec<String>> {
+    let workflow_policy = load_issue_workflow_policy()?;
     ids.into_iter()
         .map(|id| {
             let issue = db.require_issue(&id)?;
-            let marker = if blockers && issue.status == "open" {
+            let marker = if blockers && issue_blocks_work(workflow_policy.as_ref(), &issue) {
                 " (open blocker)"
             } else {
                 ""
@@ -758,7 +995,7 @@ fn dependency_rows_for_text(
             Ok(format!(
                 "{} [{}] {} - {}{}",
                 issue_id_for_agent(db, &issue)?,
-                issue.status,
+                issue_status_label(workflow_policy.as_ref(), &issue.status),
                 issue.priority,
                 issue.title,
                 marker
@@ -931,27 +1168,37 @@ pub fn list(
     ready: bool,
     quiet: bool,
 ) -> Result<()> {
-    if ready && !matches!(status, None | Some("open")) {
-        bail!("--ready can only be used with open issues");
+    let workflow_policy = load_issue_workflow_policy()?;
+    let status_input = status.unwrap_or("todo");
+    if ready && !matches!(status_input, "todo" | "open") {
+        bail!("--ready uses startable todo-category work; do not combine it with --status");
     }
+    let status_filter = IssueStatusFilter::from_input(workflow_policy.as_ref(), status_input);
+    let mut read_context = WorkflowReadContext {
+        missing_policy: workflow_policy.is_none(),
+        unmigrated_filter: false,
+    };
     let mut rows = db
-        .list_issues(Some(status.unwrap_or("open")), label, priority)?
+        .list_issues(Some("all"), label, priority)?
         .into_iter()
+        .filter(|issue| {
+            ready || status_filter.matches(workflow_policy.as_ref(), issue, &mut read_context)
+        })
         .map(|issue| issue_summary(db, issue))
-        .map(|summary| summary.and_then(|issue| queue_row(db, issue)))
+        .map(|summary| summary.and_then(|issue| queue_row(db, workflow_policy.as_ref(), issue)))
         .collect::<Result<Vec<_>>>()?;
     if ready {
-        rows = filter_ready_rows(db, rows)?;
+        rows = filter_ready_rows(db, workflow_policy.as_ref(), rows)?;
     }
     if rows.is_empty() {
         println!("No issues found.");
-        Ok(())
     } else if quiet {
         render_queue_ids_quiet(rows);
-        Ok(())
     } else {
-        render_issue_queue_human(db, "Issue Queue", rows, status == Some("all"))
+        render_issue_queue_human(db, "Issue Queue", rows, true)?;
     }
+    print_workflow_read_guidance(read_context);
+    Ok(())
 }
 
 pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
@@ -969,7 +1216,10 @@ pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {
     } else {
         let rows = items
             .into_iter()
-            .map(|item| queue_row(db, item))
+            .map(|item| {
+                let workflow_policy = load_issue_workflow_policy()?;
+                queue_row(db, workflow_policy.as_ref(), item)
+            })
             .collect::<Result<Vec<_>>>()?;
         render_issue_queue_human(db, &format!("Search Results: {query}"), rows, true)
     }
@@ -1082,13 +1332,19 @@ fn render_issue_queue_human(
     Ok(())
 }
 
-fn queue_row(db: &Database, item: IssueSummary) -> Result<QueueRow> {
-    let open_blockers = open_blocker_ids(db, &item.id)?;
+fn queue_row(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    item: IssueSummary,
+) -> Result<QueueRow> {
+    let open_blockers = open_blocker_ids_with_policy(db, workflow_policy, &item.id)?;
     let depth = ancestry_depth(db, &item.id)?;
+    let status_category = issue_status_category(workflow_policy, &item.status);
     Ok(QueueRow {
         id: item.id,
         title: item.title,
         status: item.status,
+        status_category,
         issue_type: item.issue_type,
         priority: item.priority,
         parent: item.parent,
@@ -1098,26 +1354,50 @@ fn queue_row(db: &Database, item: IssueSummary) -> Result<QueueRow> {
 }
 
 fn open_blocker_ids(db: &Database, issue_id: &str) -> Result<Vec<String>> {
+    let workflow_policy = load_issue_workflow_policy()?;
+    open_blocker_ids_with_policy(db, workflow_policy.as_ref(), issue_id)
+}
+
+fn open_blocker_ids_with_policy(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue_id: &str,
+) -> Result<Vec<String>> {
     let mut blockers = db
         .get_blockers(issue_id)?
         .into_iter()
         .filter_map(|id| db.require_issue(&id).ok())
-        .filter(|issue| issue.status == "open")
+        .filter(|issue| issue_blocks_work(workflow_policy, issue))
         .map(|issue| format_issue_id(&issue.id))
         .collect::<Vec<_>>();
     blockers.sort();
     Ok(blockers)
 }
 
-fn filter_ready_rows(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueRow>> {
+fn filter_ready_rows(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    rows: Vec<QueueRow>,
+) -> Result<Vec<QueueRow>> {
     let children = children_by_parent(db)?;
     rows.into_iter()
         .map(|row| {
             if has_descendants(&children, &row.id) {
-                let external = external_blockers_for_subtree(db, &children, &row.id)?;
-                Ok((row, external.is_empty()))
+                let external =
+                    external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
+                let readiness =
+                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
+                Ok((
+                    row,
+                    external.is_empty() && readiness == IssueStartReadiness::Ready,
+                ))
             } else {
-                Ok((row.clone(), row.open_blockers.is_empty()))
+                let readiness =
+                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
+                Ok((
+                    row.clone(),
+                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready,
+                ))
             }
         })
         .filter_map(|result: Result<(QueueRow, bool)>| match result {
@@ -1157,7 +1437,9 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
                 .then(a.id.cmp(&b.id))
         });
         let issue = db.require_issue(&group_id)?;
-        let external_blockers = external_blockers_for_subtree(db, &children, &group_id)?;
+        let workflow_policy = load_issue_workflow_policy()?;
+        let external_blockers =
+            external_blockers_for_subtree(db, workflow_policy.as_ref(), &children, &group_id)?;
         let include_header_row = row_ids.contains(&group_id);
         if include_header_row {
             rows.retain(|row| row.id != group_id);
@@ -1244,6 +1526,7 @@ fn subtree_ids(children: &BTreeMap<String, Vec<String>>, root_id: &str) -> BTree
 
 fn external_blockers_for_subtree(
     db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
     children: &BTreeMap<String, Vec<String>>,
     root_id: &str,
 ) -> Result<Vec<String>> {
@@ -1252,7 +1535,7 @@ fn external_blockers_for_subtree(
     for issue_id in &subtree {
         for blocker_id in db.get_blockers(issue_id)? {
             let blocker = db.require_issue(&blocker_id)?;
-            if blocker.status == "open" && !subtree.contains(&blocker_id) {
+            if issue_blocks_work(workflow_policy, &blocker) && !subtree.contains(&blocker_id) {
                 blockers.insert(format_issue_id(&blocker_id));
             }
         }
@@ -1261,10 +1544,18 @@ fn external_blockers_for_subtree(
 }
 
 fn queue_summary(rows: &[QueueRow]) -> String {
+    let mut categories = BTreeMap::<String, usize>::new();
     let mut statuses = BTreeMap::<String, usize>::new();
     let mut priorities = BTreeMap::<String, usize>::new();
     let mut blocked = 0;
     for row in rows {
+        *categories
+            .entry(
+                row.status_category
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
+            )
+            .or_default() += 1;
         *statuses.entry(row.status.clone()).or_default() += 1;
         *priorities.entry(row.priority.clone()).or_default() += 1;
         if !row.open_blockers.is_empty() {
@@ -1272,8 +1563,9 @@ fn queue_summary(rows: &[QueueRow]) -> String {
         }
     }
     format!(
-        "{} total | Status: {} | Priority: {} | Blocked: {}",
+        "{} total | Category: {} | Status: {} | Priority: {} | Blocked: {}",
         rows.len(),
+        joined_counts(categories),
         joined_counts(statuses),
         joined_counts(priorities),
         blocked
@@ -1297,7 +1589,10 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
     for row in group.rows {
         let status_text = if show_status {
-            format!("{} ", row.status)
+            format!(
+                "{} ",
+                format_status_with_category(row.status_category.as_deref(), &row.status)
+            )
         } else {
             String::new()
         };

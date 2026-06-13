@@ -244,11 +244,11 @@ Install `cargo-nextest` before running the default Rust test command:
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker install, local runtime, diagnostics, and workflow health |
 
-`atelier workflow validate` failures are command failures by default. Mission
-completion is valid only when all linked work is closed, required evidence is
-attached, workflow validators pass, docs/help/Agent Factory command guidance has
-no drift, stale obsolete-command tests are explicitly owned or deferred, and the
-Git worktree is clean.
+Workflow and closeout validation failures are command failures by default.
+Mission completion is valid only when all linked work is closed, required
+evidence is attached, configured transition gates pass, docs/help/Agent Factory
+command guidance has no drift, stale obsolete-command tests are explicitly
+owned or deferred, and the Git worktree is clean.
 
 ## Scenario Proof
 
@@ -261,12 +261,13 @@ Git worktree is clean.
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.
 - Mission closeout proof should show linked work closed, evidence attached to
-  accountable child work, workflow validators passing, and clean Git state.
+  accountable child work, configured transition gates passing, and clean Git
+  state.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
-  validate durable state with tracked `.atelier/` records, compatibility
-  `atelier export --check`, `atelier lint`, `atelier doctor`, and focused
-  `show` or `workflow validate` commands.
+  validate durable state with tracked `.atelier/` records, `atelier export
+  --check`, `atelier lint`, `atelier doctor`, `workflow check`, focused `show`
+  commands, `issue transition --options`, and mission status or audit output.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.
 

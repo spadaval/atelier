@@ -897,15 +897,6 @@ enum WorkflowCommands {
     MigrateStatuses,
     /// Validate .atelier/workflow.yaml policy and current issue-record health
     Check,
-    /// Evaluate workflow validators as an advanced diagnostic without mutating record state
-    Validate {
-        target_kind: String,
-        target_id: String,
-        #[arg(long, default_value = "close")]
-        transition: String,
-        #[arg(long)]
-        validator: Vec<String>,
-    },
 }
 
 #[derive(Subcommand)]
@@ -2308,20 +2299,6 @@ fn run() -> Result<()> {
                 let db = projection_query_db()?;
                 commands::workflow::check(&db)
             }
-            WorkflowCommands::Validate {
-                target_kind,
-                target_id,
-                transition,
-                validator,
-            } => {
-                let db = projection_query_db()?;
-                let target_id = if target_kind == "tracker" {
-                    target_id
-                } else {
-                    resolve_record_arg(&db, &target_kind, &target_id)?
-                };
-                commands::workflow::validate(&db, &target_kind, &target_id, &transition, validator)
-            }
         },
 
         Commands::Work { action } => {
@@ -2506,7 +2483,6 @@ fn command_identity(command: &Commands) -> &'static str {
             WorkflowCommands::Init { .. } => "workflow init",
             WorkflowCommands::MigrateStatuses => "workflow migrate-statuses",
             WorkflowCommands::Check => "workflow check",
-            WorkflowCommands::Validate { .. } => "workflow validate",
         },
         Commands::Work { action } => match action {
             WorkCommands::Start { .. } => "work start",

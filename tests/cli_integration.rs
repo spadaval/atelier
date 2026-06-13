@@ -1037,7 +1037,10 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["workflow", "--help"]);
     assert!(success, "workflow help failed: {stderr}");
     assert!(stdout.contains("Advanced/internal workflow policy diagnostics"));
-    assert!(stdout.contains("advanced diagnostic"));
+    assert!(stdout.contains("init"));
+    assert!(stdout.contains("migrate-statuses"));
+    assert!(stdout.contains("check"));
+    assert!(!stdout.contains("validate"));
 }
 
 #[test]
@@ -2394,19 +2397,16 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     assert!(success, "related by partial key failed: {stderr}");
     assert!(stdout.contains(&related_id));
 
+    migrate_default_issue_workflow(dir.path());
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            parent_key,
-            "--validator",
-            "no_open_blockers",
-        ],
+        &["issue", "transition", parent_key, "--options"],
     );
-    assert!(success, "workflow validate by partial key failed: {stderr}");
-    assert!(stdout.contains(&format!("Workflow Validation: issue {parent_id}")));
+    assert!(
+        success,
+        "transition options by partial key failed: {stderr}"
+    );
+    assert!(stdout.contains(&format!("Issue Transitions {parent_id}")));
 }
 
 #[test]
@@ -6658,44 +6658,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
-    let (success, validate_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            mission_id,
-            "--validator",
-            "durable_state_current",
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "workflow validate failed: {stderr}");
-    assert!(validate_out.contains("pass  durable_state_current"));
-    assert!(validate_out.contains("pass  evidence_attached"));
-
-    let (success, validate_human, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            mission_id,
-            "--validator",
-            "durable_state_current",
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "human workflow validate failed: {stderr}");
-    assert!(validate_human.contains("Workflow Validation: mission"));
-    assert!(validate_human.contains("Transition: close"));
-    assert!(validate_human.contains("Results"));
-    assert!(validate_human.contains("pass  durable_state_current"));
-    assert!(validate_human.contains("Reason: canonical export is current"));
-    assert!(!validate_human.contains("pass durable_state_current:"));
-
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(view_out.contains("Records: plans=1 milestones=0 evidence=1"));
@@ -7026,20 +6988,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         "conflict error should be actionable: {stderr}"
     );
 
-    let (success, issue_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            issue_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "issue workflow validate failed: {stderr}");
-    assert!(issue_validate.contains("pass  evidence_attached"));
-
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -7124,20 +7072,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(manual_record_out.contains("[evidence] pass - unified manual issue proof"));
     assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
 
-    let (success, epic_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            epic_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "epic workflow validate failed: {stderr}");
-    assert!(epic_validate.contains("pass  evidence_attached"));
-
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -7172,20 +7106,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(!mission_show.contains("blocked-line-349"));
     assert!(mission_show.contains("Stdout: "));
     assert!(mission_show.contains("truncated: yes"));
-
-    let (success, mission_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            mission_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "mission workflow validate failed: {stderr}");
-    assert!(mission_validate.contains("pass  evidence_attached"));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
@@ -7248,36 +7168,6 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     let donor_id = donor_id.as_str();
 
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
-
-    let (success, donor_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            donor_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "donor evidence validation failed: {stderr}");
-    assert!(donor_validate.contains("pass  evidence_attached"));
-
-    let (success, target_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            target_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(!success, "target should not inherit donor proof");
-    assert!(target_validate.contains("fail  evidence_attached"));
-    assert!(target_validate.contains("no validating evidence link found"));
-    assert!(stderr.contains("workflow validation failed"));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -7373,25 +7263,6 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         "linked passing evidence does not demonstrate line-by-line or contract-audit proof"
     ));
 
-    let (success, validate_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            &validation_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(
-        !success,
-        "validation issue evidence gate should fail with only broad proof"
-    );
-    assert!(validate_out.contains("fail  evidence_attached"));
-    assert!(validate_out.contains("line-by-line or contract-audit proof"));
-    assert!(stderr.contains("workflow validation failed"));
-
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &validation_id, "--reason", "too early"],
@@ -7410,24 +7281,6 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         "Mission contract audit line-by-line classification maps validation outcome lines to proof",
     );
 
-    let (success, validate_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            &validation_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(
-        success,
-        "validation issue evidence gate should pass after contract-audit proof: {stderr}"
-    );
-    assert!(validate_out.contains("pass  evidence_attached"));
-    assert!(validate_out.contains("line-by-line or contract-audit evidence is linked"));
-
     let (success, _stdout, stderr) = run_atelier(
         dir.path(),
         &[
@@ -7442,75 +7295,6 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         success,
         "validation issue closeout should pass after contract-audit proof: {stderr}"
     );
-}
-
-#[test]
-fn test_workflow_validate_fails_without_required_evidence() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Needs evidence"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Needs evidence");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(!success, "workflow validate should fail without evidence");
-    assert!(stdout.contains("fail  evidence_attached"));
-    assert!(stdout.contains("no validating evidence link found"));
-    assert!(stderr.contains("workflow validation failed"));
-}
-
-#[test]
-fn test_workflow_validate_reports_ignored_tests_without_owner() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    std::fs::create_dir_all(dir.path().join("tests")).unwrap();
-    std::fs::write(
-        dir.path().join("tests/ignored_inventory.rs"),
-        ignored_test_source(
-            "ignore = \"reason: product parser migration; product: yes\"",
-            "hidden_product_behavior",
-        ),
-    )
-    .unwrap();
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Ignored inventory"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Ignored inventory");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "ignored_tests_reviewed",
-        ],
-    );
-
-    assert!(!success, "ignored test inventory should fail");
-    assert!(stdout.contains("fail  ignored_tests_reviewed"));
-    assert!(stdout.contains("hidden_product_behavior"));
-    assert!(stdout.contains("missing owner or linked issue"));
-    assert!(stdout.contains("product=yes"));
-    assert!(stderr.contains("workflow validation failed"));
 }
 
 #[test]
@@ -7598,75 +7382,6 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     assert!(!status_out.contains(&format!(
         "atelier mission update {mission_id} --status closed"
     )));
-}
-
-#[test]
-fn test_workflow_validate_reports_agent_factory_command_drift() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-    fs::write(
-        dir.path().join("AGENTFACTORY.md"),
-        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission view <id>`\n",
-    )
-    .unwrap();
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Agent Factory drift"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Agent Factory drift");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "command_surface_current",
-        ],
-    );
-
-    assert!(!success, "stale Agent Factory guidance should fail");
-    assert!(stdout.contains("fail  command_surface_current"));
-    assert!(stdout.contains("AGENTFACTORY.md"));
-    assert!(stdout.contains("atelier mission view"));
-    assert!(stderr.contains("workflow validation failed"));
-}
-
-#[test]
-fn test_workflow_validate_reports_docs_help_root_surface_drift() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_valid_command_guidance(dir.path());
-    let stale_doc = valid_command_surface_doc().replace("- `atelier diagnostics slow`\n", "");
-    fs::write(dir.path().join("docs/product/cli-surface.md"), stale_doc).unwrap();
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Docs help drift"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Docs help drift");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "command_surface_current",
-        ],
-    );
-
-    assert!(!success, "docs/help drift should fail");
-    assert!(stdout.contains("fail  command_surface_current"));
-    assert!(stdout.contains("docs/product/cli-surface.md"));
-    assert!(stdout.contains("help command `atelier diagnostics`"));
-    assert!(stderr.contains("workflow validation failed"));
 }
 
 #[test]
@@ -8002,251 +7717,6 @@ fn test_closed_children_alone_do_not_close_epic_parent() {
 }
 
 #[test]
-fn test_workflow_validate_can_use_parsed_issue_sections() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Parsed section workflow"]);
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Parsed section workflow");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            &issue_id,
-            "--validator",
-            "issue_sections_parseable",
-        ],
-    );
-    assert!(success, "workflow validate failed: {stderr}");
-    assert!(stdout.contains("pass  issue_sections_parseable"));
-    assert!(stdout.contains("parsed required sections Description, Outcome, Evidence"));
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Section mission"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Section mission");
-    let (success, _stdout, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
-    assert!(success, "mission add-work failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "issue_sections_parseable",
-        ],
-    );
-    assert!(success, "mission workflow validate failed: {stderr}");
-    assert!(stdout.contains("pass  issue_sections_parseable"));
-    assert!(stdout.contains("for 1 issue(s)"));
-}
-
-#[test]
-fn test_workflow_validate_defaults_are_target_and_transition_aware() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-
-    let issue_body = "## Description\n\nDefault validator issue body.\n\n## Outcome\n\nWorkflow validation reports target-aware issue close blockers.\n\n## Evidence\n\n- `atelier workflow validate issue <id>` reports missing evidence.";
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Default close validators",
-            "--description",
-            issue_body,
-        ],
-    );
-    assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Default close validators");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            &issue_id,
-            "--transition",
-            "close",
-        ],
-    );
-    assert!(!success, "issue close defaults should require evidence");
-    assert!(stdout.contains("pass  durable_state_current"));
-    assert!(stdout.contains("pass  issue_sections_parseable"));
-    assert!(stdout.contains("pass  no_open_blockers"));
-    assert!(stdout.contains("fail  evidence_attached"));
-    assert!(stdout.contains("no validating evidence link found"));
-    assert!(stderr.contains("workflow validation failed"));
-
-    let (success, blocker_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Default start blocker",
-            "--description",
-            "## Description\n\nBlocker body.\n\n## Outcome\n\nBlocker remains open.\n\n## Evidence\n\n- `atelier workflow validate issue <id> --transition start` reports the open blocker.",
-        ],
-    );
-    assert!(success, "blocker create failed: {stderr}");
-    assert!(blocker_out.contains("Created issue atelier-"));
-    let blocker_id = issue_id_by_title(dir.path(), "Default start blocker");
-    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &issue_id, &blocker_id]);
-    assert!(success, "dep add failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            &issue_id,
-            "--transition",
-            "start",
-        ],
-    );
-    assert!(!success, "issue start defaults should report blockers");
-    assert!(stdout.contains("fail  no_open_blockers"));
-    assert!(stdout.contains(&blocker_id));
-    assert!(
-        !stdout.contains("evidence_attached"),
-        "start defaults must not require validation evidence:\n{stdout}"
-    );
-    assert!(stderr.contains("workflow validation failed"));
-
-    let (success, mission_out, stderr) = run_atelier(
-        dir.path(),
-        &["mission", "create", "Default mission validators"],
-    );
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Default mission validators");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
-    assert!(success, "mission add-work failed: {stderr}");
-    commit_all(dir.path(), "default validator setup");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--transition",
-            "close",
-        ],
-    );
-    assert!(
-        !success,
-        "mission close defaults should report closeout blockers"
-    );
-    for validator in [
-        "durable_state_current",
-        "issue_sections_parseable",
-        "no_open_work",
-        "evidence_attached",
-        "no_open_blockers",
-        "no_blocking_lints",
-        "ignored_tests_reviewed",
-        "git_worktree_clean",
-    ] {
-        assert!(
-            stdout.contains(validator),
-            "mission default output missing {validator}:\n{stdout}"
-        );
-    }
-    assert!(stdout.contains("open linked work"));
-    assert!(stdout.contains(&issue_id));
-    assert!(stdout.contains("no validating evidence link found"));
-    assert!(stderr.contains("workflow validation failed"));
-}
-
-#[test]
-fn test_workflow_validate_defaults_for_evidence_and_tracker_health_targets() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-
-    let (success, evidence_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "evidence",
-            "add",
-            "--kind",
-            "validation",
-            "--result",
-            "pass",
-            "target-aware evidence proof",
-        ],
-    );
-    assert!(success, "evidence add failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - target-aware evidence proof"));
-    let evidence_id = record_id_by_title(dir.path(), "evidence", "target-aware evidence proof");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "evidence",
-            &evidence_id,
-            "--transition",
-            "attach",
-        ],
-    );
-    assert!(success, "evidence target defaults failed: {stderr}");
-    assert!(stdout.contains("pass  durable_state_current"));
-    assert!(
-        !stdout.contains("issue_sections_parseable"),
-        "evidence defaults must not run issue validators:\n{stdout}"
-    );
-
-    commit_all(dir.path(), "tracker health setup");
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "tracker",
-            "health",
-            "--transition",
-            "health",
-        ],
-    );
-    assert!(success, "tracker health defaults failed: {stderr}");
-    for validator in [
-        "durable_state_current",
-        "no_blocking_lints",
-        "ignored_tests_reviewed",
-        "git_worktree_clean",
-    ] {
-        assert!(
-            stdout.contains(&format!("pass  {validator}")),
-            "tracker health output missing passing {validator}:\n{stdout}"
-        );
-    }
-    assert!(
-        !stdout.contains("issue_sections_parseable"),
-        "tracker health defaults must not run issue validators:\n{stdout}"
-    );
-}
-
-#[test]
 fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -8490,6 +7960,150 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
         ),
         "stderr: {stderr}"
     );
+}
+
+#[test]
+fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for title in [
+        "Todo category item",
+        "Active status item",
+        "Done category item",
+    ] {
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+        assert!(success, "issue create failed for {title}: {stderr}");
+    }
+    let todo_id = issue_id_by_title(dir.path(), "Todo category item");
+    let active_id = issue_id_by_title(dir.path(), "Active status item");
+    let done_id = issue_id_by_title(dir.path(), "Done category item");
+    migrate_default_issue_workflow(dir.path());
+
+    let active_path = canonical_issue_path(dir.path(), &active_id);
+    let active_text = std::fs::read_to_string(&active_path).unwrap();
+    std::fs::write(
+        &active_path,
+        active_text.replace("status: \"todo\"", "status: \"in_progress\""),
+    )
+    .unwrap();
+    let done_path = canonical_issue_path(dir.path(), &done_id);
+    let done_text = std::fs::read_to_string(&done_path).unwrap();
+    std::fs::write(
+        &done_path,
+        done_text.replace("status: \"todo\"", "status: \"done\""),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, todo_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
+    assert!(success, "todo filter failed: {stderr}");
+    assert!(todo_out.contains("Category: todo=1"), "{todo_out}");
+    assert!(todo_out.contains("Status: todo=1"), "{todo_out}");
+    assert!(todo_out.contains(&todo_id), "{todo_out}");
+    assert!(!todo_out.contains(&active_id), "{todo_out}");
+    assert!(!todo_out.contains(&done_id), "{todo_out}");
+
+    let (success, active_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "in_progress"]);
+    assert!(success, "in_progress filter failed: {stderr}");
+    assert!(
+        active_out.contains("Category: in_progress=1"),
+        "{active_out}"
+    );
+    assert!(active_out.contains("Status: in_progress=1"), "{active_out}");
+    assert!(
+        active_out.contains("in_progress/in_progress"),
+        "{active_out}"
+    );
+    assert!(active_out.contains(&active_id), "{active_out}");
+    assert!(!active_out.contains(&todo_id), "{active_out}");
+
+    let (success, done_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
+    assert!(success, "done filter failed: {stderr}");
+    assert!(done_out.contains("Category: done=1"), "{done_out}");
+    assert!(done_out.contains("Status: done=1"), "{done_out}");
+    assert!(done_out.contains("done/done"), "{done_out}");
+    assert!(done_out.contains(&done_id), "{done_out}");
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &active_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(
+        show_out.contains(&format!(
+            "{active_id} [task] in_progress/in_progress - Active status item"
+        )),
+        "{show_out}"
+    );
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+    assert!(show_out.contains("Category: in_progress"), "{show_out}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Workflow mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Workflow mission");
+    for issue_id in [&todo_id, &active_id, &done_id] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["mission", "add-work", &mission_id, issue_id]);
+        assert!(success, "mission add-work failed for {issue_id}: {stderr}");
+    }
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    assert!(success, "mission show failed: {stderr}");
+    assert!(mission_out.contains("todo/todo"), "{mission_out}");
+    assert!(
+        mission_out.contains("in_progress/in_progress"),
+        "{mission_out}"
+    );
+    assert!(mission_out.contains("done/done"), "{mission_out}");
+}
+
+#[test]
+fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready transition"]);
+    assert!(success, "ready issue create failed: {stderr}");
+    let ready_id = issue_id_by_title(dir.path(), "Ready transition");
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "ready list failed: {stderr}");
+    assert!(ready_out.contains(&ready_id), "{ready_out}");
+
+    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    std::fs::write(
+        &policy_path,
+        policy.replacen(
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [proof_attached]\n",
+            1,
+        ),
+    )
+    .unwrap();
+
+    let (success, blocked_ready_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(
+        success,
+        "ready list with blocked transition should remain readable: {stderr}"
+    );
+    assert!(
+        !blocked_ready_out.contains(&ready_id),
+        "{blocked_ready_out}"
+    );
+    assert!(
+        blocked_ready_out.contains("No issues found."),
+        "{blocked_ready_out}"
+    );
+
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &ready_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options_out.contains("start [blocked]"), "{options_out}");
+    assert!(options_out.contains("proof_attached"), "{options_out}");
 }
 
 #[test]
@@ -10969,7 +10583,10 @@ hooks:
     assert!(success, "worktree for failed: {stderr}");
     assert!(worktree_out.contains(&worktree_arg));
     assert!(worktree_path.join(".atelier/state.db").exists());
-    assert!(worktree_path.join(".atelier/setup-marker").exists());
+    assert!(
+        !worktree_path.join(".atelier/setup-marker").exists(),
+        "root atelier.workflow.yaml hooks should not run during worktree setup"
+    );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
@@ -11024,7 +10641,7 @@ hooks:
     commit_all(dir.path(), "failing worktree hook");
     let failed_worktree_path = dir.path().join(".atelier-worktrees").join(&failed_issue_id);
     let failed_worktree_arg = failed_worktree_path.to_string_lossy().to_string();
-    let (success, _, stderr) = run_atelier(
+    let (success, failed_out, stderr) = run_atelier(
         dir.path(),
         &[
             "worktree",
@@ -11034,18 +10651,17 @@ hooks:
             &failed_worktree_arg,
         ],
     );
-    assert!(!success, "failing setup hook should reject worktree setup");
     assert!(
-        stderr.contains("worktree setup failed before active work association was changed")
-            && stderr.contains("worktree_setup hook fail_setup failed"),
-        "failed setup should name setup failure and association safety: {stderr}"
+        success,
+        "root atelier.workflow.yaml hook should be ignored, not fail setup: {stderr}"
     );
+    assert!(failed_out.contains(&failed_worktree_arg));
     let (success, failed_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(
         success,
         "worktree status after failed setup failed: {stderr}"
     );
-    assert!(!failed_status.contains(&format!("{failed_issue_id} [active]")));
+    assert!(failed_status.contains(&format!("{failed_issue_id} [active]")));
 }
 
 #[test]
@@ -11129,7 +10745,8 @@ fn test_issue_type_is_canonical_not_label_derived() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("[validation] open - Typed issue"));
+    assert!(stdout.contains("[validation] todo/open - Typed issue"));
+    assert!(stdout.contains("Category: todo"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "list failed: {stderr}");

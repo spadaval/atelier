@@ -409,10 +409,12 @@ This example makes the intended trade-off explicit:
 
 ## Diagnostics
 
-Hidden advanced/internal workflow diagnostics remain separate from the normal
-operator workflow. Use `atelier lint` and `atelier doctor` for the human-facing
-record and runtime health checks, and reserve `atelier workflow validate` for
-explicit diagnostic or closeout contracts that name it.
+Workflow diagnostics stay on supported operator surfaces. Use `atelier workflow
+check` for policy and record-health checks, `atelier issue transition <id>
+--options` for transition gate inspection, and `atelier lint`, `atelier doctor`,
+`atelier mission status`, or `atelier mission audit` for closeout and runtime
+health. The previous `atelier workflow validate` diagnostic command is not part
+of the v1 surface.
 
 ## Deferred Features
 

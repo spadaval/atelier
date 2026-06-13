@@ -175,8 +175,9 @@ audit maps authored mission validation expectations and linked epic outcomes to
 closed work, blockers, and evidence on accountable implementation, review,
 validation, and closeout issues. Raw workflow validator names are diagnostic
 detail; normal closeout output names the operator-facing blocker class and the
-next domain command. Hidden `workflow validate` or policy-debug commands remain
-advanced diagnostics and do not replace `mission status` or the closeout audit.
+next domain command. `workflow check`, `issue transition --options`, `mission
+status`, and `mission audit` are the supported inspection surfaces; removed
+policy-debug commands do not replace them.
 `atelier evidence record` is the normal evidence-recording surface. It records
 manual summaries, command transcripts, audits, failed validations, deferred
 proof, and artifact references as one operator workflow. The target is supplied

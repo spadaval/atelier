@@ -49,8 +49,9 @@ Atelier adopts a repo-owned issue workflow model for version 1.
    `.atelier/workflow.yaml`.
    Workflow discovery does not go through `.atelier/config.toml`, root
    `atelier.workflow.yaml`, or a repository-selected alternate path in version
-   1. The policy file is committed project state alongside other canonical
-   `.atelier/` records.
+   1. Root `atelier.workflow.yaml` hook behavior is removed rather than
+   treated as an alternate policy source. The policy file is committed project
+   state alongside other canonical `.atelier/` records.
 
 4. Version 1 workflow scope is issue-only.
    The configured workflow engine, migration path, transition wrappers, and
