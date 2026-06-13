@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Make worktree association atomic and repairable"
-updated_at: "2026-06-13T04:01:42.078652500+00:00"
+updated_at: "2026-06-13T15:59:35.719873146+00:00"
 ---
 
 ## Description
