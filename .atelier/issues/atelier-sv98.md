@@ -11,8 +11,6 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
-    id: "atelier-09sx"
-  - kind: "issue"
     id: "atelier-im60"
   - kind: "issue"
     id: "atelier-j6v4"
@@ -26,7 +24,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Simplify core command surface around user workflows"
-updated_at: "2026-06-13T03:08:12.351942595+00:00"
+updated_at: "2026-06-13T03:12:37.812133932+00:00"
 ---
 
 ## Description
