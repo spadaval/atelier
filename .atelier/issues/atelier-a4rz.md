@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair active-work root status guidance"
-updated_at: "2026-06-13T00:15:44.796943006+00:00"
+updated_at: "2026-06-13T00:20:24.506664822+00:00"
 ---
 
 ## Description
