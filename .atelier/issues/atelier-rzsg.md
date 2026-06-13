@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate evidence model on mission fixtures"
-updated_at: "2026-06-13T02:36:00.415872253+00:00"
+updated_at: "2026-06-13T16:06:16.445560217+00:00"
 ---
 
 ## Description
