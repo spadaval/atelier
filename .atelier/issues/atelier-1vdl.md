@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:06:13.284390988+00:00"
+status: "done"
 title: "Document reproducible dev environment and env template"
-updated_at: "2026-06-13T23:05:36.189640470+00:00"
+updated_at: "2026-06-13T23:06:13.284390988+00:00"
 ---
 
 ## Description
