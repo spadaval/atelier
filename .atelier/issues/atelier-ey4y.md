@@ -27,12 +27,13 @@ updated_at: "2026-06-13T02:36:09.470158989+00:00"
 
 ## Description
 
-Update Agent Factory orchestration so subagents are used earlier for bounded evidence-producing slices, and so routine work defaults to cheaper/faster models. The policy should reduce main-agent token burn without losing independent validation quality.
+Update Agent Factory orchestration so subagents are used earlier for bounded evidence-producing slices, and so cheaper/faster models are used only when the assignment fits their capability. The policy should reduce main-agent token burn without losing implementation, review, or independent validation quality.
 
 ## Outcome
 
 - Delegation guidance says when to use subagents early for scouting, fixture repair, docs drift checks, transcript capture, focused validation, and stale-test inventory.
-- Model routing defaults routine bounded work to 5.4 Mini and reserves heavier models for ambiguous architecture, cross-cutting refactors, hard debugging, and final adversarial closeout.
+- Model routing identifies 5.4 Mini as suitable for carefully bounded, low-ambiguity work such as basic behavior validation, transcript capture, fixture repair, and straightforward refactor-style implementation when the orchestrator judges the task fit is safe.
+- Model routing reserves higher-reasoning models for complex open-ended implementation, complex review, ambiguous architecture, cross-cutting refactors, hard debugging, and final adversarial closeout.
 - Worker prompts require exact tracker IDs, one role, owned files or workflows, proof expected, model rationale, and independence requirements.
 - Orchestrators can prove delegation quality through evidence-producing handoffs instead of private summaries.
 

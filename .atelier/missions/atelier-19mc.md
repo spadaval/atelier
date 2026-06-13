@@ -38,7 +38,7 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 
 - Use docs-first contracts for workflow policy, public CLI semantics, evidence schema, and Agent Factory rules before implementation.
 - Use focused tests or command transcripts for each changed public behavior; broad suites are supporting evidence, not proof by themselves.
-- Default subagent assignments to cheaper/faster models unless a higher-reasoning model is justified by ambiguity or cross-cutting risk.
+- Use cheaper/faster models only when the orchestrator judges the assignment is bounded, low-ambiguity, and low-risk; use higher-reasoning models for complex open-ended implementation, review, architecture, and hard debugging.
 - Prefer fewer, stronger operator commands over new narrow commands; normal users should not need raw workflow diagnostics for closeout.
 - Treat simplicity as a safety requirement: if a process or command shape makes routine work easier to misuse, redesign it before relying on training or reminders.
 
@@ -55,5 +55,5 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 - Evidence recording is one simple operator workflow for manual summaries and command transcripts.
 - Mission/operator CLI gives a concise default answer for state, blockers, missing evidence, next action, and closeout readiness, with verbose audit drill-down available when needed.
 - Broad command consolidation removes, hides, or merges duplicate surfaces so normal workflows are simple and context-driven.
-- Agent Factory guidance routes delegation by bounded slice, proof need, and model cost, with 5.4 Mini as the default for routine evidence-producing work.
+- Agent Factory guidance routes delegation by bounded slice, proof need, model capability, and cost, with clear caution that 5.4 Mini is suitable for basic bounded validation or refactor-style work only when orchestrator judgment says the task fits.
 - Focused tests, docs/help parity checks, tracker lint/export/doctor, and an independent closeout validation prove the new model end to end.

@@ -21,7 +21,7 @@ updated_at: "2026-06-13T02:36:09.470158989+00:00"
 
 ## Description
 
-Validate the new delegation and model-routing policy by using it on a small bounded run. The run should include at least one 5.4 Mini-suitable assignment and one explicit escalation or no-escalation decision.
+Validate the new delegation and model-routing policy by using it on a small bounded run. The run should include at least one assignment judged suitable for 5.4 Mini by the orchestrator and one explicit escalation or no-escalation decision.
 
 ## Outcome
 
