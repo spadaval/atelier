@@ -265,7 +265,7 @@ commands. They store local work association in runtime state and enforce clean
 worktree plus current-export checks where they affect workflow transitions.
 Root `atelier status`, `atelier mission status`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
-the hidden `atelier work status` helper or any legacy `work start` path for
+the removed work-status helper or any legacy work-start path for
 normal workflow.
 Worktree helpers expose scan-friendly JSON status, create/remove associated Git
 worktrees, and prepare local runtime state in new worktrees.
@@ -320,7 +320,7 @@ surface is `delete` unless it is in the core list above.
 | `atelier export` | Keep with distinct purpose | Explicit repair and deterministic render surface for committed state. | Not a default next action from issue or mission workflow surfaces. |
 | `atelier rebuild` | Keep with distinct purpose | Checkout recovery, test setup, and projection repair. | Use when local runtime state is missing, stale, or deliberately recreated. |
 | Hidden `issue quick/subissue/search/block/relate/tree/tested` helpers | Keep hidden temporarily | Test fixtures and migration slices still exercise these predecessor paths, but they must stay absent from help and must not print compatibility nudges that keep the old verbs alive. | Public workflows use `issue create/update/list/show/close`, root `search`, `dep`, `link`, `graph`, `note`, `evidence`, and `status`. |
-| Hidden `atelier work status` helper and any legacy `work start` path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and `work start` is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
+| Hidden work-status helper and any legacy work-start path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and work-start under that removed group is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue`, `dep`, `link`, and `graph` own those jobs. |
 | Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `import-beads` for migration, canonical `.atelier/` plus `export` and `rebuild` for repair. |
