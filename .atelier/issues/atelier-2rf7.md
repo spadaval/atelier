@@ -21,9 +21,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T22:52:38.077752582+00:00"
+status: "done"
 title: "Define command-purpose and output contract"
-updated_at: "2026-06-13T22:41:56.094803697+00:00"
+updated_at: "2026-06-13T22:52:38.077752582+00:00"
 ---
 
 ## Description
