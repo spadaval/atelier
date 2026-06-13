@@ -13,6 +13,8 @@ relationships:
   - kind: "issue"
     id: "atelier-b2vi"
   - kind: "issue"
+    id: "atelier-cbru"
+  - kind: "issue"
     id: "atelier-ovs0"
   - kind: "issue"
     id: "atelier-rc1v"
@@ -24,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Define strong proof and contract-first workflow"
-updated_at: "2026-06-13T02:39:43.398190553+00:00"
+updated_at: "2026-06-13T03:00:48.118729570+00:00"
 ---
 
 ## Description
@@ -37,10 +39,12 @@ Define what strong proof means in Atelier and make contract-first work the defau
 - Weak proof is defined as broad, summary-only, unattached, unverifiable, or not mapped to a claim.
 - Validation policy distinguishes qualitative judgment from quantitative measurement: subjective claims can pass through inspectable expert judgment, while numerical claims use hard metrics whenever practical.
 - Docs-first and test-first expectations are explicit for public CLI behavior, tracker transitions, evidence policy, and Agent Factory workflow changes.
+- Validation placement guidance tells authors what belongs at the mission, epic, issue, and validation-item layers without duplicating detail across all of them.
 - Work-item authoring guidance tells agents when broad checks support proof and when scenario proof is required.
+- Anti-red-tape guidance prevents parent validation from becoming a second implementation spec.
 
 ## Evidence
 
 - Documentation diff updates CONTEXT and validation/process guidance with the strong-proof vocabulary.
-- Focused examples show strong and weak proof for ordinary issues, parent closeout, CLI behavior, subjective information-hierarchy validation, performance validation, and validation items.
+- Focused examples show strong and weak proof for ordinary issues, parent closeout, CLI behavior, subjective information-hierarchy validation, performance validation, validation placement, and validation items.
 - Tracker lint and export checks pass after the guidance changes.

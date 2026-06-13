@@ -50,6 +50,7 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 ## Validation
 
 - Mission defines a durable strong-proof contract and updates validation guidance so weak proof is distinguishable from strong proof, including support for subjective qualitative validation and hard quantitative validation where practical.
+- Mission defines where validation requirements belong across mission, epic, issue, and validation-item layers, with explicit anti-red-tape guidance to prevent duplicated requirements.
 - Evidence records attach to accountable work rather than mission objectives; mission readiness derives proof from linked implementation, validation, review, and closeout work.
 - Evidence recording is one simple operator workflow for manual summaries and command transcripts.
 - Mission/operator CLI gives a concise default answer for state, blockers, missing evidence, next action, and closeout readiness, with verbose audit drill-down available when needed.
