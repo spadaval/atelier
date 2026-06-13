@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Remove legacy workflow migration and hard-coded statuses"
-updated_at: "2026-06-13T20:09:01.514694429+00:00"
+updated_at: "2026-06-13T21:04:10.297185984+00:00"
 ---
 
 ## Description
