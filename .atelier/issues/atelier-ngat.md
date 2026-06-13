@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:42:04.703223296+00:00"
+status: "done"
 title: "Build stabilization audit inventory and follow-up map"
-updated_at: "2026-06-13T23:41:13.182819405+00:00"
+updated_at: "2026-06-13T23:42:04.703223296+00:00"
 ---
 
 ## Description
