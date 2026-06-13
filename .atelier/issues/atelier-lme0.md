@@ -52,3 +52,9 @@ Initial command audit candidates:
 - `start`, `finish`, `issue close`, `issue transition --options`, and `issue update --status` split lifecycle operations across field mutation and lifecycle command surfaces.
 - `dep`, `link`, and `graph` expose relationship management through three nouns; classify which relationship jobs are normal workflow, drill-down, or advanced graph inspection.
 - `lint`, `doctor`, `export --check`, and `rebuild` need a clear health/recovery split so normal users know when to check, when to repair, and which command output is authoritative.
+- Wrong-kind record IDs are a known orientation hazard. The taxonomy should
+  decide whether type-aware read commands, a generic record lookup, or better
+  wrong-kind errors own this workflow.
+- Installed binary/schema drift is a known mission hazard. The taxonomy should
+  classify it as a health/recovery concern and keep the normal tracker command
+  guidance aligned with Agent Factory.

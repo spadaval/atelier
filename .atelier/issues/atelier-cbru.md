@@ -35,9 +35,15 @@ Clarify where validation requirements belong across missions, epics, executable 
 - Executable issues define the local observable result and local proof.
 - Dedicated validation issues define independent review scenarios, classification expectations, and evidence capture, without becoming a second implementation spec.
 - Guidance includes an anti-red-tape rule: do not add detail to a higher layer unless it changes scope, risk, sequencing, or parent-level confidence.
+- Broad persistence, canonical write, projection refresh, runtime-cache, and
+  worktree changes require early concurrency or scenario validation before final
+  closeout, not only an end-of-mission audit.
 
 ## Evidence
 
 - File-change review of work-item authoring and validation guidance shows the placement model and anti-red-tape rule.
 - Review artifact includes before/after examples for a subjective `mission list` information-hierarchy task and a quantitative performance task.
+- Review artifact includes an example canonical write or projection-refresh
+  issue and shows which command transcript, test, or evidence record provides
+  early concurrency proof.
 - `atelier lint`, `atelier export --check`, and docs whitespace check commands pass.

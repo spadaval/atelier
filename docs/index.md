@@ -60,5 +60,8 @@
 - `docs/architecture/quality/standards.md`: code and documentation standards.
 - `docs/architecture/quality/validation.md`: validation router and result
   states.
+- [docs/architecture/quality/mission-log-insights.md](architecture/quality/mission-log-insights.md):
+  findings from mining recent long-running Codex mission transcripts for docs,
+  Agent Factory, and CLI improvement opportunities.
 - `docs/references/`: notes on external projects and prior art that inform
   Atelier design.
