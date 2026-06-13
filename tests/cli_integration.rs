@@ -6276,20 +6276,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(epic_show.contains("failing stdout"));
     assert!(epic_show.contains("failing stderr"));
 
-    let (success, epic_validate, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "issue",
-            epic_id,
-            "--validator",
-            "evidence_attached",
-        ],
-    );
-    assert!(success, "epic workflow validate failed: {stderr}");
-    assert!(epic_validate.contains("pass  evidence_attached"));
-
+    let manual_epic_summary =
+        "manual epic contract audit line-by-line classification maps epic outcome lines to proof";
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -6299,12 +6287,11 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "validation",
             "--result",
             "pass",
-            "manual epic attach proof",
+            manual_epic_summary,
         ],
     );
     assert!(success, "manual evidence add failed: {stderr}");
-    let manual_epic_evidence_id =
-        record_id_by_title(dir.path(), "evidence", "manual epic attach proof");
+    let manual_epic_evidence_id = record_id_by_title(dir.path(), "evidence", manual_epic_summary);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -6320,6 +6307,20 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         run_atelier(dir.path(), &["evidence", "show", &manual_epic_evidence_id]);
     assert!(success, "manual epic evidence show failed: {stderr}");
     assert!(manual_epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+
+    let (success, epic_validate, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            epic_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(success, "epic workflow validate failed: {stderr}");
+    assert!(epic_validate.contains("pass  evidence_attached"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -6486,6 +6487,144 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     assert!(
         success,
         "target closeout should pass after direct proof: {stderr}"
+    );
+}
+
+#[test]
+fn test_validation_issue_closeout_requires_contract_audit_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, task_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Ordinary proof task",
+            "--description",
+            "## Description\n\nOrdinary task body.\n\n## Outcome\n\nThe ordinary task can close with focused command proof.\n\n## Evidence\n\n- Attach focused passing evidence.",
+        ],
+    );
+    assert!(success, "ordinary issue create failed: {stderr}");
+    assert!(task_out.contains("Created issue atelier-"));
+    let task_id = issue_id_by_title(dir.path(), "Ordinary proof task");
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &task_id,
+        "broad default nextest suite passes",
+    );
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &task_id, "--reason", "ordinary proof"],
+    );
+    assert!(
+        success,
+        "ordinary issue closeout should still accept focused proof: {stderr}"
+    );
+
+    let validation_body = "## Description\n\nValidation item body.\n\n## Outcome\n\n- The validation item maps outcome lines to proof.\n- The validator classifies every finding.\n\n## Evidence\n\n- Attach a mission contract-audit evidence record.\n- Record line-by-line validation classifications.";
+    let (success, validation_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "High-risk validation proof",
+            "--issue-type",
+            "validation",
+            "--description",
+            validation_body,
+        ],
+    );
+    assert!(success, "validation issue create failed: {stderr}");
+    assert!(validation_out.contains("Created issue atelier-"));
+    let validation_id = issue_id_by_title(dir.path(), "High-risk validation proof");
+
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "broad default nextest suite passes",
+    );
+
+    let (success, transitions, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "--options"],
+    );
+    assert!(success, "transition options failed: {stderr}");
+    assert!(transitions.contains("close"));
+    assert!(transitions.contains(
+        "linked passing evidence does not demonstrate line-by-line or contract-audit proof"
+    ));
+
+    let (success, validate_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            &validation_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(
+        !success,
+        "validation issue evidence gate should fail with only broad proof"
+    );
+    assert!(validate_out.contains("fail  evidence_attached"));
+    assert!(validate_out.contains("line-by-line or contract-audit proof"));
+    assert!(stderr.contains("workflow validation failed"));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &validation_id, "--reason", "too early"],
+    );
+    assert!(
+        !success,
+        "validation issue closeout must reject broad proof alone"
+    );
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("line-by-line or contract-audit proof"));
+
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "Mission contract audit line-by-line classification maps validation outcome lines to proof",
+    );
+
+    let (success, validate_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "workflow",
+            "validate",
+            "issue",
+            &validation_id,
+            "--validator",
+            "evidence_attached",
+        ],
+    );
+    assert!(
+        success,
+        "validation issue evidence gate should pass after contract-audit proof: {stderr}"
+    );
+    assert!(validate_out.contains("pass  evidence_attached"));
+    assert!(validate_out.contains("line-by-line or contract-audit evidence is linked"));
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &validation_id,
+            "--reason",
+            "contract audit proof",
+        ],
+    );
+    assert!(
+        success,
+        "validation issue closeout should pass after contract-audit proof: {stderr}"
     );
 }
 
@@ -6827,7 +6966,12 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", mission_id, epic_id]);
     assert!(success, "mission add work failed: {stderr}");
-    attach_issue_pass_evidence(dir.path(), epic_id);
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        epic_id,
+        "Epic contract audit line-by-line classification maps child and parent outcomes to proof",
+    );
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", epic_id, "--reason", "epic proof"],
@@ -6939,7 +7083,12 @@ fn test_epic_closeout_requires_closed_children_and_parent_evidence() {
     let child_id = issue_id_by_title(dir.path(), "Open child");
     let child_id = child_id.as_str();
 
-    attach_issue_pass_evidence(dir.path(), epic_id);
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        epic_id,
+        "Epic contract audit line-by-line classification maps open child and parent outcomes to proof",
+    );
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", epic_id, "--reason", "parent done"],

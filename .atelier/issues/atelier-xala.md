@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Block validation closeout on incomplete proof"
-updated_at: "2026-06-13T01:27:15.818383607+00:00"
+updated_at: "2026-06-13T01:37:29.195569742+00:00"
 ---
 
 ## Description

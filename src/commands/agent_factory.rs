@@ -473,15 +473,19 @@ fn transition_actions(db: &Database, issue: &Issue) -> Result<Vec<TransitionActi
     let active_work = db.get_active_work_association()?;
     let section_blockers = issue_section_blockers(&issue.id);
     let open_blockers = open_blocker_ids(db, &issue.id)?;
-    let evidence_attached = validating_evidence_attached(db, &issue.id)?;
+    let evidence_gate = issue_evidence_gate_status(db, issue)?;
     let mut close_blockers = Vec::new();
     close_blockers.extend(open_blockers.iter().map(|id| format!("open blocker {id}")));
     close_blockers.extend(section_blockers.iter().cloned());
-    if !evidence_attached {
-        close_blockers.push(
-            "missing issue-level proof; capture passing evidence or attach existing evidence"
-                .to_string(),
-        );
+    if !evidence_gate.passed {
+        if evidence_gate.reason == "no validating evidence link found" {
+            close_blockers.push(
+                "missing issue-level proof; capture passing evidence or attach existing evidence"
+                    .to_string(),
+            );
+        } else {
+            close_blockers.push(evidence_gate.reason.clone());
+        }
     }
 
     let start_blocker = if issue.status == "closed" {
@@ -571,16 +575,6 @@ fn issue_section_blockers(issue_id: &str) -> Vec<String> {
     }
 }
 
-fn validating_evidence_attached(db: &Database, issue_id: &str) -> Result<bool> {
-    Ok(db
-        .list_record_links("issue", issue_id)?
-        .into_iter()
-        .any(|link| {
-            link.relation_type == "validates"
-                && (link.source_kind == "evidence" || link.target_kind == "evidence")
-        }))
-}
-
 fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<DomainRecord>> {
     let mut evidence = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
@@ -601,6 +595,114 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Domai
     evidence.sort_by(|a, b| a.id.cmp(&b.id));
     evidence.dedup_by(|a, b| a.id == b.id);
     Ok(evidence)
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EvidenceGateStatus {
+    pub passed: bool,
+    pub reason: String,
+}
+
+pub(crate) fn issue_evidence_gate_status(
+    db: &Database,
+    issue: &Issue,
+) -> Result<EvidenceGateStatus> {
+    let evidence = linked_validating_evidence(db, &issue.id)?;
+    Ok(issue_evidence_gate_status_from_records(issue, &evidence))
+}
+
+fn issue_evidence_gate_status_from_records(
+    issue: &Issue,
+    evidence: &[DomainRecord],
+) -> EvidenceGateStatus {
+    if evidence.is_empty() {
+        return evidence_gate(false, "no validating evidence link found");
+    }
+
+    let passing = evidence
+        .iter()
+        .filter(|record| record.status == "pass")
+        .collect::<Vec<_>>();
+    if passing.is_empty() {
+        let statuses = evidence
+            .iter()
+            .map(|record| format!("{} [{}]", record.id, record.status))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return evidence_gate(
+            false,
+            format!("linked validating evidence is not passing: {statuses}"),
+        );
+    }
+
+    if issue_requires_line_by_line_proof(issue) {
+        if passing
+            .iter()
+            .any(|record| evidence_record_demonstrates_closeout_proof(record))
+        {
+            return evidence_gate(true, "line-by-line or contract-audit evidence is linked");
+        }
+        return evidence_gate(
+            false,
+            "linked passing evidence does not demonstrate line-by-line or contract-audit proof required for validation and parent closeout work",
+        );
+    }
+
+    evidence_gate(true, "validating evidence is linked")
+}
+
+fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {
+    EvidenceGateStatus {
+        passed,
+        reason: reason.into(),
+    }
+}
+
+fn issue_requires_line_by_line_proof(issue: &Issue) -> bool {
+    matches!(
+        issue.issue_type.as_str(),
+        "validation" | "epic" | "closeout" | "audit" | "review"
+    )
+}
+
+fn evidence_record_demonstrates_closeout_proof(record: &DomainRecord) -> bool {
+    let mut text = String::new();
+    text.push_str(&record.title);
+    text.push('\n');
+    if let Some(body) = &record.body {
+        text.push_str(body);
+        text.push('\n');
+    }
+    text.push_str(&record.data_json);
+    let text = text.to_ascii_lowercase();
+
+    let closeout_terms = [
+        "line-by-line",
+        "line by line",
+        "contract audit",
+        "contract-audit",
+        "closeout audit",
+        "mission audit",
+        "outcome audit",
+        "outcome line",
+        "linked epic outcome",
+        "epic outcome",
+    ];
+    let classification_terms = [
+        "classified",
+        "classification",
+        "pass/fail",
+        "pass, fail",
+        "blocked",
+        "deferred",
+        "not-applicable",
+        "not applicable",
+        "maps",
+        "mapped",
+    ];
+
+    closeout_terms.iter().any(|term| text.contains(term))
+        && classification_terms.iter().any(|term| text.contains(term))
 }
 
 fn evidence_section_allows_note_proof(evidence: &str) -> bool {
@@ -632,8 +734,18 @@ fn ensure_issue_closeout_proof(
     record: &CanonicalIssueRecord,
 ) -> Result<()> {
     let evidence = linked_validating_evidence(db, issue_id)?;
-    if evidence.iter().any(|record| record.status == "pass") {
+    let evidence_gate = issue_evidence_gate_status_from_records(&record.issue, &evidence);
+    if evidence_gate.passed {
         return Ok(());
+    }
+    if issue_requires_line_by_line_proof(&record.issue) && !evidence.is_empty() {
+        bail!(
+            "Issue {} cannot be closed because {}. Attach passing line-by-line or contract-audit proof with `atelier evidence attach <evidence-id> issue {}` or capture it with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>`.",
+            format_issue_id(issue_id),
+            evidence_gate.reason,
+            format_issue_id(issue_id),
+            format_issue_id(issue_id)
+        );
     }
     if !evidence.is_empty() {
         let statuses = evidence

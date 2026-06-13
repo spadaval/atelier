@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+use crate::commands::agent_factory::issue_evidence_gate_status;
 use crate::db::Database;
 use crate::record_store::{IssueSections, RecordStore};
 
@@ -199,6 +200,11 @@ fn evaluate_builtin(
             }
         }
         "evidence_attached" => {
+            if target_kind == "issue" {
+                let issue = db.require_issue(target_id)?;
+                let gate = issue_evidence_gate_status(db, &issue)?;
+                return Ok((gate.passed, gate.reason));
+            }
             let attached = db
                 .list_record_links(target_kind, target_id)?
                 .into_iter()
