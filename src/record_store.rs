@@ -2388,7 +2388,7 @@ mod tests {
                 id: id.to_string(),
                 title: "Write RecordStore".to_string(),
                 description: Some(body.to_string()),
-                status: "open".to_string(),
+                status: "todo".to_string(),
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
                 parent_id: None,
@@ -2490,7 +2490,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Write RecordStore"
 updated_at: "2026-06-10T13:00:00+00:00"
 ---

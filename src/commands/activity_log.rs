@@ -27,18 +27,6 @@ pub fn record_close_reason(issue_id: &str, reason: &str) -> Result<()> {
     )
 }
 
-pub fn record_status_changed(issue_id: &str, old: &str, new: &str) -> Result<()> {
-    if old == new {
-        return Ok(());
-    }
-    record(
-        issue_id,
-        ActivityEventType::StatusChanged,
-        &format!("Changed status from {old} to {new}"),
-        &field_change_body("status", Some(old), Some(new)),
-    )
-}
-
 pub fn record_field_changed(
     issue_id: &str,
     field: &str,

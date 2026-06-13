@@ -237,15 +237,33 @@ fn test_issue_tree_status_filter() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Filterable parent"]);
-    h.run_ok(&["issue", "subissue", "1", "Open child"]);
-    h.run_ok(&["issue", "subissue", "1", "Closed child"]);
-    h.close_issue_with_evidence("3");
+    let parent_id = h.issue_id(1);
+    h.run_ok(&["issue", "subissue", "1", "Todo child"]);
+    h.run_ok(&[
+        "issue",
+        "create",
+        "Done child",
+        "--parent",
+        &parent_id,
+        "--issue-type",
+        "spike",
+    ]);
+    let done_child_id = h.issue_id(3);
+    h.run_ok(&["issue", "transition", &done_child_id, "start"]);
+    h.run_ok(&["issue", "transition", &done_child_id, "request_review"]);
+    h.run_ok(&[
+        "issue",
+        "close",
+        &done_child_id,
+        "--reason",
+        "fixture complete",
+    ]);
 
-    let tree = h.run_ok(&["issue", "tree", "-s", "open"]);
-    assert!(tree.stdout.contains("Open child"));
+    let tree = h.run_ok(&["issue", "tree", "-s", "todo"]);
+    assert!(tree.stdout.contains("Todo child"));
     assert!(
-        !tree.stdout_contains("Closed child"),
-        "tree --status open should not show closed issues.\nstdout: {}",
+        !tree.stdout_contains("Done child"),
+        "tree --status todo should not show done issues.\nstdout: {}",
         tree.stdout,
     );
 }

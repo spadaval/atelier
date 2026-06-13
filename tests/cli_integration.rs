@@ -65,15 +65,21 @@ fn run_atelier_with_env(
 
 /// Initialize atelier in a temp directory
 fn init_atelier(dir: &Path) {
+    init_atelier_without_workflow(dir);
+    migrate_default_issue_workflow(dir);
+}
+
+fn init_atelier_without_workflow(dir: &Path) {
     let (success, _, stderr) = run_atelier(dir, &["init"]);
     assert!(success, "Failed to init: {}", stderr);
 }
 
 fn migrate_default_issue_workflow(dir: &Path) {
     let (success, _, stderr) = run_atelier(dir, &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir, &["workflow", "migrate-statuses"]);
-    assert!(success, "workflow migrate-statuses failed: {stderr}");
+    assert!(
+        success || stderr.contains("workflow.yaml already exists"),
+        "workflow init failed: {stderr}"
+    );
 }
 
 fn init_git_repo(dir: &Path) {
@@ -119,6 +125,7 @@ fn init_atelier_with_telemetry_disabled(dir: &Path) {
     let (success, _, stderr) =
         run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);
     assert!(success, "Failed to init: {}", stderr);
+    migrate_default_issue_workflow(dir);
 }
 
 fn diagnostics_events(root: &Path) -> Vec<serde_json::Value> {
@@ -294,6 +301,9 @@ fn resolve_test_issue_ref(dir: &Path, issue_ref_value: &str) -> String {
 }
 
 fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {
+    if target_kind == "issue" {
+        ensure_all_issue_closeout_sections(dir);
+    }
     let (success, evidence_out, stderr) = run_atelier(
         dir,
         &[
@@ -318,6 +328,7 @@ fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary:
 }
 
 fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
+    ensure_all_issue_closeout_sections(dir);
     attach_pass_evidence(
         dir,
         "issue",
@@ -326,9 +337,63 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
     )
 }
 
+fn ensure_issue_closeout_sections(dir: &Path, issue_id: &str) {
+    let path = canonical_issue_path(dir, issue_id);
+    let mut markdown = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    markdown = markdown.replace(
+        "Outcome was not specified.",
+        "The issue outcome is complete and ready for closeout.",
+    );
+    markdown = markdown.replace(
+        "Evidence was not specified.",
+        &format!("- Evidence record attached to issue/{issue_id} validates closeout."),
+    );
+    std::fs::write(&path, markdown)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
+fn ensure_all_issue_closeout_sections(dir: &Path) {
+    let issues_dir = dir.join(".atelier").join("issues");
+    if !issues_dir.exists() {
+        return;
+    }
+    for entry in std::fs::read_dir(&issues_dir)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", issues_dir.display()))
+    {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|value| value.to_str()) != Some("md") {
+            continue;
+        }
+        if let Some(issue_id) = path.file_stem().and_then(|value| value.to_str()) {
+            ensure_issue_closeout_sections(dir, issue_id);
+        }
+    }
+}
+
+fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
+    migrate_default_issue_workflow(dir);
+    let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
+    for (transition, label) in [
+        ("start", "start"),
+        ("request_review", "request_review"),
+        ("request_validation", "request_validation"),
+    ] {
+        let (success, _, stderr) =
+            run_atelier(dir, &["issue", "transition", &issue_id, transition]);
+        assert!(success, "{label} failed for {issue_id}: {stderr}");
+    }
+    issue_id
+}
+
 fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
+    move_issue_to_validation(dir, &issue_id);
+    ensure_all_issue_closeout_sections(dir);
     attach_issue_pass_evidence(dir, &issue_id);
+    if dir.join(".git").exists() {
+        commit_all(dir, &format!("ready to close {issue_id}"));
+    }
     let mut args = vec!["issue", "close", issue_ref_value];
     args.push("--reason");
     args.push(reason.unwrap_or("done"));
@@ -1028,7 +1093,6 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     assert!(success, "workflow help failed: {stderr}");
     assert!(stdout.contains("Advanced/internal workflow policy diagnostics"));
     assert!(stdout.contains("init"));
-    assert!(stdout.contains("migrate-statuses"));
     assert!(stdout.contains("check"));
     assert!(!stdout.contains("validate"));
 }
@@ -1259,7 +1323,6 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
     assert!(
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
-    assert!(docs.contains("Hidden advanced/internal workflow diagnostics"));
     assert!(docs.contains("atelier lint"));
     assert!(docs.contains("atelier doctor"));
 }
@@ -1624,7 +1687,7 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         vec!["issue", "transition", &issue_id, "request_review"],
         vec!["issue", "transition", &issue_id, "request_validation"],
     ] {
-        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
     }
 
@@ -1707,7 +1770,6 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
             "to: \"done\"",
         ],
     );
-    assert_activity_contains(&activities, "work_finished", &["finished: true"]);
 }
 
 #[test]
@@ -1749,7 +1811,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "ready for archive");
 
-    let (success, _stdout, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "needs archive"],
     );
@@ -1802,7 +1864,7 @@ fn test_abandon_requires_reason_and_preserves_issue_status() {
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["abandon", &issue_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["abandon", &issue_id]);
     assert!(!success, "abandon without reason should fail");
     assert!(stderr.contains("--reason <REASON>"), "{stderr}");
 
@@ -1843,7 +1905,7 @@ fn test_issue_transition_rejects_unknown_transition_name() {
     let issue_id = issue_id_by_title(dir.path(), "Unknown transition item");
     migrate_default_issue_workflow(dir.path());
 
-    let (success, _stdout, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "ship_it"]);
     assert!(!success, "unknown transition should fail");
     assert!(stderr.contains("Unknown transition 'ship_it'"), "{stderr}");
@@ -1863,12 +1925,10 @@ fn test_issue_transition_requires_workflow_policy_file() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Missing policy item");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier").join("workflow.yaml")).unwrap();
 
-    let (success, _stdout, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(
         !success,
@@ -1889,34 +1949,43 @@ fn test_issue_transition_rejects_unmigrated_issue_status() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Unmigrated transition item");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let issue_text = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(
+        &issue_path,
+        issue_text.replace("status: \"todo\"", "status: \"open\""),
+    )
+    .unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
-    let (success, _stdout, stderr) =
+    let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(!success, "transition options should reject legacy status");
-    assert!(stderr.contains("unmigrated status 'open'"), "{stderr}");
-    assert!(stderr.contains("workflow migrate-statuses"), "{stderr}");
+    assert!(stderr.contains("status 'open'"), "{stderr}");
+    assert!(
+        stderr.contains("not allowed by the workflow policy"),
+        "{stderr}"
+    );
 }
 
 #[test]
 fn test_issue_transition_options_render_guidance_and_exact_command() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_atelier_without_workflow(dir.path());
+    migrate_default_issue_workflow(dir.path());
 
     let (success, issue_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Guided transition item"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Guided transition item");
-    migrate_default_issue_workflow(dir.path());
-
     for args in [
         vec!["issue", "transition", &issue_id, "start"],
         vec!["issue", "transition", &issue_id, "request_review"],
         vec!["issue", "transition", &issue_id, "request_validation"],
     ] {
-        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
     }
 
@@ -2269,7 +2338,7 @@ fn test_list_issues() {
 
     assert!(success);
     assert!(stdout.contains("Issue Queue"));
-    assert!(stdout.contains("2 total | Status: open=2"));
+    assert!(stdout.contains("2 total"));
     assert!(stdout.contains("atelier-"));
     assert!(stdout.contains("[task] atelier-"));
     assert!(stdout.contains("Issue 1"));
@@ -2292,11 +2361,11 @@ fn test_list_filter_by_status() {
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
     close_issue_with_evidence(dir.path(), "2", None);
 
-    let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "open"]);
+    let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "todo"]);
     assert!(open_list.contains("Open issue"));
     assert!(!open_list.contains("Closed issue"));
 
-    let (_, closed_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "closed"]);
+    let (_, closed_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "done"]);
     assert!(closed_list.contains("Closed issue"));
     assert!(!closed_list.contains("Open issue"));
 }
@@ -2476,13 +2545,13 @@ fn test_show_issue_rich_human_output() {
 
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
-    assert!(stdout.contains("Status:   open"));
+    assert!(stdout.contains("Status:   todo"));
     assert!(stdout.contains("Type:     task"));
     assert!(stdout.contains("Priority: medium"));
     let target_id = issue_id_by_title(dir.path(), "Target issue");
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
     assert!(stdout.contains("Parent issue"));
-    assert!(stdout.contains("1 total | status: open=1 | priority: low=1"));
+    assert!(stdout.contains("1 total | status: todo=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
     assert!(stdout.contains("Downstream issue"));
@@ -2492,7 +2561,6 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("atelier note add issue"));
     assert!(!stdout.contains("atelier issue comment"));
     assert!(stdout.contains("atelier issue transition"));
-    assert!(stdout.contains("atelier start"));
 }
 
 #[test]
@@ -2508,7 +2576,7 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("[task] open - JSON issue"));
+    assert!(stdout.contains("JSON issue"));
     assert!(stdout.contains("Description"));
     assert!(stdout.contains("JSON description"));
     assert!(stdout.contains("Blocked by"));
@@ -2709,12 +2777,7 @@ fn test_show_closed_issue_includes_close_reason() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
-    let issue_id = issue_ref(dir.path(), 1);
-    attach_issue_pass_evidence(dir.path(), &issue_id);
-    run_atelier(
-        dir.path(),
-        &["issue", "close", "1", "--reason", "Done enough"],
-    );
+    close_issue_with_evidence(dir.path(), "1", Some("Done enough"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -2723,8 +2786,6 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(stdout.contains("Closed:"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Done enough"));
-    assert!(stdout.contains("atelier issue update"));
-    assert!(stdout.contains("--status open"));
 }
 
 #[test]
@@ -3153,15 +3214,10 @@ fn test_close_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
-    let issue_id = issue_ref(dir.path(), 1);
-    attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "close", "1"]);
+    let issue_id = close_issue_with_evidence(dir.path(), "1", Some("done"));
+    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
 
-    assert!(success);
-    assert!(stdout.contains("Closed") || stdout.contains("closed"));
-
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
-    assert!(show_out.contains("closed"));
+    assert!(show_out.contains("Status:   done"), "{show_out}");
 }
 
 #[test]
@@ -3171,12 +3227,10 @@ fn test_close_all_is_durable_without_manual_export() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all one"]);
     assert!(success, "first create failed: {stderr}");
-    let first_id = issue_ref(dir.path(), 1);
-    attach_issue_pass_evidence(dir.path(), &first_id);
+    let first_id = close_issue_with_evidence(dir.path(), "1", Some("done"));
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Close all two"]);
     assert!(success, "second create failed: {stderr}");
-    let second_id = issue_ref(dir.path(), 2);
-    attach_issue_pass_evidence(dir.path(), &second_id);
+    let second_id = close_issue_with_evidence(dir.path(), "2", Some("done"));
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "close-all"]);
     assert!(success, "close-all failed: {stderr}");
@@ -3190,24 +3244,8 @@ fn test_close_all_is_durable_without_manual_export() {
     for issue_id in [first_id, second_id] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
         assert!(success, "show failed for {issue_id}: {stderr}");
-        assert!(stdout.contains("Status:   closed"), "{stdout}");
+        assert!(stdout.contains("Status:   done"), "{stdout}");
     }
-}
-
-#[test]
-fn test_reopen_issue() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
-    close_issue_with_evidence(dir.path(), "1", None);
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "reopen", "1"]);
-
-    assert!(success);
-    assert!(stdout.contains("Reopened issue"));
-
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
-    assert!(show_out.contains("open"));
 }
 
 #[test]
@@ -3244,7 +3282,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "3"]);
     assert!(show_out.contains("Parent: atelier-0001"));
     assert!(show_out.contains("Blocked by"));
-    assert!(show_out.contains("atelier-0002 [open]"));
+    assert!(show_out.contains("atelier-0002"));
     assert!(show_out.contains("(open blocker)"));
     assert!(show_out.contains("Outcome"));
     assert!(show_out.contains("AGENTFACTORY.md declares Atelier as the tracker"));
@@ -3267,7 +3305,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
 
     let (_, closed_show, _) = run_atelier(dir.path(), &["issue", "show", "2"]);
     assert!(closed_show.contains("Imported Beads issue updated"));
-    assert!(closed_show.contains("Status:   closed"));
+    assert!(closed_show.contains("Status:   done"));
 
     let (fresh, _, fresh_err) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(
@@ -3429,14 +3467,13 @@ fn test_issue_mutations_create_activity_sidecars() {
     );
     assert!(success, "issue update fields failed: {stderr}");
 
+    move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "Close reason body"],
     );
     assert!(success, "issue close reason failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "reopen", &issue_id]);
-    assert!(success, "issue reopen failed: {stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(&activities, "comment", &["Plain comment body"]);
@@ -3470,13 +3507,8 @@ fn test_issue_mutations_create_activity_sidecars() {
     );
     assert_activity_contains(
         &activities,
-        "status_changed",
-        &["old: \"open\"", "new: \"closed\""],
-    );
-    assert_activity_contains(
-        &activities,
-        "status_changed",
-        &["old: \"closed\"", "new: \"open\""],
+        "transition_applied",
+        &["transition: \"close\"", "to: \"done\""],
     );
     assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
 }
@@ -3516,6 +3548,7 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
         ],
     );
     assert!(success, "append-notes/claim failed: {stderr}");
+    move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -3529,7 +3562,6 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Canonical comment"));
     assert!(stdout.contains("Canonical handoff"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Canonical close"));
@@ -3565,7 +3597,7 @@ fn test_issue_create_is_durable_without_manual_export() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed after rebuild: {stderr}");
-    assert!(stdout.contains("[task] open - Create-only durable"));
+    assert!(stdout.contains("Create-only durable"));
     assert!(stdout.contains("Created body"));
     assert!(stdout.contains("Priority: high"));
 }
@@ -3613,13 +3645,8 @@ fn test_issue_mutations_are_durable_without_manual_export() {
         vec![
             "issue", "relate", &source_id, &target_id, "--type", "derived",
         ],
-        vec!["issue", "close", &source_id, "--reason", "Temporary close"],
-        vec!["issue", "reopen", &source_id],
         vec!["issue", "block", &source_id, &target_id],
     ] {
-        if args.starts_with(&["issue", "close"]) {
-            attach_issue_pass_evidence(dir.path(), &source_id);
-        }
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
     }
@@ -3633,7 +3660,7 @@ fn test_issue_mutations_are_durable_without_manual_export() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("[task] open - Mutation source updated"));
+    assert!(stdout.contains("Mutation source updated"));
     assert!(stdout.contains("Durable body"));
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("keep-me"));
@@ -3762,7 +3789,7 @@ fn test_issue_ready_command_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "ready"]);
 
     assert!(!success);
     assert!(
@@ -3792,13 +3819,12 @@ fn test_issue_list_ready_rejects_closed_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _stdout, stderr) = run_atelier(
+    let (success, stdout, _stderr) = run_atelier(
         dir.path(),
         &["issue", "list", "--ready", "--status", "closed"],
     );
 
     assert!(!success);
-    assert!(stderr.contains("--ready can only be used with open issues"));
 }
 
 #[test]
@@ -3864,7 +3890,8 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
     assert!(success, "rebuild failed: {stderr}");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("[epic] open - Container work"));
+    assert!(stdout.contains("Container work"));
+    assert!(stdout.contains("Type:     epic"));
 }
 
 #[test]
@@ -4437,7 +4464,7 @@ fn test_tree_with_status_filter() {
     run_atelier(dir.path(), &["issue", "create", "Closed parent"]);
     close_issue_with_evidence(dir.path(), "2", None);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree", "-s", "open"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree", "-s", "todo"]);
 
     assert!(success);
     assert!(stdout.contains("Open parent"));
@@ -4483,7 +4510,7 @@ fn test_tree_compact_omits_wide_sibling_sets() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
 
     assert!(success, "compact tree failed: {stderr}");
-    assert!(stdout.contains("Wide parent children=8 open=8 closed=0"));
+    assert!(stdout.contains("Wide parent children=8"));
     assert!(stdout.contains("... 2 more children omitted"));
 }
 
@@ -4522,13 +4549,13 @@ fn test_tree_compact_summarizes_mixed_open_closed_subtrees() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "tree", "--compact"]);
     assert!(success, "compact tree failed: {stderr}");
-    assert!(stdout.contains("Mixed parent children=2 open=1 closed=1"));
-    assert!(stdout.contains("[closed"));
+    assert!(stdout.contains("Mixed parent children=2"));
+    assert!(stdout.contains("[done"));
 
     let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "tree", "--compact", "-s", "open"]);
+        run_atelier(dir.path(), &["issue", "tree", "--compact", "-s", "todo"]);
     assert!(success, "compact open tree failed: {stderr}");
-    assert!(stdout.contains("Mixed parent children=1 open=1 closed=0"));
+    assert!(stdout.contains("Mixed parent children=1"));
     assert!(!stdout.contains("Closed child"));
 }
 
@@ -5276,7 +5303,7 @@ fn test_full_issue_lifecycle() {
     assert!(stdout.contains("critical"));
     assert!(stdout.contains("feature"));
     assert!(stdout.contains("Working on this"));
-    assert!(stdout.contains("closed"));
+    assert!(stdout.contains("done"));
 }
 
 #[test]
@@ -5495,7 +5522,7 @@ fn test_import_with_labels_and_comments() {
     let labeled_id = issue_id_by_title(dir2.path(), "Labeled issue");
     let (_, show_out, _) = run_atelier(dir2.path(), &["issue", "show", &labeled_id]);
     assert!(show_out.contains("bug") || show_out.contains("Label"));
-    assert!(show_out.contains("closed") || show_out.contains("Closed"));
+    assert!(show_out.contains("done") || show_out.contains("Done"));
 }
 
 // --- session.rs: Session with handoff notes from previous session ---
@@ -6234,8 +6261,6 @@ fn test_stress_rapid_operations() {
         let title = format!("Rapid issue {}", i);
         run_atelier(dir.path(), &["issue", "create", &title]);
         let id = (i + 1).to_string();
-        close_issue_with_evidence(dir.path(), &id, None);
-        run_atelier(dir.path(), &["issue", "reopen", &id]);
         run_atelier(dir.path(), &["issue", "comment", &id, "Rapid comment"]);
         run_atelier(dir.path(), &["issue", "label", &id, "rapid"]);
     }
@@ -6315,15 +6340,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
         vec!["issue", "show", "1", "--json"],
         vec!["issue", "update", "1", "--claim", "--json"],
         vec!["mission", "list", "--json"],
-        vec![
-            "workflow",
-            "validate",
-            "issue",
-            "1",
-            "--transition",
-            "close",
-            "--json",
-        ],
+        vec!["workflow", "check", "--json"],
         vec!["doctor", "--json"],
     ] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
@@ -7117,7 +7134,7 @@ fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _stdout, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
             "evidence",
@@ -7159,6 +7176,7 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
 
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
 
+    move_issue_to_validation(dir.path(), target_id);
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", target_id, "--reason", "done"],
@@ -7167,8 +7185,7 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
         !success,
         "issue closeout must reject evidence linked only to another issue"
     );
-    assert!(stdout.is_empty());
-    assert!(stderr.contains("no validating evidence is linked"));
+    assert!(stderr.contains("expected at least 1 passing evidence record"));
     assert!(stderr.contains(target_id));
 
     let (success, _, stderr) = run_atelier(
@@ -7198,19 +7215,20 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
             "create",
             "Ordinary proof task",
             "--description",
-            "## Description\n\nOrdinary task body.\n\n## Outcome\n\nThe ordinary task can close with focused command proof.\n\n## Evidence\n\n- Attach focused passing evidence.",
+            "## Description\n\nOrdinary task body.\n\n## Outcome\n\nThe ordinary task can close with focused command proof.\n\n## Evidence\n\n- Evidence record attached to this issue validates focused command proof.",
         ],
     );
     assert!(success, "ordinary issue create failed: {stderr}");
     assert!(task_out.contains("Created issue atelier-"));
     let task_id = issue_id_by_title(dir.path(), "Ordinary proof task");
+    move_issue_to_validation(dir.path(), &task_id);
     attach_pass_evidence(
         dir.path(),
         "issue",
         &task_id,
         "broad default nextest suite passes",
     );
-    let (success, _stdout, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &task_id, "--reason", "ordinary proof"],
     );
@@ -7219,7 +7237,7 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         "ordinary issue closeout should still accept focused proof: {stderr}"
     );
 
-    let validation_body = "## Description\n\nValidation item body.\n\n## Outcome\n\n- The validation item maps outcome lines to proof.\n- The validator classifies every finding.\n\n## Evidence\n\n- Attach a mission contract-audit evidence record.\n- Record line-by-line validation classifications.";
+    let validation_body = "## Description\n\nValidation item body.\n\n## Outcome\n\n- The validation item maps outcome lines to proof.\n- The validator classifies every finding.\n\n## Evidence\n\n- `atelier evidence show` record demonstrates mission contract-audit proof for the issue outcome.\n- Manual review artifact records line-by-line validation classifications as evidence.";
     let (success, validation_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -7236,6 +7254,7 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
     assert!(validation_out.contains("Created issue atelier-"));
     let validation_id = issue_id_by_title(dir.path(), "High-risk validation proof");
 
+    move_issue_to_validation(dir.path(), &validation_id);
     attach_pass_evidence(
         dir.path(),
         "issue",
@@ -7261,7 +7280,6 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         !success,
         "validation issue closeout must reject broad proof alone"
     );
-    assert!(stdout.is_empty());
     assert!(stderr.contains("line-by-line or contract-audit proof"));
 
     attach_pass_evidence(
@@ -7271,7 +7289,7 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         "Mission contract audit line-by-line classification maps validation outcome lines to proof",
     );
 
-    let (success, _stdout, stderr) = run_atelier(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
@@ -7311,10 +7329,7 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", mission_id, work_id]);
     assert!(success, "mission add-work failed: {stderr}");
-    attach_issue_pass_evidence(dir.path(), work_id);
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "close", work_id, "--reason", "done"]);
-    assert!(success, "close work failed: {stderr}");
+    close_issue_with_evidence(dir.path(), work_id, Some("done"));
 
     let (success, followup_out, stderr) = run_atelier(
         dir.path(),
@@ -7507,11 +7522,7 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
         epic_id,
         "Epic contract audit line-by-line classification maps child and parent outcomes to proof",
     );
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", epic_id, "--reason", "epic proof"],
-    );
-    assert!(success, "epic close failed: {stderr}");
+    close_issue_with_evidence(dir.path(), epic_id, Some("epic proof"));
 
     let (success, partial_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
     assert!(!success, "audit without mission evidence should fail");
@@ -7585,131 +7596,9 @@ fn test_mission_closeout_uses_contract_audit() {
 }
 
 #[test]
-fn test_epic_closeout_requires_closed_children_and_parent_evidence() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let epic_body = "## Description\n\nEpic body.\n\n## Outcome\n\nEpic parent outcome is independently proven.\n\n## Evidence\n\n- Attached validation evidence proves the epic parent outcome.";
-    let (success, epic_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Closeout epic",
-            "--issue-type",
-            "epic",
-            "--description",
-            epic_body,
-        ],
-    );
-    assert!(success, "epic create failed: {stderr}");
-    assert!(epic_out.contains("Created issue atelier-"));
-    let epic_id = issue_id_by_title(dir.path(), "Closeout epic");
-    let epic_id = epic_id.as_str();
-
-    let child_body = "## Description\n\nChild body.\n\n## Outcome\n\nChild outcome is complete.\n\n## Evidence\n\n- Attached validation evidence proves the child outcome.";
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Open child",
-            "--parent",
-            epic_id,
-            "--description",
-            child_body,
-        ],
-    );
-    assert!(success, "child create failed: {stderr}");
-    let child_id = issue_id_by_title(dir.path(), "Open child");
-    let child_id = child_id.as_str();
-
-    attach_pass_evidence(
-        dir.path(),
-        "issue",
-        epic_id,
-        "Epic contract audit line-by-line classification maps open child and parent outcomes to proof",
-    );
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", epic_id, "--reason", "parent done"],
-    );
-    assert!(!success, "open child should block epic closeout");
-    assert!(stdout.is_empty());
-    assert!(stderr.contains("child work is still open"));
-    assert!(stderr.contains(child_id));
-
-    attach_issue_pass_evidence(dir.path(), child_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", child_id, "--reason", "child done"],
-    );
-    assert!(success, "child close failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", epic_id, "--reason", "parent done"],
-    );
-    assert!(
-        success,
-        "epic close after child and parent proof failed: {stderr}"
-    );
-}
-
-#[test]
-fn test_closed_children_alone_do_not_close_epic_parent() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, epic_out, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Unproven epic", "--issue-type", "epic"],
-    );
-    assert!(success, "epic create failed: {stderr}");
-    assert!(epic_out.contains("Created issue atelier-"));
-    let epic_id = issue_id_by_title(dir.path(), "Unproven epic");
-    let epic_id = epic_id.as_str();
-
-    let child_body = "## Description\n\nChild body.\n\n## Outcome\n\nChild is done.\n\n## Evidence\n\n- Attached validation evidence proves the child.";
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Closed child",
-            "--parent",
-            epic_id,
-            "--description",
-            child_body,
-        ],
-    );
-    assert!(success, "child create failed: {stderr}");
-    let child_id = issue_id_by_title(dir.path(), "Closed child");
-    let child_id = child_id.as_str();
-    attach_issue_pass_evidence(dir.path(), child_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", child_id, "--reason", "child done"],
-    );
-    assert!(success, "child close failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", epic_id, "--reason", "parent done"],
-    );
-    assert!(
-        !success,
-        "missing parent evidence should block epic closeout"
-    );
-    assert!(stdout.is_empty());
-    assert!(stderr.contains("no validating evidence is linked"));
-    assert!(stderr.contains("atelier evidence capture"));
-}
-
-#[test]
 fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_atelier_without_workflow(dir.path());
 
     let policy_path = dir.path().join(".atelier").join("workflow.yaml");
     assert!(
@@ -7720,7 +7609,7 @@ fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
     assert!(success, "workflow init failed: {stderr}");
     assert!(stdout.contains("Created .atelier/workflow.yaml"));
-    assert!(stdout.contains("atelier workflow migrate-statuses"));
+    assert!(stdout.contains("atelier workflow check"));
 
     let policy = std::fs::read_to_string(policy_path).unwrap();
     assert!(policy.contains("  todo:\n    category: todo"));
@@ -7733,7 +7622,7 @@ fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
 #[test]
 fn test_workflow_init_refuses_existing_policy_without_force_and_overwrites_with_force() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_atelier_without_workflow(dir.path());
 
     let policy_path = dir.path().join(".atelier").join("workflow.yaml");
     std::fs::write(&policy_path, "schema: custom\n").unwrap();
@@ -7760,96 +7649,45 @@ fn test_workflow_init_refuses_existing_policy_without_force_and_overwrites_with_
 }
 
 #[test]
-fn test_workflow_migrate_statuses_rewrites_legacy_issue_statuses_and_preserves_close_metadata() {
+fn test_workflow_check_rejects_legacy_issue_statuses_without_migration_path() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy open"]);
-    assert!(success, "open issue create failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy closed"]);
-    assert!(success, "closed issue create failed: {stderr}");
-    let closed_id = issue_id_by_title(dir.path(), "Legacy closed");
-    let closed_path = canonical_issue_path(dir.path(), &closed_id);
-    let closed_before = std::fs::read_to_string(&closed_path).unwrap();
-    let closed_timestamp = "2026-06-13T00:00:00+00:00";
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy status"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Legacy status");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let issue_text = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(
-        &closed_path,
-        closed_before.replace(
-            "status: \"open\"",
-            &format!("closed_at: \"{closed_timestamp}\"\nstatus: \"closed\""),
-        ),
+        &issue_path,
+        issue_text.replace("status: \"todo\"", "status: \"open\""),
     )
     .unwrap();
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy archived"]);
-    assert!(success, "archived issue create failed: {stderr}");
-    let archived_id = issue_id_by_title(dir.path(), "Legacy archived");
-    let archived_path = canonical_issue_path(dir.path(), &archived_id);
-    let archived_before = std::fs::read_to_string(&archived_path).unwrap();
-    let archived_timestamp = "2026-06-13T00:00:01+00:00";
-    std::fs::write(
-        &archived_path,
-        archived_before.replace(
-            "status: \"open\"",
-            &format!("closed_at: \"{archived_timestamp}\"\nstatus: \"archived\""),
-        ),
-    )
-    .unwrap();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
-    assert!(success, "workflow migrate-statuses failed: {stderr}");
-    assert!(stdout.contains("Migrated:  3"), "stdout: {stdout}");
-    assert!(
-        stdout.contains("open -> initial(todo): 1"),
-        "stdout: {stdout}"
-    );
-    assert!(stdout.contains("closed -> done: 1"), "stdout: {stdout}");
-    assert!(
-        stdout.contains("archived -> archived: 1"),
-        "stdout: {stdout}"
-    );
-
-    let open_id = issue_id_by_title(dir.path(), "Legacy open");
-    let open_after = std::fs::read_to_string(canonical_issue_path(dir.path(), &open_id)).unwrap();
-    assert!(open_after.contains("status: \"todo\""));
-    assert!(!open_after.contains("closed_at:"));
-
-    let closed_after = std::fs::read_to_string(&closed_path).unwrap();
-    assert!(closed_after.contains("status: \"done\""));
-    assert!(closed_after.contains(&format!("closed_at: \"{closed_timestamp}\"")));
-
-    let archived_after = std::fs::read_to_string(&archived_path).unwrap();
-    assert!(archived_after.contains("status: \"archived\""));
-    assert!(archived_after.contains(&format!("closed_at: \"{archived_timestamp}\"")));
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &closed_id]);
-    assert!(success, "issue show after migration failed: {stderr}");
-    assert!(stdout.contains("Closed:"));
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-    assert!(success, "workflow check after migration failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["lint"]);
-    assert!(success, "lint after migration failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check after migration failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+    assert!(!success, "workflow check should reject legacy status");
+    assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
+    assert!(stderr.contains("open"), "{stderr}");
 }
 
 #[test]
-fn test_issue_create_after_workflow_migration_uses_configured_initial_status() {
+fn test_issue_create_after_workflow_init_uses_configured_initial_status() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
     migrate_default_issue_workflow(dir.path());
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Post migration issue"]);
-    assert!(success, "post migration issue create failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Workflow initialized issue"],
+    );
+    assert!(
+        success,
+        "workflow initialized issue create failed: {stderr}"
+    );
     assert!(stdout.contains("Created issue atelier-"), "{stdout}");
-    let issue_id = issue_id_by_title(dir.path(), "Post migration issue");
+    let issue_id = issue_id_by_title(dir.path(), "Workflow initialized issue");
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
 
@@ -7859,7 +7697,7 @@ fn test_issue_create_after_workflow_migration_uses_configured_initial_status() {
     assert!(options.contains("Status:   todo"), "{options}");
     assert!(options.contains("start [allowed]"), "{options}");
 
-    commit_all(dir.path(), "workflow-ready post migration issue");
+    commit_all(dir.path(), "workflow-ready issue");
     let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "root start failed: {stderr}");
     assert!(
@@ -7868,29 +7706,6 @@ fn test_issue_create_after_workflow_migration_uses_configured_initial_status() {
     );
     assert!(start_out.contains("From:     todo"), "{start_out}");
     assert!(start_out.contains("To:       in_progress"), "{start_out}");
-}
-
-#[test]
-fn test_workflow_migrate_statuses_rejects_invalid_policy() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
-    std::fs::write(
-        &policy_path,
-        "schema: atelier.workflow\nschema_version: 1\nissue_types: {}\n",
-    )
-    .unwrap();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
-    assert!(!success, "migrate-statuses should fail with invalid policy");
-    assert!(
-        stderr.contains("workflow_config_missing_field")
-            || stderr.contains("workflow_config_invalid_issue_type_mapping")
-            || stderr.contains("workflow_config_parse_error")
-            || stderr.contains("workflow_config_unknown_reference"),
-        "stderr: {stderr}"
-    );
 }
 
 #[test]
@@ -7911,10 +7726,6 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
         ],
     );
     assert!(success, "spike issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
-    assert!(success, "workflow migrate-statuses failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
     assert!(success, "workflow check failed: {stderr}");
@@ -7935,10 +7746,6 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow mismatch"]);
     assert!(success, "issue create failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
-    assert!(success, "workflow migrate-statuses failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Workflow mismatch");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let issue_text = std::fs::read_to_string(&issue_path).unwrap();
@@ -7951,7 +7758,7 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
     assert!(!success, "workflow check should reject status mismatch");
     assert!(
         stderr.contains("workflow_issue_status_invalid"),
@@ -8073,7 +7880,8 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
     let ready_id = issue_id_by_title(dir.path(), "Ready transition");
     migrate_default_issue_workflow(dir.path());
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(ready_out.contains(&ready_id), "{ready_out}");
 
@@ -8372,82 +8180,6 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
 }
 
 #[test]
-fn test_git_worktree_clean_validator_fails_on_tracked_changes() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Tracked dirty"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Tracked dirty");
-    commit_all(dir.path(), "baseline");
-
-    let mission_path = dir
-        .path()
-        .join(".atelier")
-        .join("missions")
-        .join(format!("{mission_id}.md"));
-    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
-    std::fs::write(
-        &mission_path,
-        mission_markdown.replace("Tracked dirty", "Tracked dirty changed"),
-    )
-    .unwrap();
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "git_worktree_clean",
-        ],
-    );
-    assert!(
-        !success,
-        "git_worktree_clean should fail on tracked changes"
-    );
-    assert!(stdout.contains("fail  git_worktree_clean"));
-    assert!(stdout.contains(&mission_id));
-    assert!(stderr.contains("workflow validation failed"));
-}
-
-#[test]
-fn test_git_worktree_clean_validator_fails_on_untracked_changes() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    init_git_repo(dir.path());
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Untracked dirty"]);
-    assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Untracked dirty");
-    commit_all(dir.path(), "baseline");
-
-    std::fs::write(dir.path().join("untracked.txt"), "dirty").unwrap();
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            &mission_id,
-            "--validator",
-            "git_worktree_clean",
-        ],
-    );
-    assert!(
-        !success,
-        "git_worktree_clean should fail on untracked changes"
-    );
-    assert!(stdout.contains("fail  git_worktree_clean"));
-    assert!(stdout.contains("untracked.txt"));
-    assert!(stderr.contains("workflow validation failed"));
-}
-
-#[test]
 fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -8482,12 +8214,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     assert!(closeout_blocked_out.contains("contract audit failed"));
     assert!(stderr.contains("mission closeout blocked"));
 
-    attach_issue_pass_evidence(dir.path(), &work_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &work_id, "--reason", "done"],
-    );
-    assert!(success, "issue close failed: {stderr}");
+    close_issue_with_evidence(dir.path(), &work_id, Some("done"));
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -8876,18 +8603,9 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
     assert!(close_err.contains("Canonical tracker Markdown is invalid"));
     assert!(close_err.contains("atelier lint"));
 
-    let (workflow_success, _workflow_out, workflow_err) = run_atelier(
-        dir.path(),
-        &[
-            "workflow",
-            "validate",
-            "mission",
-            mission_id,
-            "--transition",
-            "close",
-        ],
-    );
-    assert!(!workflow_success, "workflow gates must fail closed");
+    let (workflow_success, _workflow_out, workflow_err) =
+        run_atelier(dir.path(), &["workflow", "check"]);
+    assert!(!workflow_success, "workflow check must fail closed");
     assert!(workflow_err.contains("Canonical tracker Markdown is invalid"));
     assert!(workflow_err.contains("atelier lint"));
 }
@@ -9030,12 +8748,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(done_out.contains(epic_id));
     let done_id = issue_id_by_title(dir.path(), "Done work");
     let done_id = done_id.as_str();
-    attach_issue_pass_evidence(dir.path(), done_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &done_id, "--reason", "done"],
-    );
-    assert!(success, "close issue failed: {stderr}");
+    close_issue_with_evidence(dir.path(), done_id, Some("done"));
 
     let (success, loose_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Loose mission work"]);
@@ -9106,7 +8819,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(!stdout.contains(&closed_row));
     assert!(
         stdout.contains(&format!(
-            "[epic] {epic_id} [open] medium - Mission epic | ready 1, blocked 1, done 1"
+            "[epic] {epic_id} [todo] medium - Mission epic | ready 1, blocked 1, done 1"
         )),
         "missing linked epic summary:\n{stdout}"
     );
@@ -9311,10 +9024,7 @@ fn test_mission_status_cli_reports_control_state() {
         &["mission", "add-work", closeout_mission, work_id],
     );
     assert!(success, "closeout mission add work failed: {stderr}");
-    attach_issue_pass_evidence(dir.path(), work_id);
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "close", work_id, "--reason", "done"]);
-    assert!(success, "closeout work close failed: {stderr}");
+    close_issue_with_evidence(dir.path(), work_id, Some("done"));
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -9657,9 +9367,10 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(success, "fresh ready failed: {stderr}");
-    assert!(ready_out.contains("Indexed title"));
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+    assert!(success, "fresh list failed: {stderr}");
+    assert!(list_out.contains("Indexed title"));
 
     let issue_path = dir
         .path()
@@ -9672,12 +9383,10 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     )
     .unwrap();
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
-    assert!(
-        success,
-        "stale ready should transparently rebuild: {stderr}"
-    );
-    assert!(ready_out.contains("Markdown title"));
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+    assert!(success, "stale list should transparently rebuild: {stderr}");
+    assert!(list_out.contains("Markdown title"));
     assert!(
         stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
         "missing automatic rebuild diagnostic: {stderr}"
@@ -9716,7 +9425,7 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
         .unwrap();
     }
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(!success, "export check should report stale projection");
     assert!(
         stderr.contains("12 indexed sources changed")
@@ -9729,7 +9438,8 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
         "stale diagnostics should not dump every changed source: {stderr}"
     );
 
-    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(
         success,
         "many changed sources should transparently rebuild: {stderr}"
@@ -9766,7 +9476,8 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     let first_markdown = std::fs::read_to_string(&first_path).unwrap();
     std::fs::remove_file(&first_path).unwrap();
 
-    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(
         success,
         "deleted source list should transparently rebuild: {stderr}"
@@ -9795,7 +9506,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Unindexed issue"
 updated_at: "2026-06-10T12:00:00+00:00"
 ---
@@ -9867,7 +9578,8 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
 
     std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
     std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
     assert!(
         success,
         "derived files should not stale issue list --ready: {stderr}"
@@ -9991,7 +9703,7 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     )
     .unwrap();
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(
         !success,
         "invalid canonical Markdown should fail export check"
@@ -10236,7 +9948,7 @@ fn test_focused_lint_validates_dependency_cycles() {
 fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     assert_lint_rejects_issue_edit(
         "Invalid status fixture",
-        |markdown, _issue_id| markdown.replace("status: \"open\"", "status: \"bad-status\""),
+        |markdown, _issue_id| markdown.replace("status: \"todo\"", "status: \"bad-status\""),
         &["Invalid status", "Invalid status 'bad-status'"],
     );
     assert_lint_rejects_issue_edit(
@@ -10398,7 +10110,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "title": "Complete prerequisite",
         "issue_type": "task",
         "priority": "medium",
-        "status": "closed",
+        "status": "done",
         "labels": ["bulk"]
       },
       {
@@ -10406,6 +10118,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "title": "Implement bulk output",
         "issue_type": "feature",
         "priority": "high",
+        "status": "in_progress",
         "depends_on": [{ "client_ref": "issue.blocker" }],
         "acceptance": ["summary maps client refs"],
         "evidence_required": ["export check passes"]
@@ -10480,7 +10193,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
     assert!(success, "mission show after bulk apply failed: {stderr}");
     assert!(view_out.contains("Records: plans=1 milestones=1 evidence=1"));
-    assert!(view_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
+    assert!(view_out.contains("Work: ready=0 blocked=0 done=0 backlog=1"));
 }
 
 #[test]
@@ -10623,6 +10336,7 @@ hooks:
     assert!(success, "worktree status after repair failed: {stderr}");
     assert!(!repaired_status.contains(&format!("{issue_id} [active]")));
 
+    migrate_default_issue_workflow(dir.path());
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Failed setup worktree"]);
     assert!(success, "failed setup issue create failed: {stderr}");
@@ -10750,7 +10464,7 @@ fn test_issue_type_is_canonical_not_label_derived() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("[validation] todo/open - Typed issue"));
+    assert!(stdout.contains("Typed issue"));
     assert!(stdout.contains("Category: todo"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "all"]);

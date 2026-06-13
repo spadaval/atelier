@@ -21,7 +21,7 @@ fn test_create_and_get_issue() {
     assert_eq!(issue.id, id);
     assert_eq!(issue.title, "Test issue");
     assert_eq!(issue.description, None);
-    assert_eq!(issue.status, "open");
+    assert_eq!(issue.status, "todo");
     assert_eq!(issue.priority, "medium");
     assert_eq!(issue.parent_id, None);
     assert!(issue.closed_at.is_none());
@@ -81,17 +81,17 @@ fn test_list_issues() {
 fn test_list_issues_filter_by_status() {
     let (db, _dir) = setup_test_db();
 
-    let id1 = db.create_issue("Open issue", None, "low").unwrap();
-    let id2 = db.create_issue("To be closed", None, "medium").unwrap();
+    let id1 = db.create_issue("Todo issue", None, "low").unwrap();
+    let id2 = db.create_issue("To be done", None, "medium").unwrap();
     db.close_issue(&id2).unwrap();
 
-    let open_issues = db.list_issues(Some("open"), None, None).unwrap();
-    assert_eq!(open_issues.len(), 1);
-    assert_eq!(open_issues[0].id, id1);
+    let todo_issues = db.list_issues(Some("todo"), None, None).unwrap();
+    assert_eq!(todo_issues.len(), 1);
+    assert_eq!(todo_issues[0].id, id1);
 
-    let closed_issues = db.list_issues(Some("closed"), None, None).unwrap();
-    assert_eq!(closed_issues.len(), 1);
-    assert_eq!(closed_issues[0].id, id2);
+    let done_issues = db.list_issues(Some("done"), None, None).unwrap();
+    assert_eq!(done_issues.len(), 1);
+    assert_eq!(done_issues[0].id, id2);
 
     let all_issues = db.list_issues(Some("all"), None, None).unwrap();
     assert_eq!(all_issues.len(), 2);
@@ -157,14 +157,14 @@ fn test_close_and_reopen_issue() {
     assert!(closed);
 
     let issue = db.get_issue(&id).unwrap().unwrap();
-    assert_eq!(issue.status, "closed");
+    assert_eq!(issue.status, "done");
     assert!(issue.closed_at.is_some());
 
     let reopened = db.reopen_issue(&id).unwrap();
     assert!(reopened);
 
     let issue = db.get_issue(&id).unwrap().unwrap();
-    assert_eq!(issue.status, "open");
+    assert_eq!(issue.status, "todo");
     assert!(issue.closed_at.is_none());
 }
 

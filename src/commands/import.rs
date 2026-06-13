@@ -207,24 +207,24 @@ fn imported_issue(
     lossy_fields: &mut Vec<LossyField>,
 ) -> Result<Issue> {
     let status = match record.status.as_str() {
-        "open" => "open",
-        "closed" => "closed",
+        "open" => "todo",
+        "closed" => "done",
         "archived" => "archived",
         "in_progress" => {
             lossy_fields.push(lossy(
                 &record.id,
                 "status",
-                "mapped in_progress to open; assignee/start metadata reported as lossy fields",
+                "mapped in_progress to todo; assignee/start metadata reported as lossy fields",
             ));
-            "open"
+            "todo"
         }
         other => {
             lossy_fields.push(lossy(
                 &record.id,
                 "status",
-                format!("mapped unsupported status '{other}' to open"),
+                format!("mapped unsupported status '{other}' to todo"),
             ));
-            "open"
+            "todo"
         }
     }
     .to_string();
@@ -536,7 +536,7 @@ mod tests {
             .unwrap();
         assert_eq!(issue.title, "Imported record updated");
         assert_eq!(issue.priority, "critical");
-        assert_eq!(issue.status, "closed");
+        assert_eq!(issue.status, "done");
     }
 
     #[test]

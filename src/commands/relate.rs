@@ -151,7 +151,11 @@ pub fn list(db: &Database, issue_id: &str) -> Result<()> {
         println!("\n  [{}]:", rel_type);
         for id in ids {
             if let Some(issue) = db.get_issue(&id)? {
-                let status_marker = if issue.status == "closed" { "✓" } else { " " };
+                let status_marker = if matches!(issue.status.as_str(), "done" | "archived") {
+                    "✓"
+                } else {
+                    " "
+                };
                 println!(
                     "    {:<5} [{}] {:8} {}",
                     format_issue_id(id),
@@ -186,7 +190,11 @@ pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
     );
 
     for issue in &affected {
-        let status_marker = if issue.status == "closed" { "✓" } else { " " };
+        let status_marker = if matches!(issue.status.as_str(), "done" | "archived") {
+            "✓"
+        } else {
+            " "
+        };
         let parent_note = if let Some(pid) = &issue.parent_id {
             format!(" (child of {})", format_issue_id(pid))
         } else {

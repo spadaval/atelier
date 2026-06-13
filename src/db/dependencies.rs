@@ -93,7 +93,7 @@ impl Database {
             FROM issues i
             JOIN dependencies d ON i.id = d.blocked_id
             JOIN issues blocker ON d.blocker_id = blocker.id
-            WHERE i.status = 'open' AND blocker.status = 'open'
+            WHERE i.status NOT IN ('done', 'archived') AND blocker.status NOT IN ('done', 'archived')
             ORDER BY i.id
             "#,
         )?;
@@ -110,11 +110,11 @@ impl Database {
             r#"
             SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
-            WHERE i.status = 'open'
+            WHERE i.status NOT IN ('done', 'archived')
             AND NOT EXISTS (
                 SELECT 1 FROM dependencies d
                 JOIN issues blocker ON d.blocker_id = blocker.id
-                WHERE d.blocked_id = i.id AND blocker.status = 'open'
+                WHERE d.blocked_id = i.id AND blocker.status NOT IN ('done', 'archived')
             )
             ORDER BY i.id
             "#,

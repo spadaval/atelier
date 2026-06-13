@@ -168,32 +168,18 @@ fn operator_category_filter(input: &str) -> Option<String> {
     }
 }
 
-fn legacy_status_category(status: &str) -> Option<&'static str> {
-    match status {
-        "open" => Some("todo"),
-        "in_progress" => Some("active"),
-        "blocked" => Some("blocked"),
-        "review" => Some("review"),
-        "validation" => Some("validation"),
-        "closed" | "archived" => Some("done"),
-        _ => None,
-    }
-}
-
 pub(crate) fn issue_status_category(
     policy: Option<&WorkflowPolicy>,
     status: &str,
 ) -> Option<String> {
     policy
         .and_then(|policy| policy.status_category(status))
-        .or_else(|| legacy_status_category(status))
         .map(operator_category_label)
 }
 
 fn workflow_category(policy: Option<&WorkflowPolicy>, status: &str) -> Option<String> {
     policy
         .and_then(|policy| policy.status_category(status))
-        .or_else(|| legacy_status_category(status))
         .map(str::to_string)
 }
 
@@ -271,13 +257,13 @@ fn print_workflow_read_guidance(context: WorkflowReadContext) {
     if context.missing_policy {
         println!();
         println!(
-            "Workflow policy missing: run `atelier workflow init`, then `atelier workflow migrate-statuses`."
+            "Workflow policy missing: run `atelier workflow init`, then `atelier workflow check`."
         );
     }
     if context.unmigrated_filter {
         println!();
         println!(
-            "Unmigrated issue statuses are present: run `atelier workflow migrate-statuses`, then `atelier workflow check`."
+            "Issue statuses outside the configured workflow are present; fix the records, then run `atelier workflow check`."
         );
     }
 }
@@ -805,132 +791,6 @@ fn evidence_record_demonstrates_closeout_proof(record: &DomainRecord) -> bool {
         && classification_terms.iter().any(|term| text.contains(term))
 }
 
-fn evidence_section_allows_note_proof(evidence: &str) -> bool {
-    let lower = evidence.to_lowercase();
-    (lower.contains("durable note") || lower.contains("issue note"))
-        && (lower.contains("no separate proof")
-            || lower.contains("no separate artifact")
-            || lower.contains("no separate evidence")
-            || lower.contains("no first-class evidence")
-            || lower.contains("note proof"))
-}
-
-fn observable_note_proof_exists(state_dir: &Path, issue_id: &str) -> Result<bool> {
-    Ok(list_issue_activities(state_dir, issue_id)?
-        .into_iter()
-        .filter(|activity| {
-            matches!(
-                activity.event_type,
-                ActivityEventType::Note | ActivityEventType::Handoff | ActivityEventType::Comment
-            )
-        })
-        .any(|activity| evidence_entry_names_observable_target(&activity.body)))
-}
-
-fn ensure_issue_closeout_proof(
-    db: &Database,
-    state_dir: &Path,
-    issue_id: &str,
-    record: &CanonicalIssueRecord,
-) -> Result<()> {
-    let evidence = linked_validating_evidence(db, issue_id)?;
-    let evidence_gate = issue_evidence_gate_status_from_records(&record.issue, &evidence);
-    if evidence_gate.passed {
-        return Ok(());
-    }
-    if issue_requires_line_by_line_proof(&record.issue) && !evidence.is_empty() {
-        bail!(
-            "Issue {} cannot be closed because {}. Attach passing line-by-line or contract-audit proof with `atelier evidence attach <evidence-id> issue {}` or capture it with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>`.",
-            format_issue_id(issue_id),
-            evidence_gate.reason,
-            format_issue_id(issue_id),
-            format_issue_id(issue_id)
-        );
-    }
-    if !evidence.is_empty() {
-        let statuses = evidence
-            .iter()
-            .map(|record| format!("{} [{}]", record.id, record.status))
-            .collect::<Vec<_>>()
-            .join(", ");
-        bail!(
-            "Issue {} cannot be closed because linked validating evidence is not passing: {}. Attach passing proof with `atelier evidence attach <evidence-id> issue {}` or capture it with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>`.",
-            format_issue_id(issue_id),
-            statuses,
-            format_issue_id(issue_id),
-            format_issue_id(issue_id)
-        );
-    }
-
-    if evidence_section_allows_note_proof(&record.sections.evidence) {
-        if observable_note_proof_exists(state_dir, issue_id)? {
-            return Ok(());
-        }
-        bail!(
-            "Issue {} cannot be closed because durable note proof is allowed but no issue note names an observable proof target. Add proof with `atelier note add issue {} \"...\"` or attach evidence with `atelier evidence attach <evidence-id> issue {}`.",
-            format_issue_id(issue_id),
-            format_issue_id(issue_id),
-            format_issue_id(issue_id)
-        );
-    }
-
-    bail!(
-        "Issue {} cannot be closed because no validating evidence is linked. Capture proof with `atelier evidence capture --kind validation --result pass --target-kind issue --target-id {} -- <command>` or attach existing proof with `atelier evidence attach <evidence-id> issue {}`. Durable note proof is accepted only when the issue Evidence section explicitly says no separate proof artifact is meaningful.",
-        format_issue_id(issue_id),
-        format_issue_id(issue_id),
-        format_issue_id(issue_id)
-    );
-}
-
-fn ensure_issue_closeout_ready(
-    db: &Database,
-    state_dir: &Path,
-    issue_id: &str,
-    record: &CanonicalIssueRecord,
-) -> Result<()> {
-    let open_blockers = open_blocker_ids(db, issue_id)?;
-    if !open_blockers.is_empty() {
-        bail!(
-            "Issue {} cannot be closed because it has open blockers: {}",
-            format_issue_id(issue_id),
-            open_blockers.join(", ")
-        );
-    }
-    if record.issue.issue_type == "epic" {
-        let open_children = open_descendant_issue_ids(db, issue_id)?;
-        if !open_children.is_empty() {
-            bail!(
-                "Epic {} cannot be closed because child work is still open: {}",
-                format_issue_id(issue_id),
-                open_children.join(", ")
-            );
-        }
-    }
-    ensure_issue_closeout_proof(db, state_dir, issue_id, record)
-}
-
-fn open_descendant_issue_ids(db: &Database, issue_id: &str) -> Result<Vec<String>> {
-    let mut open = Vec::new();
-    collect_open_descendant_issue_ids(db, issue_id, &mut open)?;
-    open.sort();
-    Ok(open)
-}
-
-fn collect_open_descendant_issue_ids(
-    db: &Database,
-    issue_id: &str,
-    open: &mut Vec<String>,
-) -> Result<()> {
-    let workflow_policy = load_issue_workflow_policy()?;
-    for child in db.get_subissues(issue_id)? {
-        if !issue_is_done(workflow_policy.as_ref(), &child) {
-            open.push(format_issue_id(&child.id));
-        }
-        collect_open_descendant_issue_ids(db, &child.id, open)?;
-    }
-    Ok(())
-}
-
 fn render_parent_context(db: &Database, canonical_id: &str) -> Result<()> {
     let issue = db.require_issue(canonical_id)?;
     println!("\nHierarchy");
@@ -1058,11 +918,14 @@ fn joined_counts(counts: BTreeMap<String, usize>) -> String {
 
 fn status_rank(status: &str) -> u8 {
     match status {
-        "open" => 0,
+        "todo" => 0,
         "in_progress" => 1,
         "blocked" => 2,
-        "closed" => 3,
-        _ => 4,
+        "review" => 3,
+        "validation" => 4,
+        "done" => 5,
+        "archived" => 6,
+        _ => 7,
     }
 }
 
@@ -1170,7 +1033,7 @@ pub fn list(
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
     let status_input = status.unwrap_or("todo");
-    if ready && !matches!(status_input, "todo" | "open") {
+    if ready && status_input != "todo" {
         bail!("--ready uses startable todo-category work; do not combine it with --status");
     }
     let status_filter = IssueStatusFilter::from_input(workflow_policy.as_ref(), status_input);
@@ -1351,11 +1214,6 @@ fn queue_row(
         open_blockers,
         depth,
     })
-}
-
-fn open_blocker_ids(db: &Database, issue_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = load_issue_workflow_policy()?;
-    open_blocker_ids_with_policy(db, workflow_policy.as_ref(), issue_id)
 }
 
 fn open_blocker_ids_with_policy(
@@ -1841,21 +1699,30 @@ pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
 }
 
 fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String> {
-    let Some(repo_root) = state_dir.parent() else {
-        return Ok("open".to_string());
-    };
-    Ok(
-        crate::workflow_policy::configured_initial_status(repo_root, issue_type)?
-            .unwrap_or_else(|| "open".to_string()),
-    )
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    crate::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
+        anyhow!(
+            "workflow policy file is required at {}; run `atelier workflow init` before creating issues",
+            crate::workflow_policy::WORKFLOW_POLICY_PATH
+        )
+    })
 }
 
 fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> Result<()> {
     let repo_root = crate::storage_layout::find_repo_root()?;
-    if let Some(status) = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
-    {
-        db.update_issue_status(id, &status)?;
-    }
+    let status = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
+        .ok_or_else(|| {
+            anyhow!(
+                "workflow policy file is required at {}; run `atelier workflow init` before creating issues",
+                crate::workflow_policy::WORKFLOW_POLICY_PATH
+            )
+        })?;
+    db.update_issue_status(id, &status)?;
     Ok(())
 }
 
@@ -1864,7 +1731,6 @@ pub struct UpdateInput<'a> {
     pub title: Option<&'a str>,
     pub description: Option<&'a str>,
     pub priority: Option<&'a str>,
-    pub status: Option<&'a str>,
     pub issue_type: Option<&'a str>,
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
@@ -1911,52 +1777,6 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
                     input.priority,
                 )?;
             }
-        }
-    }
-
-    if let Some(status) = input.status {
-        match status {
-            "open" => {
-                db.reopen_issue(&id)?;
-                changed_fields.push("status");
-                crate::commands::activity_log::record_status_changed(
-                    &id,
-                    &previous.status,
-                    "open",
-                )?;
-            }
-            "closed" => {
-                if let Some(state_dir) = find_state_dir_from_cwd()? {
-                    let record = RecordStore::new(&state_dir).load_issue_by_id(&id)?;
-                    ensure_issue_closeout_ready(db, &state_dir, &id, &record)?;
-                } else {
-                    let open_blockers = open_blocker_ids(db, &id)?;
-                    if !open_blockers.is_empty() {
-                        bail!(
-                            "Issue {} cannot be closed because it has open blockers: {}",
-                            format_issue_id(&id),
-                            open_blockers.join(", ")
-                        );
-                    }
-                }
-                db.close_issue(&id)?;
-                changed_fields.push("status");
-                crate::commands::activity_log::record_status_changed(
-                    &id,
-                    &previous.status,
-                    "closed",
-                )?;
-            }
-            "in_progress" => {
-                db.add_label(&id, "status:in_progress")?;
-                changed_fields.push("status");
-                crate::commands::activity_log::record_status_changed(
-                    &id,
-                    &previous.status,
-                    "in_progress",
-                )?;
-            }
-            other => bail!("Invalid status '{other}'. Valid values: open, in_progress, closed"),
         }
     }
 
@@ -2019,7 +1839,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     }
 
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes");
+        bail!("Nothing to update. Use --title, --description, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
     }
     changed_fields.sort_unstable();
     changed_fields.dedup();
@@ -2096,28 +1916,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
             Some(priority),
         )?;
     }
-    if let Some(status) = input.status {
-        match status {
-            "open" => {
-                record.issue.status = "open".to_string();
-                record.issue.closed_at = None;
-            }
-            "closed" => {
-                if previous.status != "closed" {
-                    let db = Database::open(db_path)?;
-                    ensure_issue_closeout_ready(&db, state_dir, &id, &record)?;
-                }
-                record.issue.status = "closed".to_string();
-                record.issue.closed_at = Some(now);
-            }
-            "in_progress" => {
-                push_unique(&mut record.labels, "status:in_progress".to_string());
-            }
-            other => bail!("Invalid status '{other}'. Valid values: open, in_progress, closed"),
-        }
-        changed_fields.push("status");
-        crate::commands::activity_log::record_status_changed(&id, &previous.status, status)?;
-    }
     if let Some(issue_type) = input.issue_type {
         crate::db::validate_issue_type(issue_type)?;
         record.issue.issue_type = issue_type.to_string();
@@ -2185,7 +1983,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_note(&id, note)?;
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --status, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes");
+        bail!("Nothing to update. Use --title, --description, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
@@ -2217,41 +2015,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     Ok(())
 }
 
-pub fn close(db: &Database, issue_ref: &str, reason: Option<&str>) -> Result<()> {
-    let id = resolve_id(db, issue_ref)?;
-    let previous = db.require_issue(&id)?;
-    if previous.status != "closed" {
-        if let Some(state_dir) = find_state_dir_from_cwd()? {
-            let record = RecordStore::new(&state_dir).load_issue_by_id(&id)?;
-            ensure_issue_closeout_ready(db, &state_dir, &id, &record)?;
-        } else {
-            ensure_canonical_issue_sections_valid(&id)?;
-            let open_blockers = open_blocker_ids(db, &id)?;
-            if !open_blockers.is_empty() {
-                bail!(
-                    "Issue {} cannot be closed because it has open blockers: {}",
-                    issue_ref,
-                    open_blockers.join(", ")
-                );
-            }
-        }
-    }
-    db.close_issue(&id)?;
-    crate::commands::activity_log::record_status_changed(&id, &previous.status, "closed")?;
-    if let Some(reason) = reason {
-        db.add_comment(&id, &format!("Close reason: {reason}"), "resolution")?;
-        crate::commands::activity_log::record_close_reason(&id, reason)?;
-    }
-    let issue = db.require_issue(&id)?;
-    let object = issue_object(db, issue)?;
-    println!(
-        "Closed issue {}{}",
-        object.id,
-        reason.map(|r| format!(": {r}")).unwrap_or_default()
-    );
-    Ok(())
-}
-
 pub fn close_lifecycle(
     state_dir: &Path,
     db_path: &Path,
@@ -2261,46 +2024,6 @@ pub fn close_lifecycle(
 ) -> Result<()> {
     let db = Database::open(db_path)?;
     crate::commands::workflow::close_issue(&db, state_dir, db_path, issue_ref, to_status, reason)
-}
-
-fn ensure_canonical_issue_sections_valid(issue_id: &str) -> Result<()> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(());
-    };
-    RecordStore::new(state_dir).load_issue_by_id(issue_id)?;
-    Ok(())
-}
-
-pub fn reopen(db: &Database, issue_ref: &str) -> Result<()> {
-    let id = resolve_id(db, issue_ref)?;
-    let previous = db.require_issue(&id)?;
-    db.reopen_issue(&id)?;
-    crate::commands::activity_log::record_status_changed(&id, &previous.status, "open")?;
-    let object = issue_object(db, db.require_issue(&id)?)?;
-    println!("Reopened issue {}", object.id);
-    Ok(())
-}
-
-pub fn reopen_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
-    let id = resolve_id(&db, issue_ref)?;
-    let previous = db.require_issue(&id)?;
-    drop(db);
-
-    let store = RecordStore::new(state_dir);
-    let mut record = store.load_issue_by_id(&id)?;
-    let now = Utc::now();
-    record.issue.status = "open".to_string();
-    record.issue.closed_at = None;
-    record.issue.updated_at = now;
-    store.write_issue_atomic(&record)?;
-    crate::commands::activity_log::record_status_changed(&id, &previous.status, "open")?;
-
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let object = issue_object(&db, db.require_issue(&id)?)?;
-    println!("Reopened issue {}", object.id);
-    Ok(())
 }
 
 pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<String> {
@@ -2594,7 +2317,7 @@ const VAGUE_EVIDENCE_MARKERS: &[&str] = &[
 ];
 
 fn issue_requires_concrete_evidence(issue: &Issue) -> bool {
-    issue.status == "open" && issue.issue_type != "epic"
+    !matches!(issue.status.as_str(), "done" | "archived") && issue.issue_type != "epic"
 }
 
 fn evidence_entries(evidence: &str) -> Vec<String> {
@@ -3016,7 +2739,7 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert!(rows[0].contains(&format_issue_id(&blocker)));
-        assert!(rows[0].contains("[open] high - Blocking issue"));
+        assert!(rows[0].contains("[todo/todo] high - Blocking issue"));
         assert!(rows[0].contains("(open blocker)"));
     }
 
@@ -3036,8 +2759,8 @@ mod tests {
         let summary = subissue_summary(&subissues);
 
         assert!(summary.contains("2 total"));
-        assert!(summary.contains("closed=1"));
-        assert!(summary.contains("open=1"));
+        assert!(summary.contains("done=1"));
+        assert!(summary.contains("todo=1"));
         assert!(summary.contains("high=1"));
         assert!(summary.contains("low=1"));
         assert!(subissues.iter().any(|issue| issue.id == child_a));

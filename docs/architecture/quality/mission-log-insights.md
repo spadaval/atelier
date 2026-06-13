@@ -158,9 +158,9 @@ Confidence: high.
 ### 9. Normal command surface still leaks competing models
 
 The logs show friction around overlapping commands and concepts:
-`issue create --template` versus `--issue-type`, `issue update --status closed`
-versus `issue close`, `dep` versus `link` versus `graph`, and normal workflow
-guidance still mentioning advanced validator commands.
+`issue create --template` versus `--issue-type`, historical direct status
+updates versus workflow transitions, `dep` versus `link` versus `graph`, and
+normal workflow guidance still mentioning advanced validator commands.
 
 Improvement:
 

@@ -12,9 +12,10 @@ and skill bindings were updated.
 - Start gate: `atelier issue show atelier-z1p.6` and `atelier issue show
   atelier-z1p` showed the assigned validation item and parent mission.
 - Planning/docs workflow: `atelier issue create` created issue `#43` under
-  `atelier-z1p.6`; `atelier issue update 43 --claim --status in_progress
-  --append-notes ...` claimed and updated it; `atelier issue close 43
-  --reason ...` closed it after this note was added.
+  `atelier-z1p.6`; `atelier issue update 43 --claim --append-notes ...`
+  claimed and annotated it; `atelier issue transition 43 start` moved it into
+  active work; `atelier issue close 43 --reason ...` closed it after this note
+  was added.
 - Ready discovery: `atelier issue list --ready` listed `atelier-z1p.6` as ready after
   its blockers were closed.
 - Dependency workflow: `atelier issue block 43 44` added a blocker; `atelier

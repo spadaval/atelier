@@ -14,17 +14,6 @@ use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
 
 const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
 
-#[derive(Debug, Default)]
-struct StatusMigrationSummary {
-    scanned: usize,
-    changed: usize,
-    open_to_initial: usize,
-    closed_to_done: usize,
-    archived_to_archived: usize,
-    archived_to_done: usize,
-    already_current: usize,
-}
-
 pub fn init(repo_root: &Path, force: bool) -> Result<()> {
     let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
     let existed = policy_path.exists();
@@ -53,75 +42,7 @@ pub fn init(repo_root: &Path, force: bool) -> Result<()> {
     println!("Starter workflows: standard_review_proof, lightweight_spike");
     println!();
     print_heading("Next Commands");
-    println!("  atelier workflow migrate-statuses");
     println!("  atelier workflow check");
-    Ok(())
-}
-
-pub fn migrate_statuses(repo_root: &Path, state_dir: &Path, db_path: &Path) -> Result<()> {
-    let policy = crate::workflow_policy::load(repo_root)?;
-    let store = RecordStore::new(state_dir);
-    let mut records = Vec::new();
-    let mut summary = StatusMigrationSummary::default();
-
-    for relative in store.discover_issue_paths()? {
-        let mut record = store.load_issue(&relative)?;
-        summary.scanned += 1;
-
-        let current_status = record.issue.status.clone();
-        let target_status = legacy_status_target(&policy, &record.issue)?;
-        if let Some(target_status) = target_status {
-            match current_status.as_str() {
-                "open" => summary.open_to_initial += 1,
-                "closed" => summary.closed_to_done += 1,
-                "archived" if target_status == "archived" => summary.archived_to_archived += 1,
-                "archived" => summary.archived_to_done += 1,
-                _ => {}
-            }
-            record.issue.status = target_status;
-            summary.changed += 1;
-            records.push(record);
-        } else {
-            summary.already_current += 1;
-        }
-    }
-
-    for record in &records {
-        store.write_issue_atomic(record)?;
-    }
-
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    crate::workflow_policy::check(&db, repo_root)?;
-
-    println!("Workflow Status Migration");
-    println!("=========================");
-    println!(
-        "Path:      {}",
-        crate::workflow_policy::WORKFLOW_POLICY_PATH
-    );
-    println!("Scanned:   {}", summary.scanned);
-    println!("Migrated:  {}", summary.changed);
-    println!("Current:   {}", summary.already_current);
-    if summary.changed > 0 {
-        print_heading("Applied");
-        if summary.open_to_initial > 0 {
-            println!("  open -> initial(todo): {}", summary.open_to_initial);
-        }
-        if summary.closed_to_done > 0 {
-            println!("  closed -> done: {}", summary.closed_to_done);
-        }
-        if summary.archived_to_archived > 0 {
-            println!("  archived -> archived: {}", summary.archived_to_archived);
-        }
-        if summary.archived_to_done > 0 {
-            println!("  archived -> done: {}", summary.archived_to_done);
-        }
-    }
-    print_heading("Next Commands");
-    println!("  atelier workflow check");
-    println!("  atelier lint");
-    println!("  atelier export --check");
     Ok(())
 }
 
@@ -165,89 +86,6 @@ pub fn check(db: &Database) -> Result<()> {
     println!("Record Health:  pass");
     println!("Issues Checked: {}", report.issue_count);
     Ok(())
-}
-
-fn legacy_status_target(
-    policy: &crate::workflow_policy::WorkflowPolicy,
-    issue: &crate::models::Issue,
-) -> Result<Option<String>> {
-    match issue.status.as_str() {
-        "open" => Ok(Some(initial_todo_status(policy, issue)?.to_string())),
-        "closed" => Ok(Some(primary_done_status(policy, issue)?.to_string())),
-        "archived" => Ok(Some(archived_target_status(policy, issue)?.to_string())),
-        current => {
-            if policy.workflow_allows_status(&issue.issue_type, current)? {
-                Ok(None)
-            } else {
-                bail!(
-                    "Issue {} has unmigratable status '{}' for issue_type '{}'; fix {} or run `atelier workflow check` after correcting the policy",
-                    issue.id,
-                    current,
-                    issue.issue_type,
-                    crate::workflow_policy::WORKFLOW_POLICY_PATH
-                )
-            }
-        }
-    }
-}
-
-fn initial_todo_status<'a>(
-    policy: &'a crate::workflow_policy::WorkflowPolicy,
-    issue: &crate::models::Issue,
-) -> Result<&'a str> {
-    let workflow_name = policy.workflow_name_for_issue_type(&issue.issue_type)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
-    let initial_status = workflow.initial_status.as_str();
-    if policy.status_category(initial_status) != Some("todo") {
-        bail!(
-            "Workflow '{}' initial_status '{}' for issue_type '{}' must use category 'todo' before status migration",
-            workflow_name,
-            initial_status,
-            issue.issue_type
-        );
-    }
-    Ok(initial_status)
-}
-
-fn primary_done_status<'a>(
-    policy: &'a crate::workflow_policy::WorkflowPolicy,
-    issue: &crate::models::Issue,
-) -> Result<&'a str> {
-    let workflow_name = policy.workflow_name_for_issue_type(&issue.issue_type)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
-    let done_status = workflow
-        .done_statuses
-        .iter()
-        .find(|status| status.as_str() != "archived")
-        .or_else(|| workflow.done_statuses.first())
-        .map(String::as_str)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Workflow '{}' has no terminal done status for issue_type '{}'",
-                workflow_name,
-                issue.issue_type
-            )
-        })?;
-    if policy.status_category(done_status) != Some("done") {
-        bail!(
-            "Workflow '{}' done status '{}' for issue_type '{}' must use category 'done' before status migration",
-            workflow_name,
-            done_status,
-            issue.issue_type
-        );
-    }
-    Ok(done_status)
-}
-
-fn archived_target_status<'a>(
-    policy: &'a crate::workflow_policy::WorkflowPolicy,
-    issue: &crate::models::Issue,
-) -> Result<&'a str> {
-    if policy.workflow_allows_status(&issue.issue_type, "archived")? {
-        Ok("archived")
-    } else {
-        primary_done_status(policy, issue)
-    }
 }
 
 pub fn issue_transition_options(
@@ -764,13 +602,6 @@ fn ensure_transitionable_status(
     if policy.workflow_allows_status(&issue.issue_type, &issue.status)? {
         return Ok(());
     }
-    if matches!(issue.status.as_str(), "open" | "closed" | "archived") {
-        bail!(
-            "Issue {} has unmigrated status '{}'; run `atelier workflow migrate-statuses` before using `atelier issue transition`",
-            issue.id,
-            issue.status
-        );
-    }
     bail!(
         "Issue {} has status '{}' that is not allowed by the workflow policy for issue_type '{}'",
         issue.id,
@@ -1280,6 +1111,12 @@ fn git_worktree_clean() -> Result<(bool, String)> {
         .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.contains("not a git repository") {
+            return Ok((
+                true,
+                "not a git repository; git worktree check skipped".to_string(),
+            ));
+        }
         let message = if stderr.is_empty() {
             "git status failed".to_string()
         } else {

@@ -46,6 +46,12 @@ impl SmokeHarness {
         // Run atelier init
         let result = harness.run(&["init"]);
         assert!(result.success, "atelier init failed: {}", result.stderr);
+        let result = harness.run(&["workflow", "init"]);
+        assert!(
+            result.success,
+            "atelier workflow init failed: {}",
+            result.stderr
+        );
 
         harness
     }
@@ -117,8 +123,12 @@ impl SmokeHarness {
 
     /// Close an issue fixture through the current proof-backed closeout path.
     pub fn close_issue_with_evidence(&self, issue_ref: &str) {
-        self.attach_issue_pass_evidence(issue_ref);
-        self.run_ok(&["issue", "close", issue_ref]);
+        let issue_id = self.translate_issue_ref(issue_ref);
+        self.attach_issue_pass_evidence(&issue_id);
+        self.run_ok(&["issue", "update", &issue_id, "--issue-type", "spike"]);
+        self.run_ok(&["issue", "transition", &issue_id, "start"]);
+        self.run_ok(&["issue", "transition", &issue_id, "request_review"]);
+        self.run_ok(&["issue", "close", &issue_id, "--reason", "fixture complete"]);
     }
 
     /// Run an Atelier CLI command and assert it fails.

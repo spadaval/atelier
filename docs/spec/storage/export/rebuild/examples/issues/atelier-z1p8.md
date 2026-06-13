@@ -23,7 +23,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Define canonical export layout"
 updated_at: "2026-06-08T00:00:00Z"
 ---

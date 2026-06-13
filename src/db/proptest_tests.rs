@@ -47,9 +47,9 @@ fn create_close_reopen_search_and_blocking_examples() {
 
     assert_eq!(db.list_issues(None, None, None).unwrap().len(), 3);
     db.close_issue(&source_id).unwrap();
-    assert_eq!(db.get_issue(&source_id).unwrap().unwrap().status, "closed");
+    assert_eq!(db.get_issue(&source_id).unwrap().unwrap().status, "done");
     db.reopen_issue(&source_id).unwrap();
-    assert_eq!(db.get_issue(&source_id).unwrap().unwrap().status, "open");
+    assert_eq!(db.get_issue(&source_id).unwrap().unwrap().status, "todo");
 
     db.add_dependency(&source_id, &blocker_id).unwrap();
     assert!(db.get_blockers(&source_id).unwrap().contains(&blocker_id));
@@ -137,7 +137,7 @@ proptest! {
         }
     }
 
-    /// Ready list should never contain issues with open blockers
+    /// Ready list should never contain issues with unresolved blockers
     #[test]
     #[ignore = "reason: extended property test run only in extended profile; owner: quality; product: yes; blocking: no"]
     fn prop_extended_ready_list_correctness(issue_count in 2usize..8) {
@@ -158,14 +158,14 @@ proptest! {
         // Get ready issues
         let ready = db.list_ready_issues().unwrap();
 
-        // Verify: no ready issue should have open blockers
+        // Verify: no ready issue should have unresolved blockers
         for issue in &ready {
             let blockers = db.get_blockers(&issue.id).unwrap();
             for blocker_id in blockers {
                 if let Some(blocker) = db.get_issue(&blocker_id).unwrap() {
                     prop_assert_ne!(
-                        blocker.status, "open",
-                        "Ready issue {} has open blocker {}",
+                        blocker.status, "todo",
+                        "Ready issue {} has unresolved blocker {}",
                         issue.id, blocker_id
                     );
                 }

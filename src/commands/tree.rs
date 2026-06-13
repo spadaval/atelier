@@ -8,8 +8,8 @@ const COMPACT_MAX_SIBLINGS: usize = 6;
 
 fn status_icon(status: &str) -> &'static str {
     match status {
-        "open" => " ",
-        "closed" => "x",
+        "todo" => " ",
+        "done" => "x",
         _ => "?",
     }
 }
@@ -46,35 +46,32 @@ fn print_tree_recursive(
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 struct ProgressSummary {
-    open: usize,
-    closed: usize,
+    todo: usize,
+    done: usize,
     other: usize,
 }
 
 impl ProgressSummary {
     fn add_issue(&mut self, issue: &Issue) {
         match issue.status.as_str() {
-            "open" => self.open += 1,
-            "closed" => self.closed += 1,
+            "todo" => self.todo += 1,
+            "done" => self.done += 1,
             _ => self.other += 1,
         }
     }
 
     fn add_summary(&mut self, summary: ProgressSummary) {
-        self.open += summary.open;
-        self.closed += summary.closed;
+        self.todo += summary.todo;
+        self.done += summary.done;
         self.other += summary.other;
     }
 
     fn total(self) -> usize {
-        self.open + self.closed + self.other
+        self.todo + self.done + self.other
     }
 
     fn format(self) -> String {
-        let mut parts = vec![
-            format!("open={}", self.open),
-            format!("closed={}", self.closed),
-        ];
+        let mut parts = vec![format!("todo={}", self.todo), format!("done={}", self.done)];
         if self.other > 0 {
             parts.push(format!("other={}", self.other));
         }
@@ -217,7 +214,7 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
 
     // Legend
     println!();
-    println!("Legend: [ ] open, [x] closed");
+    println!("Legend: [ ] todo, [x] done");
 
     Ok(())
 }
@@ -272,13 +269,13 @@ mod tests {
     }
 
     #[test]
-    fn test_status_icon_open() {
-        assert_eq!(status_icon("open"), " ");
+    fn test_status_icon_todo() {
+        assert_eq!(status_icon("todo"), " ");
     }
 
     #[test]
-    fn test_status_icon_closed() {
-        assert_eq!(status_icon("closed"), "x");
+    fn test_status_icon_done() {
+        assert_eq!(status_icon("done"), "x");
     }
 
     #[test]
@@ -337,31 +334,31 @@ mod tests {
     #[test]
     fn test_run_with_status_filter() {
         let (db, _dir) = setup_test_db();
-        let closed_id = db.create_issue("Closed issue", None, "medium").unwrap();
-        let open_id = db.create_issue("Open issue", None, "medium").unwrap();
-        db.close_issue(&closed_id).unwrap();
-        run(&db, Some("open")).unwrap();
-        let open_issues = db.list_issues(Some("open"), None, None).unwrap();
-        assert_eq!(open_issues.len(), 1);
-        assert_eq!(open_issues[0].id, open_id);
+        let done_id = db.create_issue("Done issue", None, "medium").unwrap();
+        let todo_id = db.create_issue("Todo issue", None, "medium").unwrap();
+        db.close_issue(&done_id).unwrap();
+        run(&db, Some("todo")).unwrap();
+        let todo_issues = db.list_issues(Some("todo"), None, None).unwrap();
+        assert_eq!(todo_issues.len(), 1);
+        assert_eq!(todo_issues[0].id, todo_id);
     }
 
     #[test]
-    fn test_run_closed_filter() {
+    fn test_run_done_filter() {
         let (db, _dir) = setup_test_db();
         let id = db.create_issue("Issue", None, "medium").unwrap();
         db.close_issue(&id).unwrap();
-        run(&db, Some("closed")).unwrap();
-        let closed = db.list_issues(Some("closed"), None, None).unwrap();
-        assert_eq!(closed.len(), 1);
-        assert_eq!(closed[0].id, id);
+        run(&db, Some("done")).unwrap();
+        let done = db.list_issues(Some("done"), None, None).unwrap();
+        assert_eq!(done.len(), 1);
+        assert_eq!(done[0].id, id);
     }
 
     #[test]
     fn test_run_all_filter() {
         let (db, _dir) = setup_test_db();
-        db.create_issue("Open issue", None, "medium").unwrap();
-        let id = db.create_issue("Closed issue", None, "medium").unwrap();
+        db.create_issue("Todo issue", None, "medium").unwrap();
+        let id = db.create_issue("Done issue", None, "medium").unwrap();
         db.close_issue(&id).unwrap();
         run(&db, Some("all")).unwrap();
         let all = db.list_issues(Some("all"), None, None).unwrap();
@@ -385,29 +382,29 @@ mod tests {
     fn test_progress_summary_counts_mixed_statuses() {
         let (db, _dir) = setup_test_db();
         let root = db.create_issue("Root", None, "high").unwrap();
-        let open = db.create_subissue(&root, "Open", None, "medium").unwrap();
-        let closed = db.create_subissue(&root, "Closed", None, "medium").unwrap();
-        db.close_issue(&closed).unwrap();
-        db.create_subissue(&open, "Nested open", None, "low")
+        let todo = db.create_subissue(&root, "Todo", None, "medium").unwrap();
+        let done = db.create_subissue(&root, "Done", None, "medium").unwrap();
+        db.close_issue(&done).unwrap();
+        db.create_subissue(&todo, "Nested todo", None, "low")
             .unwrap();
 
         let summary = descendant_summary(&db, &root, Some("all")).unwrap();
 
-        assert_eq!(summary.open, 2);
-        assert_eq!(summary.closed, 1);
+        assert_eq!(summary.todo, 2);
+        assert_eq!(summary.done, 1);
     }
 
     #[test]
-    fn test_filtered_subissues_excludes_closed_children() {
+    fn test_filtered_subissues_excludes_done_children() {
         let (db, _dir) = setup_test_db();
         let root = db.create_issue("Root", None, "high").unwrap();
-        db.create_subissue(&root, "Open", None, "medium").unwrap();
-        let closed = db.create_subissue(&root, "Closed", None, "medium").unwrap();
-        db.close_issue(&closed).unwrap();
+        db.create_subissue(&root, "Todo", None, "medium").unwrap();
+        let done = db.create_subissue(&root, "Done", None, "medium").unwrap();
+        db.close_issue(&done).unwrap();
 
-        let children = filtered_subissues(&db, &root, Some("open")).unwrap();
+        let children = filtered_subissues(&db, &root, Some("todo")).unwrap();
 
         assert_eq!(children.len(), 1);
-        assert_eq!(children[0].status, "open");
+        assert_eq!(children[0].status, "todo");
     }
 }

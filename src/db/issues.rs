@@ -118,7 +118,7 @@ impl Database {
             record_id::allocate_issue_id(|candidate| Ok(self.get_issue(candidate)?.is_some()))?;
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, ?7)",
+            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?7)",
             params![id, title, description, priority, issue_type, parent_id, now],
         )?;
         Ok(id)
@@ -326,7 +326,7 @@ impl Database {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
-            "UPDATE issues SET status = 'closed', closed_at = ?1, updated_at = ?1 WHERE id = ?2",
+            "UPDATE issues SET status = 'done', closed_at = ?1, updated_at = ?1 WHERE id = ?2",
             params![now, id],
         )?;
         Ok(rows > 0)
@@ -336,7 +336,7 @@ impl Database {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
         let rows = self.conn.execute(
-            "UPDATE issues SET status = 'open', closed_at = NULL, updated_at = ?1 WHERE id = ?2",
+            "UPDATE issues SET status = 'todo', closed_at = NULL, updated_at = ?1 WHERE id = ?2",
             params![now, id],
         )?;
         Ok(rows > 0)
@@ -443,7 +443,7 @@ mod tests {
             id: id.to_string(),
             title: title.to_string(),
             description: None,
-            status: "open".to_string(),
+            status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "medium".to_string(),
             parent_id: None,

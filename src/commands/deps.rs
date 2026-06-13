@@ -17,7 +17,7 @@ pub fn list_blocked(db: &Database) -> Result<()> {
             .get_blockers(&issue.id)?
             .into_iter()
             .filter_map(|id| db.require_issue(&id).ok())
-            .filter(|blocker| blocker.status == "open")
+            .filter(|blocker| !matches!(blocker.status.as_str(), "done" | "archived"))
             .map(|blocker| format_issue_id(&blocker.id))
             .collect();
         blocker_strs.sort();

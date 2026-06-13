@@ -101,7 +101,7 @@ This file binds Agent Factory to this repository.
 - Issues:
   - `atelier issue list --ready`
   - `atelier issue list --blocked`
-  - `atelier issue list --status open`
+  - `atelier issue list --status todo`
   - `atelier issue show <id>`
   - `atelier issue transition <id> --options`
   - `atelier mission show <id>`

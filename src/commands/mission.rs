@@ -1365,8 +1365,8 @@ fn mission_closeout_status(
                 validator: "workflow_policy".to_string(),
                 passed: false,
                 reason: format!(
-                "{error:#}; run `atelier workflow init`, then `atelier workflow migrate-statuses`"
-            ),
+                    "{error:#}; run `atelier workflow init`, then `atelier workflow check`"
+                ),
                 elapsed_ms: 0,
             }],
         };

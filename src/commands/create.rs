@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 use std::path::Path;
 
@@ -233,10 +233,14 @@ pub fn run_subissue(
 
 fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> Result<()> {
     let repo_root = crate::storage_layout::find_repo_root()?;
-    if let Some(status) = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
-    {
-        db.update_issue_status(id, &status)?;
-    }
+    let status = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
+        .ok_or_else(|| {
+            anyhow!(
+                "workflow policy file is required at {}; run `atelier workflow init` before creating issues",
+                crate::workflow_policy::WORKFLOW_POLICY_PATH
+            )
+        })?;
+    db.update_issue_status(id, &status)?;
     Ok(())
 }
 

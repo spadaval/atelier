@@ -390,8 +390,8 @@ enum IssueCommands {
 
     /// List issues
     List {
-        /// Filter by status (open, closed, all)
-        #[arg(short, long, default_value = "open")]
+        /// Filter by status (todo, done, all)
+        #[arg(short, long, default_value = "todo")]
         status: String,
         /// Filter by label
         #[arg(short, long)]
@@ -491,13 +491,6 @@ enum IssueCommands {
         /// Filter by priority
         #[arg(short, long)]
         priority: Option<String>,
-    },
-
-    /// Reopen a closed issue
-    #[command(hide = true)]
-    Reopen {
-        /// Issue ID
-        id: String,
     },
 
     /// Delete an issue
@@ -607,7 +600,7 @@ enum IssueCommands {
     /// Show issues as a tree hierarchy
     #[command(hide = true)]
     Tree {
-        /// Filter by status (open, closed, all)
+        /// Filter by status (todo, done, all)
         #[arg(short, long, default_value = "all")]
         status: String,
         /// Show a bounded, scan-friendly hierarchy instead of the full tree
@@ -668,7 +661,7 @@ enum GraphCommands {
     },
     /// Show issues as a tree hierarchy
     Tree {
-        /// Filter by status (open, closed, all)
+        /// Filter by status (todo, done, all)
         #[arg(short, long, default_value = "all")]
         status: String,
         /// Show a bounded, scan-friendly hierarchy instead of the full tree
@@ -893,8 +886,6 @@ enum WorkflowCommands {
         #[arg(long)]
         force: bool,
     },
-    /// Migrate legacy issue statuses in canonical Markdown to workflow statuses
-    MigrateStatuses,
     /// Validate .atelier/workflow.yaml policy and current issue-record health
     Check,
 }
@@ -1436,7 +1427,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 if ready {
                     bail!("--blocked cannot be combined with --ready");
                 }
-                if status != "open" || label.is_some() || priority.is_some() {
+                if status != "todo" || label.is_some() || priority.is_some() {
                     bail!("--blocked cannot be combined with --status, --label, or --priority");
                 }
                 commands::deps::list_blocked(&db)
@@ -1517,7 +1508,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     title: title.as_deref(),
                     description: description.as_deref(),
                     priority: priority.as_deref(),
-                    status: None,
                     issue_type: issue_type.as_deref(),
                     labels: &label,
                     remove_labels: &remove_label,
@@ -1553,12 +1543,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 label.as_deref(),
                 priority.as_deref(),
             )
-        }
-
-        IssueCommands::Reopen { id } => {
-            issue_compat_guidance("atelier issue update <id> --status open");
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::agent_factory::reopen_lifecycle(&state_dir, &db_path, &id)
         }
 
         IssueCommands::Delete { id, force } => {
@@ -2286,15 +2270,6 @@ fn run() -> Result<()> {
                 let repo_root = storage_layout::find_repo_root()?;
                 commands::workflow::init(&repo_root, force)
             }
-            WorkflowCommands::MigrateStatuses => {
-                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
-                let repo_root = storage.repo_root().to_path_buf();
-                commands::workflow::migrate_statuses(
-                    &repo_root,
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                )
-            }
             WorkflowCommands::Check => {
                 let db = projection_query_db()?;
                 commands::workflow::check(&db)
@@ -2403,7 +2378,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Close { .. } => "issue close",
             IssueCommands::CloseAll { .. } => "issue close-all",
-            IssueCommands::Reopen { .. } => "issue reopen",
             IssueCommands::Delete { .. } => "issue delete",
             IssueCommands::Comment { .. } => "issue comment",
             IssueCommands::Label { .. } => "issue label",
@@ -2481,7 +2455,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
             WorkflowCommands::Init { .. } => "workflow init",
-            WorkflowCommands::MigrateStatuses => "workflow migrate-statuses",
             WorkflowCommands::Check => "workflow check",
         },
         Commands::Work { action } => match action {
