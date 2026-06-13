@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Implement workflow init and status migration"
-updated_at: "2026-06-13T17:36:53.049768882+00:00"
+updated_at: "2026-06-13T19:19:47.399468559+00:00"
 ---
 
 ## Description

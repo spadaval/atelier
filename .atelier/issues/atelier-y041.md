@@ -23,9 +23,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Replace issue transition engine"
-updated_at: "2026-06-13T18:33:28.624374245+00:00"
+updated_at: "2026-06-13T19:19:47.480806698+00:00"
 ---
 
 ## Description
