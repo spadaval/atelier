@@ -34,5 +34,5 @@ Reduce evidence-output noise while preserving inspectability. Mission and issue 
 ## Evidence
 
 - Snapshot or transcript tests cover default compact rendering and verbose drill-down.
-- Manual transcript uses a mission fixture with long evidence records and records the reviewer role, baseline output, decision criteria, and pass/fail rationale for scannability.
+- Manual transcript uses a mission fixture with long evidence records and records enough context to explain why the default evidence output is or is not scannable.
 - `atelier lint`, `atelier export --check`, and relevant CLI tests pass.

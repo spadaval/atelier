@@ -25,7 +25,7 @@ Validate that the strong-proof guidance is operational by applying it to represe
 ## Outcome
 
 - Each representative example is classified as strong proof, weak proof, blocked, deferred, or not applicable with a reason.
-- Subjective examples are judged against explicit evaluator role, scenario, comparison baseline, decision criteria, and captured evidence rather than pre-baked output.
+- Subjective examples are judged against inspectable evaluator context, scenario or baseline, decision rationale, and captured evidence rather than pre-baked output.
 - Quantitative examples are judged against hard metrics or an explicit reason why a metric is not practical.
 - Placement examples show that mission, epic, issue, and validation-item text each owns a distinct question and does not duplicate all details from other layers.
 - The validator identifies any wording that would let broad green checks masquerade as claim-specific proof.

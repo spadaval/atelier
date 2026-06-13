@@ -28,7 +28,7 @@ Define how Atelier handles subjective and quantitative validation. Some work, su
 ## Outcome
 
 - Validation guidance explicitly allows qualitative pass/fail judgment for subjective product, UX, documentation, and information-architecture claims.
-- Subjective validation still names the evaluator role, scenario, comparison baseline, decision criteria, and captured evidence so the result is inspectable.
+- Subjective validation records enough evaluator context, scenario or baseline, decision rationale, and captured evidence for the result to be inspectable.
 - Quantitative validation is required or strongly preferred for numerical claims such as performance, latency, count reduction, size, coverage, or error-rate changes.
 - Work-item guidance warns against over-specifying subjective output before implementation while still requiring enough evidence for review.
 
