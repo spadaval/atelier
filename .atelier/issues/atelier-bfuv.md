@@ -11,9 +11,13 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-0vjq"
+  - kind: "issue"
     id: "atelier-dv3d"
   - kind: "issue"
     id: "atelier-h2tq"
+  - kind: "issue"
+    id: "atelier-n9up"
   - kind: "issue"
     id: "atelier-rzsg"
   - kind: "issue"
@@ -25,23 +29,23 @@ relationships:
 schema: "atelier.issue"
 schema_version: 1
 status: "open"
-title: "Redesign evidence capture and claim mapping"
-updated_at: "2026-06-13T02:36:00.415872253+00:00"
+title: "Redesign evidence capture and proof coverage"
+updated_at: "2026-06-13T02:52:25.920806260+00:00"
 ---
 
 ## Description
 
-Redesign evidence so proof is structured around claims instead of long prose summaries. Evidence should be easy for agents to capture, easy for validators to inspect, and suitable for mission closeout without private chat context.
+Redesign evidence so proof is attached to accountable work and easy to inspect without private chat context. The model should avoid turning missions into pseudo-work items and should not require line-level claim plumbing for ordinary work.
 
 ## Outcome
 
-- Evidence records can identify targets, covered claims, proof kind, result classification, commands or artifacts, agent identity, independence level, residual risks, and follow-up IDs.
-- Evidence capture commands reduce hand-written summaries for shell commands, tests, audits, and transcripts.
+- Evidence records identify accountable targets, proof kind, result classification, commands or artifacts, agent identity, independence level, residual risks, and follow-up IDs.
+- Evidence recording uses one normal workflow for manual summaries, shell commands, tests, audits, and transcripts.
 - Evidence rendering defaults to compact summaries with drill-down for full details.
-- Parent closeout can verify whether required claims are covered by suitable evidence, not just whether any evidence is attached.
+- Parent closeout can verify whether required proof coverage exists through linked work and validation records, not just whether any evidence is attached.
 
 ## Evidence
 
 - Evidence schema or record contract is documented before implementation.
-- Focused tests prove claim-mapped evidence creation, attachment, rendering, and closeout lookup.
-- Command transcripts prove agents can capture a test run or CLI transcript without manually writing a huge summary.
+- Focused tests prove evidence creation, attachment to accountable work, rendering, and closeout lookup.
+- Command transcripts prove agents can record a test run or CLI transcript without manually writing a huge summary or choosing between duplicate evidence verbs.

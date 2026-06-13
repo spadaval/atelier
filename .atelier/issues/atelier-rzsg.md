@@ -20,11 +20,11 @@ updated_at: "2026-06-13T02:36:00.415872253+00:00"
 
 ## Description
 
-Validate the structured evidence model against representative mission, epic, issue, pass, fail, blocked, deferred, and not-applicable scenarios.
+Validate the structured evidence model against representative mission, epic, issue, pass, fail, blocked, deferred, and not-applicable scenarios without requiring mission-attached proof as the normal path.
 
 ## Outcome
 
-- Validator confirms claim mapping works for ordinary issue proof, epic closeout, mission closeout, failed validation, and deferred checks.
+- Validator confirms proof coverage works for ordinary issue proof, epic closeout, mission closeout through linked accountable work, failed validation, and deferred checks.
 - Any missing migration or rendering behavior is filed as follow-up work.
 - Existing mission fixtures either migrate cleanly or have explicit compatibility handling.
 

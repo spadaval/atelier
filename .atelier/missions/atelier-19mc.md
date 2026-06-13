@@ -20,16 +20,19 @@ relationships:
   - kind: "issue"
     id: "atelier-qf35"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-sv98"
+    type: "advances"
 schema: "atelier.mission"
 schema_version: 1
 status: "ready"
 title: "Overhaul proof, evidence, delegation, and operator CLI"
-updated_at: "2026-06-13T02:35:51.356708440+00:00"
+updated_at: "2026-06-13T02:52:21.324153629+00:00"
 ---
 
 ## Intent
 
-Make Atelier's operating model cheaper, clearer, and harder to fool. The mission defines strong proof, redesigns evidence capture around claim mapping, improves Agent Factory delegation and model routing, and collapses mission/operator CLI surfaces into fewer contextual commands.
+Make Atelier's operating model cheaper, clearer, and harder to fool. The mission defines strong proof, redesigns evidence capture around accountable work, improves Agent Factory delegation and model routing, and collapses the operator CLI into fewer contextual commands that real humans and agents can use without ceremony.
 
 ## Constraints
 
@@ -37,6 +40,7 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 - Use focused tests or command transcripts for each changed public behavior; broad suites are supporting evidence, not proof by themselves.
 - Default subagent assignments to cheaper/faster models unless a higher-reasoning model is justified by ambiguity or cross-cutting risk.
 - Prefer fewer, stronger operator commands over new narrow commands; normal users should not need raw workflow diagnostics for closeout.
+- Treat simplicity as a safety requirement: if a process or command shape makes routine work easier to misuse, redesign it before relying on training or reminders.
 
 ## Risks
 
@@ -46,7 +50,9 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 ## Validation
 
 - Mission defines a durable strong-proof contract and updates validation guidance so weak proof is distinguishable from strong proof, including support for subjective qualitative validation and hard quantitative validation where practical.
-- Evidence records can map proof to concrete issue, epic, and mission claims, with command-backed capture for transcripts and tests.
+- Evidence records attach to accountable work rather than mission objectives; mission readiness derives proof from linked implementation, validation, review, and closeout work.
+- Evidence recording is one simple operator workflow for manual summaries and command transcripts.
 - Mission/operator CLI gives a concise default answer for state, blockers, missing evidence, next action, and closeout readiness, with verbose audit drill-down available when needed.
+- Broad command consolidation removes, hides, or merges duplicate surfaces so normal workflows are simple and context-driven.
 - Agent Factory guidance routes delegation by bounded slice, proof need, and model cost, with 5.4 Mini as the default for routine evidence-producing work.
 - Focused tests, docs/help parity checks, tracker lint/export/doctor, and an independent closeout validation prove the new model end to end.

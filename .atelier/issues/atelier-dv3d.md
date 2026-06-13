@@ -22,15 +22,15 @@ updated_at: "2026-06-13T02:35:56.733150569+00:00"
 
 ## Description
 
-Make it easy to capture proof from command execution without hand-writing long summaries. The UX should support tests, CLI transcripts, and audit commands while preserving enough output to inspect later.
+Implement command-backed recording inside the unified evidence workflow so operators can capture proof from command execution without hand-writing long summaries. The UX should support tests, CLI transcripts, and audit commands while preserving enough output to inspect later.
 
 ## Outcome
 
-- An operator can run a command through an evidence capture surface and attach the resulting evidence to an issue or mission.
+- An operator can run a command through the normal evidence recording surface and attach the resulting evidence to accountable work such as an implementation, validation, review, or closeout issue.
 - Captured evidence records command, exit status, relevant output, result classification, and target attachments.
 - Sensitive or excessive output has a documented handling rule.
 
 ## Evidence
 
-- Focused CLI tests cover successful command capture, failed command capture, and attachment to a tracker target.
+- Focused CLI tests cover successful command-backed evidence recording, failed command recording, and attachment to accountable work.
 - Transcript proves a real check can be captured without manually writing the evidence body.
