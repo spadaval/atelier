@@ -26,6 +26,9 @@
 - [docs/product/development-setup.md](product/development-setup.md): required
   tools, Rust toolchain, `cargo-nextest`, optional integrations, local
   environment/secrets policy, and devcontainer decision.
+- [docs/product/repository-contribution.md](product/repository-contribution.md):
+  repository contribution entry points, GitHub collaboration-file
+  classification, and tracker-first ownership policy.
 - [docs/product/zen.md](product/zen.md): product principles for
   semi-autonomous mission work, evidence, validation, and closeout.
 - [docs/architecture/index.md](architecture/index.md): implementation
