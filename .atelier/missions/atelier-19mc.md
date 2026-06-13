@@ -45,7 +45,7 @@ Make Atelier's operating model cheaper, clearer, and harder to fool. The mission
 
 ## Validation
 
-- Mission defines a durable strong-proof contract and updates validation guidance so weak proof is mechanically distinguishable from strong proof.
+- Mission defines a durable strong-proof contract and updates validation guidance so weak proof is distinguishable from strong proof, including support for subjective qualitative validation and hard quantitative validation where practical.
 - Evidence records can map proof to concrete issue, epic, and mission claims, with command-backed capture for transcripts and tests.
 - Mission/operator CLI gives a concise default answer for state, blockers, missing evidence, next action, and closeout readiness, with verbose audit drill-down available when needed.
 - Agent Factory guidance routes delegation by bounded slice, proof need, and model cost, with 5.4 Mini as the default for routine evidence-producing work.
