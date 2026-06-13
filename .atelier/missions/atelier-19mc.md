@@ -25,9 +25,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Overhaul proof, evidence, delegation, and operator CLI"
-updated_at: "2026-06-13T02:52:21.324153629+00:00"
+updated_at: "2026-06-13T16:20:07.964895230+00:00"
 ---
 
 ## Intent
