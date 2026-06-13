@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:52:24.423203682+00:00"
+status: "done"
 title: "Move work selection guidance into Atelier status surfaces"
-updated_at: "2026-06-13T23:51:48.858292322+00:00"
+updated_at: "2026-06-13T23:52:24.423203682+00:00"
 ---
 
 ## Description
