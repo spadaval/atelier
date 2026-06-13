@@ -416,9 +416,14 @@ enum IssueCommands {
     Transition {
         /// Issue ID
         id: String,
+        /// Transition name to execute
+        transition: Option<String>,
         /// Show the full option list
         #[arg(long)]
         options: bool,
+        /// Close reason used by transitions that require it
+        #[arg(long = "reason")]
+        close_reason: Option<String>,
     },
 
     /// Update an issue
@@ -1458,10 +1463,36 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::agent_factory::show(&db, &id)
         }
 
-        IssueCommands::Transition { id, options } => {
-            let db = degraded_projection_query_db()?;
-            let _ = options;
-            commands::agent_factory::transition_options(&db, &id)
+        IssueCommands::Transition {
+            id,
+            transition,
+            options,
+            close_reason,
+        } => {
+            if options {
+                if transition.is_some() {
+                    bail!("--options cannot be combined with a transition name");
+                }
+                let db = degraded_projection_query_db()?;
+                commands::agent_factory::transition_options(&db, &id)
+            } else {
+                let transition = transition.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Specify a transition name or rerun with `atelier issue transition {} --options`",
+                        id
+                    )
+                })?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let db = canonical_mutation_db()?;
+                commands::workflow::transition_issue(
+                    &db,
+                    &state_dir,
+                    &db_path,
+                    &id,
+                    &transition,
+                    close_reason.as_deref(),
+                )
+            }
         }
 
         IssueCommands::Update {

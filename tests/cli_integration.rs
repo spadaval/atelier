@@ -69,6 +69,13 @@ fn init_atelier(dir: &Path) {
     assert!(success, "Failed to init: {}", stderr);
 }
 
+fn migrate_default_issue_workflow(dir: &Path) {
+    let (success, _, stderr) = run_atelier(dir, &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir, &["workflow", "migrate-statuses"]);
+    assert!(success, "workflow migrate-statuses failed: {stderr}");
+}
+
 fn init_git_repo(dir: &Path) {
     let status = Command::new("git")
         .current_dir(dir)
@@ -1371,7 +1378,7 @@ fn test_issue_next_uses_current_workflow_commands() {
 }
 
 #[test]
-fn test_root_start_finish_and_issue_transition_surface() {
+fn test_issue_transition_options_and_successful_execution_follow_workflow_policy() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -1379,34 +1386,266 @@ fn test_root_start_finish_and_issue_transition_surface() {
     let (success, issue_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Root workflow item"]);
     assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("atelier start"));
+    assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Root workflow item");
+    migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "tracker setup");
 
     let (success, transition_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition failed: {stderr}");
     assert!(transition_out.contains("Issue Transitions"));
-    assert!(transition_out.contains("Allowed Actions"));
-    assert!(transition_out.contains("start"));
-    assert!(transition_out.contains(&format!("atelier start {issue_id}")));
-    assert!(transition_out.contains("Blocked Actions"));
-    assert!(transition_out.contains("missing issue-level proof"));
-    assert!(transition_out.contains("capture passing evidence or attach existing evidence"));
+    assert!(
+        transition_out.contains("start [allowed]"),
+        "{transition_out}"
+    );
+    assert!(
+        transition_out.contains("block [allowed]"),
+        "{transition_out}"
+    );
+    assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
-    assert!(success, "root start failed: {stderr}");
-    assert!(start_out.contains(&format!("Started work on {issue_id}")));
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "transition start failed: {stderr}");
+    assert!(
+        start_out.contains("Applied transition start"),
+        "{start_out}"
+    );
+    assert!(start_out.contains("To:       in_progress"), "{start_out}");
 
-    let (success, active_transition, stderr) =
+    let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
+    assert!(
+        issue_text.contains("status: \"in_progress\""),
+        "{issue_text}"
+    );
+
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activities,
+        "transition_applied",
+        &[
+            "Applied transition start",
+            "transition: \"start\"",
+            "to: \"in_progress\"",
+        ],
+    );
+}
+
+#[test]
+fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Validator blocked item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Validator blocked item");
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+
+    let evidence_dir = dir.path().join(".atelier").join("evidence");
+    let evidence_before = std::fs::read_dir(&evidence_dir)
+        .unwrap()
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .ok()
+                .and_then(|entry| entry.path().extension().map(|ext| ext == "md"))
+                .unwrap_or(false)
+        })
+        .count();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_validation"],
+    );
+    assert!(
+        !success,
+        "request_validation should fail without a completed review"
+    );
+    assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(stderr.contains("review_ready"), "{stderr}");
+    assert!(stderr.contains("blocked"), "{stderr}");
+
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activities,
+        "transition_blocked",
+        &[
+            "Blocked transition request_validation from in_progress",
+            "transition: \"request_validation\"",
+            "reason: \"validator review_ready failed:",
+        ],
+    );
+
+    let evidence_after = std::fs::read_dir(&evidence_dir)
+        .unwrap()
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .ok()
+                .and_then(|entry| entry.path().extension().map(|ext| ext == "md"))
+                .unwrap_or(false)
+        })
+        .count();
+    assert_eq!(
+        evidence_before, evidence_after,
+        "blocked transition created evidence"
+    );
+}
+
+#[test]
+fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Blocked close item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Blocked close item");
+    migrate_default_issue_workflow(dir.path());
+
+    for args in [
+        vec!["issue", "transition", &issue_id, "start"],
+        vec!["issue", "transition", &issue_id, "request_review"],
+        vec!["issue", "transition", &issue_id, "request_validation"],
+    ] {
+        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "transition {:?} failed: {stderr}", args);
+    }
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    assert!(!success, "close should be blocked without reason and proof");
+    assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(
+        stderr.contains("missing required field close_reason"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("proof_attached"), "{stderr}");
+
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activities,
+        "transition_blocked",
+        &[
+            "Blocked transition close from validation",
+            "transition: \"close\"",
+            "reason: \"missing required field close_reason;",
+        ],
+    );
+}
+
+#[test]
+fn test_issue_transition_rejects_unknown_transition_name() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Unknown transition item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Unknown transition item");
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "ship_it"]);
+    assert!(!success, "unknown transition should fail");
+    assert!(stderr.contains("Unknown transition 'ship_it'"), "{stderr}");
+    assert!(
+        stderr.contains("available from 'todo' are: block, start"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_issue_transition_requires_workflow_policy_file() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Missing policy item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Missing policy item");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier").join("workflow.yaml")).unwrap();
+
+    let (success, _stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
-    assert!(success, "active transition failed: {stderr}");
-    assert!(active_transition.contains("Work:     active on this issue"));
-    assert!(active_transition.contains(&format!("atelier finish {issue_id}")));
+    assert!(
+        !success,
+        "transition options should fail without workflow policy"
+    );
+    assert!(stderr.contains("workflow_config_missing"), "{stderr}");
+}
 
-    let (success, finish_out, stderr) = run_atelier(dir.path(), &["finish"]);
-    assert!(success, "root finish failed: {stderr}");
-    assert!(finish_out.contains(&format!("Finished work on {issue_id}")));
+#[test]
+fn test_issue_transition_rejects_unmigrated_issue_status() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Unmigrated transition item"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Unmigrated transition item");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(!success, "transition options should reject legacy status");
+    assert!(stderr.contains("unmigrated status 'open'"), "{stderr}");
+    assert!(stderr.contains("workflow migrate-statuses"), "{stderr}");
+}
+
+#[test]
+fn test_issue_transition_options_render_guidance_and_exact_command() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Guided transition item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Guided transition item");
+    migrate_default_issue_workflow(dir.path());
+
+    for args in [
+        vec!["issue", "transition", &issue_id, "start"],
+        vec!["issue", "transition", &issue_id, "request_review"],
+        vec!["issue", "transition", &issue_id, "request_validation"],
+    ] {
+        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "transition {:?} failed: {stderr}", args);
+    }
+
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options_out.contains("close [blocked]"), "{options_out}");
+    assert!(options_out.contains("Guidance"), "{options_out}");
+    assert!(
+        options_out.contains(&format!(
+            "Closing {} requires attached evidence and no open blockers.",
+            issue_id
+        )),
+        "{options_out}"
+    );
+    assert!(options_out.contains(&format!(
+        "atelier issue transition {issue_id} close --reason \"...\""
+    )));
 }
 
 #[test]

@@ -33,6 +33,8 @@ pub enum ActivityEventType {
     WorkStarted,
     WorkFinished,
     EvidenceAttached,
+    TransitionApplied,
+    TransitionBlocked,
 }
 
 impl ActivityEventType {
@@ -48,6 +50,8 @@ impl ActivityEventType {
             Self::WorkStarted => "work_started",
             Self::WorkFinished => "work_finished",
             Self::EvidenceAttached => "evidence_attached",
+            Self::TransitionApplied => "transition_applied",
+            Self::TransitionBlocked => "transition_blocked",
         }
     }
 }
@@ -73,6 +77,8 @@ impl FromStr for ActivityEventType {
             "work_started" => Ok(Self::WorkStarted),
             "work_finished" => Ok(Self::WorkFinished),
             "evidence_attached" => Ok(Self::EvidenceAttached),
+            "transition_applied" => Ok(Self::TransitionApplied),
+            "transition_blocked" => Ok(Self::TransitionBlocked),
             other => bail!("Unsupported activity event_type '{}'", other),
         }
     }

@@ -95,6 +95,35 @@ pub fn record_evidence_attached(
     )
 }
 
+pub fn record_transition_applied(
+    issue_id: &str,
+    transition: &str,
+    from: &str,
+    to: &str,
+) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::TransitionApplied,
+        &format!("Applied transition {transition} ({from} -> {to})"),
+        &transition_body(transition, from, Some(to), None),
+    )
+}
+
+pub fn record_transition_blocked(
+    issue_id: &str,
+    transition: &str,
+    from: &str,
+    to: Option<&str>,
+    reason: &str,
+) -> Result<()> {
+    record(
+        issue_id,
+        ActivityEventType::TransitionBlocked,
+        &format!("Blocked transition {transition} from {from}"),
+        &transition_body(transition, from, to, Some(reason)),
+    )
+}
+
 fn record(issue_id: &str, event_type: ActivityEventType, summary: &str, body: &str) -> Result<()> {
     let Some(state_dir) = current_state_dir_for_issue(issue_id) else {
         return Ok(());
@@ -137,6 +166,16 @@ fn work_body(branch: Option<&str>, worktree_path: Option<&str>) -> String {
         "branch: {}\nworktree_path: {}",
         option_scalar(branch),
         option_scalar(worktree_path)
+    )
+}
+
+fn transition_body(transition: &str, from: &str, to: Option<&str>, reason: Option<&str>) -> String {
+    format!(
+        "transition: {}\nfrom: {}\nto: {}\nreason: {}",
+        scalar(transition),
+        scalar(from),
+        option_scalar(to),
+        option_scalar(reason)
     )
 }
 

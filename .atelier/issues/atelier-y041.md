@@ -3,6 +3,7 @@ created_at: "2026-06-13T17:29:11.074101350+00:00"
 id: "atelier-y041"
 issue_type: "feature"
 labels:
+- "assignee:root"
 - "workflow"
 priority: "P0"
 relationships:
@@ -24,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Replace issue transition engine"
-updated_at: "2026-06-13T17:36:54.438314837+00:00"
+updated_at: "2026-06-13T18:33:28.624374245+00:00"
 ---
 
 ## Description

@@ -1,4 +1,5 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
+use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fs;
@@ -8,7 +9,8 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use crate::db::Database;
-use crate::record_store::{IssueSections, RecordStore};
+use crate::models::Issue;
+use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
 
 const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
 
@@ -123,7 +125,7 @@ pub fn migrate_statuses(repo_root: &Path, state_dir: &Path, db_path: &Path) -> R
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ValidatorResult {
     pub target_kind: String,
     pub target_id: String,
@@ -132,6 +134,18 @@ pub struct ValidatorResult {
     pub passed: bool,
     pub reason: String,
     pub elapsed_ms: u128,
+}
+
+#[derive(Debug, Clone)]
+pub struct IssueTransitionOption {
+    pub name: String,
+    pub from: Vec<String>,
+    pub to: String,
+    pub allowed: bool,
+    pub blockers: Vec<String>,
+    pub validator_results: Vec<ValidatorResult>,
+    pub guidance: Vec<String>,
+    pub command: String,
 }
 
 pub fn check(db: &Database) -> Result<()> {
@@ -236,6 +250,195 @@ fn archived_target_status<'a>(
     }
 }
 
+pub fn issue_transition_options(
+    db: &Database,
+    issue_ref: &str,
+) -> Result<Vec<IssueTransitionOption>> {
+    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let repo_root = repo_root()?;
+    let policy = crate::workflow_policy::load(&repo_root)?;
+    let issue = db.require_issue(&issue_id)?;
+    ensure_transitionable_status(&policy, &issue)?;
+    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
+    let state_dir = crate::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
+    let store = RecordStore::new(&state_dir);
+    let record = store.load_issue_by_id(&issue.id)?;
+    let mut options = Vec::new();
+
+    for (name, transition) in &workflow.transitions {
+        if !transition.from.iter().any(|from| from == &issue.status) {
+            continue;
+        }
+        let mut blockers = required_field_failures(&record, transition, None)?;
+        let validator_results = evaluate_policy_transition(
+            db,
+            &policy,
+            "issue",
+            &issue.id,
+            name,
+            &transition.validators,
+        )?;
+        blockers.extend(
+            validator_results
+                .iter()
+                .filter(|result| !result.passed)
+                .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
+        );
+        let guidance = render_transition_guidance(&policy, &issue, name, transition)?;
+        options.push(IssueTransitionOption {
+            name: name.clone(),
+            from: transition.from.clone(),
+            to: transition.to.clone(),
+            allowed: blockers.is_empty(),
+            blockers,
+            validator_results,
+            guidance,
+            command: transition_command(&issue.id, name, transition),
+        });
+    }
+
+    if options.is_empty() {
+        bail!(
+            "Issue {} has no configured transitions from status '{}'",
+            issue.id,
+            issue.status
+        );
+    }
+
+    Ok(options)
+}
+
+pub fn transition_issue(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    transition_name: &str,
+    close_reason: Option<&str>,
+) -> Result<()> {
+    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let repo_root = repo_root()?;
+    let policy = crate::workflow_policy::load(&repo_root)?;
+    let before = db.require_issue(&issue_id)?;
+    ensure_transitionable_status(&policy, &before)?;
+    let workflow = policy.workflow_for_issue_type(&before.issue_type)?;
+    let Some(transition) = workflow.transitions.get(transition_name) else {
+        let available = workflow
+            .transitions
+            .iter()
+            .filter(|(_, candidate)| candidate.from.iter().any(|from| from == &before.status))
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>();
+        if available.is_empty() {
+            bail!(
+                "Unknown transition '{}' for issue {}; no transitions are configured from status '{}'",
+                transition_name,
+                before.id,
+                before.status
+            );
+        }
+        bail!(
+            "Unknown transition '{}' for issue {}; available from '{}' are: {}",
+            transition_name,
+            before.id,
+            before.status,
+            available.join(", ")
+        );
+    };
+
+    if !transition.from.iter().any(|from| from == &before.status) {
+        crate::commands::activity_log::record_transition_blocked(
+            &before.id,
+            transition_name,
+            &before.status,
+            Some(&transition.to),
+            &format!(
+                "transition '{}' is not available from status '{}'",
+                transition_name, before.status
+            ),
+        )?;
+        bail!(
+            "Transition '{}' is not available from status '{}' for issue {}",
+            transition_name,
+            before.status,
+            before.id
+        );
+    }
+
+    let store = RecordStore::new(state_dir);
+    let mut record = store.load_issue_by_id(&before.id)?;
+    let mut blockers = required_field_failures(&record, transition, close_reason)?;
+    let validator_results = evaluate_policy_transition(
+        db,
+        &policy,
+        "issue",
+        &before.id,
+        transition_name,
+        &transition.validators,
+    )?;
+    blockers.extend(
+        validator_results
+            .iter()
+            .filter(|result| !result.passed)
+            .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
+    );
+    if !blockers.is_empty() {
+        let reason = blockers.join("; ");
+        crate::commands::activity_log::record_transition_blocked(
+            &before.id,
+            transition_name,
+            &before.status,
+            Some(&transition.to),
+            &reason,
+        )?;
+        print_transition_attempt(
+            &before,
+            transition_name,
+            &transition.to,
+            &validator_results,
+            &blockers,
+            &render_transition_guidance(&policy, &before, transition_name, transition)?,
+            &transition_command(&before.id, transition_name, transition),
+        );
+        bail!(
+            "Transition '{}' is blocked for issue {}: {}",
+            transition_name,
+            before.id,
+            reason
+        );
+    }
+
+    let now = Utc::now();
+    record.issue.status = transition.to.clone();
+    record.issue.updated_at = now;
+    record.issue.closed_at = if policy.status_category(&transition.to) == Some("done") {
+        Some(now)
+    } else {
+        None
+    };
+    store.write_issue_atomic(&record)?;
+    if let Some(reason) = close_reason {
+        crate::commands::activity_log::record_close_reason(&before.id, reason)?;
+    }
+    crate::commands::activity_log::record_transition_applied(
+        &before.id,
+        transition_name,
+        &before.status,
+        &transition.to,
+    )?;
+
+    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    let refreshed = Database::open(db_path)?;
+    let issue = refreshed.require_issue(&before.id)?;
+    println!("Applied transition {} to {}", transition_name, issue.id);
+    println!("From:     {}", before.status);
+    println!("To:       {}", issue.status);
+    print_heading("Next Commands");
+    println!("  atelier issue show {}", issue.id);
+    println!("  atelier issue transition {} --options", issue.id);
+    Ok(())
+}
+
 pub fn validate(
     db: &Database,
     target_kind: &str,
@@ -256,6 +459,29 @@ pub fn validate(
     Ok(())
 }
 
+pub fn print_issue_transition_options(issue: &Issue, options: &[IssueTransitionOption]) {
+    println!("Issue Transitions {} - {}", issue.id, issue.title);
+    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
+    print_heading("State");
+    println!("Status:   {}", issue.status);
+    println!("Type:     {}", issue.issue_type);
+    println!("Options:  {}", options.len());
+    for option in options {
+        println!();
+        println!(
+            "{} [{}]",
+            option.name,
+            if option.allowed { "allowed" } else { "blocked" }
+        );
+        println!("  From: {}", option.from.join(", "));
+        println!("  To:   {}", option.to);
+        println!("  Command: {}", option.command);
+        print_transition_detail("Validators", &option.validator_results);
+        print_text_list("Blockers", &option.blockers);
+        print_text_list("Guidance", &option.guidance);
+    }
+}
+
 pub fn evaluate(
     db: &Database,
     target_kind: &str,
@@ -272,7 +498,15 @@ pub fn evaluate(
     let mut results = Vec::new();
     for validator in validators {
         let started = Instant::now();
-        let (passed, reason) = evaluate_builtin(db, target_kind, target_id, &validator)?;
+        let (passed, reason) = evaluate_builtin_with_params(
+            db,
+            &crate::workflow_policy::load(&repo_root()?)?,
+            target_kind,
+            target_id,
+            transition,
+            &validator,
+            None,
+        )?;
         let elapsed_ms = started.elapsed().as_millis();
         results.push(ValidatorResult {
             target_kind: target_kind.to_string(),
@@ -286,6 +520,53 @@ pub fn evaluate(
     }
 
     Ok(results)
+}
+
+fn print_transition_attempt(
+    issue: &Issue,
+    transition_name: &str,
+    destination: &str,
+    validator_results: &[ValidatorResult],
+    blockers: &[String],
+    guidance: &[String],
+    command: &str,
+) {
+    println!("Issue Transition {} - {}", issue.id, issue.title);
+    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 20));
+    println!("Transition: {}", transition_name);
+    println!("From:       {}", issue.status);
+    println!("To:         {}", destination);
+    println!("Command:    {}", command);
+    print_transition_detail("Validators", validator_results);
+    print_text_list("Blockers", blockers);
+    print_text_list("Guidance", guidance);
+}
+
+fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
+    print_heading(title);
+    if results.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for result in results {
+        println!(
+            "  {}  {}",
+            if result.passed { "pass" } else { "fail" },
+            result.validator
+        );
+        println!("      {}", result.reason);
+    }
+}
+
+fn print_text_list(title: &str, values: &[String]) {
+    print_heading(title);
+    if values.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for value in values {
+        println!("  {value}");
+    }
 }
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
@@ -377,6 +658,140 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
+fn ensure_transitionable_status(
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
+) -> Result<()> {
+    if policy.workflow_allows_status(&issue.issue_type, &issue.status)? {
+        return Ok(());
+    }
+    if matches!(issue.status.as_str(), "open" | "closed" | "archived") {
+        bail!(
+            "Issue {} has unmigrated status '{}'; run `atelier workflow migrate-statuses` before using `atelier issue transition`",
+            issue.id,
+            issue.status
+        );
+    }
+    bail!(
+        "Issue {} has status '{}' that is not allowed by the workflow policy for issue_type '{}'",
+        issue.id,
+        issue.status,
+        issue.issue_type
+    )
+}
+
+fn required_field_failures(
+    _record: &CanonicalIssueRecord,
+    transition: &crate::workflow_policy::TransitionDefinition,
+    close_reason: Option<&str>,
+) -> Result<Vec<String>> {
+    let mut failures = Vec::new();
+    for field in &transition.required_fields {
+        match field.as_str() {
+            "close_reason" => {
+                if close_reason.is_none_or(|value| value.trim().is_empty()) {
+                    failures.push(
+                        "missing required field close_reason; rerun with `--reason \"...\"`"
+                            .to_string(),
+                    );
+                }
+            }
+            other => {
+                return Err(anyhow!("unsupported required field '{other}'"));
+            }
+        }
+    }
+    Ok(failures)
+}
+
+fn transition_command(
+    issue_id: &str,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+) -> String {
+    let mut command = format!("atelier issue transition {issue_id} {transition_name}");
+    if transition
+        .required_fields
+        .iter()
+        .any(|field| field == "close_reason")
+    {
+        command.push_str(" --reason \"...\"");
+    }
+    command
+}
+
+fn evaluate_policy_transition(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+    transition: &str,
+    validators: &[String],
+) -> Result<Vec<ValidatorResult>> {
+    ensure_target_exists(db, target_kind, target_id)?;
+    let mut results = Vec::new();
+    for validator_name in validators {
+        let definition = policy.validators.get(validator_name).ok_or_else(|| {
+            anyhow!(
+                "workflow policy references unknown validator '{}'",
+                validator_name
+            )
+        })?;
+        let started = Instant::now();
+        let (passed, reason) = evaluate_builtin_with_params(
+            db,
+            policy,
+            target_kind,
+            target_id,
+            transition,
+            &definition.builtin,
+            definition.params.as_ref(),
+        )?;
+        results.push(ValidatorResult {
+            target_kind: target_kind.to_string(),
+            target_id: target_id.to_string(),
+            transition: transition.to_string(),
+            validator: validator_name.clone(),
+            passed,
+            reason,
+            elapsed_ms: started.elapsed().as_millis(),
+        });
+    }
+    Ok(results)
+}
+
+fn render_transition_guidance(
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+) -> Result<Vec<String>> {
+    let mut rendered = Vec::new();
+    for guidance_name in &transition.guidance {
+        let template = policy
+            .guidance_templates
+            .get(guidance_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "workflow policy references undefined guidance template '{}'",
+                    guidance_name
+                )
+            })?;
+        rendered.push(
+            template
+                .template
+                .replace("{{ issue.id }}", &issue.id)
+                .replace("{{ issue.type }}", &issue.issue_type)
+                .replace("{{ transition.name }}", transition_name)
+                .replace("{{ transition.from }}", &issue.status)
+                .replace("{{ transition.to }}", &transition.to)
+                .trim()
+                .to_string(),
+        );
+    }
+    Ok(rendered)
+}
+
 fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
     match kind {
         "issue" => {
@@ -394,11 +809,14 @@ fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_builtin(
+fn evaluate_builtin_with_params(
     db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
+    transition: &str,
     validator: &str,
+    params: Option<&crate::workflow_policy::ValidatorParams>,
 ) -> Result<(bool, String)> {
     match validator {
         "durable_state_current" => {
@@ -417,6 +835,30 @@ fn evaluate_builtin(
             if target_kind == "issue" {
                 let issue = db.require_issue(target_id)?;
                 let gate = issue_evidence_gate_status(db, &issue)?;
+                if let Some(crate::workflow_policy::ValidatorParams::EvidenceAttached {
+                    min_count,
+                    kind,
+                }) = params
+                {
+                    let linked = linked_evidence_records(db, target_id, kind.as_deref())?;
+                    let passing_count = linked
+                        .iter()
+                        .filter(|record| record.status == "pass")
+                        .count();
+                    if passing_count < *min_count as usize {
+                        return Ok((
+                            false,
+                            format!(
+                                "expected at least {} passing evidence record(s){}; found {}",
+                                min_count,
+                                kind.as_deref()
+                                    .map(|value| format!(" of kind {}", value))
+                                    .unwrap_or_default(),
+                                passing_count
+                            ),
+                        ));
+                    }
+                }
                 return Ok((gate.passed, gate.reason));
             }
             let attached = db
@@ -433,7 +875,7 @@ fn evaluate_builtin(
             }
         }
         "no_open_blockers" => {
-            let open = open_blockers(db, target_kind, target_id)?;
+            let open = open_blockers(db, policy, target_kind, target_id)?;
             if open.is_empty() {
                 Ok((true, "no open blockers".to_string()))
             } else {
@@ -441,7 +883,7 @@ fn evaluate_builtin(
             }
         }
         "no_open_work" => {
-            let open = open_work(db, target_kind, target_id)?;
+            let open = open_work(db, policy, target_kind, target_id)?;
             if open.is_empty() {
                 Ok((true, "no open linked work".to_string()))
             } else {
@@ -466,10 +908,7 @@ fn evaluate_builtin(
             false,
             "validation criteria records are not implemented in this staged slice".to_string(),
         )),
-        "review_complete" => Ok((
-            false,
-            "review completion evidence is not linked".to_string(),
-        )),
+        "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
 }
@@ -539,7 +978,86 @@ fn issue_sections_parseable(
     ))
 }
 
-fn open_blockers(db: &Database, target_kind: &str, target_id: &str) -> Result<Vec<String>> {
+fn linked_evidence_records(
+    db: &Database,
+    issue_id: &str,
+    required_kind: Option<&str>,
+) -> Result<Vec<crate::models::DomainRecord>> {
+    let mut records = Vec::new();
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        let evidence_id = if link.source_kind == "evidence" {
+            Some(link.source_id)
+        } else if link.target_kind == "evidence" {
+            Some(link.target_id)
+        } else {
+            None
+        };
+        let Some(evidence_id) = evidence_id else {
+            continue;
+        };
+        let record = db.require_record("evidence", &evidence_id)?;
+        if let Some(required_kind) = required_kind {
+            let data =
+                serde_json::from_str::<serde_json::Value>(&record.data_json).unwrap_or_default();
+            let actual_kind = data.get("kind").and_then(|value| value.as_str());
+            if actual_kind != Some(required_kind) {
+                continue;
+            }
+        }
+        records.push(record);
+    }
+    Ok(records)
+}
+
+fn review_complete(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+    _transition: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("review completion does not apply to {target_kind}"),
+        ));
+    }
+    let issue = db.require_issue(target_id)?;
+    match policy.status_category(&issue.status) {
+        Some("review") | Some("validation") | Some("done") => Ok((
+            true,
+            format!(
+                "issue {} has completed review state {}",
+                issue.id, issue.status
+            ),
+        )),
+        _ => Ok((
+            false,
+            format!(
+                "issue {} must reach a review status before this transition; current status is {}",
+                issue.id, issue.status
+            ),
+        )),
+    }
+}
+
+fn issue_is_open_for_workflow(
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
+) -> Result<bool> {
+    ensure_transitionable_status(policy, issue)?;
+    Ok(policy.status_category(&issue.status) != Some("done"))
+}
+
+fn open_blockers(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<String>> {
     let mut blocker_ids = BTreeSet::new();
     match target_kind {
         "issue" => {
@@ -562,23 +1080,34 @@ fn open_blockers(db: &Database, target_kind: &str, target_id: &str) -> Result<Ve
     let mut open = blocker_ids
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| issue.status == "open")
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
+        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
+            Ok(true) => Some(Ok(issue.id)),
+            Ok(false) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<Result<Vec<_>>>()?;
     open.sort();
     Ok(open)
 }
 
-fn open_work(db: &Database, target_kind: &str, target_id: &str) -> Result<Vec<String>> {
+fn open_work(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<String>> {
     if target_kind != "mission" {
         return Ok(Vec::new());
     }
     let mut open = mission_issue_ids(db, target_id)?
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| issue.status != "closed")
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
+        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
+            Ok(true) => Some(Ok(issue.id)),
+            Ok(false) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<Result<Vec<_>>>()?;
     open.sort();
     Ok(open)
 }
