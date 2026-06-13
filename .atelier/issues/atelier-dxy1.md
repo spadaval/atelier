@@ -4,6 +4,7 @@ id: "atelier-dxy1"
 issue_type: "task"
 labels:
 - "agent-factory"
+- "assignee:root"
 - "delegation"
 priority: "P1"
 relationships:
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Update delegation prompt template for bounded proof slices"
-updated_at: "2026-06-13T02:36:08.361649921+00:00"
+updated_at: "2026-06-13T04:19:27.423552685+00:00"
 ---
 
 ## Description

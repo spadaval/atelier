@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Render compact evidence summaries with drill-down"
-updated_at: "2026-06-13T02:35:57.892462110+00:00"
+updated_at: "2026-06-13T04:25:05.301875638+00:00"
 ---
 
 ## Description

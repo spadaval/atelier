@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:52:25.920806260+00:00"
 id: "atelier-0vjq"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "evidence"
 - "ux"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define unified evidence recording command contract"
-updated_at: "2026-06-13T02:52:25.920806260+00:00"
+updated_at: "2026-06-13T04:19:42.539808852+00:00"
 ---
 
 ## Description

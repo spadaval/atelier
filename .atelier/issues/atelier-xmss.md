@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Require proof coverage for parent closeout"
-updated_at: "2026-06-13T03:17:30.304274553+00:00"
+updated_at: "2026-06-13T04:25:06.392775786+00:00"
 ---
 
 ## Description

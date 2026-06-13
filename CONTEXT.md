@@ -27,6 +27,14 @@
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
+- Strong proof: claim-specific evidence that is reproducible from durable
+  repository state or recorded transcripts, attached to the accountable work,
+  classified with a result, scoped to the claim being made, and independently
+  validated when the claim's risk requires a different reviewer.
+- Weak proof: evidence that is too broad, summary-only, unattached,
+  unverifiable, stale, or not mapped to the specific claim it is supposed to
+  prove. Broad green test suites and mission summaries can support strong proof,
+  but they are weak when they are the only proof for a concrete outcome.
 - Workflow validator: a machine-readable transition check that controls whether
   a workflow transition can proceed and returns an actionable failure reason.
 - Issue: a durable accountability unit. It does not have to map one-to-one to an

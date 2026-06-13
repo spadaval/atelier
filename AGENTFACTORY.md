@@ -65,13 +65,30 @@ This file binds Agent Factory to this repository.
   - `atelier start <issue-id>`
   - `atelier status`
   - `atelier finish [issue-id]`
-  - `atelier evidence add --kind <kind> --result <result> "summary"`
+  - `atelier evidence record --target issue/<issue-id> --kind <kind> --result <result> "summary"`
+  - `atelier evidence record --target issue/<issue-id> --kind <kind> --result <result> -- <command>`
   - `atelier evidence attach <evidence-id> issue <issue-id>`
 - Advanced policy diagnostics:
   - Hidden workflow diagnostics are not normal planning, implementation, or
     closeout commands. Use them only when a binding, assignment, workflow policy,
     or closeout contract explicitly names the diagnostic command; they do not
     replace attached Outcome proof.
+- Model routing:
+  - Orchestrator prompts must name the model choice and a short rationale based
+    on task complexity, ambiguity, risk, review depth, and proof needs.
+  - 5.4 Mini is suitable only when the slice is bounded, low ambiguity, and
+    low risk: basic behavior validation, search, fixture repair, docs drift
+    scans, transcript capture, focused tests, straightforward validation,
+    stale-test inventory, or basic refactor-style implementation with clear
+    owned files and objective proof.
+  - Do not route to 5.4 Mini when the work requires complex open-ended
+    implementation, complex review, ambiguous architecture, cross-cutting
+    refactors, hard debugging, security or data-loss judgment, public-contract
+    redesign, or final adversarial closeout. Use a higher-reasoning model for
+    those cases.
+  - When a Mini model is selected, the prompt must say why the scope is small
+    enough, what boundaries make the work low risk, and what observable proof
+    will show the assignment is complete.
 - Issues:
   - `atelier issue list --ready`
   - `atelier issue list --blocked`

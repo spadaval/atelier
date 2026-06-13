@@ -35,6 +35,15 @@ coordination, validation, or Mission Control. Errors should identify the failed
 record, validator, transition, or file projection. Durable projections, not
 command-result JSON, are the machine-readable state boundary.
 
+## Proof
+
+Strong proof is claim-specific, reproducible, attached to the accountable work,
+classified with a result, scoped to the changed behavior or policy, and
+independent when risk requires another validator. Weak proof is broad,
+summary-only, unattached, unverifiable, stale, or unmapped to the claim. Broad
+checks are useful supporting context, but they do not replace proof that shows
+the claimed behavior, file content, command result, rejection, or workflow gate.
+
 ## Preservation
 
 When replacing inherited Chainlink behavior, preserve useful CLI, SQLite,

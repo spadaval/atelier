@@ -34,6 +34,31 @@ pub fn add(
     uri: Option<&str>,
     producer: Option<&str>,
 ) -> Result<()> {
+    let id = add_returning_id(
+        state_dir,
+        db_path,
+        evidence_kind,
+        result,
+        summary,
+        path,
+        uri,
+        producer,
+    )?;
+    let db = Database::open(db_path)?;
+    let record = db.require_record(KIND, &id)?;
+    print_record(&db, &record)
+}
+
+pub fn add_returning_id(
+    state_dir: &Path,
+    db_path: &Path,
+    evidence_kind: &str,
+    result: &str,
+    summary: &str,
+    path: Option<&str>,
+    uri: Option<&str>,
+    producer: Option<&str>,
+) -> Result<String> {
     let data = json!({
         "kind": evidence_kind,
         "result": result,
@@ -45,10 +70,9 @@ pub fn add(
     let store = RecordStore::new(state_dir);
     let created =
         store.create_domain_record(KIND, summary, result, Some(summary), &data.to_string())?;
+    let id = created.record.id.clone();
     refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, &created.record.id)?;
-    print_record(&db, &record)
+    Ok(id)
 }
 
 pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) -> Result<()> {
@@ -264,7 +288,7 @@ pub fn list(db: &Database, result: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
+pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
     let data = evidence_data(record)?;
     println!(
         "{} [evidence] {} - {}",

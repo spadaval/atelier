@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:39:43.398190553+00:00"
 id: "atelier-z80r"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "process"
 - "proof"
 - "validation"
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define qualitative and quantitative validation standards"
-updated_at: "2026-06-13T02:39:43.398190553+00:00"
+updated_at: "2026-06-13T04:11:53.593274943+00:00"
 ---
 
 ## Description

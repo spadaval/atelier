@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define accountable-work evidence target model"
-updated_at: "2026-06-13T02:52:24.818111700+00:00"
+updated_at: "2026-06-13T04:07:29.982799344+00:00"
 ---
 
 ## Description

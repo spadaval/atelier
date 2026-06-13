@@ -132,7 +132,8 @@ fn is_runtime_rebuild_temp_path(relative_path: &Path) -> bool {
     file_name.starts_with(&format!(".{LEGACY_RUNTIME_DB}."))
         && (file_name.ends_with(".rebuild-tmp")
             || file_name.ends_with(".rebuild-tmp-shm")
-            || file_name.ends_with(".rebuild-tmp-wal"))
+            || file_name.ends_with(".rebuild-tmp-wal")
+            || file_name.ends_with(".rebuild-tmp-journal"))
 }
 
 #[cfg(test)]
@@ -158,6 +159,9 @@ mod tests {
         )));
         assert!(is_local_atelier_path(Path::new(
             ".state.db.123.456.rebuild-tmp-wal"
+        )));
+        assert!(is_local_atelier_path(Path::new(
+            ".state.db.123.456.rebuild-tmp-journal"
         )));
         assert!(!is_local_atelier_path(Path::new(
             "issues/.state.db.123.456.rebuild-tmp"

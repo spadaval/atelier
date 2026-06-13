@@ -433,9 +433,6 @@ enum IssueCommands {
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// New status (open, in_progress, closed)
-        #[arg(short, long)]
-        status: Option<String>,
         /// New issue type (bug, closeout, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
@@ -712,7 +709,15 @@ enum MissionCommands {
         switch_active: bool,
     },
     /// Show mission-control status for one mission or all current missions
-    Status { id: Option<String> },
+    Status {
+        /// Show closeout contract audit detail for the mission
+        #[arg(long)]
+        closeout: bool,
+        /// Show verbose validator detail in the status summary
+        #[arg(long)]
+        verbose: bool,
+        id: Option<String>,
+    },
     /// Audit mission validation and linked epic outcomes against proof
     Audit { id: String },
     /// List missions
@@ -787,6 +792,27 @@ enum PlanCommands {
 
 #[derive(Subcommand)]
 enum EvidenceCommands {
+    /// Record proof manually or by capturing a command transcript
+    Record {
+        #[arg(long = "kind")]
+        evidence_kind: String,
+        #[arg(long)]
+        result: String,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long, default_value = "validates")]
+        role: String,
+        #[arg(long)]
+        summary: Option<String>,
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long)]
+        uri: Option<String>,
+        #[arg(long)]
+        producer: Option<String>,
+        #[arg(last = true, num_args = 0..)]
+        command: Vec<String>,
+    },
     /// Add validation evidence
     Add {
         #[arg(long = "kind")]
@@ -1170,6 +1196,16 @@ fn issue_compat_guidance(replacement: &str) {
     eprintln!("Compatibility: this hidden issue helper remains callable; use `{replacement}`.");
 }
 
+fn parse_evidence_target(target: &str) -> Result<(&str, &str)> {
+    let Some((kind, id)) = target.split_once('/') else {
+        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
+    };
+    if kind.trim().is_empty() || id.trim().is_empty() {
+        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
+    }
+    Ok((kind, id))
+}
+
 fn resolve_evidence_target_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     if matches!(kind, "issue" | "epic") {
         resolve_issue_arg(db, id)
@@ -1367,7 +1403,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             title,
             description,
             priority,
-            status,
             issue_type,
             label,
             remove_label,
@@ -1385,7 +1420,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     title: title.as_deref(),
                     description: description.as_deref(),
                     priority: priority.as_deref(),
-                    status: status.as_deref(),
+                    status: None,
                     issue_type: issue_type.as_deref(),
                     labels: &label,
                     remove_labels: &remove_label,
@@ -1804,9 +1839,20 @@ fn run() -> Result<()> {
                 let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
-            MissionCommands::Status { id } => {
+            MissionCommands::Status {
+                id,
+                closeout,
+                verbose,
+            } => {
                 let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-                commands::mission::status(storage.db(), &storage.state_dir(), id.as_deref(), quiet)
+                commands::mission::status(
+                    storage.db(),
+                    &storage.state_dir(),
+                    id.as_deref(),
+                    quiet,
+                    closeout,
+                    verbose,
+                )
             }
             MissionCommands::Audit { id } => {
                 let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
@@ -1926,6 +1972,72 @@ fn run() -> Result<()> {
         },
 
         Commands::Evidence { action } => match action {
+            EvidenceCommands::Record {
+                evidence_kind,
+                result,
+                target,
+                role,
+                summary,
+                path,
+                uri,
+                producer,
+                command,
+            } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let parsed_target = match target.as_deref() {
+                    Some(target) => {
+                        let (kind, id) = parse_evidence_target(target)?;
+                        let id = resolve_evidence_target_arg(storage.db(), kind, id)?;
+                        Some((kind.to_string(), id))
+                    }
+                    None => None,
+                };
+                if command.is_empty() {
+                    let Some(summary) = summary.as_deref() else {
+                        bail!("evidence record without a command requires --summary");
+                    };
+                    let evidence_id = commands::evidence::add_returning_id(
+                        &storage.state_dir(),
+                        &storage.db_path(),
+                        &evidence_kind,
+                        &result,
+                        summary,
+                        path.as_deref(),
+                        uri.as_deref(),
+                        producer.as_deref(),
+                    )?;
+                    if let Some((kind, id)) = parsed_target {
+                        commands::evidence::attach(
+                            &storage.state_dir(),
+                            &storage.db_path(),
+                            &evidence_id,
+                            &kind,
+                            &id,
+                            &role,
+                        )?;
+                    }
+                    let db = Database::open(&storage.db_path())?;
+                    let record = db.require_record("evidence", &evidence_id)?;
+                    commands::evidence::print_record(&db, &record)
+                } else {
+                    commands::evidence::capture(
+                        &storage.state_dir(),
+                        &storage.db_path(),
+                        commands::evidence::CaptureOptions {
+                            evidence_kind: &evidence_kind,
+                            result: &result,
+                            summary: summary.as_deref(),
+                            path: path.as_deref(),
+                            uri: uri.as_deref(),
+                            producer: producer.as_deref(),
+                            target_kind: parsed_target.as_ref().map(|(kind, _)| kind.as_str()),
+                            target_id: parsed_target.as_ref().map(|(_, id)| id.as_str()),
+                            role: &role,
+                            command: &command,
+                        },
+                    )
+                }
+            }
             EvidenceCommands::Add {
                 evidence_kind,
                 result,
@@ -2246,6 +2358,7 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Evidence { action } => match action {
             EvidenceCommands::Add { .. } => "evidence add",
+            EvidenceCommands::Record { .. } => "evidence record",
             EvidenceCommands::Capture { .. } => "evidence capture",
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",

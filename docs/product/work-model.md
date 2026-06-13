@@ -19,9 +19,41 @@ proof. These concepts should not collapse into one issue hierarchy.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
-- Evidence: durable proof that work, review, or validation happened. Evidence
-  can validate an issue, epic, mission, or a specific milestone validation
-  criterion.
+- Evidence: durable proof that accountable work, review, validation, or closeout
+  happened. Normal evidence attaches to issue-shaped work because issues own
+  accountability. Parent readiness is derived from linked implementation,
+  review, validation, and closeout evidence rather than from direct proof pasted
+  onto the parent objective.
+
+## Evidence Records
+
+Evidence records are structured proof envelopes, not free-form notes with an
+optional attachment. The canonical record must expose enough metadata for a
+later operator to answer what was proven, by whom, for which accountable work,
+and what remains risky.
+
+Required or expected fields are:
+
+| Field | Contract |
+| --- | --- |
+| `id` | Canonical evidence ID. |
+| `targets` | Accountable target IDs. Version 1 normally uses `issue/<id>` for implementation, review, validation, or closeout work. |
+| `proof_scope` | The local Outcome line, parent validation criterion, workflow validator, audit row, or review claim being proven. |
+| `kind` | Evidence type such as `test`, `validation`, `review`, `audit`, `transcript`, `artifact`, or `migration`. |
+| `result` | `pass`, `fail`, `blocked`, `deferred`, or `not-applicable`. |
+| `summary` | Human-readable result summary. |
+| `commands` | Optional command transcript metadata: argv or rendered command, exit status, success flag, timestamp, and bounded stdout/stderr summaries. |
+| `artifacts` | Optional repository paths, external URIs, sizes, and hashes when payloads are available. |
+| `agent_identity` | Producer or validator identity, using the local agent identity when available. |
+| `independence_level` | `implementer`, `peer`, `independent`, `closeout`, or `adversarial`. |
+| `residual_risks` | Known caveats that remain after this proof. Empty is allowed only when the producer has no known caveat. |
+| `follow_up_ids` | Issue IDs for defects, deferred proof, migration cleanup, or remaining work. |
+| `created_at` | Capture time. |
+
+Manual summaries and command transcripts use the same record shape. A transcript
+record fills `commands`; an audit table or screenshot fills `artifacts`; a
+manual review fills `summary`, `proof_scope`, `independence_level`, and
+`residual_risks`.
 
 ## Proof Routing
 
@@ -42,9 +74,40 @@ not validate the claim alone: migrations, public command or API contracts,
 docs/help parity, stale-test risk, cross-cutting workflow or persistence
 behavior, Agent Factory process changes, and all epic or mission closeouts.
 
+Missions are objectives, not work logs. A mission may retain direct evidence
+links only for legacy imports, migration notes, or a final closeout artifact
+whose accountable owner is also a linked closeout issue. Normal mission
+readiness is computed from closed linked work, attached evidence on that work,
+and the closeout audit that maps parent validation lines to the child proof.
+
 The detailed routing table lives in
 [Validation](../architecture/quality/validation.md). Product docs should point
 to that router instead of defining a second proof model.
+
+## Parent Coverage Summaries
+
+Issue closeout reads evidence attached to that issue and checks whether the
+issue's `Evidence` section has objective proof. Parent records summarize
+coverage instead of owning every proof detail.
+
+An epic coverage summary maps each epic Outcome line to child issues and their
+attached evidence IDs. The summary classifies each line as `covered`,
+`missing`, `failed`, `blocked`, `deferred`, or `not-applicable`, and names
+residual risks plus follow-up IDs. It may use stable claim anchors for
+automation-heavy, high-risk, or repeated audit work, but ordinary issues should
+not need line-level claim plumbing.
+
+A mission closeout summary maps mission validation expectations and linked epic
+outcomes to implementation, review, validation, and closeout issues. The
+mission derives readiness from closed linked work, coverage classifications,
+attached evidence, current tracker health, and independent closeout validation.
+Direct mission evidence is not the normal coverage source.
+
+Existing prose evidence migrates as structured evidence with the original text
+as `summary`, best-effort `kind` and `result`, the linked issue as `targets`,
+`proof_scope: legacy-prose`, `independence_level: implementer` unless a
+validator is clear, and a residual risk noting any missing command transcript,
+artifact, or independent reviewer identity.
 
 ## Mission Sizing
 
@@ -73,6 +136,9 @@ epic contributes_to milestone
 issue part_of epic
 issue contributes_to milestone
 evidence validates issue
+evidence validates review issue
+evidence validates validation issue
+evidence validates closeout issue
 evidence validates milestone.validation_criteria[N]
 workflow transition uses validator
 validator evaluation produces evidence or a machine-readable result

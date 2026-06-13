@@ -84,11 +84,24 @@ pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) ->
     Ok(())
 }
 
-pub fn status(db: &Database, state_dir: &Path, id: Option<&str>, quiet: bool) -> Result<()> {
+pub fn status(
+    db: &Database,
+    state_dir: &Path,
+    id: Option<&str>,
+    quiet: bool,
+    closeout: bool,
+    verbose: bool,
+) -> Result<()> {
+    if closeout {
+        let Some(id) = id else {
+            bail!("mission status --closeout requires a mission id");
+        };
+        return audit(db, state_dir, id, quiet);
+    }
     match id {
-        Some(id) => status_one(db, state_dir, id, quiet),
+        Some(id) => status_one(db, state_dir, id, quiet, verbose),
         None => match active_mission(db)? {
-            Some(record) => status_one(db, state_dir, &record.id, quiet),
+            Some(record) => status_one(db, state_dir, &record.id, quiet, verbose),
             None => status_dashboard(db, state_dir, quiet),
         },
     }
@@ -172,7 +185,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     Ok(())
 }
 
-fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<()> {
+fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: bool) -> Result<()> {
     let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
@@ -277,20 +290,22 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         closeout.print_human();
     }
 
-    print_mission_heading("Advanced Validator Detail");
-    if validator_failures == 0 {
-        println!("All advanced closeout validators passed.");
-    } else {
-        println!(
-            "{} advanced closeout validator failure detected.",
-            validator_failures
-        );
-        for result in closeout
-            .validator_results
-            .iter()
-            .filter(|result| !result.passed)
-        {
-            println!("  fail  {} - {}", result.validator, result.reason);
+    if verbose {
+        print_mission_heading("Advanced Validator Detail");
+        if validator_failures == 0 {
+            println!("All advanced closeout validators passed.");
+        } else {
+            println!(
+                "{} advanced closeout validator failure detected.",
+                validator_failures
+            );
+            for result in closeout
+                .validator_results
+                .iter()
+                .filter(|result| !result.passed)
+            {
+                println!("  fail  {} - {}", result.validator, result.reason);
+            }
         }
     }
 
@@ -309,41 +324,72 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<
         }
     }
 
+    print_status_next_commands(&mission, &summary, &closeout);
+    Ok(())
+}
+
+fn print_status_next_commands(
+    mission: &DomainRecord,
+    summary: &MissionListSummary,
+    closeout: &MissionCloseoutStatus,
+) {
     print_mission_heading("Next Commands");
+    let lifecycle = mission_lifecycle_status(mission);
     println!(
         "  Inspect mission record (durable intent and linked work): atelier mission show {}",
         mission.id
     );
-    println!(
-        "  Refresh mission status (current blockers and closeout gates): atelier mission status {}",
-        mission.id
-    );
-    if mission_lifecycle_status(&mission) != "closed" {
-        println!(
-            "  Run contract audit (mission validation and linked epic outcomes): atelier mission audit {}",
-            mission.id
-        );
+    match lifecycle.as_str() {
+        "closed" => {
+            println!(
+                "  Inspect closeout audit history: atelier mission status --closeout {}",
+                mission.id
+            );
+            println!(
+                "  Inspect mission history: atelier history --mission {}",
+                mission.id
+            );
+            return;
+        }
+        "draft" => {
+            println!(
+                "  Shape mission work or move to ready when gates permit: atelier mission update {} --status ready",
+                mission.id
+            );
+        }
+        _ => {
+            println!(
+                "  Refresh mission status (current blockers and closeout gates): atelier mission status {}",
+                mission.id
+            );
+        }
     }
-    if summary.total_work().ready > 0 {
-        println!(
-            "  Choose ready work ({} ready item(s)): atelier issue list --ready",
-            summary.total_work().ready
-        );
-    }
-    if summary.evidence_gap_count() > 0 {
-        println!(
-            "  Record validation proof ({} evidence gap(s)): atelier evidence add --kind validation --result pass \"...\"",
-            summary.evidence_gap_count()
-        );
-    }
-    if mission_lifecycle_status(&mission) != "closed" && closeout.ready() {
+    if closeout.ready() {
         println!(
             "  Close mission (all closeout gates pass): atelier mission update {} --status closed",
             mission.id
         );
+    } else {
+        println!(
+            "  Inspect closeout audit (mission validation and linked epic outcomes): atelier mission status --closeout {}",
+            mission.id
+        );
+        if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
+            println!("  Resolve open blockers before assigning more implementation work");
+        } else if summary.total_work().ready > 0 {
+            println!(
+                "  Choose ready work ({} ready item(s)): atelier issue list --ready",
+                summary.total_work().ready
+            );
+        }
+        if summary.evidence_gap_count() > 0 {
+            println!(
+                "  Record validation proof ({} evidence gap(s)): atelier evidence add --kind validation --result pass \"...\"",
+                summary.evidence_gap_count()
+            );
+        }
     }
     println!("  Check runtime health (tracker and projection state): atelier doctor");
-    Ok(())
 }
 
 pub fn view(db: &Database, id: &str) -> Result<()> {

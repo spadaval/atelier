@@ -26,7 +26,7 @@ in normal Agent Factory workflows:
 - `atelier mission create/show/list/status/update`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
-- `atelier evidence add/capture/show/list/attach`
+- `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier start`
 - `atelier finish`
@@ -52,6 +52,44 @@ prints must have a concrete reason.
 active mission focus, ready work count, tracker freshness, and the next
 mission/work/health drill-down commands. It does not replace `mission status`;
 it points operators to the scoped status surface that owns closeout readiness.
+
+## Operator Jobs
+
+The public command surface is organized around jobs an operator performs under
+time pressure:
+
+- Orient: answer what is active, ready, blocked, stale, or unsafe to change.
+  Owned by `atelier status`, `atelier issue show/list`, `atelier mission show`,
+  `atelier mission status`, `atelier history`, and `atelier search`.
+- Select and run work: claim a clear slice, prepare the right worktree, start
+  it, leave notes, finish it, and close it with proof. Owned by
+  `atelier issue ...`, `atelier worktree ...`, root `atelier start`, root
+  `atelier finish`, `atelier note add`, and `atelier evidence ...`.
+- Coordinate mission progress: see linked work by state, blockers, evidence
+  gaps, closeout readiness, and the next action for the mission. Owned by
+  `atelier mission show`, `atelier mission status`, `atelier mission update`,
+  and `atelier mission add-work/add-blocker`.
+- Manage relationships: record dependencies, typed links, and impact when the
+  next action depends on graph shape. Owned by `atelier dep ...`,
+  `atelier link ...`, and `atelier graph impact/tree`.
+- Check health: prove committed tracker state and local runtime are usable for
+  handoff. Owned by `atelier lint`, `atelier doctor`, and closeout-required
+  `atelier export --check`.
+
+Normal workflow commands speak in product terms: issue, mission, worktree,
+evidence, blocker, proof, closeout, and health. Advanced diagnostics may expose
+workflow policy names, projections, cache repair, command telemetry, or raw
+validator detail, but normal operators should only run them when a binding,
+assignment, or closeout contract names them. Destructive maintenance is a third
+category: commands such as `atelier maintenance delete issue <id> --force`
+exist for explicit record surgery and must not appear as routine next actions.
+
+Every command-consolidation proposal must pass a red-tape check before it is
+implemented: the new shape must remove a real duplicate, reduce the chance of
+choosing the wrong command, and shorten the path from question to observable
+answer. A consolidation that merely moves ritual into a new umbrella command,
+adds mandatory ceremony to ordinary work, or hides the domain next action behind
+diagnostic jargon fails this check.
 
 Mission lifecycle statuses are `draft`, `ready`, `active`, and `closed`.
 Mission creation defaults to `ready`; `atelier mission start <id>` transitions
@@ -89,14 +127,63 @@ blocked, done, and backlog state. `atelier mission status [<id>]` is the
 mission-control CLI surface for active mission health, mission proof gaps,
 blockers, record health, docs/help drift, ignored-test review, dirty worktree
 state, closeout readiness, and next actions before any separate projection or UI
-is required. Raw workflow validator names are diagnostic detail; the primary
-closeout output should name the operator-facing blocker class and the next
-domain command. `atelier mission audit <id>` is the closeout contract surface:
-it maps authored mission validation expectations and linked epic outcomes to
-current work, blockers, and attached evidence before a mission can close.
-`atelier evidence capture` runs a command and stores bounded stdout/stderr
-summaries with command, exit status, result, timestamp, and optional target
-metadata so validation proof does not require manual transcript copy/paste.
+is required.
+
+`atelier mission status` without an ID defaults to the active mission when one
+exists; otherwise it reports the available ready missions and the command to
+select one. With an ID, the command is scoped to that mission regardless of the
+active runtime association. Default output is compact and answers: mission
+identity and state, tracker health, work counts, open blockers, missing proof,
+closeout readiness, and one or two state-specific next actions. Verbose output
+keeps the same sections but expands the record lists, evidence gaps, blocked
+work, and degraded health details enough for a handoff transcript.
+
+State-specific next actions are part of the command contract:
+
+- `draft`: show missing readiness fields and point to record editing,
+  `atelier lint <mission-id>`, or `atelier mission update <id> --status ready`.
+- `ready`: show ready work and the command to start or switch mission focus.
+- `active`: show active work, ready work, blockers, evidence gaps, and the next
+  issue, evidence, or health command that advances the mission.
+- `blocked`: show the open blocker records first and point to the specific
+  blocker or dependent issue to resolve.
+- `close-ready`: show the closeout command only after linked work is closed,
+  required proof is attached to accountable work, the contract audit passes,
+  health gates are current, and the worktree is clean.
+- `closed`: show the close reason, closeout evidence or closeout issue, and
+  history/audit drill-down commands without suggesting new implementation work.
+
+`atelier mission audit <id>` is not a normal daily status command. Its fate is
+to remain a closeout drill-down and, where practical, become the verbose
+closeout section behind `atelier mission status --closeout` or equivalent. The
+audit maps authored mission validation expectations and linked epic outcomes to
+closed work, blockers, and evidence on accountable implementation, review,
+validation, and closeout issues. Raw workflow validator names are diagnostic
+detail; normal closeout output names the operator-facing blocker class and the
+next domain command. Hidden `workflow validate` or policy-debug commands remain
+advanced diagnostics and do not replace `mission status` or the closeout audit.
+`atelier evidence record` is the normal evidence-recording surface. It records
+manual summaries, command transcripts, audits, failed validations, deferred
+proof, and artifact references as one operator workflow. The target is supplied
+as one low-friction argument:
+
+```text
+atelier evidence record --target issue/<id> --kind validation --result pass "summary"
+atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+```
+
+The target syntax is `<kind>/<id>`. Version 1 accepts `issue/<id>` as the normal
+accountable target. Direct `mission/<id>` targets are reserved for legacy
+imports, migration notes, or explicit closeout mirroring; normal mission and
+epic readiness reads proof from linked accountable child issues. The command
+mode preserves the old capture behavior by storing the command, exit status,
+success flag, timestamp, result, and bounded stdout/stderr summaries so
+validation proof does not require manual transcript copy/paste.
+
+`atelier evidence add` and `atelier evidence capture` are predecessor shapes
+that split one operator job into two verbs. New help and Agent Factory guidance
+should teach `evidence record`; implementation may keep old entrypoints only as
+internal migration scaffolding until the unified surface is shipped.
 `atelier history` is the canonical project-history view. Repo-wide history and
 scoped forms such as `atelier history --mission <id>`, `atelier history --issue
 <id>`, and `atelier history --epic <id>` read canonical activity sidecars,
@@ -115,8 +202,9 @@ not need the hidden `atelier work start/finish/status` command group for normal
 workflow. Worktree helpers expose scan-friendly JSON status, create/remove
 associated Git worktrees, prepare local runtime state in new worktrees, and run
 `worktree_setup` hooks from the configured workflow policy.
-Mission closeout is ready only when all linked work is closed, mission proof is
-attached, contract audit passes, linked issue records are parseable, docs/help
+Mission closeout is ready only when all linked work is closed, required proof is
+attached to the accountable implementation, review, validation, or closeout
+work, the contract audit passes, linked issue records are parseable, docs/help
 and ignored-test review gates are current, and the Git worktree is clean.
 
 ## Cache Transparency

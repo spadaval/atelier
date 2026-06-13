@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:35:55.611441511+00:00"
 id: "atelier-s8z0"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "docs"
 - "evidence"
 - "schema"
@@ -20,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Specify structured evidence schema and coverage summaries"
-updated_at: "2026-06-13T02:35:55.611441511+00:00"
+updated_at: "2026-06-13T04:19:43.745506644+00:00"
 ---
 
 ## Description

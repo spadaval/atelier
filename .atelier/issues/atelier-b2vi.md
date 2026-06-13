@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:35:52.407547330+00:00"
 id: "atelier-b2vi"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "docs"
 - "proof"
 priority: "P1"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Document strong proof taxonomy"
-updated_at: "2026-06-13T02:35:52.407547330+00:00"
+updated_at: "2026-06-13T04:11:50.100985856+00:00"
 ---
 
 ## Description

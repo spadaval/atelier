@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:36:01.510687439+00:00"
 id: "atelier-6cte"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "docs"
 - "mission"
@@ -20,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define mission operator command contract"
-updated_at: "2026-06-13T02:36:01.510687439+00:00"
+updated_at: "2026-06-13T04:09:00.906432994+00:00"
 ---
 
 ## Description

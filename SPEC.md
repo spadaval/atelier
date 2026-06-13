@@ -185,23 +185,37 @@ to be revised with reasons as new facts emerge.
 
 ### Evidence
 
-Evidence records prove that validation happened. Evidence may point to test
-results, logs, screenshots, videos, API responses, benchmark output, review
-notes, or generated reports.
+Evidence records prove that accountable work, review, validation, or closeout
+happened. Evidence may point to test results, logs, screenshots, videos, API
+responses, benchmark output, review notes, or generated reports. Normal evidence
+targets issue-shaped work because issues own accountability; mission,
+milestone, and epic readiness is derived from linked implementation,
+validation, review, and closeout work rather than direct parent attachments.
 
 Evidence metadata should include:
 
 - ID.
-- Linked issue, milestone, mission, workflow validator result, or other
-  evidence target.
+- Accountable target IDs, normally issue-shaped work such as implementation,
+  review, validation, or closeout issues.
+- Proof scope: the issue Outcome line, parent validation criterion, workflow
+  validator result, milestone criterion, or review/audit claim being proven.
 - Kind.
 - Result.
 - Summary.
-- Path or URI.
+- Commands, command exit status, bounded stdout/stderr summaries, artifacts,
+  paths, or URIs.
+- Agent identity or producer.
+- Independence level, such as implementer-produced, peer validation,
+  independent validation, closeout audit, or adversarial validation.
+- Residual risks.
+- Follow-up issue IDs for defects, deferred proof, or remaining work.
 - Size.
 - Hash when applicable.
 - Created time.
-- Producer or validator.
+
+Direct mission evidence links are retained only for legacy imports, migration
+notes, or explicit closeout mirroring. New mission proof should be captured on
+the linked closeout or validation issue that performed the audit.
 
 Small artifacts may live in the repo. Large artifacts should use external
 storage while preserving metadata in repo state. The first supported backend is
@@ -429,8 +443,8 @@ atelier mission show atelier-k7mq
 atelier mission add-work atelier-k7mq atelier-z1p8
 atelier milestone create
 atelier plan create
-atelier evidence add
-atelier evidence capture -- <command>
+atelier evidence record --target issue/atelier-z1p8 --kind validation --result pass "summary"
+atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>
 atelier lint
 atelier export --check
 atelier doctor

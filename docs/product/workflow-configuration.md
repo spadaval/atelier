@@ -319,7 +319,7 @@ Validator results are machine-readable and use a pass/fail shape:
   "message": "Attach at least 1 evidence record before closing atelier-z1p8.",
   "actions": [
     "Run the required validation command.",
-    "Record the result with atelier evidence add.",
+    "Record the result with atelier evidence record --target issue/atelier-z1p8.",
     "Retry the close transition."
   ],
   "details": {

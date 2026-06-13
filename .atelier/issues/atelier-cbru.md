@@ -3,6 +3,7 @@ created_at: "2026-06-13T03:00:48.118729570+00:00"
 id: "atelier-cbru"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "authoring"
 - "process"
 - "ux"
@@ -17,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define validation placement and anti-red-tape guidance"
-updated_at: "2026-06-13T03:00:48.118729570+00:00"
+updated_at: "2026-06-13T04:11:51.171068876+00:00"
 ---
 
 ## Description

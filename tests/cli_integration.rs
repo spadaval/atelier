@@ -1024,6 +1024,16 @@ fn test_mission_help_uses_show_not_view() {
 }
 
 #[test]
+fn test_mission_status_help_exposes_closeout_drilldown() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);
+    assert!(success, "mission status help failed: {stderr}");
+
+    assert!(stdout.contains("--closeout"));
+    assert!(stdout.contains("Show closeout contract audit detail"));
+}
+
+#[test]
 fn test_root_status_summarizes_checkout_orientation() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1403,6 +1413,10 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
             "folded or moved command {hidden} is still visible:\n{stdout}"
         );
     }
+
+    let (success, update_help, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
+    assert!(success, "issue update help failed: {stderr}");
+    assert!(!update_help.contains("--status"));
 }
 
 #[test]
@@ -2152,8 +2166,8 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(stdout.contains("Closed:"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Done enough"));
-    assert!(stdout.contains("atelier issue update"));
-    assert!(stdout.contains("--status open"));
+    assert!(stdout.contains("atelier issue reopen"));
+    assert!(!stdout.contains("--status open"));
 }
 
 #[test]
@@ -2563,7 +2577,7 @@ fn test_update_issue_remove_label_replaces_unlabel_helper() {
         ],
     );
     assert!(success, "update label replacement failed: {stderr}");
-    assert!(stdout.contains("Updated issue"));
+    assert!(stdout.contains("Reopened issue"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     let labels_line = show_out
@@ -2630,11 +2644,10 @@ fn test_reopen_issue() {
 
     run_atelier(dir.path(), &["issue", "create", "Test issue"]);
     close_issue_with_evidence(dir.path(), "1", None);
-    let (success, stdout, _) =
-        run_atelier(dir.path(), &["issue", "update", "1", "--status", "open"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "reopen", "1"]);
 
     assert!(success);
-    assert!(stdout.contains("Updated issue"));
+    assert!(stdout.contains("Reopened issue"));
 
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
     assert!(show_out.contains("open"));
@@ -2853,8 +2866,6 @@ fn test_issue_mutations_create_activity_sidecars() {
             "Activity issue renamed",
             "--priority",
             "high",
-            "--status",
-            "in_progress",
             "--label",
             "activity-label",
         ],
@@ -2862,11 +2873,6 @@ fn test_issue_mutations_create_activity_sidecars() {
     assert!(success, "issue update fields failed: {stderr}");
 
     attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", &issue_id, "--status", "closed"],
-    );
-    assert!(success, "issue update status closed failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "Close reason body"],
@@ -6230,6 +6236,32 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("pass stderr"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
 
+    let (success, record_capture, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--summary",
+            "unified command proof",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "--",
+            "sh",
+            "-c",
+            "printf 'record stdout\\n'",
+        ],
+    );
+    assert!(success, "unified command record failed: {stderr}");
+    assert!(record_capture.contains("[evidence] pass - unified command proof"));
+    assert!(record_capture.contains("Command:     sh -c"));
+    assert!(record_capture.contains("Exit Status: 0"));
+    assert!(record_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    assert!(record_capture.contains("record stdout"));
+
     let (success, issue_validate, stderr) = run_atelier(
         dir.path(),
         &[
@@ -6307,6 +6339,26 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         run_atelier(dir.path(), &["evidence", "show", &manual_epic_evidence_id]);
     assert!(success, "manual epic evidence show failed: {stderr}");
     assert!(manual_epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
+
+    let manual_issue_summary = "unified manual issue proof";
+    let (success, manual_record_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--summary",
+            manual_issue_summary,
+            "--target",
+            &format!("issue/{issue_id}"),
+        ],
+    );
+    assert!(success, "unified manual record failed: {stderr}");
+    assert!(manual_record_out.contains("[evidence] pass - unified manual issue proof"));
+    assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
 
     let (success, epic_validate, stderr) = run_atelier(
         dir.path(),
@@ -6946,6 +6998,20 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
     assert!(missing_out.contains("No linked mission work exists"));
     assert!(stderr.contains("mission contract audit failed"));
 
+    let (success, closeout_missing_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--closeout", mission_id]);
+    assert!(!success, "status closeout without work should fail");
+    assert!(closeout_missing_out.contains("Mission Contract Audit"));
+    assert!(closeout_missing_out.contains("[fail]"));
+    assert!(closeout_missing_out.contains("No linked mission work exists"));
+    assert!(stderr.contains("mission contract audit failed"));
+
+    let (success, missing_id_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--closeout"]);
+    assert!(!success, "status closeout without id should fail");
+    assert!(missing_id_out.is_empty());
+    assert!(stderr.contains("mission status --closeout requires a mission id"));
+
     let epic_body = "## Description\n\nAudit epic body.\n\n## Outcome\n\n- Linked epic outcome is proven.\n\n## Evidence\n\n- Attached validation evidence proves the epic outcome.";
     let (success, epic_out, stderr) = run_atelier(
         dir.path(),
@@ -6999,6 +7065,12 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
     assert!(ready_out.contains(&format!(
         "Close mission when other gates pass: atelier mission update {mission_id} --status closed"
     )));
+
+    let (success, closeout_ready_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--closeout", mission_id]);
+    assert!(success, "ready status closeout should pass: {stderr}");
+    assert!(closeout_ready_out.contains("[pass]"));
+    assert!(closeout_ready_out.contains("Summary: 2 pass, 0 fail, 2 total"));
 }
 
 #[test]
@@ -7902,8 +7974,14 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(status_out.contains("Mission Proof: missing"));
     assert!(status_out.contains("Worktree: dirty"));
     assert!(status_out.contains("status-dirty.txt"));
-    assert!(status_out.contains("Advanced Validator Detail"));
-    assert!(status_out.contains("advanced closeout validator failure"));
+    assert!(!status_out.contains("Advanced Validator Detail"));
+    assert!(!status_out.contains("advanced closeout validator failure"));
+
+    let (success, verbose_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--verbose", &mission_id]);
+    assert!(success, "verbose mission status failed: {stderr}");
+    assert!(verbose_out.contains("Advanced Validator Detail"));
+    assert!(verbose_out.contains("advanced closeout validator failure"));
 }
 
 #[test]
@@ -8528,13 +8606,18 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Missing Evidence Sections: none"));
     assert!(status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
-    assert!(status_out.contains(&format!("atelier mission audit {mission_id}")));
+    assert!(status_out.contains(&format!("atelier mission status --closeout {mission_id}")));
     assert!(status_out.contains("atelier lint"));
     assert!(status_out.contains("atelier doctor"));
     assert!(status_out.contains("Closeout Gates"));
     assert!(status_out.contains("Mission Proof: missing"));
-    assert!(status_out.contains("Advanced Validator Detail"));
-    assert!(status_out.contains("advanced closeout validator failure detected."));
+    assert!(!status_out.contains("Advanced Validator Detail"));
+    assert!(!status_out.contains("advanced closeout validator failure detected."));
+    let (success, verbose_status_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
+    assert!(success, "verbose mission status failed: {stderr}");
+    assert!(verbose_status_out.contains("Advanced Validator Detail"));
+    assert!(verbose_status_out.contains("advanced closeout validator failure detected."));
     assert!(status_out.contains("Next Commands"));
     assert!(status_out.contains(&format!(
         "Inspect mission record (durable intent and linked work): atelier mission show {mission_id}"
@@ -8542,8 +8625,8 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains(&format!(
         "Refresh mission status (current blockers and closeout gates): atelier mission status {mission_id}"
     )));
-    assert!(status_out.contains("Choose ready work ("));
-    assert!(status_out.contains("ready item(s)): atelier issue list --ready"));
+    assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
+    assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
     assert!(status_out.contains(
         "Record validation proof (1 evidence gap(s)): atelier evidence add --kind validation --result pass \"...\""
     ));
@@ -8648,7 +8731,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(stale_status.contains("Autonomy status stale"));
     assert!(stale_status.contains("Tracker:  ok"));
     assert!(stale_status.contains("Worktree: dirty"));
-    assert!(stale_status.contains("advanced closeout validator failure detected."));
+    assert!(!stale_status.contains("advanced closeout validator failure detected."));
 }
 
 #[test]
@@ -9139,6 +9222,10 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
 
     let temp_path = dir.path().join(".atelier/.state.db.123.456.rebuild-tmp");
     std::fs::write(&temp_path, "partial sqlite rebuild").unwrap();
+    let temp_journal_path = dir
+        .path()
+        .join(".atelier/.state.db.123.456.rebuild-tmp-journal");
+    std::fs::write(&temp_journal_path, "partial sqlite rebuild journal").unwrap();
 
     let issue_path = dir
         .path()

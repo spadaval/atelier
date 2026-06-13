@@ -3,6 +3,7 @@ created_at: "2026-06-13T02:52:22.538971656+00:00"
 id: "atelier-lme0"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 - "docs"
 - "ux"
@@ -20,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define simple operator command taxonomy"
-updated_at: "2026-06-13T02:52:22.538971656+00:00"
+updated_at: "2026-06-13T04:08:59.680155697+00:00"
 ---
 
 ## Description
