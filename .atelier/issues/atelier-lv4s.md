@@ -20,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Implement workflow policy parser and checker"
-updated_at: "2026-06-13T17:36:51.662209623+00:00"
+updated_at: "2026-06-13T18:06:21.719386675+00:00"
 ---
 
 ## Description
