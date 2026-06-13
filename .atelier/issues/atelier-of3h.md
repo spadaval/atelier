@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Replace evidence escaped data JSON with typed Markdown fields"
-updated_at: "2026-06-13T23:25:37.738108397+00:00"
+updated_at: "2026-06-13T23:26:28.495772882+00:00"
 ---
 
 ## Description
