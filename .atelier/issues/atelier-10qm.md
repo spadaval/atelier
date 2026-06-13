@@ -18,9 +18,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:58:41.608083459+00:00"
+status: "done"
 title: "Inventory and remove dead code paths"
-updated_at: "2026-06-13T23:58:05.682962894+00:00"
+updated_at: "2026-06-13T23:58:41.608083459+00:00"
 ---
 
 ## Description
