@@ -25,13 +25,7 @@ updated_at: "2026-06-10T15:05:38.612806202+00:00"
 ## Description
 
 Add a mission-centered read view that summarizes completed work, remaining ready/backlog work, blockers, checkpoint progress, plans, and evidence for one mission.
-
-## Outcome
-
 A mission view shows what has been done and what remains for a mission using first-class records and typed links; JSON output is deterministic; fixtures or tests cover a mission with linked milestones, plans, completed issues, ready issues, blocked issues, and evidence gaps; the view degrades clearly when links or first-class records are absent.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -43,9 +37,6 @@ A mission view shows what has been done and what remains for a mission using fir
 - `atelier export --check`
 
 - `atelier doctor`
-
-## Notes
-
 ### Scope
 
 - Provide a command such as `atelier mission view <record-id>` or an equivalent `mission show --progress` mode after first-class mission records and typed links exist.
@@ -54,3 +45,11 @@ A mission view shows what has been done and what remains for a mission using fir
 - Emit stable JSON suitable for Mission Control projection and TUI consumption.
 - Keep the view read-only; mutation remains in `mission`, `issue`, `plan`, `evidence`, and `link` commands.
 - Use the single project-scoped random record ID form throughout output and examples.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

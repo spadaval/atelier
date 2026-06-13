@@ -36,13 +36,15 @@ Scope:
 
 Out of scope:
 - Redesigning hook behavior itself.
-
-## Outcome
-
 - atelier init no longer installs Claude hooks or MCP config.
 - A user who wants hooks has an explicit command/path to install them.
 - Docs and help text distinguish core tracker setup from optional Claude integration setup.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

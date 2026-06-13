@@ -31,9 +31,6 @@ What:
 - Delete `.atelier/state.db`, run `atelier rebuild`, and confirm activity survives and history output is unchanged.
 - Run the migration script on a temp repo with SQLite comments and close reasons; verify generated sidecars and no duplicate output on a second run.
 - Run the agreed validation commands.
-
-## Outcome
-
 - `cargo fmt -- --check` passes.
 - Focused history/activity integration tests pass.
 - `cargo test` passes.
@@ -43,7 +40,12 @@ What:
 - Any residual risk or intentionally deferred non-issue history support is documented in the issue close reason.
 
 Recommended subskill: agent-factory validate.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

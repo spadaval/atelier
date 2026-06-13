@@ -25,6 +25,10 @@ Integration tests duplicate canonical record discovery, ID extraction, section
 mutation, and front matter parsing. The large `tests/cli_integration.rs` file
 and smoke harness use direct string searches and ad hoc Markdown rewrites,
 which makes record format changes amplify across unrelated CLI behavior tests.
+Audit evidence: `tests/cli_integration.rs` is over 10k lines and duplicates ID
+scanning, evidence front matter parsing, title-based record discovery, and
+string replacement of issue Markdown; `tests/smoke/harness.rs` repeats stdout
+and `.atelier/issues` assumptions.
 
 ## Outcome
 

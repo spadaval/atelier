@@ -26,13 +26,7 @@ updated_at: "2026-06-09T18:55:47.741705917+00:00"
 ## Description
 
 Decouple work-item closure from product changelog mutation. `issue close` should represent tracker state only; release-note or changelog generation should be a separate explicit workflow if retained later.
-
-## Outcome
-
 `issue close` no longer exposes or depends on changelog behavior. Existing tests and docs are updated so closing work records tracker closure reason only.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -44,3 +38,11 @@ Decouple work-item closure from product changelog mutation. `issue close` should
 - `atelier export --check`
 
 - `atelier doctor`
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

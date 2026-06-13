@@ -22,14 +22,16 @@ updated_at: "2026-06-13T16:06:16.445560217+00:00"
 ## Description
 
 Validate the structured evidence model against representative mission, epic, issue, pass, fail, blocked, deferred, and not-applicable scenarios without requiring mission-attached proof as the normal path.
-
-## Outcome
-
 - Validator confirms proof coverage works for ordinary issue proof, epic closeout, mission closeout through linked accountable work, failed validation, and deferred checks.
 - Any missing migration or rendering behavior is filed as follow-up work.
 - Existing mission fixtures either migrate cleanly or have explicit compatibility handling.
+- Attach first-class validation evidence containing the scenario matrix and command transcripts.
+- Include `atelier lint`, `atelier export --check`, and focused test results.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-- Attach first-class validation evidence containing the scenario matrix and command transcripts.
-- Include `atelier lint`, `atelier export --check`, and focused test results.
+Evidence was not specified.

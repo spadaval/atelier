@@ -33,11 +33,13 @@ updated_at: "2026-06-08T22:10:56+00:00"
 Implement or verify the Atelier command surface required by Agent Factory. This is not full Beads compatibility; it is the subset agents actually need for durable planning and execution: ready/list/search/show/create/update/close/dependency operations, stable JSON, lint/doctor-style health checks, and explicit export/check behavior.
 
 Where command names differ from Beads, provide documented mappings or temporary aliases until Agent Factory is migrated.
+Agent-facing commands cover ready, list, search, show, create, update, close, dep add/remove/list, lint, doctor, export, export --check, and rebuild or documented equivalents; each has stable JSON output; error messages are actionable for missing IDs, invalid deps, stale exports, and dirty state; focused CLI tests cover the Agent Factory command subset.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Agent-facing commands cover ready, list, search, show, create, update, close, dep add/remove/list, lint, doctor, export, export --check, and rebuild or documented equivalents; each has stable JSON output; error messages are actionable for missing IDs, invalid deps, stale exports, and dirty state; focused CLI tests cover the Agent Factory command subset.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

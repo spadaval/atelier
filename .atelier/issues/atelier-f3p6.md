@@ -31,9 +31,6 @@ updated_at: "2026-06-12T21:03:14.689647967+00:00"
 Explode the current `atelier work` command group so ordinary operators do not
 need to understand an abstract work/session namespace before starting,
 finishing, or inspecting work.
-
-## Outcome
-
 - Root `atelier start <issue-id>` is the normal entrypoint for beginning work.
 - A root or domain-specific finish command exists, or the mission records a
   deliberate decision to keep finish under a clearly named domain surface.
@@ -49,9 +46,6 @@ finishing, or inspecting work.
   normal workflow.
 - Tests prove old work commands are absent from primary help or clearly marked
   non-normal.
-
-## Evidence
-
 - CLI transcript tests prove root `atelier start <issue-id>` begins normal work
   and reports the active work state through the chosen status/current-work
   surface.
@@ -69,9 +63,14 @@ common commands.
   finish/current-work surfaces and classify worktree commands as advanced.
 
 - Run focused work/start/status CLI tests plus `atelier lint`.
-
-## Notes
-
 This does not remove the local runtime concept of active work. It removes the
 
 confusing public command-group shape from the normal workflow.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

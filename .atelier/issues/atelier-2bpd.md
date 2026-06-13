@@ -24,15 +24,17 @@ updated_at: "2026-06-13T19:55:19.253877836+00:00"
 ## Description
 
 Close out the mission by mapping mission validation expectations to linked work and attached evidence. This item owns final audit and residual-risk classification, including whether atelier-09sx can be closed as resolved by the mission.
-
-## Outcome
-
 - Every mission validation bullet is mapped to linked implementation, cleanup, artifact, and validation work with evidence IDs or explicit residual risks.
 - atelier-09sx is either closed with supporting evidence or left open with a precise follow-up reason.
 - Final closeout records the command/test health needed for repository readiness.
-
-## Evidence
-
 - Closeout audit evidence maps mission criteria, child issues, and evidence records line by line.
 - Final transcript includes atelier lint, atelier export --check, atelier doctor, relevant workflow tests, and git diff --check or explains any deferred check.
 - Mission status transcript shows closeout readiness after all linked work and validation evidence are complete.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -23,11 +23,13 @@ updated_at: "2026-06-11T19:54:15.536904694+00:00"
 ## Description
 
 Validate the terminal UI against representative projection fixtures and terminal sizes.
+tests or recorded validation cover active missions, backlog/ready work, blockers, plan drift, evidence gaps, validator failures, empty state, narrow terminal behavior, and stale/missing projection handling.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-tests or recorded validation cover active missions, backlog/ready work, blockers, plan drift, evidence gaps, validator failures, empty state, narrow terminal behavior, and stale/missing projection handling.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

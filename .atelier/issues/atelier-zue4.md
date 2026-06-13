@@ -83,9 +83,6 @@ Build a reliability layer for missions so agents cannot declare work complete
 without proving the desired outcomes. This epic coordinates issue structure,
 lint, validators, evidence capture, Agent Factory validation process, closeout
 audits, and drift detection.
-
-## Outcome
-
 - Executable work has clear Outcome and Evidence sections.
 - Validation routing is explicit: ordinary issues carry their own proof, while
   review, independent validation, and parent closeout audits are used when risk
@@ -114,9 +111,6 @@ audits, and drift detection.
   instead of dumping stale index internals or rebuild races.
 - The validation system is tested against seeded failure scenarios that broad
   green checks would otherwise miss.
-
-## Evidence
-
 - Child issues cover validation routing policy, issue closeout proof gates,
   lint, validators, evidence capture, validation process, closeout audit,
   adversarial mission validation, malformed-record recovery, projection
@@ -128,9 +122,14 @@ audits, and drift detection.
   stale-test inventory, and mission contract audit results.
 
 - Mission `atelier-tcmr` cannot close until this reliability work is validated.
-
-## Notes
-
 This epic is intentionally broader than one command. The failure mode was
 systemic: agents could close work without proof because tracker structure,
 commands, docs, validators, and skill process all allowed it.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

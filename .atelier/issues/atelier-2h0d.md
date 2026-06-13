@@ -20,11 +20,13 @@ updated_at: "2026-06-11T04:35:41.552112841+00:00"
 ## Description
 
 Run required formatting, Rust tests or focused equivalents, tracker export/check, lint, doctor, and workflow validation for this mission. Acceptance: evidence is linked to the mission; open blockers and evidence gaps are resolved before mission closure.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

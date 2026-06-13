@@ -25,11 +25,13 @@ updated_at: "2026-06-08T22:34:53.437062263+00:00"
 ## Description
 
 Capture concise validation notes for atelier-z1p.6 showing Agent Factory can use Atelier for planning, updates, dependencies, closeout, sync, rebuild, and handoff.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

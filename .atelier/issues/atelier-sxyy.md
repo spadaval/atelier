@@ -33,9 +33,6 @@ updated_at: "2026-06-12T21:01:52.055672292+00:00"
 Define the canonical Markdown shape for mission records before implementation.
 The contract should make mission content reviewable in normal diffs without
 forcing operators to understand `RecordStore` internals.
-
-## Outcome
-
 - The mission record contract names the allowed front matter, Markdown sections,
   and deterministic rendering order.
 - The contract states where mission narrative, constraints, risks, validation
@@ -44,11 +41,16 @@ forcing operators to understand `RecordStore` internals.
 - Escaped mission `data` JSON is rejected as the authoring contract.
 - Product and storage documentation include a representative before/after
   mission example.
-
-## Evidence
-
 - Documentation diff for the mission record contract.
 - Before/after fixture or example showing an existing escaped-JSON mission and
   the readable replacement.
 - Review note confirming the contract can be understood without reading the
   implementation.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

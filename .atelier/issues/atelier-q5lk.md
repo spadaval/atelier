@@ -29,11 +29,13 @@ legacy import/migration data or promoted into Atelier's normal canonical
 activity history. Also define how notes/activity sidecars are represented,
 ordered, validated, merged, and displayed. Acceptance: dependent implementation
 issues are unblocked by a recorded policy.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

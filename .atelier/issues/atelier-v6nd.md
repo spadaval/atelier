@@ -33,9 +33,6 @@ updated_at: "2026-06-12T21:25:55.304932055+00:00"
 Update Agent Factory so agents get one clear rule: ordinary work closes with
 proof on the issue; risky, broad, or parent-level claims need an independent
 check.
-
-## Outcome
-
 - Agent Factory guidance explains default proof and escalation in plain
   operational language.
 - Orchestrator prompts name the proof expected for each assigned worker and
@@ -46,9 +43,6 @@ check.
   and failure classifications without competing terminology.
 - Repository `AGENTFACTORY.md` is updated only where the local Atelier binding
   needs command-specific examples.
-
-## Evidence
-
 - Patch the relevant Agent Factory skill procedures and standards files under
   `/root/.agents/skills/agent-factory/`.
 - Process review confirms the skill keeps ordinary issue proof lightweight and
@@ -57,3 +51,11 @@ check.
   epic.
 - Run relevant docs/process checks plus `atelier lint` and `atelier export
   --check`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -27,17 +27,19 @@ The default workflow-validator unit test still expects validator lists from
 before command-surface freshness became part of the mission closeout and tracker
 health contracts. Repair the test so it matches the current public validator
 surfaces without weakening any validator behavior.
-
-## Outcome
-
 - The default mission close and tracker health validator expectations include
   command-surface freshness when that validator is part of the actual contract.
 - The focused workflow validator unit test passes without removing any required
   mission closeout or tracker health gate.
 - Tracker lint and export checks remain clean for this repair record.
-
-## Evidence
-
 - Run `cargo nextest run default_validators_are_target_and_transition_aware`.
 - Run `target/debug/atelier rebuild && target/debug/atelier lint <issue-id> && target/debug/atelier export --check`.
 - Run `git diff --check`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -33,9 +33,6 @@ records. It complements projection freshness diagnostics: stale projections and
 invalid records are related failure modes, but a malformed record should produce
 bounded repair guidance rather than collapsing unrelated mission, status,
 doctor, lint, and show workflows.
-
-## Outcome
-
 - `atelier status`, `atelier doctor`, `atelier lint`, and focused record repair
   commands remain usable when one issue record is malformed.
 - Mission and issue orientation surfaces can show valid records from canonical
@@ -53,9 +50,6 @@ doctor, lint, and show workflows.
 - Tests distinguish recoverable orientation behavior from strict completion
   behavior so future projection changes cannot reintroduce all-or-nothing
   failure.
-
-## Evidence
-
 - CLI transcript tests prove a malformed issue does not prevent `atelier status`,
   `atelier doctor`, global `atelier lint`, or `atelier lint <id>` from reporting
   bounded, actionable repair guidance.
@@ -71,9 +65,14 @@ doctor, lint, and show workflows.
   one ambiguous malformed record that requires manual repair guidance.
 
 - Run focused projection, lint, doctor, status, and mission orientation tests.
-
-## Notes
-
 Do not make degraded mode a silent best-effort query path. Any answer produced
 from fallback state must say the tracker is degraded and must not be accepted as
 closeout proof until the malformed records are repaired.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

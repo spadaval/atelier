@@ -26,17 +26,8 @@ updated_at: "2026-06-10T14:51:19.776106093+00:00"
 ## Description
 
 Resolve the SPEC.md open question about artifact storage. Specify what evidence artifacts live in the repo, what may live externally, and which backend is first.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 TODO: choose the initial artifact storage policy and backend.
@@ -51,3 +42,11 @@ Evidence records need stable metadata, size/hash handling, and paths or URIs whi
 - Store metadata in repo and large artifacts externally.
 - Start with local filesystem paths only.
 - Add a configurable external backend immediately.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

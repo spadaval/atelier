@@ -32,9 +32,6 @@ Remove `atelier workflow validate` from the normal public/operator workflow.
 Validation policy can remain an internal implementation concept, but users and
 agents should interact through domain commands such as mission status, mission
 closeout, issue transition options, start, close, lint, and evidence commands.
-
-## Outcome
-
 - Top-level help and Agent Factory guidance no longer present
   `atelier workflow validate` as a normal command.
 - Mission and issue next-action output routes operators to domain surfaces
@@ -45,9 +42,6 @@ closeout, issue transition options, start, close, lint, and evidence commands.
   validation: what is blocked, why, and which user-facing command fixes it.
 - Tests prove normal help, mission status, issue show/transition, and closeout
   guidance do not recommend `workflow validate`.
-
-## Evidence
-
 - CLI transcript tests cover top-level help, mission status, mission closeout
   blockers, and issue transition/options output.
 
@@ -58,8 +52,13 @@ closeout, issue transition options, start, close, lint, and evidence commands.
   non-normal.
 
 - Run focused CLI/help tests plus `atelier lint`.
-
-## Notes
-
 The underlying validator functions may still exist as implementation details.
 The product failure is exposing them as the normal mental model.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

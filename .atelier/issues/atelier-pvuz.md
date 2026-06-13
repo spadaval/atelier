@@ -29,9 +29,6 @@ updated_at: "2026-06-12T23:32:51.177579643+00:00"
 Expose closeout proof requirements through domain commands instead of requiring
 operators to understand raw workflow validators. This is the user-facing bridge
 between reliability policy and closeout behavior.
-
-## Outcome
-
 - Mission status and mission closeout output name missing proof, open work,
   malformed linked issues, missing evidence, stale tracker state, and dirty
   worktree state in user-facing language.
@@ -41,10 +38,15 @@ between reliability policy and closeout behavior.
 - Raw validator names may appear only as advanced diagnostic detail, not as the
   primary answer.
 - Output stays bounded when many linked issues or evidence gaps exist.
-
-## Evidence
-
 - CLI transcripts for issue closeout missing proof, mission closeout missing
   proof, malformed linked issue, stale tracker state, and dirty worktree state.
 - Tests proving status and closeout surfaces agree on blocker classes.
 - Docs/help parity check for closeout proof commands.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

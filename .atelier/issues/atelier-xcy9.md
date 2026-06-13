@@ -41,13 +41,15 @@ Scope:
 Out of scope:
 - Removing packaged resources from the crate if optional integrations still need them.
 - Implementing the optional Claude integration command.
-
-## Outcome
-
 - Fresh init produces a small .atelier/ containing tracked config plus ignored runtime DB only.
 - Existing init tests are updated to assert the reduced surface.
 - No generated .atelier/rules tree appears after core init.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

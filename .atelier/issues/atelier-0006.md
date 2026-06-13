@@ -43,14 +43,16 @@ can choose work from either mission or epic context.
 
 Quiet mode returns only essential IDs/counts suitable for shell composition. Do
 not add command-result JSON.
-
-## Outcome
-
 CLI integration tests cover open mission status, active-mission
 defaulting, option-oriented work selection context, evidence gaps, validator
 failure or warning state, all-work-done-but-missing-closeout state, no-ID
 dashboard mode, and quiet output.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

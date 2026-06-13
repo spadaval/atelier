@@ -25,17 +25,8 @@ updated_at: "2026-06-10T14:51:19.805241515+00:00"
 ## Description
 
 Resolve the SPEC.md open question about Chainlink lock/sync behavior. Specify what becomes claim/worktree association, what remains as lock coordination, and what is removed or deferred.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 Retire almost all inherited Chainlink lock/sync functionality from Atelier's
@@ -61,3 +52,11 @@ lock/sync mental model would obscure the simpler repo-state workflow.
 - Replace it with claim/worktree association.
 - Keep local locks only.
 - Defer lock redesign until after export/rebuild.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

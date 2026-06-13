@@ -25,14 +25,16 @@ updated_at: "2026-06-13T04:11:50.100985856+00:00"
 ## Description
 
 Create the durable vocabulary for strong proof and weak proof. The wording should be understandable to future agents and humans and should fit the existing Evidence, Workflow validator, Mission, and Issue glossary terms.
-
-## Outcome
-
 - CONTEXT and validation guidance define strong proof and weak proof without relying on private mission history.
 - The definition names required properties: claim-specific, reproducible, attached, classified, scoped, and independent when required by risk.
 - Examples distinguish broad supporting checks from claim-level proof.
+- File-change review of documentation shows the vocabulary and examples.
+- `git diff --check`, `atelier export --check`, and `atelier lint` pass.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-- File-change review of documentation shows the vocabulary and examples.
-- `git diff --check`, `atelier export --check`, and `atelier lint` pass.
+Evidence was not specified.

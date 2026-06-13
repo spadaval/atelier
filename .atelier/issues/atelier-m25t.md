@@ -34,15 +34,17 @@ Scope:
 - Define record-kind registration, schema/version validation, link target validation, and deterministic rendering hooks for first-class records.
 - Coordinate with existing open issues for mission, plan, evidence, milestone, workflow validator, and Mission Control work.
 - Avoid reintroducing typed numeric IDs or aggregate manifest/graph canonical files.
-
-## Outcome
-
 First-class record kinds have an implementation-ready storage contract that reuses the Markdown-first architecture; issue-specific assumptions are isolated; future mission/plan/evidence command issues can depend on this slice rather than inventing separate persistence paths; tests or fixtures cover at least one non-issue record kind or a documented stub contract with validation.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test
 - ./target/debug/atelier export --check
 - ./target/debug/atelier doctor
 - docs/index.md and docs/architecture/index.md remain consistent
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

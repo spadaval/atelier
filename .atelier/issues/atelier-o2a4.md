@@ -44,11 +44,13 @@ updated_at: "2026-06-12T03:36:04.665698736+00:00"
 ## Description
 
 Plan intuitive command placement and remove redundant command surfaces that make agent workflows harder to explain. Acceptance: command placement is documented with old-to-new mappings, direct-removal decisions, and validation expectations for issue lifecycle, dependencies, links, search, notes/activity, work/start, setup/integrations, rebuild, maintenance, and state commands. Prefer deleting moved or duplicate command behavior once the replacement is clear, tested, and documented; retain aliases only when a human explicitly asks for a compatibility window.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

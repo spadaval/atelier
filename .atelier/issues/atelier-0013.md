@@ -33,11 +33,13 @@ updated_at: "2026-06-08T22:17:07.925041568+00:00"
 Cut /root/atelier over from Beads to Atelier after the import, command parity, and storage checks pass. This is the repository-level replacement step: AGENTFACTORY.md, AGENTS.md, docs, hooks, and validation commands should point at Atelier rather than bd.
 
 Keep the old Beads data archived for recovery, but normal planning and execution must use Atelier.
+AGENTFACTORY.md declares Atelier as the tracker and lists Atelier sync/check commands; current Beads data is archived read-only; a fresh clone/worktree can rebuild Atelier state and run the tracker checks; at least one real issue update and closeout is performed through Atelier; no normal agent-factory command path requires bd.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-AGENTFACTORY.md declares Atelier as the tracker and lists Atelier sync/check commands; current Beads data is archived read-only; a fresh clone/worktree can rebuild Atelier state and run the tracker checks; at least one real issue update and closeout is performed through Atelier; no normal agent-factory command path requires bd.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

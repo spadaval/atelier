@@ -49,16 +49,18 @@ record of the waiver. Status output should present action options with context,
 not claim there is only one correct next step.
 
 Out of scope: supervising live agent processes.
-
-## Outcome
-
 tests cover one active mission, switching, multiple-active lint
 failure, work start inside/outside active mission, non-mission lightweight issue
 work, worktree status showing mission context, completion blocked by missing
 evidence, completion after evidence is attached, explicit waiver behavior, and
 mission start/focus behavior when unresolved high-consequence artifact-update
 tasks are linked to the mission.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

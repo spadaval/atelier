@@ -23,9 +23,6 @@ updated_at: "2026-06-13T21:04:23.593476358+00:00"
 
 Remove obsolete migration command surfaces and legacy issue status code paths now
 that issue lifecycle is driven by `.atelier/workflow.yaml`.
-
-## Outcome
-
 - Legacy workflow migration command paths and implementation helpers are removed
   from the current workflow code.
 - Issue creation, listing, dependency, tree, and import paths use workflow
@@ -35,9 +32,6 @@ that issue lifecycle is driven by `.atelier/workflow.yaml`.
   `atelier issue transition`.
 - Tests prove active workflow behavior without command-absence coverage for
   removed migrate commands.
-
-## Evidence
-
 - `rg -n "migrate-statuses|migrate_status|workflow migrate|record_status_changed|input.status|pub status: Option|issue update .*--status|--status open|--status closed|status: \"open\"|status: \"closed\"|Some\\(\"open\"\\)|Some\\(\"closed\"\\)" src tests AGENTFACTORY.md CONTEXT.md SPEC.md docs` leaves only mission-status/current-external-import references.
 - `cargo fmt -- --check`
 - `cargo build`
@@ -57,3 +51,11 @@ that issue lifecycle is driven by `.atelier/workflow.yaml`.
 - `target/debug/atelier export --check`
 - `target/debug/atelier doctor`
 - `git diff --check`
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

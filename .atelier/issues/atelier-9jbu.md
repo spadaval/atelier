@@ -60,9 +60,6 @@ specific replacement is required:
 - `issue close-all`
 - `issue next`
 - `issue tested`
-
-## Outcome
-
 - The desired issue command surface is documented with keep/fold/move/remove
   classifications for every current issue subcommand.
 - The reduced `atelier issue --help` target is limited to lifecycle essentials.
@@ -72,7 +69,12 @@ specific replacement is required:
 - Transcript tests prove the replacement commands cover create, parented
   create, active-work create, reopen, label/unlabel, blocked-list, dependency,
   link, hierarchy, search, notes, and deletion workflows where retained.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

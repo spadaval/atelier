@@ -25,9 +25,6 @@ Document the preferred file-first issue authoring workflow wherever agents are
 likely to look. The workflow is: create a valid issue shell with
 `atelier issue create`, edit the generated canonical Markdown file directly,
 then run focused lint and any relevant workflow validation.
-
-## Outcome
-
 - `AGENTS.md` describes file-first issue editing for this repository.
 - `AGENTFACTORY.md` describes when to use `issue create` plus Markdown editing
   instead of shell-quoted long descriptions.
@@ -37,7 +34,12 @@ then run focused lint and any relevant workflow validation.
   only the storage spec.
 - Examples cover creating issues, parented issues, epics, dependencies, and
   validation after direct edits.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

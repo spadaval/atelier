@@ -32,16 +32,18 @@ Scope:
 - Validate that local RuntimeState can be absent or reset without losing canonical issue behavior.
 - Run residue searches for stale architecture language that treats SQLite as canonical record storage or export as the normal durability step.
 - Record explicit follow-up issues for deferred compatibility paths.
-
-## Outcome
-
 Command transcripts or automated tests prove create/update/close/dependency/link flows, stale projection recovery, rebuild from .atelier-state, export --check, lint, doctor, and ready work discovery; docs and tracker issues reflect any deferred work; the epic can be closed with no unowned acceptance criterion.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test
 - git diff --check
 - ./target/debug/atelier lint
 - ./target/debug/atelier export --check
 - ./target/debug/atelier doctor
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

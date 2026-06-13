@@ -38,9 +38,6 @@ What:
 Out of scope:
 - Migrating non-comment/non-close-reason runtime data.
 - Adding a first-class `atelier migrate` command.
-
-## Outcome
-
 - Running against a temp repo with SQLite comments and close reasons generates valid sidecars.
 - `--dry-run` reports intended output without writing files.
 - A second run does not duplicate output and reports skipped/refused existing IDs clearly.
@@ -48,7 +45,12 @@ Out of scope:
 - Tests or scripted validation cover dry run, normal run, and duplicate/id collision behavior.
 
 Recommended subskill: agent-factory migrate.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

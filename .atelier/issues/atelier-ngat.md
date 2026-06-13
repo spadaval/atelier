@@ -24,14 +24,16 @@ updated_at: "2026-06-13T23:42:04.703223296+00:00"
 ## Description
 
 Before closeout, validate the stabilization work against a fresh inventory of CLI commands, canonical record fields, module boundaries, dead-code residue, docs/help parity, and tests. This item should classify findings rather than implement fixes.
-
-## Outcome
-
 - Inventory covers visible help, hidden commands, current docs, canonical record examples, major modules, and residue searches.
 - Every failed classification has an open issue linked to the mission or a documented defer/not-applicable rationale.
 - Inventory is usable by a future closeout auditor without private chat context.
+- Evidence record or audit artifact captures command transcripts, file references, rg searches, and classification table.
+- atelier lint, atelier export --check, and atelier doctor results are recorded with any failures assigned to owner issues.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-- Evidence record or audit artifact captures command transcripts, file references, rg searches, and classification table.
-- atelier lint, atelier export --check, and atelier doctor results are recorded with any failures assigned to owner issues.
+Evidence was not specified.

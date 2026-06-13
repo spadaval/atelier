@@ -37,15 +37,17 @@ updated_at: "2026-06-13T23:12:00.253045347+00:00"
 ## Description
 
 Apply an agent-readiness lens to the stabilization mission. The goal is not generic process expansion; it is to make fresh agents able to set up, choose work, run the right checks, detect quality hazards, and hand off without private context.
-
-## Outcome
-
 - Fresh-agent entry, setup, validation, and tracker workflows are verifiable from committed repository files.
 - Mechanical guardrails exist for the recurring quality hazards identified by the readiness audit: command-doc drift, complexity, dead code, dependency hygiene, and task ownership.
 - Optional collaboration scaffolding such as GitHub templates or CODEOWNERS is either added or explicitly classified as not applicable for this repo.
-
-## Evidence
-
 - Agent-readiness audit evidence record scores the repository against Agent Factory and Factory-style criteria.
 - File change review shows any added setup, docs validation, quality tooling, or collaboration templates.
 - `atelier lint`, `atelier export --check`, `atelier doctor`, and focused setup/quality command transcripts pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

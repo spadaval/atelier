@@ -37,9 +37,6 @@ updated_at: "2026-06-12T21:11:26.147862233+00:00"
 Define the proof policy for Atelier work. The policy should keep the operator
 model small: ordinary work proves itself on the issue; risky, broad, or
 parent-level claims need an independent check.
-
-## Outcome
-
 - Every executable issue type has a default proof expectation and a simple
   escalation rule for higher-risk work.
 - The policy states when a durable note is enough, when first-class evidence is
@@ -50,11 +47,16 @@ parent-level claims need an independent check.
   their own claim.
 - Product docs, quality docs, and Agent Factory binding point to the same proof
   model.
-
-## Evidence
-
 - Documentation diff showing the proof policy and examples.
 - Example matrix covering a docs-only issue, CLI behavior change, persistence
   migration, Agent Factory process change, epic closeout, and mission closeout.
 - Review or validation note confirming the policy is actionable without private
   context.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

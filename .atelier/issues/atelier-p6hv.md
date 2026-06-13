@@ -30,11 +30,13 @@ updated_at: "2026-06-11T18:33:28.877502115+00:00"
 ## Description
 
 Define and implement the post-RecordStore projection refresh contract used by mutation commands. Scope includes choosing full rebuild versus targeted refresh for this mission, making the refresh boundary explicit after successful canonical writes, preserving RuntimeState, and documenting which helpers mutation paths must call. Out of scope: migrating every command family in this epic. Acceptance: commands have a shared projection refresh API after canonical writes; stale projection metadata remains correct; rebuild/export/lint/doctor stay green; downstream mutation epics have a clear API to use.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

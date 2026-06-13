@@ -25,11 +25,13 @@ updated_at: "2026-06-11T03:50:15.674483497+00:00"
 ## Description
 
 Search the CLI argument definitions, output format enums, formatter helpers, command handlers, integration tests, snapshots, and shell examples for command-result JSON support. Acceptance: produce a tracker note or doc section listing every affected command/path and the recommended owning epic; include explicit non-scope candidates such as diagnostic log formatting and projection files.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

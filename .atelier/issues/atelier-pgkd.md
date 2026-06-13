@@ -29,11 +29,13 @@ updated_at: "2026-06-11T23:31:47.652647633+00:00"
 ## Description
 
 Implement atelier migrate markdown-first or equivalent internal migration to move existing committed records from .atelier-state/* into .atelier/*, preserve runtime state under ignored paths, and report clear next steps. Acceptance: writes after migration target only the new canonical layout.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -26,11 +26,13 @@ updated_at: "2026-06-08T19:57:41+00:00"
 ## Description
 
 Identify inherited tests that should remain unchanged, tests that need rename updates, tests that encode obsolete Chainlink behavior, and any currently failing tests such as the readonly-location assertion observed during onboarding.
+A tracked test triage result names preserved, updated, retired, and failing tests; any behavioral fixes have focused beads; cargo test outcome is recorded with pass/fail evidence.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-A tracked test triage result names preserved, updated, retired, and failing tests; any behavioral fixes have focused beads; cargo test outcome is recorded with pass/fail evidence.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

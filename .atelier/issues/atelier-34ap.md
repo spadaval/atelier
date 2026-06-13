@@ -23,11 +23,13 @@ updated_at: "2026-06-10T21:39:24.615302818+00:00"
 ## Description
 
 Delete flat issue aliases, flat timer aliases, and mission view. Make mission show the only mission read command and rewrite tests/docs to canonical commands.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

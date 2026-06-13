@@ -37,9 +37,6 @@ did not complete. The issue command group still exposes lifecycle, graph,
 search, comments, destructive maintenance, and legacy helper commands together.
 Use the closed command-surface decisions in `atelier-9jbu` and `atelier-o2a4`
 as the starting point, then validate the current implementation against them.
-
-## Outcome
-
 - `atelier issue --help` exposes only issue lifecycle commands for creating,
   inspecting, editing compact metadata, starting through the approved start
   surface, and closing or reopening through approved lifecycle commands.
@@ -53,9 +50,6 @@ as the starting point, then validate the current implementation against them.
 - Obsolete commands either fail clearly with a replacement or are hidden during
   an explicit migration window; they are not visible in primary help.
 - Tests no longer preserve the old command surface as normal behavior.
-
-## Evidence
-
 - CLI transcript tests prove `atelier issue --help` lists only lifecycle commands
   and omits graph, search, history, impact, destructive maintenance, and legacy
   helper commands.
@@ -73,8 +67,13 @@ as the starting point, then validate the current implementation against them.
   on old subcommands as normal behavior.
 
 - Run `atelier export --check` and `atelier lint`.
-
-## Notes
-
 This is new repair work. Do not reopen the old closed command-cleanup issue
 unless a human wants its historical record changed.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

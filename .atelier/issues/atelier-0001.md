@@ -30,17 +30,8 @@ for work too large for a single agent context; this resolution defines the
 lightweight issue workflow that keeps small tasks out of mission ceremony while
 still allowing configured stricter workflows for mission-linked or high-risk
 work.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 Single-issue work does not use the mission system. It follows the ordinary issue
@@ -66,3 +57,11 @@ of making the default issue path heavy.
 - Require evidence only at close.
 - Require workflow validators only for configured types.
 - Use one universal workflow for all tasks.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

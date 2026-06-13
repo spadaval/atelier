@@ -26,9 +26,6 @@ updated_at: "2026-06-13T00:25:49.979408942+00:00"
 
 Validate the workflow signpost surfaces after status, start/finish, transition,
 history, prime, and workflow-validator public-surface repairs land.
-
-## Outcome
-
 - Root status, mission status, mission show, start, finish/current-work,
   transition/options, history, and prime surfaces each have clear
   non-overlapping responsibilities.
@@ -39,11 +36,16 @@ history, prime, and workflow-validator public-surface repairs land.
 - Historical decision records `atelier-rqvv`, `atelier-v02t`, `atelier-vr9g`,
   `atelier-hggl`, and `atelier-bzts` are either satisfied or explicitly
   superseded by a new tracker item.
-
-## Evidence
-
 - Positive and negative CLI transcripts for the major signpost surfaces.
 - Manual docs/help/Agent Factory parity check transcript or evidence record.
 - Focused CLI integration tests for status, start/finish, transition, history,
   prime, and raw-workflow-validator absence from normal guidance.
 - `atelier lint` and `atelier export --check`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

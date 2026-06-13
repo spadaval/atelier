@@ -32,9 +32,6 @@ updated_at: "2026-06-12T05:02:21.466001699+00:00"
 Define the issue-body section contract before implementation changes land. This
 task decides the recognized heading names, which sections are required, how
 unknown sections behave, and how the parser should report malformed Markdown.
-
-## Outcome
-
 - The canonical issue body contract names `Description`, `Outcome`, `Evidence`,
   and `Notes`.
 - Required sections are defined, including whether `Evidence` is required for
@@ -49,15 +46,17 @@ unknown sections behave, and how the parser should report malformed Markdown.
   replace them as the authoring surface.
 - Documentation states that `Outcome` describes the desired finished world and
   `Evidence` describes required proof artifacts.
-
-## Evidence
-
 - Update the relevant architecture or storage documentation with the final
   section contract.
 - Add or update parser contract tests before behavior enforcement work starts.
 - Run `atelier lint atelier-4eot`.
-
-## Notes
-
 This is the sequencing gate for the implementation tasks. Do not let parser or
 lint enforcement make irreversible assumptions before this contract is explicit.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

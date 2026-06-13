@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define canonical activity sidecar ownership"
-updated_at: "2026-06-13T21:58:03.424579938+00:00"
+updated_at: "2026-06-13T23:44:47.850820555+00:00"
 ---
 
 ## Description
@@ -27,6 +27,10 @@ separate activity API that discovers the repository from the current working
 directory. Projection freshness intentionally skips `.activity` directories.
 The architecture needs an explicit ownership decision before implementation
 normalizes or preserves that split.
+Audit evidence: `docs/architecture/markdown-first-record-store.md` describes
+canonical activity sidecars, `src/commands/activity_log.rs` writes them through
+cwd lookup and `src/activity.rs`, while `src/projection_index.rs` skips
+`.activity` paths during freshness snapshots.
 
 ## Outcome
 

@@ -44,9 +44,6 @@ normal Markdown review works, and preserve rebuildable projection behavior.
 
 This epic coordinates the record contract, typed mission model, relationship
 semantics, migration, and end-to-end validation as separate child issues.
-
-## Outcome
-
 - The readable mission record contract is documented before implementation.
 - Mission parsing, rendering, command behavior, rebuild, export/check, lint, and
   projection refresh use a mission-specific model instead of mission semantics
@@ -59,15 +56,17 @@ semantics, migration, and end-to-end validation as separate child issues.
   risks, validation expectations, relationships, and evidence links live.
 - Child issues close with focused proof; this epic closes only after their
   evidence shows the full mission-record workflow is coherent.
-
-## Evidence
-
 - All child issues are closed with linked evidence.
 - Final closeout includes focused tests, migration transcript, representative
   mission command output, `atelier lint`, `atelier export --check`, and
   `atelier doctor`.
-
-## Notes
-
 The parent epic should stay small. The child issues own the contract,
 implementation, migration, relationship cleanup, and validation details.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

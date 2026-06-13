@@ -25,11 +25,13 @@ updated_at: "2026-06-08T22:34:53.200182347+00:00"
 ## Description
 
 Short-lived validation task used by atelier-z1p.6 to prove Agent Factory dependency add/remove commands through Atelier.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

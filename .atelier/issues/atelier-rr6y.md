@@ -28,9 +28,6 @@ updated_at: "2026-06-11T15:57:34.759490885+00:00"
 ## Description
 
 Finish the Markdown-first persistence transition so canonical durable records are written through RecordStore first and SQLite is only a transparent rebuildable projection/cache.
-
-## Outcome
-
 - Command audit identifies every durable mutation path and classifies it as Markdown-first, compatibility SQLite-first, or runtime-only.
 
 - Remaining non-runtime durable mutations either write Markdown first or have child issues documenting the migration boundary.
@@ -42,13 +39,7 @@ Finish the Markdown-first persistence transition so canonical durable records ar
 - Invalid canonical Markdown still produces actionable errors and never silently rebuilds from stale or corrupt data.
 
 - Closeout validation covers fresh checkout rebuild, manual Markdown edit followed by query, concurrent mutation/query behavior, export freshness, lint, doctor, and nextest/cargo test coverage as appropriate.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Desired State
 
 1. Most durable command mutations write directly to Markdown records before touching SQLite.
@@ -62,3 +53,11 @@ Evidence was not specified in the legacy issue record.
 - Preserve explicit failure for invalid Markdown, conflicting records, unsafe concurrent writes, or runtime DB repair failures.
 - Keep runtime-only state under `.atelier/` separate from canonical projection rebuilds.
 - Ensure `atelier export --check`, `atelier rebuild`, `atelier lint`, `atelier doctor`, issue workflows, mission workflows, and Mission Control inputs remain correct.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

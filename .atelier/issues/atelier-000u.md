@@ -43,11 +43,13 @@ Integrate first-class mission, milestone checkpoint, plan, evidence, and workflo
 The mission-centered model is the organizing target: missions hold objective intent, constraints, risks, validation expectations, and links to checkpoint milestones, durable plans, evidence, epics, and issues. Epics and issues remain accountable work units; milestones remain validated checkpoint states; plans remain durable execution intent; evidence remains validation proof; links connect these concepts explicitly.
 
 Direct agent-run/session records are intentionally deferred from the first domain-model slice; workflow and evidence records should leave room for later run metadata without requiring it now.
+Focused child issues provide mission, milestone checkpoint, plan, evidence, and workflow validator command surfaces. Schema and models represent the target records or accepted staged subset using the single project-scoped random record ID form. Create/show/list JSON exists for agent-facing records. Records export and rebuild deterministically. Mission records are first-class objective records, not generic issues or labels. Milestones are checkpoint states with validation criteria, not work containers. Typed links express mission-to-milestone, mission-to-plan, mission-to-work, and evidence validation relationships without overloading dependencies. Migration behavior is tested as cutover, not long-lived compatibility. Docs name deferred run/session fields explicitly. Workflow validators enforce transitions and are not milestone fields.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Focused child issues provide mission, milestone checkpoint, plan, evidence, and workflow validator command surfaces. Schema and models represent the target records or accepted staged subset using the single project-scoped random record ID form. Create/show/list JSON exists for agent-facing records. Records export and rebuild deterministically. Mission records are first-class objective records, not generic issues or labels. Milestones are checkpoint states with validation criteria, not work containers. Typed links express mission-to-milestone, mission-to-plan, mission-to-work, and evidence validation relationships without overloading dependencies. Migration behavior is tested as cutover, not long-lived compatibility. Docs name deferred run/session fields explicitly. Workflow validators enforce transitions and are not milestone fields.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

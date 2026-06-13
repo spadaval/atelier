@@ -39,15 +39,17 @@ Out of scope:
 - Changing tracker scheduling semantics.
 - Building a full-screen TUI.
 - Hiding important issue records solely to make output short.
-
-## Outcome
-
 - Default queue output is grouped, compact, and useful on a realistic project with dozens of issues.
 - Output makes blockers and parent context visible without becoming a massive tree.
 - Tests cover empty queues, mixed priorities/statuses/types, blocked work, and parent-child context.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -34,16 +34,18 @@ Scope:
 - Make target export/check behavior validate Markdown records and derived projections without requiring SQLite to be the freshest source of canonical facts.
 - Keep rebuild as the safe way to recreate ProjectionIndex from RecordStore.
 - Label any SQLite-derived comparison as transitional compatibility behavior.
-
-## Outcome
-
 Docs and command behavior agree that canonical records live in Markdown; export --check detects malformed/stale rendered Markdown and derived projection drift; rebuild ignores local RuntimeState except for safe schema setup; tests cover Markdown-first check behavior, compatibility export repair, unexpected canonical files, and stale derived projections.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test export rebuild or equivalent focused tests
 - cargo test
 - ./target/debug/atelier rebuild
 - ./target/debug/atelier export --check
 - ./target/debug/atelier doctor
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

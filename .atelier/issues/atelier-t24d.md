@@ -30,17 +30,8 @@ updated_at: "2026-06-11T20:56:50.757820936+00:00"
 ## Description
 
 Specify how workers and orchestrators move issues, epics, and missions through workflow states. Scope: whether start/finish/complete commands are separate concepts or ergonomic wrappers over generic workflow transitions; how transition commands run validators, surface missing evidence, support explicit waivers, and record durable handoff; how worker subagents should interact with Atelier from assignment through closeout. Acceptance: an artifact records the command model, the worker subagent flow, which commands are aliases/wrappers versus primitives, and how validation/evidence failures are handled without creating red tape for non-mission issue work.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 Workflow transitions are the underlying model. Human-facing `start`, `finish`,
@@ -103,3 +94,11 @@ machine. Workflow policy owns which transitions and validators exist; CLI
 commands provide the stable operator vocabulary. Lightweight non-mission issue
 work stays simple because its configured validators remain light, while mission
 work can opt into stricter evidence and closeout gates.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

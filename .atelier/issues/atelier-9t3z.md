@@ -38,9 +38,6 @@ Children own the executable work: `atelier-n0p4` bootstraps and migrates policy
 state, `atelier-y041` replaces the transition engine, `atelier-3z35` rewires
 start/close/abandon wrappers, and `atelier-jwcz` updates ready queues and
 status surfaces.
-
-## Outcome
-
 - Repositories can initialize `.atelier/workflow.yaml`, migrate existing issue
   statuses deliberately, and reject unmigrated or missing-policy mutation paths
   with actionable repair commands.
@@ -50,9 +47,6 @@ status surfaces.
 - `atelier status`, issue views, ready queues, mission summaries, and status
   filters show workflow categories and exact status IDs without requiring
   operators to inspect raw workflow-validator internals.
-
-## Evidence
-
 - Child evidence for `atelier-n0p4`, `atelier-y041`, `atelier-3z35`, and
   `atelier-jwcz` proves init, migration, transition execution, blocked
   transitions, close gating, abandon behavior, and orientation output.
@@ -60,3 +54,11 @@ status surfaces.
   evidence and names any residual risks or follow-up IDs.
 - Focused workflow tests or transcripts, `atelier lint`, and
   `atelier export --check` pass after the child implementation work.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

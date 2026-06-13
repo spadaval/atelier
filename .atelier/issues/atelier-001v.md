@@ -23,11 +23,13 @@ updated_at: "2026-06-10T15:05:38.596309925+00:00"
 ## Description
 
 Prove the bulk JSON apply workflow with realistic agent-generated plans, including nested issues, cross-links, blockers, and first-class record references.
+docs include compact and complex examples, validation evidence records command transcripts or tests, and tracker lint/export/doctor checks pass after apply.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-docs include compact and complex examples, validation evidence records command transcripts or tests, and tracker lint/export/doctor checks pass after apply.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

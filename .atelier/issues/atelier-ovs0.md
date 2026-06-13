@@ -22,9 +22,6 @@ updated_at: "2026-06-13T15:54:06.450537319+00:00"
 ## Description
 
 Validate that the strong-proof guidance is operational by applying it to representative ordinary issue, CLI behavior, parent closeout, subjective validation, quantitative validation, validation-placement, and validation-item examples.
-
-## Outcome
-
 - Each representative example is classified as strong proof, weak proof, blocked, deferred, or not applicable with a reason.
 - Subjective examples are judged against inspectable evaluator context, scenario or baseline, decision rationale, and captured evidence rather than pre-baked output.
 - Quantitative examples are judged against hard metrics or an explicit reason why a metric is not practical.
@@ -32,8 +29,13 @@ Validate that the strong-proof guidance is operational by applying it to represe
 - The validator identifies any wording that would let broad green checks masquerade as claim-specific proof.
 - The validator identifies any wording that encourages red-tape, over-specification, or validation hierarchy inflation.
 - Follow-up issues are created for unclear or unenforceable guidance.
+- Evidence record attached to this validation issue contains the classification table.
+- Command transcripts cover tracker lint/export and any docs/help parity checks used in the validation.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-- Evidence record attached to this validation issue contains the classification table.
-- Command transcripts cover tracker lint/export and any docs/help parity checks used in the validation.
+Evidence was not specified.

@@ -24,11 +24,13 @@ updated_at: "2026-06-11T03:50:58.795807774+00:00"
 ## Description
 
 Identify repository scripts, tests, Agent Factory docs, and workflow examples that currently call atelier commands with --json. Acceptance: each consumer has a migration target: human parsing avoided, quiet output used, direct repo-state/projection read used, or command redesigned.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

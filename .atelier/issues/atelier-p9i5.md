@@ -22,11 +22,13 @@ updated_at: "2026-06-12T03:24:09.956008450+00:00"
 ## Description
 
 Specify a shared work-context data model used by root status, work status, no-ID mission status, and issue/mission drill-downs where relevant. Acceptance: defines active mission, active work, ready work, blockers, tracker health, and recent activity once, then states which command renders which slice. The goal is to reduce duplicated status logic and produce consistent signals across all surfaces.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

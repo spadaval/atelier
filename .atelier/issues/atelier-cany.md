@@ -32,9 +32,6 @@ updated_at: "2026-06-12T22:10:24.136622568+00:00"
 Implement the user-facing issue transition options surface specified in
 `atelier-vr9g`. Operators should be able to ask what an issue can do next
 without knowing internal workflow validator names.
-
-## Outcome
-
 - A command such as `atelier issue transition <id> --options` or the approved
   equivalent lists allowed actions, blocked actions, fast gate reasons, and the
   command to perform each allowed action.
@@ -46,11 +43,16 @@ without knowing internal workflow validator names.
   synchronous transition calculation.
 - Help text positions raw workflow validation as advanced/internal rather than
   normal next-action discovery.
-
-## Evidence
-
 - CLI transcript tests for open ready issue, blocked issue, closed issue,
   active-work issue, close-ready issue, and missing-evidence close block.
 - Consistency check between issue show, transition/options output, and closeout
   behavior.
 - Help transcript proving the transition surface is discoverable.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

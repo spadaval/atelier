@@ -27,11 +27,13 @@ updated_at: "2026-06-09T20:20:08.248232780+00:00"
 ## Description
 
 Define first-class milestone records as validated checkpoint states, not work containers or super-epics.
+Milestone records model desired_state, scope boundaries, validation_criteria, accepted evidence, completion_state, linked mission or missions, and contributing work links. Existing inherited atelier milestone behavior is classified as compatibility unless migrated. Docs and tests prove milestones are validated by evidence and workflow validators, not by milestone-attached transition checks.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Milestone records model desired_state, scope boundaries, validation_criteria, accepted evidence, completion_state, linked mission or missions, and contributing work links. Existing inherited atelier milestone behavior is classified as compatibility unless migrated. Docs and tests prove milestones are validated by evidence and workflow validators, not by milestone-attached transition checks.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

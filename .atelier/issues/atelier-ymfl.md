@@ -29,9 +29,6 @@ updated_at: "2026-06-13T00:27:27.360198689+00:00"
 Align documentation, tests, and Agent Factory process with enforced proof so
 agents cannot close implementation work based on notes, intent summaries, or
 unrelated green tests.
-
-## Outcome
-
 - Agent guidance explains when to create new repair issues versus reopening
   misleading closed work.
 - The global Agent Factory skill procedures are updated so planning,
@@ -52,9 +49,6 @@ unrelated green tests.
   compatibility policy.
 - Agent Factory guidance no longer lists `atelier workflow validate` as a
   normal planning, closeout, or drill-down command.
-
-## Evidence
-
 - Docs updates cover Agent Factory workflow, repository guidance, and CLI
   surface documentation.
 - Skill updates cover Agent Factory procedure files, not only repository-local
@@ -66,9 +60,14 @@ unrelated green tests.
   outcome has evidence.
 - Run focused docs/tests, `atelier export --check`, `atelier lint`, and
   `atelier doctor`.
-
-## Notes
-
 This is process repair, not a substitute for command implementation. It should
 block mission closeout if documentation and tests still allow the old failure
 mode.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

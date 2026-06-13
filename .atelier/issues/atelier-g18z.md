@@ -26,17 +26,11 @@ updated_at: "2026-06-12T23:06:44.821490789+00:00"
 
 Make documentation, help output, and tests part of reliability validation. A
 mission should not close while these sources contradict each other.
-
-## Outcome
-
 - Closeout detects when docs and help list different command surfaces.
 - Tests that assert obsolete behavior block closeout unless tied to an explicit
   migration window.
 - Agent Factory guidance is checked against implemented commands.
 - Drift findings name the file, command, or test that must change.
-
-## Evidence
-
 - Docs/help consistency checks or transcript tests compare the implemented
   command surfaces against Agent Factory guidance, repository docs, and CLI help.
 
@@ -45,3 +39,11 @@ mission should not close while these sources contradict each other.
 
 - Run focused docs/help tests and record any intentionally deferred drift with a
   linked owner.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

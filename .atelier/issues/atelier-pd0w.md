@@ -46,15 +46,17 @@ Out of scope:
 - Grouped work queue views.
 - Mission Control TUI work.
 - New persistence model for activity.
-
-## Outcome
-
 - Child issues cover core rendering, hierarchy/dependency context, recent activity/footer behavior, and regression validation.
 - JSON compatibility remains the explicit boundary for scripts and agents.
 - Future implementers can execute each child without needing the original chat plan.
 
 Recommended subskill: agent-factory orchestrate.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

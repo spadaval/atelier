@@ -127,7 +127,7 @@ mod tests {
         assert!(!dir.path().join(".atelier/.gitignore").exists());
 
         let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        assert!(!gitignore.contains("/.atelier/state.db"));
+        assert!(gitignore.contains("/.atelier/state.db"));
         assert!(!gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
         assert!(gitignore.contains("/.atelier/runtime/"));
         assert!(gitignore.contains("/.atelier/cache/"));

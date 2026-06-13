@@ -32,4 +32,4 @@ main.rs and large command modules contain command enums, help taxonomy, compatib
 
 - Module-size and dependency review before/after identifies moved responsibilities.
 - Focused command tests prove behavior did not drift during extraction.
-- cargo fmt -- --check and relevant cargo nextest slices pass.
+- `cargo fmt -- --check` and relevant cargo nextest slices pass.

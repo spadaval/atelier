@@ -189,7 +189,9 @@ progress.
 
 ### Activity Sidecars
 
-Activity sidecars are canonical durable history, but they are not first-class
+Activity sidecars are canonical durable history owned by the activity sidecar
+API in `src/activity.rs`, not by `RecordStore` and not by the runtime SQLite
+projection. They are canonical Markdown files, but they are not first-class
 records that share the common `title`/`status` contract.
 
 | Slice | Ownership |
@@ -318,6 +320,21 @@ file named with a UTC microsecond timestamp ID:
 writers append deterministic `-01`, `-02`, and later suffixes while refusing to
 overwrite an existing file.
 
+Ownership is intentionally split:
+
+- `src/activity.rs` owns sidecar schema, parsing, ID allocation, atomic
+  create-new writes, ordering, and validation.
+- `src/commands/activity_log.rs` is a thin CLI adapter that converts command
+  events into sidecar events. Its cwd-based `.atelier` discovery is tolerated
+  only at the command boundary for callers that do not already carry a
+  `StorageLayout`.
+- `RecordStore` owns first-class issue, mission, plan, milestone, and evidence
+  records. It must not absorb activity event payloads or project activity into
+  record `relationships`.
+- `export`, `rebuild`, `lint`, `history`, and issue detail views consume
+  sidecars through the activity API. The runtime projection does not index
+  sidecar payloads as source rows.
+
 Activity front matter uses `schema: "atelier.activity"` and
 `schema_version: 1` with these required fields:
 
@@ -365,7 +382,10 @@ separate durable comment store. The accepted policy is:
 and `atelier export --check` validates them instead of reporting them as
 untracked drift. `atelier rebuild` validates sidecars, rejects activity entries
 whose subject issue is missing, and keeps the runtime projection rebuildable
-from tracked `.atelier/` records alone.
+from tracked `.atelier/` records alone. Projection freshness intentionally
+does not index `.activity/` files; changing only activity sidecars should not
+make the SQLite projection stale, because history and recent-activity views read
+the sidecars directly.
 
 ## Durable Mutation Audit
 

@@ -28,11 +28,13 @@ updated_at: "2026-06-11T04:31:25.856615297+00:00"
 ## Description
 
 Update product, architecture, and Agent Factory documentation to reflect that Atelier no longer treats command-result JSON as the stable automation contract. Acceptance: SPEC/CONTEXT and human CLI docs are reconciled; command examples avoid --json; docs explain quiet output, drill-down commands, canonical state, projections, and when external tools should read repo-state instead of command JSON.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -29,16 +29,18 @@ locate the worktree/branch, start tracked work, run workflow validators, attach
 evidence, complete or close work through transition commands, see
 blockers/evidence gaps, use an explicit waiver when configured, and close out
 with durable proof.
-
-## Outcome
-
 real command transcript or integration tests cover strict mission
 work and lightweight non-mission issue work; status presents multiple options
 with useful context rather than one prescriptive answer; missing evidence blocks
 completion with actionable guidance; waiver behavior is explicit and durable;
 every non-pass is classified with a follow-up owner; Agent Factory guidance and
 Atelier CLI behavior agree.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

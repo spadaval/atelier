@@ -40,16 +40,18 @@ What:
 Out of scope:
 - One-off migration of existing SQLite comments.
 - The history query/rendering command.
-
-## Outcome
-
 - Creating comments/notes, closing/reopening issues, changing fields, and starting/finishing work create expected sidecar activity entries.
 - Activity body content matches the user-authored text or event detail without lossy formatting.
 - Existing issue show/comment behavior remains compatible with the projection/index model.
 - Focused integration tests cover each mutation type introduced here.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

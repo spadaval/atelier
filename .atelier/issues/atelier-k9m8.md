@@ -23,17 +23,11 @@ updated_at: "2026-06-12T23:41:43.347354181+00:00"
 
 Add a mission reliability summary surface so orchestrators can quickly see
 whether a mission is ready to implement, validate, or close.
-
-## Outcome
-
 - Mission status shows reliability signals: malformed work, missing Outcome,
   missing Evidence, missing attached proof, ignored-test blockers, docs/help
   drift, and open blockers.
 - The summary is bounded and points to focused drill-downs.
 - Reliability signals use the same underlying checks as closeout validators.
-
-## Evidence
-
 - CLI transcript tests cover healthy reliability summaries and unhealthy states
   for malformed work, missing Outcome, missing Evidence, missing attached proof,
   ignored-test blockers, docs/help drift, open blockers, and projection
@@ -43,3 +37,11 @@ whether a mission is ready to implement, validate, or close.
 
 - Run focused mission status tests that assert bounded output and drill-down
   commands for each unhealthy state.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

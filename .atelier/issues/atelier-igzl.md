@@ -32,9 +32,6 @@ updated_at: "2026-06-12T05:22:46.442482975+00:00"
 Route validators and command surfaces through the parsed issue-section model
 instead of letting each command inspect raw Markdown or the legacy description
 blob independently.
-
-## Outcome
-
 - Workflow validators can inspect required issue sections through a shared API.
 - Lint, work start, issue close, mission closeout, issue show, issue list/status
   summaries, and future transition/options output all use the same parsed
@@ -47,9 +44,6 @@ blob independently.
   Markdown headings.
 - Documentation identifies the parsed-section model as the single integration
   point for issue structure.
-
-## Evidence
-
 - Add focused tests for the shared section API used from lint and workflow
   validation.
 - Add CLI tests proving lint and work start report the same missing-section
@@ -57,9 +51,14 @@ blob independently.
 - Add mission closeout or workflow-validation coverage proving linked issue
   section failures are reported through validators.
 - Run focused validator and CLI integration tests.
-
-## Notes
-
 This task should land after the parser/rendering task and before strict
 enforcement. Its purpose is to prevent the new section parser from becoming a
 display-only helper.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

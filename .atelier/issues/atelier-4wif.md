@@ -32,11 +32,13 @@ updated_at: "2026-06-12T03:42:47.456351736+00:00"
 ## Description
 
 Prove and document the final refinement. Acceptance: docs, tests, workflow validation, and linked evidence show the new CLI surfaces are coherent for agent workflows.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

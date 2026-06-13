@@ -12,6 +12,7 @@ agent_identity: null
 independence_level: "unspecified"
 follow_up_ids: []
 residual_risks: []
+output: null
 relationships:
   blocks: []
   children: []

@@ -28,9 +28,6 @@ bare `issue close` calls. These fixtures exercise list, tree, next, mutation,
 dependency, smoke, mission-list, and stress flows where close is expected to
 succeed, but current closeout rules require attached issue proof before the
 status transition can complete.
-
-## Outcome
-
 - Active success-close integration fixtures attach valid proof before closing
   issues.
 - The tests still verify readiness propagation, list/tree status filters,
@@ -38,9 +35,14 @@ status transition can complete.
   mission-list summaries, and rapid close/reopen behavior.
 - The default broad-suite fail-fast probe advances past the previous
   dependency-chain failure.
-
-## Evidence
-
 - `cargo nextest run test_dependency_chain test_list_filter_by_status test_list_all_statuses test_tree_with_status_filter test_next_with_subissue_progress test_next_only_subissues_ready test_stress_rapid_operations test_issue_mutations_are_durable_without_manual_export test_issue_mutations_create_activity_sidecars test_issue_show_json_recovers_activity_fields_after_rebuild test_mission_list_human_overview_orders_and_summarizes test_mission_list_default_current_empty_state test_issue_tree_status_filter test_dependency_chain_and_ready` passes.
 - `cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet` advances past the previous dependency-chain failure.
 - `atelier lint`, `atelier export --check`, and `git diff --check` pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

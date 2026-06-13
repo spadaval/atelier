@@ -32,17 +32,11 @@ updated_at: "2026-06-12T21:54:00.991501933+00:00"
 
 Make ignored and stale tests visible blockers instead of allowing them to hide
 unfinished product behavior.
-
-## Outcome
-
 - Ignored tests must include a reason and owner or linked issue.
 - Ignored tests for product behavior appear in closeout summaries.
 - Stale tests that preserve obsolete behavior are either updated, deleted, or
   tied to an explicit migration issue.
 - Validation agents inspect ignored tests before mission closeout.
-
-## Evidence
-
 - Add a test inventory or lint check that lists ignored tests, reasons, linked
   owners, and whether each ignored test covers product behavior.
 
@@ -52,3 +46,11 @@ unresolved ignored tests.
 
 - Attach evidence to the reliability mission showing unresolved ignored or stale
   tests are either linked to owners or no longer block product closeout.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

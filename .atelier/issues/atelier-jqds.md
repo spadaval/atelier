@@ -29,9 +29,6 @@ tests still assert removed `history`, `session`, `timer`, `archive`,
 `milestone`, and old import/export command behavior. Those assertions should
 not be treated as normal product behavior while Atelier is targeting the new
 CLI surface.
-
-## Outcome
-
 - Obsolete ignored tests for removed command surfaces are deleted or rewritten
   against the current product commands.
 - Any intentionally retained ignored tests use the ignored-test metadata format
@@ -39,11 +36,16 @@ CLI surface.
   blocking classification.
 - The ignored-test inventory no longer reports the legacy command-surface block
   as a product-behavior closeout blocker.
-
-## Evidence
-
 - Run the ignored-test inventory or workflow validator and show no unresolved
   stale legacy command-surface blockers remain.
 - Run focused tests for any rewritten command-surface behavior.
 - Run `cargo fmt -- --check`, `target/debug/atelier export --check`, and
   `target/debug/atelier lint atelier-jqds`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

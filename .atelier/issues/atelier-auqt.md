@@ -32,9 +32,6 @@ updated_at: "2026-06-12T21:37:04.161674575+00:00"
 
 Validate the reduced issue command surface after classification, folded helper
 flows, and non-lifecycle command moves land.
-
-## Outcome
-
 - The command inventory from `atelier-exz1` maps to implemented help,
   replacement commands, removed-command behavior, and docs.
 - Normal `atelier issue --help` exposes only lifecycle commands.
@@ -44,12 +41,17 @@ flows, and non-lifecycle command moves land.
 - Obsolete command surfaces do not appear in Agent Factory guidance or normal
   next-action output.
 - Any mismatch becomes a follow-up blocker before `atelier-efpk` closes.
-
-## Evidence
-
 - Command inventory audit with each row classified pass, fail, blocked,
   deferred, or not-applicable.
 - Positive and negative CLI transcripts for representative retained, moved,
   hidden, and removed commands.
 - Docs/help/Agent Factory parity check for the reduced issue surface.
 - Focused CLI tests plus `atelier lint` and `atelier export --check`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

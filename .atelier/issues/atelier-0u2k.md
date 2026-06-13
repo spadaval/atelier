@@ -23,17 +23,11 @@ updated_at: "2026-06-12T23:11:41.000674030+00:00"
 
 Make CLI next actions reliable, context-aware, and testable. Bad next actions
 send agents into obsolete commands or irrelevant validators.
-
-## Outcome
-
 - Next actions include intent labels and current-state reasons.
 - Next actions do not recommend removed, hidden, or internal commands.
 - Next actions vary correctly for active work, blocked work, missing evidence,
   malformed issues, dirty worktrees, and ready work.
 - Shared next-action helpers format actions but command code owns the context.
-
-## Evidence
-
 - Transcript tests cover next actions for no active work, active work, blocked
   work, malformed issues, missing evidence, dirty worktree, ready work, and
   closeout-ready work.
@@ -42,3 +36,11 @@ send agents into obsolete commands or irrelevant validators.
 
 - Run focused CLI output tests that assert intent labels and current-state
   reasons are present.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

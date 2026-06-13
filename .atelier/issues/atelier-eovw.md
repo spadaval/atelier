@@ -26,20 +26,22 @@ transition then rejects the freshly created issue as unmigrated and tells the
 operator to rerun `atelier workflow migrate-statuses`.
 
 This follow-up came from independent validation of `atelier-fyms`.
-
-## Outcome
-
 - New issue creation uses the configured workflow `initial_status` for the
   issue type, such as `todo` for the starter policy.
 - A freshly created issue in a workflow-enabled repository can immediately run
   `atelier issue transition <id> --options` and `atelier start <id>` without a
   one-off migration.
 - Existing status migration behavior remains available for legacy records.
-
-## Evidence
-
 - Focused CLI test or transcript creates an issue after `atelier workflow init`
   and `atelier workflow migrate-statuses`, then proves the new issue is already
   in the configured initial workflow state.
 - Regression proof shows `atelier workflow migrate-statuses` still maps legacy
   `open`, `closed`, and `archived` records as before.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

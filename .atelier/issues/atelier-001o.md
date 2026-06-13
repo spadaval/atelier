@@ -31,13 +31,7 @@ updated_at: "2026-06-11T19:54:14.390172050+00:00"
 ## Description
 
 Add an optional terminal UI for browsing Atelier state after Mission Control projection data is stable. The UI should consume existing command/projection APIs instead of owning a separate state model.
-
-## Outcome
-
 The TUI can load from deterministic Mission Control projection output, browse plan/backlog/mission views without corrupting tracker state, handles missing projection fields predictably, and has fixture-backed rendering or state tests for representative mission, backlog, blocker, plan-drift, and validation-failure states. Docs state that the CLI and JSON remain the primary agent interface.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -49,9 +43,6 @@ The TUI can load from deterministic Mission Control projection output, browse pl
 - `atelier export --check`
 
 - `atelier doctor`
-
-## Notes
-
 ### Scope
 
 - Provide a TUI entry point such as `atelier ui` or `atelier mission-control tui`.
@@ -59,3 +50,11 @@ The TUI can load from deterministic Mission Control projection output, browse pl
 - Include keyboard navigation, filtering/search, record detail views, and copyable IDs/commands for agent handoff.
 - Keep mutating operations narrow at first, such as claim/open/show commands, unless workflow validation and confirmation behavior are explicit.
 - Degrade cleanly when mission, plan, evidence, workflow, or worktree records are not implemented yet.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

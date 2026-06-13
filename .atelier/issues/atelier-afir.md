@@ -25,11 +25,13 @@ updated_at: "2026-06-11T18:48:51.129399578+00:00"
 ## Description
 
 Retire export_current_state as the normal command durability path after mutation-family epics are complete. Scope includes removing or narrowing compatibility writer calls, keeping explicit export/export --check repair behavior, updating diagnostics and docs, and proving no public durable mutation relies on a later export step for recovery. Acceptance: export remains a sync/check/repair surface; normal public mutations write via RecordStore; audit residue is documented; tests fail if representative commands mutate SQLite-only state.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

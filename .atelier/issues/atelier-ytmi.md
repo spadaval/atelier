@@ -23,11 +23,13 @@ updated_at: "2026-06-10T21:39:24.653948913+00:00"
 ## Description
 
 Prove primary help only shows core commands, removed commands fail as unknown, Agent Factory workflows still work, mission show works, and export/rebuild/lint/doctor are healthy.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -34,20 +34,19 @@ updated_at: "2026-06-11T14:41:58.053663209+00:00"
 ## Description
 
 Establish Atelier as a real fork of Chainlink, not just a copied codebase. Scope includes package/binary/resource/user-facing rename work, provenance documentation, and preservation of practical inherited tests.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Success Criteria
 
 - Package, binary, obvious resource paths, and user-facing text use the decided Atelier CLI name.
 - Provenance and architecture intent are documented.
 - Inherited tests that still apply are preserved or intentionally retired with notes.
 - `cargo fmt` and focused CLI tests pass or failures are tracked.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

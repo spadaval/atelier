@@ -43,9 +43,6 @@ mission: root status, normal start flow, history, prime, and issue transition
 options. Use the closed signpost decisions in `atelier-rqvv`, `atelier-v02t`,
 `atelier-vr9g`, `atelier-hggl`, and `atelier-bzts`; this epic should implement
 or explicitly supersede those decisions, not reopen them implicitly.
-
-## Outcome
-
 - Root `atelier status` shows checkout state, active work, active mission,
   tracker health, recent relevant activity, blockers, ready work, and
   active-mission-scoped next actions.
@@ -62,9 +59,6 @@ or explicitly supersede those decisions, not reopen them implicitly.
 - Any remaining workflow-validator implementation is hidden behind domain
   status/transition/closeout surfaces instead of appearing in normal help.
 - Help, docs, and tests agree on the implemented surfaces.
-
-## Evidence
-
 - Transcript tests cover empty and active root status, start behavior, finish or
   equivalent current-work completion behavior, issue transition/options output,
   and retained or removed history/prime behavior.
@@ -82,9 +76,14 @@ or explicitly supersede those decisions, not reopen them implicitly.
 
 - Run focused CLI integration tests for the repaired workflow signposts plus
   `atelier lint`.
-
-## Notes
-
 The product decisions for status, mission status/show, transitions, history, and
 prime are in closed decision records. This epic owns implementation and
 validation against those decisions.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

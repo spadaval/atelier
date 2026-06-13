@@ -27,13 +27,7 @@ updated_at: "2026-06-10T02:44:12.362979445+00:00"
 ## Description
 
 Replace assumption-specific relation commands with generic typed-link impact concepts. `cascade` and `falsify` should be removed, hidden, or superseded by typed-link impact commands once `atelier link` exists.
-
-## Outcome
-
 `cascade` and `falsify` are no longer the preferred public relation workflow; typed-link impact behavior covers the useful capability; docs explain migration from assumption/falsification-specific commands.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -45,3 +39,11 @@ Replace assumption-specific relation commands with generic typed-link impact con
 - `atelier export --check`
 
 - `atelier doctor`
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

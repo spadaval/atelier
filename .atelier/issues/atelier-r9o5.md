@@ -24,15 +24,17 @@ updated_at: "2026-06-13T01:17:15.095425741+00:00"
 ## Description
 
 Repair the broad-suite failure in test_full_issue_lifecycle. The lifecycle fixture still expects a bare close command to succeed, but current closeout rules require attached issue proof before an issue can close.
-
-## Outcome
-
 - The full lifecycle integration test supplies valid closeout proof before closing the issue.
 - The test still verifies the lifecycle surfaces for create, list, search, close, and show.
 - The default broad-suite fail-fast probe advances past the previous full lifecycle failure.
-
-## Evidence
-
 - cargo nextest run test_full_issue_lifecycle passes.
 - cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet advances past the previous full lifecycle failure.
 - atelier lint, atelier export --check, and git diff --check pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

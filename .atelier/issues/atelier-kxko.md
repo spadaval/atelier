@@ -26,11 +26,13 @@ updated_at: "2026-06-11T23:28:55.458093640+00:00"
 ## Description
 
 Change init/export scaffolding so .atelier/ canonical records and project config are tracked while runtime/cache subpaths are ignored. Acceptance: fresh init and migrated repos do not ignore all of .atelier/ and do not commit state.db or runtime diagnostics.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -57,13 +57,15 @@ Out of scope:
 - Mission, plan, or non-issue activity folders.
 - Replacing rich evidence records with activity entries.
 - Implementing the work in this planning pass.
-
-## Outcome
-
 - Child issues cover schema/storage, issue mutation writes, evidence references, history CLI, rebuild/export projection, one-off migration, docs, and end-to-end validation.
 - Dependencies keep validation and UI/query work behind the canonical activity format and persistence work.
 - Future agents can execute each child without needing the original chat plan.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

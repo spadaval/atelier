@@ -32,9 +32,6 @@ updated_at: "2026-06-12T21:32:57.668040024+00:00"
 
 Validate the sectioned issue workflow end to end after the contract,
 parser/rendering, enforcement, and migration tasks land.
-
-## Outcome
-
 - A newly created issue can be edited into the required sectioned format and
   shown cleanly by `atelier issue show`.
 - A malformed issue fails lint with actionable diagnostics.
@@ -43,9 +40,6 @@ parser/rendering, enforcement, and migration tasks land.
   required issue structure.
 - Documentation, tests, and actual command behavior agree on section names and
   required sections.
-
-## Evidence
-
 - Capture command transcripts for successful sectioned issue show, failing lint,
   failing start, and closeout blocked by malformed linked work.
 - Attach durable `atelier evidence` records for the final validation run.
@@ -53,8 +47,13 @@ parser/rendering, enforcement, and migration tasks land.
 - Run focused CLI integration tests for section parsing, lint, start, and
   closeout.
 - Run `atelier export --check`, `atelier lint`, and `atelier doctor`.
-
-## Notes
-
 This validation child should stay blocked until the implementation and migration
 children are complete.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

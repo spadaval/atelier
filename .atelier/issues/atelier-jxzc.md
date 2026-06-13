@@ -23,9 +23,6 @@ updated_at: "2026-06-13T15:59:35.719873146+00:00"
 ## Description
 
 Harden issue worktree setup and active-work association so failed runtime setup cannot partially claim or start unrelated work. Provide a clear repair path for stale active-work association after interrupted or failed subagent runs.
-
-## Outcome
-
 - `atelier worktree for <issue-id>` does not claim, start, or otherwise mutate
   lifecycle state until the worktree and runtime active-work association are
   successfully established.
@@ -36,9 +33,6 @@ Harden issue worktree setup and active-work association so failed runtime setup 
 - Agent Factory guidance requires isolated issue worktrees for mutating
   subagents unless the assignment explicitly explains why shared checkout work
   is safer.
-
-## Evidence
-
 - Focused test or transcript simulates failed runtime association and proves no
   unrelated issue is claimed or started.
 - Transcript proves the repair command or documented recovery path clears stale
@@ -47,3 +41,11 @@ Harden issue worktree setup and active-work association so failed runtime setup 
   isolation rule.
 - `atelier lint`, `atelier export --check`, `atelier doctor`, and relevant
   worktree/runtime tests pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

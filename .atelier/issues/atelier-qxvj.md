@@ -50,16 +50,18 @@ What:
 Out of scope:
 - The `atelier history` CLI rendering/query surface.
 - SQLite comment migration.
-
-## Outcome
-
 - Activity entries round-trip through structured parsing/serialization.
 - Collision handling refuses overwrites and produces deterministic suffixes for same-timestamp collisions.
 - Invalid schema versions, subject kinds, and event types are rejected with useful diagnostics.
 - Focused tests cover ID generation, sidecar paths, front matter, body handling, and collision behavior.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

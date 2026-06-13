@@ -39,15 +39,17 @@ Out of scope:
 - Full Mission Control TUI.
 - Large persistence-model changes.
 - Removing command surfaces.
-
-## Outcome
-
 - Mission detail output provides enough context to coordinate work without immediately falling back to multiple separate commands.
 - Issue detail output follows the same visual grammar as mission detail output.
 - Tests or snapshots cover representative records with hierarchy, blockers, activity, empty sections, and linked evidence.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

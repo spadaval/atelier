@@ -34,11 +34,13 @@ updated_at: "2026-06-11T23:41:24.065772739+00:00"
 ## Description
 
 Make lint parse committed .atelier/ records directly rather than trusting SQLite projection state. Acceptance: deleting state.db does not prevent canonical lint from validating committed records.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -27,11 +27,13 @@ updated_at: "2026-06-11T23:55:23.316750821+00:00"
 ## Description
 
 Keep doctor focused on runtime/install/cache health: cache exists, cache is fresh, rebuild possible, ignored paths correct, and runtime diagnostics. Acceptance: doctor complements lint without becoming the durability gate.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

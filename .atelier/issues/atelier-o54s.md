@@ -43,15 +43,17 @@ Out of scope:
 - Implementing every command output change.
 - Changing JSON schemas.
 - TUI work.
-
-## Outcome
-
 - A documented pattern exists for detail views, grouped list/queue views, compact hierarchy views, and empty/error states.
 - Formatter helper boundaries are clear enough for implementation epics to use without re-litigating style.
 - Any high-leverage unresolved choices are captured as artifact-update tasks before implementation depends on them.
 
 Recommended subskill: agent-factory plan or implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

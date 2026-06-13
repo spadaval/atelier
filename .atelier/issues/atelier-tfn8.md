@@ -32,15 +32,17 @@ Scope:
 - Update doctor/lint/rebuild reporting so missing or reset runtime data does not imply canonical record loss.
 - Define how sessions, locks, timers, usage, agent identity, and UI/cache state reference canonical record IDs without becoming durable project records.
 - Add migrations or docs for any tables that remain intentionally local-only.
-
-## Outcome
-
 RuntimeState responsibilities are documented in code or architecture docs; doctor distinguishes projection readiness from runtime-state availability; rebuild from .atelier-state recreates canonical query behavior while local runtime tables are empty or migrated safely; tests cover clean rebuild, missing runtime directory, and runtime table preservation or reset behavior.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test runtime or equivalent focused tests
 - cargo test
 - ./target/debug/atelier rebuild
 - ./target/debug/atelier doctor
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

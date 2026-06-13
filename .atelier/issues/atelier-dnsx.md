@@ -27,11 +27,13 @@ updated_at: "2026-06-12T00:20:54.636137024+00:00"
 ## Description
 
 Create a fixture with .atelier-state canonical records plus .atelier/state.db and prove migration produces tracked .atelier records and ignored runtime/cache files. Acceptance: source metadata and gitignore behavior are asserted.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

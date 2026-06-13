@@ -30,11 +30,13 @@ updated_at: "2026-06-08T21:23:39+00:00"
 ## Description
 
 Replace or augment backup-oriented export with canonical projections under `.atelier-state/`. `export --check` must compare live SQLite state with exported files and fail when projections are stale.
+Export output is deterministic across repeated runs; stale projection cases fail export --check; mutating command behavior is documented; tests cover no-op export, changed record export, stale check failure, and JSON/Markdown serialization stability.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Export output is deterministic across repeated runs; stale projection cases fail export --check; mutating command behavior is documented; tests cover no-op export, changed record export, stale check failure, and JSON/Markdown serialization stability.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

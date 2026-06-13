@@ -27,11 +27,13 @@ updated_at: "2026-06-11T13:11:00.683840448+00:00"
 ## Description
 
 Add a shared command telemetry wrapper that records start, finish, duration, status, command identity, workspace identity, and optional phase timings for every agent-facing command.
+successful and failed commands emit records when enabled, respect disabled telemetry, avoid sensitive argument capture by default, and have focused tests.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-successful and failed commands emit records when enabled, respect disabled telemetry, avoid sensitive argument capture by default, and have focused tests.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

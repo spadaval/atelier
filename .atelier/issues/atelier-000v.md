@@ -28,11 +28,13 @@ updated_at: "2026-06-10T14:51:59.743735264+00:00"
 ## Description
 
 Add helpers for normal work branches, optional mission branches, and work-associated worktrees while remaining a convenience layer over Git. Helpers should consume the configured branch/path policy and workflow setup hooks rather than launching or supervising agents.
+`atelier worktree for <id>` creates or locates the configured worktree; branch naming follows policy; implementation warns or fails on main according to policy; new worktrees rebuild SQLite from `.atelier-state`; setup hooks can prepare ignored caches or per-worktree local settings; tests or scripted evidence cover branch/worktree association and merge-helper behavior without launching an agent.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-`atelier worktree for <id>` creates or locates the configured worktree; branch naming follows policy; implementation warns or fails on main according to policy; new worktrees rebuild SQLite from `.atelier-state`; setup hooks can prepare ignored caches or per-worktree local settings; tests or scripted evidence cover branch/worktree association and merge-helper behavior without launching an agent.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

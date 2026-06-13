@@ -27,9 +27,6 @@ updated_at: "2026-06-13T23:16:24.916386399+00:00"
 checkout does not have `cargo machete` or `cargo udeps` installed. Decide
 whether Atelier should standardize one supported command, document the install
 path, or explicitly defer unused-dependency scanning as a repo policy.
-
-## Outcome
-
 - The repo has a named unused-dependency scan path with its prerequisites and
   owner clearly documented, or an explicit durable defer/not-applicable
   decision.
@@ -37,12 +34,17 @@ path, or explicitly defer unused-dependency scanning as a repo policy.
   neither is the expected surface.
 - Readiness docs and proof routing agree on how unavailable-tool results should
   be recorded.
-
-## Evidence
-
 - Documentation diff, config change, or tracker policy artifact names the
   selected unused-dependency scan path.
 - Command transcripts show the supported command running, or evidence records
   show the explicit defer/unavailable classification and owner.
 - `target/debug/atelier lint` and `target/debug/atelier export --check` pass
   after the policy update.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

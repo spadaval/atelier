@@ -35,9 +35,6 @@ missions through vague notes, stale tests, or unrelated green checks. The skill
 must teach orchestrators, implementers, validators, reviewers, and docs agents
 how to use Outcome/Evidence sections, attach proof, and run adversarial closeout
 audits.
-
-## Outcome
-
 - Agent Factory planning guidance requires executable work to include
   Description, Outcome, Evidence, and optional Notes sections once the section
   parser lands.
@@ -63,9 +60,6 @@ audits.
   normal closeout proof.
 - The skill distinguishes new repair issues from reopening misleading closed
   work.
-
-## Evidence
-
 - Patch the relevant Agent Factory skill procedure and standards files under
   `/root/.agents/skills/agent-factory/`, including reusable work-item authoring
   guidance.
@@ -80,10 +74,15 @@ audits.
 
 - Demonstrate the proof rule on representative ordinary, risky, broad, and
   parent-level examples.
-
-## Notes
-
 This task intentionally changes global skill behavior, not only this
 repository's local instructions. Keep the guidance general enough for Agent
 Factory, but use Atelier-specific command examples where the tracker binding
 requires them.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

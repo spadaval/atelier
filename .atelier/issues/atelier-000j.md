@@ -40,11 +40,13 @@ updated_at: "2026-06-11T14:41:58.783598154+00:00"
 Introduce first-class missions, milestone checkpoint records, plans, evidence, workflow validators, and typed links so generic issues stop carrying every durable concept. Preserve existing issue behavior where useful, but make mission intent, checkpoint state, execution plans, validation proof, workflow transition checks, and semantic links explicit records or commands.
 
 Milestones are validated target states, not work containers or super-epics. Workflow validators belong to workflow policy and enforce transitions; milestone records own validation criteria.
+Data model and CLI support first-class records for missions, milestone checkpoints, plans, evidence, workflow validators, and typed links, or explicitly staged subsets. Issues are no longer the only durable representation for non-issue concepts. Compatibility migration paths are defined where reasonable. Tests cover persistence, links, export/rebuild, JSON output, evidence validation, and workflow validator results.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Data model and CLI support first-class records for missions, milestone checkpoints, plans, evidence, workflow validators, and typed links, or explicitly staged subsets. Issues are no longer the only durable representation for non-issue concepts. Compatibility migration paths are defined where reasonable. Tests cover persistence, links, export/rebuild, JSON output, evidence validation, and workflow validator results.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -40,16 +40,18 @@ Scope:
 - Define command behavior when issue list/ready/search would read stale projection data.
 - Support full rebuild first; targeted reindex may be added if small and well-tested.
 - Do not migrate all mutating commands in this slice.
-
-## Outcome
-
 ProjectionIndex has an explicit module/API boundary; stale Markdown versus SQLite index state is detected before orchestration-relevant queries; stale-query behavior is deterministic and actionable; rebuild still recreates queryable issue/dependency/link state from .atelier-state; tests cover fresh, stale, missing, and repaired projection cases.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test projection or equivalent focused tests
 - cargo test
 - ./target/debug/atelier issue ready
 - ./target/debug/atelier export --check
 - ./target/debug/atelier doctor
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

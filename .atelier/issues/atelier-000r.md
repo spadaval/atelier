@@ -35,11 +35,13 @@ updated_at: "2026-06-11T21:18:56.564795162+00:00"
 ## Description
 
 Add configurable workflow policy, workflow validators, lint severities, waivers, and action-aware guidance while keeping process risk-scaled and overrideable. This milestone owns strict versus lightweight process rules, not ad hoc command-specific behavior.
+Configurable workflows define phases, transitions, required fields, done requirements, validation criteria requirements, evidence requirements, validators, lints, severities, and waivers. Small tasks can remain lightweight by default. Validator results are machine-readable. Start and close enforcement are driven by workflow policy. Scenario evidence covers strict, lightweight, and waiver flows.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Configurable workflows define phases, transitions, required fields, done requirements, validation criteria requirements, evidence requirements, validators, lints, severities, and waivers. Small tasks can remain lightweight by default. Validator results are machine-readable. Start and close enforcement are driven by workflow policy. Scenario evidence covers strict, lightweight, and waiver flows.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

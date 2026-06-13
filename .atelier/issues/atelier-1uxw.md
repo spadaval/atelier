@@ -46,9 +46,6 @@ The worker flow should be explicit: inspect assigned issue and parent mission or
 epic context; create or locate the worktree/branch; start tracked work; implement
 the owned slice; run the required proof; attach or record evidence; run the
 completion/transition command; leave durable handoff notes when not complete.
-
-## Outcome
-
 SKILL.md and relevant procedure/standard docs tell orchestrators and
 subagents to use Atelier mission, issue, work, worktree, evidence, workflow
 validate, lint, doctor, and export/check surfaces; guidance tells planners to
@@ -57,7 +54,12 @@ data-retention, migration, and public-contract choices before mission start and
 to block mission activation when such choices remain; guidance matches actual
 CLI behavior for transitions and evidence; legacy fallback language is clearly
 separated from the Atelier-dependent path.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -23,11 +23,13 @@ updated_at: "2026-06-11T18:59:47.721995696+00:00"
 ## Description
 
 Close out the RecordStore-owned mutation cutover with scenario-centered proof. Scope includes residue searches for export-as-writer and SQLite-first durable paths, fresh checkout rebuild, manual Markdown edit followed by query, invalid Markdown failure behavior, concurrent mutation/query behavior, mission/issue Agent Factory workflows, export freshness, lint, doctor, cargo nextest, cargo test, and extended ignored/property tests. Acceptance: all mission validation criteria are either proven by linked evidence or explicitly deferred with a follow-up; mission can close with no linked ready/blocking work.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

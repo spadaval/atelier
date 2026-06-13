@@ -25,15 +25,17 @@ updated_at: "2026-06-13T04:25:05.301875638+00:00"
 ## Description
 
 Reduce evidence-output noise while preserving inspectability. Mission and issue views should show concise evidence status by default and provide drill-down for full transcripts or audit details.
-
-## Outcome
-
 - Mission and issue output summarizes evidence by ID, result, kind, target, and covered outcomes or validation areas.
 - Full evidence bodies are available through an explicit drill-down command.
 - Long evidence records no longer dominate default mission output.
-
-## Evidence
-
 - Snapshot or transcript tests cover default compact rendering and verbose drill-down.
 - Manual transcript uses a mission fixture with long evidence records and records enough context to explain why the default evidence output is or is not scannable.
 - `atelier lint`, `atelier export --check`, and relevant CLI tests pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

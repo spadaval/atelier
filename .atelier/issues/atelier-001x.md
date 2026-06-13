@@ -24,11 +24,13 @@ updated_at: "2026-06-11T19:54:14.931558766+00:00"
 ## Description
 
 Implement the first read-only terminal UI that consumes Mission Control projection output and provides mission, plan, backlog, blocker, validation, evidence, and detail views.
+the TUI loads projection JSON, supports keyboard navigation/search/filtering, handles missing fields, and does not mutate tracker state.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-the TUI loads projection JSON, supports keyboard navigation/search/filtering, handles missing fields, and does not mutate tracker state.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

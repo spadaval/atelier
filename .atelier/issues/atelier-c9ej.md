@@ -25,15 +25,17 @@ updated_at: "2026-06-13T23:40:41.445854702+00:00"
 ## Description
 
 Agent-facing docs are only useful when their commands still run. Add a lightweight validation path for AGENTS.md, AGENTFACTORY.md, docs command examples, and common setup/check commands so stale guidance is caught before handoff.
-
-## Outcome
-
 - A documented check or script validates the key agent-facing commands from AGENTS.md and AGENTFACTORY.md.
 - The validation path is fast enough for routine handoff and clear about what it does not cover.
 - Stale command examples produce actionable failures rather than quiet drift.
-
-## Evidence
-
 - File change introduces or documents the docs-command freshness check.
 - Command transcript shows the freshness check passing and demonstrates at least one representative checked command.
 - `atelier lint`, `atelier export --check`, and relevant focused tests pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

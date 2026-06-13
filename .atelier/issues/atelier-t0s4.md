@@ -27,11 +27,13 @@ updated_at: "2026-06-11T23:42:14.026415256+00:00"
 ## Description
 
 Replace scattered get_db/get_fresh_projection_db decisions with explicit access modes: projection query, canonical mutation, runtime-only, and health/repair. Acceptance: command entrypoints declare their mode and share common setup/failure behavior.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

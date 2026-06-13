@@ -33,15 +33,17 @@ What:
 
 Out of scope:
 - Changing behavior without matching implementation issues.
-
-## Outcome
-
 - Docs explain the canonical format well enough for a future agent to add or debug activity records.
 - Operator docs include migration-script usage and safety expectations.
 - Documentation matches implemented CLI flags and JSON behavior once the implementation issues land.
 
 Recommended subskill: agent-factory docs.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

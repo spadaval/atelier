@@ -31,9 +31,6 @@ updated_at: "2026-06-12T23:55:13.375529836+00:00"
 Make mission and issue closeout validation prove real product outcomes instead
 of only checking tracker freshness. The previous mission closed even though many
 claimed command behaviors were absent.
-
-## Outcome
-
 - Mission closeout validators can require linked work to have valid sections,
   named evidence records, expected command transcripts, and clean tracker state.
 - Mission status and closeout commands check mission-specific evidence
@@ -46,9 +43,6 @@ claimed command behaviors were absent.
   require operators to understand a workflow-validator subsystem.
 - Any remaining raw workflow validation command is hidden or scoped as an
   advanced/internal diagnostic; domain commands own normal closeout guidance.
-
-## Evidence
-
 - Tests prove a mission with missing command behavior/evidence cannot close.
 - Tests prove section lint failures in linked work block mission closeout.
 - Tests prove attached evidence can satisfy declared closeout requirements.
@@ -56,8 +50,13 @@ claimed command behaviors were absent.
   closeout blockers without recommending raw workflow validation.
 - Run focused validator tests, `atelier export --check`, `atelier lint`, and
   `atelier doctor`.
-
-## Notes
-
 This epic should use the parsed issue-section integration work from
 `atelier-40ou` instead of inventing separate closeout parsing.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

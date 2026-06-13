@@ -38,16 +38,18 @@ What:
 Out of scope:
 - Non-issue history domains.
 - Migrating legacy comments.
-
-## Outcome
-
 - Global and issue-scoped history return newest-first streams.
 - `--type`, `--since`, `--until`, `--limit`, and `--json` behave as documented.
 - Human output is readable and includes event type, timestamp, issue, actor/summary, body/detail, and evidence references where applicable.
 - Tests cover filtering, ordering, limits, JSON shape, invalid arguments, and empty history.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

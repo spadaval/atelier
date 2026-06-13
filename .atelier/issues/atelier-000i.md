@@ -25,17 +25,8 @@ updated_at: "2026-06-11T13:14:54.372653798+00:00"
 ## Description
 
 Resolve the deferred question of whether sessions/runs are exported, partially exported, or treated as local runtime metadata after the first workflow/evidence model exists.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 Deferred. Direct live agent-run tracking is out of scope for the current milestones. The first domain-model and Mission Control slices should not depend on durable run/session records.
@@ -50,3 +41,11 @@ Runs may eventually inform Mission Control, retry behavior, token accounting, an
 - Export summarized run metadata only.
 - Keep sessions local and project only aggregate state.
 - Make export behavior configurable by workflow.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

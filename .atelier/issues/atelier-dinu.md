@@ -37,13 +37,15 @@ Scope:
 Out of scope:
 - Hook integration cleanup.
 - Reworking record schemas.
-
-## Outcome
-
 - A fresh checkout with tracked .atelier records can rebuild .atelier/state.db.
 - export --check validates the new .atelier canonical paths.
 - No code path requires .atelier-state for normal operation.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

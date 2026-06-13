@@ -26,17 +26,8 @@ updated_at: "2026-06-11T20:35:35.900161156+00:00"
 ## Description
 
 Define the repo-scoped active mission model for Atelier. Specify lifecycle states, the one-active-mission invariant, switch/deactivate behavior, how multiple worktrees inherit active mission context, how non-mission issue tasks stay outside the rule, and what lint/merge validation catches when branches diverge. Acceptance: docs or tracker artifact names the lifecycle states and invariant; command behavior for mission start/switch/finish/status is specified; lint behavior for multiple active missions is specified; strict versus advisory behavior is risk-scaled.
-
-## Outcome
-
 Outcome was not specified in the legacy issue record.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Resolution
 
 Atelier has one active mission per checkout/worktree.
@@ -66,3 +57,11 @@ Atelier's durable state lives in Markdown inside the repository, repo-local
 canonical state is the only place this invariant can be reliably enforced.
 Keeping one active mission per checkout makes default commands obvious while
 still allowing normal Git branch/worktree isolation.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

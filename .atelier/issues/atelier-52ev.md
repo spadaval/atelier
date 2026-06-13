@@ -23,11 +23,13 @@ updated_at: "2026-06-11T16:26:29.793290391+00:00"
 ## Description
 
 Replace issue search's dependence on issues.description and comments.content with a metadata/search index that is rebuilt from RecordStore and activity sidecars. Keep issue list and ready queries on small metadata rows, and load Markdown only for selected detail results.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

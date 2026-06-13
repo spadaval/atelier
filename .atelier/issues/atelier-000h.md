@@ -26,11 +26,13 @@ updated_at: "2026-06-10T15:05:55.226416391+00:00"
 ## Description
 
 Close out the domain-model milestone by proving the first-class concepts and typed links work together and preserve intended compatibility.
+Classify each Milestone 4 criterion from SPEC.md; include persistence, export/rebuild, and JSON-output evidence for records and typed links; name deferred compatibility migrations.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Classify each Milestone 4 criterion from SPEC.md; include persistence, export/rebuild, and JSON-output evidence for records and typed links; name deferred compatibility migrations.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

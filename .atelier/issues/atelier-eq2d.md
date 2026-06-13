@@ -26,11 +26,13 @@ updated_at: "2026-06-11T04:35:54.302598608+00:00"
 ## Description
 
 Validate the mission end to end with command fixtures, workflow checks, and tracker health. Acceptance: tests prove JSON result mode is gone from representative commands; human output supports common planning/orchestration workflows; required cargo and atelier checks pass; evidence is recorded before closeout.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

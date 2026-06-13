@@ -32,9 +32,6 @@ updated_at: "2026-06-12T05:12:09.399587813+00:00"
 
 Implement the parser/model changes that turn known issue Markdown headings into
 named sections instead of treating the whole body as one description string.
-
-## Outcome
-
 - Canonical issue parsing exposes recognized body sections as structured issue
   data while preserving the original Markdown body for round-trip writes.
 - `atelier issue show <id>` renders recognized sections in a stable,
@@ -45,16 +42,18 @@ named sections instead of treating the whole body as one description string.
   section bodies.
 - The previous ad hoc split on the literal Acceptance Criteria heading is
   removed or replaced by the general section parser.
-
-## Evidence
-
 - Parser unit tests cover normal sections, unknown sections, duplicate
   recognized headings, empty sections, content before the first heading, and
   round-trip rendering.
 - CLI transcript tests cover `atelier issue show <id>` for a sectioned issue.
 - Run focused parser and CLI show tests.
-
-## Notes
-
 This task depends on the section contract. It should not enforce lint/start
 failures; enforcement belongs to the lint and workflow-gate child.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

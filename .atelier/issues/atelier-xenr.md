@@ -32,9 +32,6 @@ Remove redundant issue creation commands instead of keeping compatibility
 aliases. In scope: eliminate or fold `issue quick` into `issue create --work`,
 eliminate or fold `issue subissue` into `issue create --parent <id>`, and ensure
 help/docs present one obvious creation command.
-
-## Outcome
-
 - `atelier issue create "Title"` creates a valid sparse canonical Markdown
   issue that can be edited directly.
 - The default human output shows the new ID, canonical file path, and a focused
@@ -45,7 +42,12 @@ help/docs present one obvious creation command.
   surface rather than retained as compatibility aliases.
 - Agent Factory and repository guidance describe the workflow as: create the
   issue shell, edit the Markdown file, then lint/validate.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -30,18 +30,12 @@ updated_at: "2026-06-12T22:51:07.828862723+00:00"
 Replace generic validator defaults with target-aware validation policy. A
 mission, issue, evidence record, and tracker health check should not all default
 to the same durable-state validator.
-
-## Outcome
-
 - Validator selection depends on target kind and transition.
 - Mission closeout validation checks linked work, blockers, evidence, issue
   structure, lint, export freshness, and worktree cleanliness where relevant.
 - Issue start/close validation checks issue structure, blockers, and required
   evidence where relevant.
 - Raw validator names are implementation details behind domain commands.
-
-## Evidence
-
 - Evidence record `atelier-waei` captures unit tests for validator selection by
   issue start, issue close, mission closeout, evidence attachment, and tracker
   health target.
@@ -54,3 +48,11 @@ to the same durable-state validator.
 - Evidence record `atelier-waei` captures `cargo fmt -- --check`,
   `git diff --check`, `target/debug/atelier lint atelier-8o34`,
   `target/debug/atelier lint`, and `target/debug/atelier export --check`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

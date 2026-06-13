@@ -25,9 +25,6 @@ Mutation commands should state exactly what changed instead of relying on
 generic acknowledgements or generic next-command blocks. The output should be
 short, but it should identify the record, changed fields or relationships, the
 canonical file path when applicable, and any focused validation command.
-
-## Outcome
-
 - Define a common mutation acknowledgement shape for issue, mission, work,
   dependency, link, evidence, and plan mutations.
 - Mutations list concrete changes such as `status: open -> closed`,
@@ -38,7 +35,12 @@ canonical file path when applicable, and any focused validation command.
   artifact-update task.
 - Transcript tests prove representative mutation outputs are explicit and
   concise.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

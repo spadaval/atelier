@@ -27,9 +27,6 @@ updated_at: "2026-06-12T23:59:50.155104498+00:00"
 Validate the validation process itself with scenarios that should fail when
 agents try to close work without real proof. This is a behavioral check of the
 process, not a code review of one implementation slice.
-
-## Outcome
-
 - Scenarios cover missing proof, vague Evidence text, unrelated attached
   evidence, closed children with an unproven parent outcome, broad green tests
   that do not exercise the claim, docs/help drift, and a high-risk slice being
@@ -40,11 +37,16 @@ process, not a code review of one implementation slice.
 - The mission-wide adversarial validation pass cannot run as final proof until
   these validation-system scenarios are complete or explicitly deferred with an
   owner.
-
-## Evidence
-
 - Focused tests or transcripts for each validation failure scenario.
 - Evidence record attached to this validation issue with the scenario matrix
   and result classifications.
 - `atelier link list` or `atelier issue show` transcripts identify follow-up
   items for any scenario that still fails or is deferred.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

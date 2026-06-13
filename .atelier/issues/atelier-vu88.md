@@ -29,9 +29,6 @@ uses workflow transitions, local work association, branch/worktree state,
 clean-worktree checks, and evidence/closeout gates instead of remote lock sync.
 Remove the defunct implementation paths unless a retained caller has an
 explicit current product owner.
-
-## Outcome
-
 - `locks.rs`, `sync.rs`, `lock_check.rs`, and daemon remnants are deleted or
   reduced to a deliberately retained internal API with a documented owner.
 - Normal ready/start/create/worktree/Agent Factory flows do not call inherited
@@ -40,9 +37,6 @@ explicit current product owner.
   obsolete `.locks-cache` handling is removed or explicitly justified.
 - Tests and docs describe work association as the coordination model, not
   inherited lock sync.
-
-## Evidence
-
 - `rg` command output for `lock_check`, `SyncManager`, `LocksFile`,
   `.locks-cache`, `atelier locks`, `atelier sync`, and `daemon` classifies all
   remaining references as deleted, docs-only provenance, or intentionally owned.
@@ -55,9 +49,6 @@ explicit current product owner.
   owning issue or architecture artifact.
 - `cargo fmt -- --check`, relevant focused tests, `atelier lint`, and
   `atelier export --check` pass.
-
-## Notes
-
 Audit evidence already attached to parent `atelier-yqj6`: `src/commands/next.rs`
 imports `lock_check` and skips issues locked by other agents;
 `src/lock_check.rs` performs best-effort sync/fetch, reads
@@ -65,3 +56,11 @@ imports `lock_check` and skips issues locked by other agents;
 removed `atelier locks check`; `src/command_surface.rs` classifies `locks` and
 `sync` as removed roots; `src/sync.rs` still owns `.locks-cache` and
 `atelier/locks`; `src/daemon.rs` appears orphaned.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

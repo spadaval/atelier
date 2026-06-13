@@ -30,11 +30,13 @@ updated_at: "2026-06-10T15:05:38.585686715+00:00"
 Extend bulk apply beyond issue hierarchy so authored JSON can create or link missions, milestone checkpoints, plans, evidence, and typed semantic links when those record types are available.
 
 Bulk apply should support mission-centered graph construction: create a mission, attach checkpoint milestones and durable plans, create contributing epics/issues, and connect evidence or validation requirements with explicit typed links. This is the authored-plan path for materializing a coherent mission graph before durable IDs exist.
+internal references work across record kinds, typed-link validation is reused, unsupported record kinds fail clearly, and fixtures cover mission-to-plan, mission-to-milestone, mission-to-work, plan-to-work, and evidence-to-validation linkage.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-internal references work across record kinds, typed-link validation is reused, unsupported record kinds fail clearly, and fixtures cover mission-to-plan, mission-to-milestone, mission-to-work, plan-to-work, and evidence-to-validation linkage.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

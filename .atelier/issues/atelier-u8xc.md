@@ -36,15 +36,17 @@ Scope:
 Out of scope:
 - Implementing missing surfaces during validation except for tiny doc/test fixes.
 - Approving breaking JSON changes.
-
-## Outcome
-
 - Validation evidence demonstrates improved scanability across representative fixture graphs and terminal widths.
 - `cargo fmt -- --check`, targeted CLI tests, `git diff --check`, `atelier export --check`, and `atelier lint` pass or failures are documented with owner issues.
 - Documentation gives future contributors concrete rules and examples for human CLI output.
 
 Recommended subskill: agent-factory validate and docs.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

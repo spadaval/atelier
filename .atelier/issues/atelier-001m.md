@@ -31,13 +31,7 @@ updated_at: "2026-06-11T13:15:09.034591115+00:00"
 ## Description
 
 Record command interactions and timing in a global, local-only Atelier diagnostics store so slow commands can be identified without making run/session records part of committed durable state.
-
-## Outcome
-
 Telemetry is captured for mutating and read-only commands, can be disabled, survives across workspaces in a global local folder, has stable JSON query output, documents privacy/redaction behavior, and does not make `.atelier-state/` nondeterministic. Tests cover successful commands, failed commands, disabled telemetry, redaction, and slow-command queries.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -49,9 +43,6 @@ Telemetry is captured for mutating and read-only commands, can be disabled, surv
 - `atelier export --check`
 
 - `atelier doctor`
-
-## Notes
-
 ### Scope
 
 - Define a global diagnostics directory, expected to be outside `.atelier-state/`, with documented override and disable controls.
@@ -59,3 +50,11 @@ Telemetry is captured for mutating and read-only commands, can be disabled, surv
 - Redact or avoid sensitive command arguments by default; provide an explicit verbose mode for local debugging.
 - Add `atelier diagnostics slow` or equivalent command JSON that summarizes slow commands by workspace, command, and time window.
 - Keep the data model compatible with future run/session metadata without requiring export of raw interaction logs.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

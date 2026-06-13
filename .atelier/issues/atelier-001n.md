@@ -34,13 +34,7 @@ updated_at: "2026-06-10T15:05:38.605006117+00:00"
 ## Description
 
 Add an agent-facing bulk creation/update command for complex plans, similar in spirit to `jira plan`, that can materialize many issues and first-class records from one JSON file while preserving hierarchy, typed links, dependency sequencing, and the single project-scoped random record ID model.
-
-## Outcome
-
 A command such as `atelier plan apply <file.json>` or `atelier bulk apply <file.json>` validates and applies a multi-item plan with internal references, parent-child relationships, typed links, and blockers. Dry-run output is deterministic. Failed validation creates no partial graph. Applied records export and rebuild deterministically, and docs include a compact JSON example using project-scoped random IDs.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -52,9 +46,6 @@ A command such as `atelier plan apply <file.json>` or `atelier bulk apply <file.
 - `atelier export --check`
 
 - `atelier doctor`
-
-## Notes
-
 ### Scope
 
 - Define a versioned JSON schema for bulk graph plans with client_ref fields for intra-file references.
@@ -64,3 +55,11 @@ A command such as `atelier plan apply <file.json>` or `atelier bulk apply <file.
 - Provide `--dry-run`, stable JSON preview, validation errors with file paths/client_refs, and an apply summary mapping client_ref to durable IDs.
 - Apply atomically where practical; if full transactionality is not possible, document recovery behavior and emit enough mapping data for repair.
 - Keep import/rebuild separate: this is for authored work plans, not backup restore or explicit-ID migrations.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

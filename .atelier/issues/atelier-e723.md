@@ -10,10 +10,7 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-10qm"
-    type: "related"
+  relates: []
 schema: "atelier.issue"
 schema_version: 1
 closed_at: "2026-06-13T23:06:57.924078755+00:00"
@@ -25,15 +22,17 @@ updated_at: "2026-06-13T23:06:57.924078755+00:00"
 ## Description
 
 Factory-style readiness highlights missing complexity, dead-code, duplicate-code, TODO/debt, and unused-dependency detection. Decide and add a pragmatic Rust-focused guardrail set for Atelier without making normal work painfully slow.
-
-## Outcome
-
 - The repo has documented commands for complexity or large-function review, dead-code or unused-code detection, TODO/FIXME debt scanning, and unused dependency checks where practical.
 - The selected checks are classified as required handoff checks, extended checks, or advisory diagnostics.
 - Findings from the first run are fixed or converted into explicit tracker issues.
-
-## Evidence
-
 - Tooling/config file change or documentation file change names the selected commands and routing.
 - Command transcript from an rg debt-marker scan captures the baseline or confirms none.
 - Focused command transcripts for the selected Rust quality scans are attached, with follow-up issue IDs for failures.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

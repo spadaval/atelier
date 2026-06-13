@@ -21,11 +21,13 @@ updated_at: "2026-06-12T03:37:45.918283493+00:00"
 ## Description
 
 Investigate whether lint or targeted lint-like checks should run automatically during command dispatch. Acceptance: measure current lint cost on this repository and synthetic larger tracker states; classify cheap always-on checks versus full-project lint; recommend where automatic checks should run, where workflow validators should own enforcement, and where explicit atelier lint should remain the right command.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

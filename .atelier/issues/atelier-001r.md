@@ -25,11 +25,13 @@ updated_at: "2026-06-11T13:14:37.100757410+00:00"
 ## Description
 
 Add a command such as `atelier diagnostics slow` that summarizes global telemetry by command, workspace, time window, and duration threshold with stable JSON output.
+query output is deterministic for fixtures, supports thresholds/time windows, documents examples, and works when no telemetry exists.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-query output is deterministic for fixtures, supports thresholds/time windows, documents examples, and works when no telemetry exists.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

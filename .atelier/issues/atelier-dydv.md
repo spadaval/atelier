@@ -32,14 +32,16 @@ Scope:
 - Validate export --check, rebuild, issue list/show/ready, lint, and doctor against the new layout.
 - Confirm tracked config and canonical records appear in git status while DB/cache/locks remain ignored.
 - Capture any remaining compatibility gaps as follow-up issues.
-
-## Outcome
-
 - cargo fmt -- --check passes.
 - cargo nextest run passes or failures are documented with concrete follow-ups.
 - atelier export --check, atelier lint, and atelier doctor pass on the migrated layout.
 - The epic has evidence that .atelier-state is no longer required for normal operation.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

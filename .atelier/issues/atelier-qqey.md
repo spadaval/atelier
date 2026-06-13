@@ -24,15 +24,17 @@ updated_at: "2026-06-13T01:17:18.531699590+00:00"
 ## Description
 
 Repair the broad-suite failure in smoke::adversarial::test_boundary_desc_exact_64k. Creating an issue with an exact 64 KiB description writes canonical Markdown but projection refresh rejects the record, indicating that length validation is counting generated issue-section framing instead of the user-provided Description content.
-
-## Outcome
-
 - An issue description at the documented 65536-byte boundary succeeds and leaves the projection current.
 - An issue description over the boundary is still rejected.
 - Boundary smoke tests cover both accepted and rejected description lengths.
-
-## Evidence
-
 - `cargo nextest run test_boundary_desc_exact_64k test_boundary_desc_over_64k issue_record_renders_and_parses_deterministically issue_parser_contract_accepts_sectioned_body_without_legacy_arrays` passes.
 - cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet advances past the previous description-boundary failure.
 - atelier lint, atelier export --check, and git diff --check pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

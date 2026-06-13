@@ -33,11 +33,13 @@ updated_at: "2026-06-08T22:33:11.061279585+00:00"
 Run scenario-centered validation that Agent Factory can operate through Atelier after the repo and skill bindings are updated. Cover planning, ready-work discovery, issue creation, dependency edits, status updates, notes, closeout, validation evidence, sync/rebuild, and failure recovery.
 
 This validation should use real repository work where possible rather than only synthetic fixtures.
+Validation evidence includes command transcripts or tests for plan, ready, show, create, update, dependency add/remove, close, lint/check, export --check, rebuild, and sync; at least one real Agent Factory planning or docs task is completed using Atelier only; failures are classified into fixed, deferred with owner, or not applicable.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Validation evidence includes command transcripts or tests for plan, ready, show, create, update, dependency add/remove, close, lint/check, export --check, rebuild, and sync; at least one real Agent Factory planning or docs task is completed using Atelier only; failures are classified into fixed, deferred with owner, or not applicable.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

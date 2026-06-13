@@ -26,11 +26,13 @@ updated_at: "2026-06-10T15:05:38.571560376+00:00"
 ## Description
 
 Implement the first bulk apply slice for issue records: create multiple issues with parent-child hierarchy, dependencies, labels, priorities, issue types, descriptions, acceptance criteria, and notes from one JSON file. This slice must use the project-scoped random record ID allocator and must not create numeric or typed-prefix issue IDs.
+apply is atomic where practical, emits a client_ref-to-ID mapping using project-scoped random IDs, preserves deterministic export/rebuild, and includes rollback or recovery tests for failed validation.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-apply is atomic where practical, emits a client_ref-to-ID mapping using project-scoped random IDs, preserves deterministic export/rebuild, and includes rollback or recovery tests for failed validation.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

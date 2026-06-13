@@ -108,6 +108,7 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || first == "rules"
         || first == "rules.local"
         || relative_path == Path::new(CONFIG_FILE)
+        || relative_path == Path::new(RUNTIME_DB_FILE)
         || relative_path == Path::new("agent.json")
         || relative_path == Path::new("hook-config.json")
         || relative_path == Path::new("hook-config.local.json")
@@ -157,6 +158,6 @@ mod tests {
         assert!(!is_local_atelier_path(Path::new(
             "issues/.state.db.123.456.rebuild-tmp"
         )));
-        assert!(!is_local_atelier_path(Path::new("state.db")));
+        assert!(is_local_atelier_path(Path::new("state.db")));
     }
 }

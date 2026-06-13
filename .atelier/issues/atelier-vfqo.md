@@ -22,11 +22,13 @@ updated_at: "2026-06-11T04:31:01.850823710+00:00"
 ## Description
 
 Replace JSON command-output assertions with human-output, quiet-output, or direct state/projection assertions according to the inventory. Acceptance: tests cover removal behavior and the intended replacement workflow without scraping broad human text as a machine contract.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -38,9 +38,6 @@ Out of scope:
 - Implementing canonical activity sidecars themselves.
 - Implementing `atelier history`.
 - Adding new command-line flags for preview limits or formats in v1.
-
-## Outcome
-
 - Human issue show displays up to 5 newest issue activity entries when sidecars are available.
 - When sidecars are absent, issue show falls back to current notes/comments without failing.
 - Empty activity renders consistently with the rest of the improved view.
@@ -48,7 +45,12 @@ Out of scope:
 - Focused tests cover fallback behavior when sidecars are absent.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

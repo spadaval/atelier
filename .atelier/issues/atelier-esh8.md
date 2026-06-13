@@ -32,11 +32,13 @@ updated_at: "2026-06-11T04:31:02.400112498+00:00"
 ## Description
 
 Map every command-result JSON surface before implementation. Identify --json flags, output enums, formatter branches, tests, docs, examples, scripts, and any Agent Factory usage. Produce a policy note in tracker notes or docs that distinguishes command result JSON from diagnostic logs, canonical projection files, exports, and future APIs. Acceptance: inventory is complete enough to drive removals; any unresolved boundary is called out as a human-choice blocker; downstream implementation issues reference the inventory.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

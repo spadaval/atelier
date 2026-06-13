@@ -42,9 +42,6 @@ when canonical Markdown changes. Prior work added automatic rebuild for some
 happy paths, but current behavior still emits unbounded low-level stale-source
 lists, confuses invalid canonical records with rebuild races, and can surface
 temporary rebuild files or missing projection artifacts as user-facing blockers.
-
-## Outcome
-
 - Projection-backed reads automatically rebuild when canonical tracker records
   are valid, even when many canonical files changed.
 - Invalid canonical records fail with the real lintable record error, not a
@@ -58,9 +55,6 @@ temporary rebuild files or missing projection artifacts as user-facing blockers.
   runtime projection artifacts, and rebuild failure.
 - Mission/status/doctor surfaces summarize projection health without dumping
   hundreds of changed source paths.
-
-## Evidence
-
 - Add regression tests for many changed canonical files that prove output is
   bounded and automatic rebuild succeeds when canonical records validate.
 
@@ -78,9 +72,6 @@ temporary rebuild files or missing projection artifacts as user-facing blockers.
 
 - Run `atelier lint`, `atelier doctor`, and `atelier export --check` after the
   canonical migration and projection repair issues land.
-
-## Notes
-
 Related prior work:
 
 - `atelier-ncog` added transparent stale projection rebuild but did not fully
@@ -88,3 +79,11 @@ Related prior work:
 - `atelier-eprw` covered invalid Markdown blocking stale projection reads, but
   current command behavior still produces confusing stale-index context around
   the real canonical error.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

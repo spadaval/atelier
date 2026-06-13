@@ -35,16 +35,18 @@ What:
 Out of scope:
 - Designing mission or plan activity projections.
 - The one-off SQLite migration script.
-
-## Outcome
-
 - `atelier export --check` accounts for activity sidecars without spurious drift.
 - `atelier rebuild` reconstructs activity projections from `.atelier-state/` alone.
 - `issue show`, `atelier history`, and JSON output see the same activity before and after runtime DB deletion/rebuild.
 - Tests cover rebuild from canonical sidecars and export freshness behavior.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -31,13 +31,7 @@ updated_at: "2026-06-10T04:30:15.278404729+00:00"
 ## Description
 
 Add first-class durable plan commands for execution intent that must survive across sessions or agents.
-
-## Outcome
-
 `atelier plan create/show/revise/link` exists with stable JSON, plan revisions preserve reasoned history, plans export and rebuild deterministically, and plans can link to missions, milestones, issues, and evidence.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -49,3 +43,11 @@ Add first-class durable plan commands for execution intent that must survive acr
 - `atelier export --check`
 
 - `atelier doctor`
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

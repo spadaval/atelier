@@ -27,11 +27,13 @@ updated_at: "2026-06-09T20:33:19.746752141+00:00"
 ## Description
 
 Define exactly which Mission Control projection fields the TUI consumes, how missing fields degrade, and the initial navigation model for missions, backlog, blockers, plans, evidence gaps, validator failures, and decisions.
+design notes identify projection dependencies, read-only versus mutating boundaries, keyboard/navigation expectations, and fixture requirements.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-design notes identify projection dependencies, read-only versus mutating boundaries, keyboard/navigation expectations, and fixture requirements.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

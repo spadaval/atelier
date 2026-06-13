@@ -27,19 +27,21 @@ Repair the broad-suite failure in `test_close_all_is_durable_without_manual_expo
 The CLI integration helper currently registers every `atelier-...` token printed
 by commands, including evidence record IDs, so numeric issue references can
 resolve to non-issue records before proof attachment.
-
-## Outcome
-
 - CLI integration issue-reference registration only records IDs that correspond
   to canonical issue records under `.atelier/issues`.
 - Evidence IDs and other non-issue record IDs printed by commands no longer
   pollute numeric issue-reference resolution.
 - `test_close_all_is_durable_without_manual_export` passes alone and in the
   broad fail-fast default suite.
-
-## Evidence
-
 - Focused CLI integration test for close-all durable export/rebuild behavior.
 - Broad default nextest fail-fast probe advances past the previous close-all
   helper failure.
 - `atelier lint`, `atelier export --check`, and `git diff --check` pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

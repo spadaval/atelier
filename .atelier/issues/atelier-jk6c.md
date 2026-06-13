@@ -27,9 +27,6 @@ Repair the Beads JSONL import path so imported issue Markdown conforms to the
 current section contract. The broad suite currently fails because the fixture
 import writes `## Acceptance Criteria`, which `atelier lint` and issue parsing
 correctly reject as an unknown issue body section.
-
-## Outcome
-
 - `atelier import-beads` maps Beads `description` into the Atelier Description
   section and Beads `acceptance_criteria` into the Atelier Outcome section.
 - Imported issues include a concrete Evidence section that names import
@@ -39,10 +36,15 @@ correctly reject as an unknown issue body section.
 - The failing broad-suite test `test_import_beads_jsonl_fixture_round_trip`
   passes, and focused import tests assert that `Acceptance Criteria` is not
   emitted as a Markdown section.
-
-## Evidence
-
 - Focused import unit and CLI integration tests for Beads fixture import.
 - `cargo nextest run test_import_beads_jsonl_fixture_round_trip` passes.
 - `atelier lint`, `atelier export --check`, `git diff --check`, and the
   default broad-suite failure probe pass after the repair.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -30,15 +30,17 @@ updated_at: "2026-06-13T04:09:00.906432994+00:00"
 ## Description
 
 Define the reduced mission/operator command model before implementation. Decide whether mission audit becomes a status mode, a closeout mode, or an advanced diagnostic, and document the normal operator path.
-
-## Outcome
-
 - The command contract identifies the primary mission status surface and its default, verbose, and closeout/audit behaviors.
 - Normal output requirements are defined for draft, ready, active, blocked, close-ready, and closed missions.
 - Help and docs describe when to use drill-down commands instead of raw workflow diagnostics.
-
-## Evidence
-
 - File-change review of product or architecture docs shows the command contract.
 - Transcript artifacts or expected-output test fixtures cover each mission state.
 - Review artifact records the human choice on the fate of `mission audit` before dependent implementation begins.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -31,11 +31,13 @@ updated_at: "2026-06-11T23:49:02.590937457+00:00"
 ## Description
 
 Implement one freshness policy that checks source hash/mtime/size metadata and refreshes the ProjectionIndex from Markdown when safe. Acceptance: query commands do not use stale SQLite when canonical Markdown changed.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

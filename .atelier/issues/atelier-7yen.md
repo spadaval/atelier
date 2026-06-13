@@ -41,9 +41,6 @@ updated_at: "2026-06-12T21:19:32.235226646+00:00"
 
 Make evidence collection cheap and explicit so agents attach real proof instead
 of writing summaries that cannot be audited.
-
-## Outcome
-
 - Operators can capture command output as an evidence record without manual
   copy/paste.
 - Evidence records can be attached to issues, epics, and missions in the same
@@ -51,9 +48,6 @@ of writing summaries that cannot be audited.
 - Evidence summaries identify command, exit status, timestamp, and target.
 - Failed commands can be captured as failing or blocked evidence without being
   mistaken for pass proof.
-
-## Evidence
-
 - CLI tests cover capturing passing, failing, and blocked command transcripts as
   evidence records and attaching them to issues, epics, and missions.
 
@@ -63,3 +57,11 @@ of writing summaries that cannot be audited.
   target, result, and bounded output summary.
 
 - Run focused evidence command tests.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

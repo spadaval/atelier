@@ -23,11 +23,13 @@ updated_at: "2026-06-11T22:23:53.217491220+00:00"
 ## Description
 
 No legacy description text was specified.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

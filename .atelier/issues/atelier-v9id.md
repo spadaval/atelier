@@ -28,9 +28,6 @@ Run a mission-wide adversarial validation pass after implementation work lands.
 This validation starts from the mission and epic Outcome sections, not from
 implementation summaries. The validator should try to prove that the claimed
 repairs are still missing, misleading, or only partially wired.
-
-## Outcome
-
 - Every mission validation criterion is mapped to concrete linked work,
   command transcripts, tests, docs, Agent Factory guidance, or attached evidence.
 - Every linked epic Outcome line is classified as pass, fail, blocked,
@@ -47,9 +44,6 @@ repairs are still missing, misleading, or only partially wired.
 - Findings create or identify follow-up tracker items before mission closeout.
 - The validation pass is performed by an agent that did not implement the
   slices being validated.
-
-## Evidence
-
 - Attach a mission contract-audit evidence record that maps mission and epic
   Outcome lines to proof.
 
@@ -71,9 +65,14 @@ repairs are still missing, misleading, or only partially wired.
 
 - Run `cargo fmt -- --check`, `git diff --check`, `atelier export --check`,
   `atelier lint`, and `atelier doctor`.
-
-## Notes
-
 This is not a code review. It is a behavioral closeout challenge. The validator
 should not fix defects while validating; failures become blocker findings or
 new repair work.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

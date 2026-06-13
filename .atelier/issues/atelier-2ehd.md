@@ -32,4 +32,4 @@ RecordStore currently owns record kind registry, issue sections, mission section
 
 - Architecture diff or review artifact shows the new module boundary and dependency direction.
 - Focused parser/render/rebuild tests pass for issue, mission, plan, and evidence fixtures.
-- cargo fmt -- --check and relevant cargo nextest slices pass.
+- `cargo fmt -- --check` and relevant cargo nextest slices pass.

@@ -24,9 +24,6 @@ updated_at: "2026-06-12T22:21:11.246588741+00:00"
 
 Define the validation subagent process so validation work proves outcomes rather
 than rubber-stamping implementation claims.
-
-## Outcome
-
 - Validation agents verify each Outcome line against observable evidence.
 - Validation agents inspect command help, docs, ignored tests, and stale tests
   where relevant.
@@ -34,9 +31,6 @@ than rubber-stamping implementation claims.
   evidence IDs or command transcripts.
 - Agent Factory validate guidance requires evidence attachment before declaring
   success.
-
-## Evidence
-
 - Update Agent Factory validate procedure.
 
 - Run a process review against a representative mission or epic that verifies
@@ -45,3 +39,11 @@ than rubber-stamping implementation claims.
 
 - Attach evidence showing the process catches at least one missing-proof or
   docs/help drift case that broad tests alone would not catch.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

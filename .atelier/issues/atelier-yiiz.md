@@ -26,11 +26,13 @@ updated_at: "2026-06-11T18:47:16.692189436+00:00"
 ## Description
 
 Move first-class record mutations onto RecordStore-owned Markdown writes before projection refresh. Scope includes missions, plans, evidence, record links, mission blockers/work links, plan revisions, evidence attachments, and bulk plan apply durable outputs. Out of scope: issue lifecycle and issue-only relationship tables. Acceptance: mission/plan/evidence command writes update Markdown first; record_links are projected from canonical relationships; detail/list/workflow validation survives rebuild; tests cover create/update/link/attach/revise/bulk apply and fresh checkout rebuild.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

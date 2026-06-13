@@ -26,11 +26,13 @@ updated_at: "2026-06-11T21:18:12.462311269+00:00"
 ## Description
 
 Support mechanical rules, lint rules, advisory guidance, severities (`info`, `warn`, `error`, `policy`), and explicit waivers surfaced close to the relevant action.
+Lint output includes severity and stable JSON; waivers require explicit reason and are visible in projections; action-aware guidance is scoped to the command being run; tests cover warning, error, policy, and waiver behavior.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Lint output includes severity and stable JSON; waivers require explicit reason and are visible in projections; action-aware guidance is scoped to the command being run; tests cover warning, error, policy, and waiver behavior.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

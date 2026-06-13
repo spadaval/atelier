@@ -32,11 +32,13 @@ updated_at: "2026-06-08T21:43:06+00:00"
 Define the minimum product contract required before Atelier can replace Beads for this repo and Agent Factory. Scope includes required commands, JSON shapes, persistence guarantees, import/export behavior, readiness semantics, dependency semantics, close/update flows, validation checks, and failure modes.
 
 This should distinguish replacement-critical features from later Atelier differentiators such as Mission Control richness, workflow policy, and worktree ergonomics.
+A documented MVP matrix maps Beads commands and Agent Factory operations to Atelier equivalents; each required command names text and JSON behavior; cutover blockers are listed with owning beads; non-blocking later features are explicitly deferred; the matrix is linked from AGENTFACTORY.md or docs so future agents know the replacement bar.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-A documented MVP matrix maps Beads commands and Agent Factory operations to Atelier equivalents; each required command names text and JSON behavior; cutover blockers are listed with owning beads; non-blocking later features are explicitly deferred; the matrix is linked from AGENTFACTORY.md or docs so future agents know the replacement bar.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

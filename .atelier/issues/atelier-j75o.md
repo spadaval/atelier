@@ -22,11 +22,13 @@ updated_at: "2026-06-11T03:50:58.356184726+00:00"
 ## Description
 
 Update selected show/status/detail commands to expose the right status, ownership, blocker, evidence, validation, and provenance context in readable sections. Acceptance: output stays bounded, avoids raw key/value dumps, and includes next commands for related information that should remain separate.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

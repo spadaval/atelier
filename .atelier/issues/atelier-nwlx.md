@@ -39,13 +39,15 @@ Scope:
 
 Out of scope:
 - Designing a large configuration schema beyond the fields needed for current runtime and integration behavior.
-
-## Outcome
-
 - git status can show tracked .atelier/config.toml and canonical record files.
 - state.db and lock/cache/local identity artifacts remain ignored.
 - Documentation describes config as tracked project state, not local runtime state.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

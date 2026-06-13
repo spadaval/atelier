@@ -26,9 +26,6 @@ updated_at: "2026-06-12T23:53:41.853912369+00:00"
 
 Validate closeout proof gates through the domain commands that operators and
 agents are expected to use.
-
-## Outcome
-
 - Mission closeout fails when linked work is open, malformed, missing required
   proof, or contradicted by parent outcomes.
 - Issue closeout fails when required proof is missing or unrelated.
@@ -37,10 +34,15 @@ agents are expected to use.
 - Domain status and closeout commands report the same blocker classes and
   recovery actions.
 - Raw workflow validation is not required as the normal operator path.
-
-## Evidence
-
 - Positive and negative transcripts for issue closeout and mission closeout.
 - Tests proving missing evidence, unrelated evidence, malformed sections, open
   work, and dirty/stale state block closeout with actionable diagnostics.
 - Evidence record attached to this validation issue with the scenario matrix.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

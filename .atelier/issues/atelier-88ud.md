@@ -22,9 +22,6 @@ updated_at: "2026-06-13T15:57:12.599042636+00:00"
 ## Description
 
 Define and implement the operator behavior for installed atelier binaries that lag behind the canonical record schema or repository command contract. The goal is for agents to identify binary/schema drift quickly instead of switching blindly between installed atelier, target/debug/atelier, and cargo run.
-
-## Outcome
-
 - Atelier detects or clearly explains when the installed binary cannot read the
   current canonical record schema or repository command contract.
 - Operator output distinguishes stale installed-binary/schema drift from
@@ -33,9 +30,6 @@ Define and implement the operator behavior for installed atelier binaries that l
   use `target/debug/atelier`, and when `cargo run -- ...` is appropriate.
 - The normal tracker workflow still defaults to installed `atelier` unless local
   CLI behavior is being tested or binary/schema drift is proven.
-
-## Evidence
-
 - Command transcript or focused test demonstrates the stale-binary/schema-drift
   diagnostic or documented fallback behavior.
 - File-change review shows Agent Factory and repo docs agree on installed versus
@@ -44,3 +38,11 @@ Define and implement the operator behavior for installed atelier binaries that l
   reported as record errors, not stale-binary errors.
 - `atelier lint`, `atelier export --check`, docs whitespace checks, and relevant
   CLI tests pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -23,9 +23,6 @@ updated_at: "2026-06-13T04:26:36.954904843+00:00"
 ## Description
 
 Make projection rebuild and runtime-cache recovery reliable under parallel agent reads and writes. User-facing diagnostics should filter rebuild temp and journal artifacts, avoid false blockers where possible, and offer one clear recovery path.
-
-## Outcome
-
 - Projection rebuilds are safe under parallel agent reads and writes, with
   lock-aware behavior or clear retry semantics.
 - User-facing health and lint diagnostics filter rebuild temp files, SQLite
@@ -34,9 +31,6 @@ Make projection rebuild and runtime-cache recovery reliable under parallel agent
   mixture of stale projection, malformed record, and temp-file noise.
 - Read-only orientation commands remain usable or fail with actionable recovery
   guidance when projection rebuild contention occurs.
-
-## Evidence
-
 - Focused concurrency test or transcript covers parallel read/write or rebuild
   contention and records the expected recovery behavior.
 - Regression test proves rebuild temp and journal artifacts are ignored by
@@ -44,3 +38,11 @@ Make projection rebuild and runtime-cache recovery reliable under parallel agent
 - Transcript shows the recovery path from stale or missing projection state.
 - `atelier lint`, `atelier export --check`, `atelier doctor`, and relevant
   projection/runtime tests pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

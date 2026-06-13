@@ -56,9 +56,6 @@ stays limited to compact metadata such as id, title, status, type, priority,
 labels, and relationships. Remove issue-level YAML evidence fields such as
 `evidence_required`; evidence requirements belong in the Markdown Evidence
 section, and durable proof artifacts belong in attached evidence records.
-
-## Outcome
-
 - The issue parser exposes named issue body sections instead of only returning
   one description string.
 - `atelier issue show <id>` renders recognized sections in stable order and
@@ -81,9 +78,6 @@ section, and durable proof artifacts belong in attached evidence records.
 - Documentation explains the section contract, required sections, optional
   sections, and why Outcome describes the desired finished world rather than a
   mutable completion checklist.
-
-## Evidence
-
 - Add parser unit tests for recognized sections, unknown sections, duplicate
   headings, empty required sections, and round-trip rendering.
 - Add CLI integration tests proving `atelier lint`, `atelier lint <id>`, and
@@ -97,10 +91,15 @@ section, and durable proof artifacts belong in attached evidence records.
 - Run `atelier export --check`, `atelier lint`, and `atelier doctor`.
 - Attach durable `atelier evidence` records for closeout transcripts or broader
   validation runs when the implementation work closes.
-
-## Notes
-
 Do not make checklist syntax the completion mechanism in this first pass. Agents
 should not mark Outcome items complete by editing checkboxes. The Evidence
 section describes required proof; durable `atelier evidence` records are the
 attached artifacts produced during validation or closeout.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

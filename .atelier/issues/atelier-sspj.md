@@ -22,11 +22,13 @@ updated_at: "2026-06-11T04:32:20.071291374+00:00"
 ## Description
 
 Exercise planning, ready inspection, mission show, issue show, linking, blocking, export/check, lint, and doctor flows using the new human-first surfaces. Acceptance: record evidence that an agent can complete normal tracker workflows without command-result JSON.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

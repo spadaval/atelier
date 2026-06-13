@@ -28,9 +28,6 @@ updated_at: "2026-06-12T22:34:58.063491602+00:00"
 Repair history and prime surfaces according to the closed signpost contracts in
 `atelier-hggl` and `atelier-bzts`. The product decisions already exist; this
 work should implement or repair them rather than reopen the question.
-
-## Outcome
-
 - Repo-wide and scoped history views support the event sources, ordering,
   filters, bounded output, empty states, and drill-down behavior from
   `atelier-hggl`.
@@ -42,11 +39,16 @@ work should implement or repair them rather than reopen the question.
   reasons.
 - Docs/help/Agent Factory guidance agree on when to use history, prime, and
   status.
-
-## Evidence
-
 - CLI transcript tests for repo-wide history, mission-scoped history,
   issue-scoped history, empty filters, bounded output, and drill-down commands.
 - Prime transcript tests for empty checkout, active mission, and active work
   states.
 - Docs/help parity check against `atelier-hggl` and `atelier-bzts`.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

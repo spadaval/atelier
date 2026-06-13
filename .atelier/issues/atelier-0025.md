@@ -28,11 +28,13 @@ updated_at: "2026-06-10T01:14:14.098013254+00:00"
 ## Description
 
 Eliminate manifest.json as a canonical source-of-truth file. Rebuild should discover Markdown record files directly and validate path/id/schema/front matter without a generated inventory. Export/check should compare rendered records against the tree and report stale, missing, extra, malformed, duplicate, and dangling records without relying on manifest hashes.
+manifest.json is no longer required in .atelier-state; rebuild/export/check/lint work from discovered record files; tests cover missing manifest, extra files, duplicate IDs, path/id mismatch, schema mismatch, malformed front matter, and stale rendered output; docs and fixtures no longer describe manifest.json as canonical.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-manifest.json is no longer required in .atelier-state; rebuild/export/check/lint work from discovered record files; tests cover missing manifest, extra files, duplicate IDs, path/id mismatch, schema mismatch, malformed front matter, and stale rendered output; docs and fixtures no longer describe manifest.json as canonical.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

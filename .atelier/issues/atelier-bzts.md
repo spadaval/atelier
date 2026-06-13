@@ -26,9 +26,6 @@ Consider an `atelier prime` command that prints the most important workflow
 commands and recovery context for agents. Use `bd prime` as a reference point,
 but adapt the shape to Atelier's mission-first workflow, Markdown-first tracker
 state, workflow validators, and repository guidance.
-
-## Outcome
-
 - Decide whether `atelier prime` belongs in the product and how it differs from
   root `status`, help, docs, and Agent Factory guidance.
 - If accepted, specify the output sections: context recovery, core rules,
@@ -40,7 +37,12 @@ state, workflow validators, and repository guidance.
   or a small blend of both.
 - Transcript examples compare the intended output against the useful parts of
   `bd prime`.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

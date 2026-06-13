@@ -38,15 +38,17 @@ What:
 Out of scope:
 - Redesigning evidence storage or artifact backends.
 - Moving evidence bodies into issue activity files.
-
-## Outcome
-
 - Attaching evidence to an issue creates a valid `evidence_attached` activity entry.
 - The entry includes enough metadata for human-readable history and JSON consumers to locate the rich evidence record.
 - Tests cover pass/fail or result-bearing evidence references and missing evidence diagnostics.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -33,18 +33,12 @@ updated_at: "2026-06-12T23:18:39.342474480+00:00"
 Add a mission closeout audit that verifies mission outcomes against linked work
 and attached evidence instead of only checking that records are syntactically
 fresh.
-
-## Outcome
-
 - A mission closeout/audit command lists every mission Outcome item and its
   current proof status.
 - Outcome items without linked work or attached evidence are blocking failures.
 - The audit distinguishes open work, missing evidence, stale docs/tests, and
   unresolved blockers.
 - Mission closeout uses this audit before allowing status `closed`.
-
-## Evidence
-
 - CLI transcript tests cover missing proof, partial proof, and ready-to-close
 
 mission states.
@@ -52,3 +46,11 @@ mission states.
 - Tests prove a mission with unproven outcomes cannot close.
 
 - Run focused mission closeout tests.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

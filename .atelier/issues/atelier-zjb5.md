@@ -28,11 +28,13 @@ updated_at: "2026-06-11T04:31:25.247085781+00:00"
 ## Description
 
 Remove command-result JSON mode from the CLI after the boundary inventory is complete. Acceptance: relevant command args/help no longer expose --json for result rendering; JSON formatter/result branches and compatibility tests are removed or rewritten; quiet mode remains intentionally minimal; removed behavior has clear migration notes.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

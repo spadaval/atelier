@@ -34,13 +34,7 @@ updated_at: "2026-06-09T18:55:47.712538891+00:00"
 ## Description
 
 Classify the current CLI surface into core, compatibility, integration, and removal buckets. Cover `timer`, `usage`, `cpitd`, `daemon`, `archive`, `cascade`, `falsify`, backup import/export, changelog-on-close, flat aliases, locks, sessions, and milestones.
-
-## Outcome
-
 A durable doc or tracker note records the final disposition for each command family, names the intended replacement where one exists, and identifies any compatibility period or migration note required before implementation.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test` or a named focused substitute
@@ -52,3 +46,11 @@ A durable doc or tracker note records the final disposition for each command fam
 - `atelier export --check`
 
 - `atelier doctor`
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -30,21 +30,12 @@ updated_at: "2026-06-13T04:08:59.680155697+00:00"
 ## Description
 
 Define the small set of operator jobs the CLI should optimize for before changing commands. The taxonomy should keep the tool simple enough that humans and agents can use it correctly under pressure.
-
-## Outcome
-
 - Product docs define the normal operator jobs and the command families that own them.
 - The taxonomy distinguishes normal workflow commands from advanced diagnostics and destructive maintenance.
 - The design includes a red-tape check: command consolidation must reduce mistakes and cognitive load, not add ritual.
-
-## Evidence
-
 - File-change review of product CLI docs shows the taxonomy and red-tape check.
 - Review artifact includes representative workflows for a human operator and an Agent Factory worker.
 - `atelier lint`, `atelier export --check`, and docs whitespace check commands pass.
-
-## Notes
-
 Initial command audit candidates:
 
 - `evidence add` and `evidence capture` are two verbs for recording proof; the unified evidence command work should decide the normal spelling and attachment syntax.
@@ -60,3 +51,11 @@ Initial command audit candidates:
 - Installed binary/schema drift is a known mission hazard. The taxonomy should
   classify it as a health/recovery concern and keep the normal tracker command
   guidance aligned with Agent Factory.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

@@ -39,15 +39,17 @@ Scope:
 - Reuse the canonical layout and project-scoped record ID rules already documented.
 - Keep SQLite query behavior working while making the file API testable without a live tracker database.
 - Do not add mission, plan, evidence, or daemon behavior in this slice.
-
-## Outcome
-
 RecordStore can round-trip issue Markdown with deterministic output; path/id/schema/front matter validation errors are actionable; ID allocation checks collisions across discovered records; focused tests cover valid records, malformed front matter, path mismatch, duplicate IDs, deterministic rendering, and atomic replacement failure handling; docs references point to docs/architecture/markdown-first-record-store.md.
-
-## Evidence
-
 - cargo fmt -- --check
 - cargo test record_store or equivalent focused tests
 - cargo test
 - ./target/debug/atelier export --check
 - ./target/debug/atelier doctor
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

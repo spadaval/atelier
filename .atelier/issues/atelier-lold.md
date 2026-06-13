@@ -23,11 +23,13 @@ updated_at: "2026-06-10T21:39:24.641767824+00:00"
 ## Description
 
 Remove unreachable command modules, DB helpers, models, runtime files, migrations or tables where safe, and stale docs/tests after command removal.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

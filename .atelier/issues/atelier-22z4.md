@@ -25,11 +25,13 @@ updated_at: "2026-06-11T23:58:45.303708996+00:00"
 ## Description
 
 After the single-tree migration, audit SQLite rows again for body/payload remnants and classify each field as metadata, search snippet/index, runtime state, compatibility residue, or removal candidate. Acceptance: follow-up removals are tracked or closed as unnecessary.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

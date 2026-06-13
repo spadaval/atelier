@@ -22,11 +22,13 @@ updated_at: "2026-06-11T04:31:24.686731041+00:00"
 ## Description
 
 Update selected list/ready/search outputs where humans or agents need one-line context that JSON previously supplied. Acceptance: grouped rows remain compact, columns/metadata are consistent, long related data is summarized, and deeper calls are suggested rather than embedded wholesale.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

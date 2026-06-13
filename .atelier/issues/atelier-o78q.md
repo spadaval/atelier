@@ -39,15 +39,17 @@ Out of scope:
 - Mission Control TUI.
 - Replacing all list/ready output with a tree.
 - Altering durable hierarchy semantics.
-
-## Outcome
-
 - Users can inspect parent/child issue shape at a glance without massive output.
 - The compact view has predictable limits and clear cues when content is omitted or collapsed.
 - Tests cover deep trees, wide sibling sets, closed/open mixed subtrees, and narrow terminal widths.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

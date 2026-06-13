@@ -39,9 +39,6 @@ Out of scope:
 - Grouped work queue views.
 - New persistence fields.
 - Terminal-width measurement dependency for v1.
-
-## Outcome
-
 - Parent title appears in human output when a parent exists.
 - Subissue progress/counts are correct for direct children.
 - Dependency rows include title, status, and priority for each referenced issue.
@@ -50,7 +47,12 @@ Out of scope:
 - Focused helper tests cover dependency row formatting and subissue summary counts.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

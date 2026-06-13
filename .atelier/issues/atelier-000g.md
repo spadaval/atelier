@@ -30,11 +30,13 @@ updated_at: "2026-06-08T21:31:43+00:00"
 ## Description
 
 Add `rebuild` support that recreates local SQLite runtime state from committed exported files after checkout, merge, pull, or clone.
+A fresh worktree can rebuild SQLite from .atelier-state/; rebuild validates manifest/schema compatibility; missing or corrupt projection files produce actionable errors; round-trip tests prove export, delete runtime DB, rebuild, and query equivalence.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-A fresh worktree can rebuild SQLite from .atelier-state/; rebuild validates manifest/schema compatibility; missing or corrupt projection files produce actionable errors; round-trip tests prove export, delete runtime DB, rebuild, and query equivalence.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -25,9 +25,6 @@ updated_at: "2026-06-11T16:16:38.419539034+00:00"
 ## Description
 
 Reduce SQLite from a broad shadow copy of canonical Markdown into a metadata/index-only ProjectionIndex. The goal is to keep enough derived rows for fast lists, ready-work discovery, graph traversal, workflow checks, search inputs, and Mission Control summaries, while reading full record content directly from Markdown when detail views need it.
-
-## Outcome
-
 - ProjectionIndex ownership is documented as metadata/index-only, not a complete replication of Markdown content.
 
 - A table/field audit classifies existing SQLite columns as projection metadata, runtime state, compatibility residue, or removal candidates.
@@ -39,13 +36,7 @@ Reduce SQLite from a broad shadow copy of canonical Markdown into a metadata/ind
 - Rebuild, export --check, lint, doctor, and existing issue/mission workflows remain green.
 
 - Follow-up issues are created for any content-heavy tables or command paths that cannot be migrated in this slice.
-
-## Evidence
-
 Evidence was not specified in the legacy issue record.
-
-## Notes
-
 ### Scope
 
 - Audit SQLite tables and command reads to identify which fields are true query/index metadata versus replicated canonical content.
@@ -53,3 +44,11 @@ Evidence was not specified in the legacy issue record.
 - Move rich canonical content such as bodies, descriptions, plan/evidence data, activity text, and detailed record payloads out of the projection path where practical.
 - Update detail commands and future Mission Control panel assumptions to query metadata first, then load selected Markdown records from RecordStore.
 - Preserve full rebuild as a compatibility/fallback path while preparing targeted per-record refresh.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

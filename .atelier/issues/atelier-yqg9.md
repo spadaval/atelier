@@ -44,16 +44,18 @@ updated_at: "2026-06-13T23:10:38.230151438+00:00"
 ## Description
 
 Audit and simplify implementation boundaries that make the CLI and data model harder to change: oversized modules, generic record plumbing, inherited lock/sync residue, and duplicate SQLite-first paths.
-
-## Outcome
-
 - Command routing stays thin and command handlers own focused user intent.
 - Record parsing/rendering/validation has cohesive ownership by record kind or shared primitive.
 - Inherited or dead modules are deleted, isolated, or explicitly assigned to a future product contract.
 - SQLite projection code contains metadata/query behavior, not competing canonical payload ownership.
-
-## Evidence
-
 - Architecture review artifact classifies each large or suspect module by keep/split/delete/reconnect.
 - Residue searches for compatibility, locks/sync, data_json/body payloads, and SQLite-first mutation paths are attached.
 - Focused tests plus cargo fmt -- --check and relevant cargo nextest slices pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

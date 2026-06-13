@@ -35,9 +35,6 @@ Straighten out mission relationship semantics while the mission model changes.
 Mission work, blockers, validation, evidence, checkpoints, and supporting
 records should not depend on broad attachment buckets or "anything except a
 blocker" filtering.
-
-## Outcome
-
 - Supported mission relationship types and buckets are documented and enforced.
 - `atelier mission add-work`, blocker handling, validation links, evidence
   links, and status/show projections write and read explicit mission semantics.
@@ -45,11 +42,16 @@ blocker" filtering.
   section.
 - Unknown or invalid mission relationships produce clear diagnostics or remain
   visibly outside the work queue.
-
-## Evidence
-
 - Tests proving unrelated mission attachments are not displayed as linked work.
 - Tests or transcripts for mission work, blocker, validation, and evidence
   relationships.
 - Documentation diff aligning product language, canonical storage, and command
   behavior.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

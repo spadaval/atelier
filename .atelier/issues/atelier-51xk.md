@@ -25,9 +25,6 @@ Remove large body-field editing from `atelier issue update`. Long descriptions,
 rich acceptance criteria, notes, and similar fields should be edited directly in
 the canonical Markdown issue file so agents can use robust file-editing tools
 instead of fragile shell quoting.
-
-## Outcome
-
 - `issue update` no longer accepts description/body-style updates for rich
   issue text.
 - `issue update --help` explains that long-form issue text should be edited in
@@ -39,7 +36,12 @@ instead of fragile shell quoting.
   description updates.
 - Transcript tests cover the removed option, the help guidance, and the
   retained metadata-update path.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

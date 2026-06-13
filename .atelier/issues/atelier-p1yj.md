@@ -41,9 +41,6 @@ Out of scope:
 - Adding a new `issue view` command or `--format` flag.
 - Implementing hierarchy/dependency row expansion beyond existing IDs; that is owned by the dependency-context child.
 - Activity preview and command footer behavior; those are owned by the activity/footer child.
-
-## Outcome
-
 - Human `atelier issue show <id>` includes the richer header, metadata rows, labels, full description, acceptance criteria, and closed reason where applicable.
 - Human `atelier show <id>` uses the same improved display.
 - Existing terminal-safe rendering helpers are used where they fit; no new terminal-width dependency is introduced for v1.
@@ -51,7 +48,12 @@ Out of scope:
 - Nonexistent issue errors remain clear.
 
 Recommended subskill: agent-factory implement.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

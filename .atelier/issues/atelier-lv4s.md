@@ -29,15 +29,17 @@ updated_at: "2026-06-13T18:06:21.719386675+00:00"
 ## Description
 
 Implement workflow policy loading and validation for .atelier/workflow.yaml. The checker should validate strict schema shape, status categories, transition references, validator definitions and parameters, guidance templates, issue-type mappings, and every current issue status against the selected workflow.
-
-## Outcome
-
 - atelier workflow check reports policy and record health for .atelier/workflow.yaml.
 - Invalid YAML, unknown fields, unknown references, missing categories, invalid issue-type mappings, and issues whose status is not valid for their selected workflow are rejected with actionable messages.
 - Workflow policy is parsed per command and is not projected into SQLite in v1.
-
-## Evidence
-
 - Parser and checker unit tests cover valid policy and representative invalid policies.
 - CLI transcripts show workflow check passing and failing with stable, actionable errors.
 - atelier lint and atelier export --check pass after implementation.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

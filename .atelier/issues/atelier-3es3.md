@@ -29,11 +29,13 @@ updated_at: "2026-06-11T23:22:24.975963037+00:00"
 ## Description
 
 Centralize canonical .atelier record paths, runtime/cache paths, legacy .atelier-state discovery, state.db location, diagnostics paths, identity paths, and ignore policy helpers. Acceptance: command code no longer hard-codes .atelier-state or .atelier/state.db outside the layout boundary.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

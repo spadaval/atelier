@@ -35,13 +35,7 @@ updated_at: "2026-06-10T02:18:00.651875871+00:00"
 ## Description
 
 Replace inherited numeric and typed-prefix record identity with one canonical project-scoped random ID format such as `atelier-z1p8`. This is a hard cutover, not a compatibility layer.
-
-## Outcome
-
 All user-facing commands accept and emit only project-scoped random record IDs; canonical export filenames and graph references use the same IDs; rebuild preserves IDs exactly; concurrent record creation does not rely on a shared sequence counter; existing repository state is migrated; tests and fixtures no longer depend on numeric or typed-prefix record IDs.
-
-## Evidence
-
 - `cargo fmt -- --check`
 
 - `cargo test`
@@ -53,9 +47,6 @@ All user-facing commands accept and emit only project-scoped random record IDs; 
 - `atelier export --check`
 
 - `atelier doctor`
-
-## Notes
-
 ### Scope
 
 - Add a record ID allocator using `<project-slug>-<random-base36>` with a four-character default suffix and collision retry.
@@ -68,3 +59,11 @@ All user-facing commands accept and emit only project-scoped random record IDs; 
 
 - Maintaining numeric or typed-prefix aliases after cutover.
 - Semantic slugs as primary identity.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

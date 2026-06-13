@@ -23,11 +23,13 @@ updated_at: "2026-06-10T21:39:24.628351615+00:00"
 ## Description
 
 Delete non-core hidden groups such as timer, archive, milestone, session, daemon, cpitd, usage, agent, locks, sync, backup import, and backup export formats after classification.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

@@ -40,11 +40,13 @@ updated_at: "2026-06-12T03:36:03.367841847+00:00"
 ## Description
 
 Improve output usefulness without restoring command-result JSON. Acceptance: next actions explain why an agent would run them, empty states are concise, and quiet output remains minimal and script-friendly.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

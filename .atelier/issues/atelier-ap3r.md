@@ -22,11 +22,13 @@ updated_at: "2026-06-11T02:05:29.277336564+00:00"
 ## Description
 
 Scope: Update mission/plan/evidence list surfaces, plan show, evidence show, workflow validate, work status, and worktree status human output for consistent headings, metadata labels, empty states, and next/actionable context. Preserve JSON output.
+list/detail/status outputs are scan-friendly, avoid mixed raw fragments, and have focused tests for changed human output.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-list/detail/status outputs are scan-friendly, avoid mixed raw fragments, and have focused tests for changed human output.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

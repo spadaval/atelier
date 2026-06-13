@@ -28,18 +28,20 @@ Repair the broad-suite failure in
 creates temporary fixture issues and then expects `atelier lint` to pass, but
 the fixture issues use placeholder body sections that are correctly rejected by
 the current proof discipline.
-
-## Outcome
-
 - The command-result fixture creates issue bodies with concrete Description,
   Outcome, and Evidence sections.
 - `atelier lint` passes inside the fixture while the test still verifies that
   human command-result surfaces do not emit JSON payloads.
 - The default broad-suite fail-fast probe advances past the previous
   command-result fixture failure.
-
-## Evidence
-
 - `cargo nextest run test_command_result_json_mode_is_rejected_and_human_subset_works` passes.
 - `cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet` advances past the previous command-result fixture failure.
 - `atelier lint`, `atelier export --check`, and `git diff --check` pass.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

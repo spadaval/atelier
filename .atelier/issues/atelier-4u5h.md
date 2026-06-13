@@ -27,6 +27,11 @@ for workflow policy loading, issue done checks, issue status labels, readiness,
 and blocker classification. That reverses the intended dependency direction:
 product workflow semantics should not live inside one command group's
 presentation module.
+Audit evidence: `src/commands/mission.rs` calls
+`crate::commands::agent_factory::load_issue_workflow_policy`,
+`issue_is_done`, `issue_status_label`, `issue_status_category`,
+`issue_start_readiness`, and `issue_blocks_work`; the helpers live in
+`src/commands/agent_factory.rs`.
 
 ## Outcome
 

@@ -38,13 +38,15 @@ Scope:
 
 Out of scope:
 - Moving files or changing code paths.
-
-## Outcome
-
 - SPEC.md, CONTEXT.md, AGENTFACTORY.md, AGENTS.md, and canonical storage docs agree on the same layout.
 - The docs no longer present .atelier-state as the target name.
 - The contract explicitly says copied rule trees are not project state.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

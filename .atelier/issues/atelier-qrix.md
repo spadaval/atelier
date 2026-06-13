@@ -25,11 +25,13 @@ updated_at: "2026-06-12T00:07:06.603846521+00:00"
 ## Description
 
 Add fixtures/tests for duplicate IDs, ID/path mismatch, invalid schema/version, missing references, dependency cycles, invalid status/type/priority, malformed activity sidecar, unsupported committed file, and malformed front matter. Acceptance: each failure has a stable diagnostic.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-Outcome was not specified in the legacy issue record.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.

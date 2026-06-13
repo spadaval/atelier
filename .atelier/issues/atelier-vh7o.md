@@ -22,11 +22,13 @@ updated_at: "2026-06-11T02:32:54.218262026+00:00"
 ## Description
 
 Scope: Upgrade human `atelier mission list` output to action-first grouped overview with status summary, linked work counts, blocker counts, evidence gap information, and next commands. Preserve `--json` shape and existing `--status` filtering.
+human mission list sorts non-closed missions before closed missions by updated time descending; rows include updated date, work counts, blockers, and evidence state; empty filtered output includes next-command guidance; JSON mission list remains `{ data: [...] }`.
+Evidence was not specified in the legacy issue record.
 
 ## Outcome
 
-human mission list sorts non-closed missions before closed missions by updated time descending; rows include updated date, work counts, blockers, and evidence state; empty filtered output includes next-command guidance; JSON mission list remains `{ data: [...] }`.
+Outcome was not specified.
 
 ## Evidence
 
-Evidence was not specified in the legacy issue record.
+Evidence was not specified.
