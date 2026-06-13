@@ -6726,8 +6726,10 @@ fn test_first_class_records_export_rebuild_and_validate() {
         .join(format!("{plan_id}.md"));
     let plan_markdown = std::fs::read_to_string(&plan_path).unwrap();
     assert!(plan_markdown.contains("schema: \"atelier.plan\""));
+    assert!(!plan_markdown.contains("\ndata: "));
     assert!(plan_markdown.contains("Do the thing, then verify the projection."));
-    assert!(plan_markdown.contains("\\\"revision\\\":2"));
+    assert!(plan_markdown.contains("revision: 2"));
+    assert!(plan_markdown.contains("reason: \"projection-first\""));
     assert!(plan_markdown.contains(&format!("id: \"{mission_id}\"")));
 
     let evidence_path = dir

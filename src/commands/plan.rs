@@ -6,7 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
-use crate::models::{DomainRecord, Issue};
+use crate::models::{
+    DomainRecord, EvidenceRecordData, Issue, MilestoneRecordData, PlanRecordData, PlanRevision,
+};
 use crate::record_store::{
     AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, IssueSections,
     RecordStore, RelatesRelationship, RelationshipTarget, Relationships,
@@ -21,16 +23,18 @@ pub fn create(
     body: Option<&str>,
     reason: Option<&str>,
 ) -> Result<()> {
-    let data = json!({
-        "revision": 1,
-        "revisions": [{
-            "revision": 1,
-            "reason": reason.unwrap_or("initial"),
-            "body": body.unwrap_or("")
-        }]
-    });
+    let data = PlanRecordData {
+        revision: 1,
+        owner: None,
+        revisions: vec![PlanRevision {
+            revision: 1,
+            reason: reason.unwrap_or("initial").to_string(),
+            body: body.unwrap_or("").to_string(),
+        }],
+    };
     let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(KIND, title, "open", body, &data.to_string())?;
+    let created =
+        store.create_domain_record(KIND, title, "open", body, &serde_json::to_string(&data)?)?;
     refresh_projection(state_dir, db_path)?;
     let db = Database::open(db_path)?;
     let record = db.require_record(KIND, &created.record.id)?;
@@ -66,18 +70,14 @@ pub fn revise(
 ) -> Result<()> {
     let store = RecordStore::new(state_dir);
     let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut data: Value = serde_json::from_str(&current.record.data_json)?;
-    let next_revision = data["revision"].as_i64().unwrap_or(1) + 1;
-    data["revision"] = json!(next_revision);
-    let revision = json!({
-        "revision": next_revision,
-        "reason": reason.unwrap_or("revision"),
-        "body": body
+    let mut data = crate::record_store::normalized_plan_data(&current.record.data_json)?;
+    let next_revision = data.revision + 1;
+    data.revision = next_revision;
+    data.revisions.push(PlanRevision {
+        revision: next_revision,
+        reason: reason.unwrap_or("revision").to_string(),
+        body: body.to_string(),
     });
-    data["revisions"]
-        .as_array_mut()
-        .expect("plan revisions must be an array")
-        .push(revision);
     current.record.body = Some(body.to_string());
     current.record.data_json = serde_json::to_string(&data)?;
     current.record.updated_at = chrono::Utc::now();
@@ -220,8 +220,7 @@ fn print_heading(title: &str) {
 }
 
 fn data_revision(record: &DomainRecord) -> Result<i64> {
-    let data: Value = serde_json::from_str(&record.data_json)?;
-    Ok(data["revision"].as_i64().unwrap_or(1))
+    Ok(crate::record_store::normalized_plan_data(&record.data_json)?.revision)
 }
 
 #[derive(Debug, Deserialize)]
@@ -561,16 +560,6 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
     }
 
     for mission in &plan.records.missions {
-        let data = json!({
-            "constraints": [],
-            "risks": [],
-            "validation": [],
-            "milestones": [],
-            "plans": [],
-            "evidence": [],
-            "work": [],
-            "labels": sorted(mission.labels.clone()),
-        });
         create_bulk_record(
             &store,
             &mut resolved,
@@ -579,15 +568,15 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             "mission",
             &mission.title,
             mission.body.as_deref(),
-            data,
+            json!({}),
         )?;
     }
     for milestone in &plan.records.milestones {
-        let data = json!({
-            "desired_state": milestone.desired_state,
-            "scope": milestone.scope,
-            "validation_criteria": milestone.validation_criteria,
-        });
+        let data = MilestoneRecordData {
+            desired_state: milestone.desired_state.clone(),
+            scope: milestone.scope.clone(),
+            validation_criteria: milestone.validation_criteria.clone(),
+        };
         create_bulk_record(
             &store,
             &mut resolved,
@@ -596,19 +585,19 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             "milestone",
             &milestone.title,
             Some(&milestone.desired_state),
-            data,
+            serde_json::to_value(data)?,
         )?;
     }
     for record in &plan.records.plans {
-        let data = json!({
-            "revision": 1,
-            "owner": record.owner,
-            "revisions": [{
-                "revision": 1,
-                "reason": "bulk_apply",
-                "body": record.body
-            }]
-        });
+        let data = PlanRecordData {
+            revision: 1,
+            owner: record.owner.clone(),
+            revisions: vec![PlanRevision {
+                revision: 1,
+                reason: "bulk_apply".to_string(),
+                body: record.body.clone(),
+            }],
+        };
         create_bulk_record(
             &store,
             &mut resolved,
@@ -617,15 +606,29 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             "plan",
             &record.title,
             Some(&record.body),
-            data,
+            serde_json::to_value(data)?,
         )?;
     }
     for evidence in &plan.records.evidence {
-        let data = json!({
-            "evidence_type": evidence.evidence_type,
-            "result": evidence.result,
-            "artifact": evidence.artifact,
-        });
+        let data = EvidenceRecordData {
+            evidence_type: evidence.evidence_type.clone(),
+            captured_at: chrono::Utc::now(),
+            command: None,
+            path: evidence.artifact.clone(),
+            uri: None,
+            producer: None,
+            proof_scope: None,
+            agent_identity: None,
+            independence_level: None,
+            residual_risks: Vec::new(),
+            follow_up_ids: Vec::new(),
+            exit_code: None,
+            exit_status: Some(evidence.result.clone()),
+            success: Some(evidence.result == "pass"),
+            spawn_error: None,
+            output: None,
+            target: None,
+        };
         create_bulk_record(
             &store,
             &mut resolved,
@@ -634,7 +637,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             "evidence",
             &evidence.title,
             Some(&evidence.body),
-            data,
+            serde_json::to_value(data)?,
         )?;
     }
 

@@ -4,6 +4,7 @@ id: "atelier-ihz0"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "data-model"
 priority: "P1"
 relationships:
@@ -15,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Replace generic DomainRecord data_json plumbing with typed records"
-updated_at: "2026-06-13T21:59:32.458698001+00:00"
+updated_at: "2026-06-13T23:50:34.383513364+00:00"
 ---
 
 ## Description

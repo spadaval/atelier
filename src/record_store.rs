@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{DomainRecord, EvidenceOutputSummary, EvidenceRecordData, Issue};
+use crate::models::{
+    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, Issue, MilestoneRecordData,
+    PlanRecordData,
+};
 use crate::record_id;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -859,8 +862,11 @@ pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
     if spec.kind == "mission" {
         return render_mission_record(&record, &relationships, spec);
     }
-    if spec.kind == "evidence" {
-        return render_evidence_record(&record, &relationships, spec);
+    match spec.kind {
+        "evidence" => return render_evidence_record(&record, &relationships, spec),
+        "milestone" => return render_milestone_record(&record, &relationships, spec),
+        "plan" => return render_plan_record(&record, &relationships, spec),
+        _ => {}
     }
 
     let mut output = String::new();
@@ -1009,11 +1015,14 @@ pub fn parse_domain_record(
             display_state_path(&expected)
         );
     }
-    if spec.kind == "mission" {
-        return parse_mission_domain_record(front_matter, body, relative, spec, id);
-    }
-    if spec.kind == "evidence" {
-        return parse_evidence_domain_record(front_matter, body, relative, spec, id);
+    match spec.kind {
+        "mission" => return parse_mission_domain_record(front_matter, body, relative, spec, id),
+        "evidence" => return parse_evidence_domain_record(front_matter, body, relative, spec, id),
+        "milestone" => {
+            return parse_milestone_domain_record(front_matter, body, relative, spec, id)
+        }
+        "plan" => return parse_plan_domain_record(front_matter, body, relative, spec, id),
+        _ => {}
     }
     let data_json = require_scalar(&front_matter, "data", relative)?;
     let _: Value = serde_json::from_str(&data_json)
@@ -1083,9 +1092,20 @@ fn validate_domain_record(
         validate_mission_record(record, relative)?;
         return Ok(());
     }
-    if spec.kind == "evidence" {
-        validate_evidence_record(record, relative)?;
-        return Ok(());
+    match spec.kind {
+        "evidence" => {
+            validate_evidence_record(record, relative)?;
+            return Ok(());
+        }
+        "milestone" => {
+            validate_milestone_record(record, relative)?;
+            return Ok(());
+        }
+        "plan" => {
+            validate_plan_record(record, relative)?;
+            return Ok(());
+        }
+        _ => {}
     }
     let _: Value = serde_json::from_str(&record.record.data_json)
         .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
@@ -1346,6 +1366,231 @@ fn validate_evidence_record(record: &CanonicalDomainRecord, relative: &Path) -> 
     Ok(())
 }
 
+fn render_milestone_record(
+    record: &CanonicalDomainRecord,
+    relationships: &Relationships,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let data = normalized_milestone_data(&record.record.data_json)?;
+
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.record.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "desired_state", Some(&data.desired_state))?;
+    write_yaml_array(&mut output, "scope", &data.scope)?;
+    write_yaml_array(
+        &mut output,
+        "validation_criteria",
+        &data.validation_criteria,
+    )?;
+    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.record.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n\n");
+    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push('\n');
+    Ok(output)
+}
+
+fn parse_milestone_domain_record(
+    front_matter: BTreeMap<String, Value>,
+    body: &str,
+    relative: &Path,
+    spec: &RecordKindSpec,
+    id: String,
+) -> Result<CanonicalDomainRecord> {
+    let relationships = parse_relationships(&front_matter, relative)?;
+    let title = require_scalar(&front_matter, "title", relative)?;
+    let status = require_scalar(&front_matter, "status", relative)?;
+    let created_at = require_datetime(&front_matter, "created_at", relative)?;
+    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
+    let data = if front_matter.contains_key("data") {
+        normalized_milestone_data(&require_scalar(&front_matter, "data", relative)?)?
+    } else {
+        MilestoneRecordData {
+            desired_state: require_scalar(&front_matter, "desired_state", relative)?,
+            scope: optional_string_array(&front_matter, "scope", relative)?.unwrap_or_default(),
+            validation_criteria: optional_string_array(
+                &front_matter,
+                "validation_criteria",
+                relative,
+            )?
+            .unwrap_or_default(),
+        }
+    };
+    let body = if body.is_empty() {
+        None
+    } else {
+        Some(body.to_string())
+    };
+
+    Ok(CanonicalDomainRecord {
+        record: DomainRecord {
+            id,
+            kind: spec.kind.to_string(),
+            title,
+            status,
+            body,
+            data_json: serde_json::to_string(&data)?,
+            created_at,
+            updated_at,
+        },
+        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+        relationships,
+    })
+}
+
+fn validate_milestone_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
+    let data = normalized_milestone_data(&record.record.data_json)
+        .with_context(|| format!("Invalid milestone data in {}", display_state_path(relative)))?;
+    if data.desired_state.trim().is_empty()
+        && record
+            .record
+            .body
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
+        bail!(
+            "Milestone record {} must include desired_state or body",
+            display_state_path(relative)
+        );
+    }
+    validate_relationships(&record.relationships, relative)?;
+    Ok(())
+}
+
+fn render_plan_record(
+    record: &CanonicalDomainRecord,
+    relationships: &Relationships,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let data = normalized_plan_data(&record.record.data_json)?;
+
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.record.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_i64(&mut output, "revision", data.revision);
+    write_yaml_scalar(&mut output, "owner", data.owner.as_deref())?;
+    write_plan_revisions(&mut output, &data.revisions)?;
+    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.record.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n\n");
+    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push('\n');
+    Ok(output)
+}
+
+fn parse_plan_domain_record(
+    front_matter: BTreeMap<String, Value>,
+    body: &str,
+    relative: &Path,
+    spec: &RecordKindSpec,
+    id: String,
+) -> Result<CanonicalDomainRecord> {
+    let relationships = parse_relationships(&front_matter, relative)?;
+    let title = require_scalar(&front_matter, "title", relative)?;
+    let status = require_scalar(&front_matter, "status", relative)?;
+    let created_at = require_datetime(&front_matter, "created_at", relative)?;
+    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
+    let mut data = if front_matter.contains_key("data") {
+        normalized_plan_data(&require_scalar(&front_matter, "data", relative)?)?
+    } else {
+        PlanRecordData {
+            revision: require_i64(&front_matter, "revision", relative)?,
+            owner: optional_scalar(&front_matter, "owner")?,
+            revisions: optional_yaml_value(&front_matter, "revisions", relative)?
+                .unwrap_or_default(),
+        }
+    };
+    if data.revisions.is_empty() {
+        data.revisions.push(crate::models::PlanRevision {
+            revision: data.revision,
+            reason: "canonical".to_string(),
+            body: body.to_string(),
+        });
+    }
+    let body = if body.is_empty() {
+        data.revisions
+            .iter()
+            .find(|revision| revision.revision == data.revision)
+            .map(|revision| revision.body.clone())
+            .filter(|body| !body.is_empty())
+    } else {
+        Some(body.to_string())
+    };
+
+    Ok(CanonicalDomainRecord {
+        record: DomainRecord {
+            id,
+            kind: spec.kind.to_string(),
+            title,
+            status,
+            body,
+            data_json: serde_json::to_string(&data)?,
+            created_at,
+            updated_at,
+        },
+        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+        relationships,
+    })
+}
+
+fn validate_plan_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
+    let data = normalized_plan_data(&record.record.data_json)
+        .with_context(|| format!("Invalid plan data in {}", display_state_path(relative)))?;
+    if data.revision < 1 {
+        bail!(
+            "Plan record {} must have a positive revision",
+            display_state_path(relative)
+        );
+    }
+    if data.revisions.is_empty() {
+        bail!(
+            "Plan record {} must include at least one revision",
+            display_state_path(relative)
+        );
+    }
+    if !data
+        .revisions
+        .iter()
+        .any(|revision| revision.revision == data.revision)
+    {
+        bail!(
+            "Plan record {} current revision is missing from revisions",
+            display_state_path(relative)
+        );
+    }
+    validate_relationships(&record.relationships, relative)?;
+    Ok(())
+}
+
 fn validate_mission_status(status: &str, relative: &Path) -> Result<()> {
     match status {
         "draft" | "ready" | "active" | "closed" => Ok(()),
@@ -1490,6 +1735,12 @@ fn normalized_domain_data_json(kind: &str, data_json: &str) -> Result<String> {
         Ok(serde_json::to_string(&normalized_evidence_data(
             data_json,
         )?)?)
+    } else if kind == "milestone" {
+        Ok(serde_json::to_string(&normalized_milestone_data(
+            data_json,
+        )?)?)
+    } else if kind == "plan" {
+        Ok(serde_json::to_string(&normalized_plan_data(data_json)?)?)
     } else {
         Ok(data_json.to_string())
     }
@@ -1524,6 +1775,19 @@ fn normalized_evidence_data(data_json: &str) -> Result<EvidenceRecordData> {
         data.agent_identity = data.producer.clone();
     }
     data.follow_up_ids.sort();
+    Ok(data)
+}
+
+fn normalized_milestone_data(data_json: &str) -> Result<MilestoneRecordData> {
+    serde_json::from_str(data_json).map_err(Into::into)
+}
+
+pub fn normalized_plan_data(data_json: &str) -> Result<PlanRecordData> {
+    let mut data: PlanRecordData = serde_json::from_str(data_json)?;
+    if data.revision < 1 {
+        data.revision = 1;
+    }
+    data.revisions.sort_by_key(|revision| revision.revision);
     Ok(data)
 }
 
@@ -2507,6 +2771,13 @@ fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> 
     Ok(())
 }
 
+fn write_yaml_i64(output: &mut String, key: &str, value: i64) {
+    output.push_str(key);
+    output.push_str(": ");
+    output.push_str(&value.to_string());
+    output.push('\n');
+}
+
 fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result<()> {
     output.push_str(key);
     if values.is_empty() {
@@ -2517,6 +2788,30 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
     for value in values {
         output.push_str("- ");
         output.push_str(&serde_json::to_string(value)?);
+        output.push('\n');
+    }
+    Ok(())
+}
+
+fn write_plan_revisions(
+    output: &mut String,
+    revisions: &[crate::models::PlanRevision],
+) -> Result<()> {
+    output.push_str("revisions");
+    if revisions.is_empty() {
+        output.push_str(": []\n");
+        return Ok(());
+    }
+    output.push_str(":\n");
+    for revision in revisions {
+        output.push_str("- revision: ");
+        output.push_str(&revision.revision.to_string());
+        output.push('\n');
+        output.push_str("  reason: ");
+        output.push_str(&serde_json::to_string(&revision.reason)?);
+        output.push('\n');
+        output.push_str("  body: ");
+        output.push_str(&serde_json::to_string(&revision.body)?);
         output.push('\n');
     }
     Ok(())
@@ -2677,7 +2972,7 @@ mod tests {
             issue: Issue {
                 id: id.to_string(),
                 title: "Write RecordStore".to_string(),
-                description: Some(body.to_string()),
+                description: None,
                 status: "todo".to_string(),
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
@@ -2806,6 +3101,64 @@ mod tests {
                 }],
                 relates: Vec::new(),
             },
+        }
+    }
+
+    fn milestone_record(id: &str) -> CanonicalDomainRecord {
+        let data = MilestoneRecordData {
+            desired_state: "Typed milestone contract is in place.".to_string(),
+            scope: vec![
+                "Canonical front matter".to_string(),
+                "Projection metadata".to_string(),
+            ],
+            validation_criteria: vec!["RecordStore round-trip passes.".to_string()],
+        };
+        CanonicalDomainRecord {
+            record: DomainRecord {
+                id: id.to_string(),
+                kind: "milestone".to_string(),
+                title: "Typed Milestone".to_string(),
+                status: "open".to_string(),
+                body: Some("Typed milestone contract is in place.".to_string()),
+                data_json: serde_json::to_string(&data).unwrap(),
+                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
+                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
+            },
+            labels: Vec::new(),
+            relationships: Relationships::default(),
+        }
+    }
+
+    fn plan_record(id: &str) -> CanonicalDomainRecord {
+        let data = PlanRecordData {
+            revision: 2,
+            owner: Some("planning".to_string()),
+            revisions: vec![
+                crate::models::PlanRevision {
+                    revision: 1,
+                    reason: "initial".to_string(),
+                    body: "Initial plan.".to_string(),
+                },
+                crate::models::PlanRevision {
+                    revision: 2,
+                    reason: "refine".to_string(),
+                    body: "Refined plan.".to_string(),
+                },
+            ],
+        };
+        CanonicalDomainRecord {
+            record: DomainRecord {
+                id: id.to_string(),
+                kind: "plan".to_string(),
+                title: "Typed Plan".to_string(),
+                status: "open".to_string(),
+                body: Some("Refined plan.".to_string()),
+                data_json: serde_json::to_string(&data).unwrap(),
+                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
+                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
+            },
+            labels: Vec::new(),
+            relationships: Relationships::default(),
         }
     }
 
@@ -2946,6 +3299,102 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("agent_identity: \"gpt-5.4 implementer\""));
         assert!(text.contains("follow_up_ids:\n- \"atelier-follow\"\n"));
         assert!(text.contains("RecordStore evidence proof summary."));
+    }
+
+    #[test]
+    fn plan_record_renders_and_parses_deterministically_without_data_blob() {
+        let record = plan_record("atelier-plnn");
+        let spec = canonical_record_kind("plan").unwrap();
+        let path = canonical_record_path(spec, "atelier-plnn").unwrap();
+        let text = render_domain_record(&record).unwrap();
+        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert!(text.contains("schema: \"atelier.plan\""));
+        assert!(!text.contains("\ndata: "));
+        assert!(text.contains("revision: 2"));
+        assert!(text.contains("owner: \"planning\""));
+        assert!(text.contains("revisions:\n- revision: 1\n  reason: \"initial\""));
+        assert!(text.contains("  body: \"Refined plan.\""));
+        assert!(text.contains("Refined plan."));
+    }
+
+    #[test]
+    fn milestone_record_renders_and_parses_deterministically_without_data_blob() {
+        let record = milestone_record("atelier-mile");
+        let spec = canonical_record_kind("milestone").unwrap();
+        let path = canonical_record_path(spec, "atelier-mile").unwrap();
+        let text = render_domain_record(&record).unwrap();
+        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert!(text.contains("schema: \"atelier.milestone\""));
+        assert!(!text.contains("\ndata: "));
+        assert!(text.contains("desired_state: \"Typed milestone contract is in place.\""));
+        assert!(text.contains("scope:\n- \"Canonical front matter\""));
+        assert!(text.contains("validation_criteria:\n- \"RecordStore round-trip passes.\""));
+    }
+
+    #[test]
+    fn legacy_plan_and_milestone_data_records_load_into_typed_front_matter() {
+        let plan_spec = canonical_record_kind("plan").unwrap();
+        let plan_path = canonical_record_path(plan_spec, "atelier-pleg").unwrap();
+        let plan_text = r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-pleg"
+data: "{\"owner\":\"agent\",\"revision\":2,\"revisions\":[{\"body\":\"Initial\",\"reason\":\"initial\",\"revision\":1},{\"body\":\"Updated\",\"reason\":\"revise\",\"revision\":2}]}"
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates: []
+schema: "atelier.plan"
+schema_version: 1
+status: "open"
+title: "Legacy Plan"
+updated_at: "2026-06-10T13:00:00+00:00"
+---
+
+Updated
+"#;
+        let plan = parse_domain_record(plan_text, &plan_path, plan_spec).unwrap();
+        let rendered_plan = render_domain_record(&plan).unwrap();
+
+        assert!(!rendered_plan.contains("\ndata: "));
+        assert!(rendered_plan.contains("revision: 2"));
+        assert!(rendered_plan.contains("owner: \"agent\""));
+        assert!(rendered_plan.contains("  body: \"Updated\""));
+
+        let milestone_spec = canonical_record_kind("milestone").unwrap();
+        let milestone_path = canonical_record_path(milestone_spec, "atelier-mleg").unwrap();
+        let milestone_text = r#"---
+created_at: "2026-06-10T12:00:00+00:00"
+id: "atelier-mleg"
+data: "{\"desired_state\":\"Release gate\",\"scope\":[\"CLI\"],\"validation_criteria\":[\"Focused tests pass\"]}"
+relationships:
+  attachments: []
+  blocks: []
+  children: []
+  relates: []
+schema: "atelier.milestone"
+schema_version: 1
+status: "open"
+title: "Legacy Milestone"
+updated_at: "2026-06-10T13:00:00+00:00"
+---
+
+Release gate
+"#;
+        let milestone =
+            parse_domain_record(milestone_text, &milestone_path, milestone_spec).unwrap();
+        let rendered_milestone = render_domain_record(&milestone).unwrap();
+
+        assert!(!rendered_milestone.contains("\ndata: "));
+        assert!(rendered_milestone.contains("desired_state: \"Release gate\""));
+        assert!(rendered_milestone.contains("scope:\n- \"CLI\""));
+        assert!(rendered_milestone.contains("validation_criteria:\n- \"Focused tests pass\""));
     }
 
     #[test]

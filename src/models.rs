@@ -64,6 +64,32 @@ pub struct DomainRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlanRevision {
+    pub revision: i64,
+    pub reason: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlanRecordData {
+    pub revision: i64,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub revisions: Vec<PlanRevision>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MilestoneRecordData {
+    #[serde(default)]
+    pub desired_state: String,
+    #[serde(default)]
+    pub scope: Vec<String>,
+    #[serde(default)]
+    pub validation_criteria: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EvidenceStreamSummary {
     pub summary: String,
     pub bytes: usize,
