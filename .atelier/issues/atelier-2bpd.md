@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Close out repo-defined workflow mission"
-updated_at: "2026-06-13T17:37:01.775712131+00:00"
+updated_at: "2026-06-13T19:53:29.976654087+00:00"
 ---
 
 ## Description
