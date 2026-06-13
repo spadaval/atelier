@@ -525,6 +525,7 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
             "no_open_work",
             "evidence_attached",
             "no_open_blockers",
+            "validation_criteria_satisfied",
             "no_blocking_lints",
             "command_surface_current",
             "ignored_tests_reviewed",
@@ -834,13 +835,27 @@ fn evaluate_builtin_with_params(
         "ignored_tests_reviewed" => ignored_tests_reviewed(),
         "command_surface_current" => command_surface_current(),
         "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
-        "validation_criteria_satisfied" => Ok((
-            false,
-            "validation criteria records are not implemented in this staged slice".to_string(),
-        )),
+        "validation_criteria_satisfied" => {
+            validation_criteria_satisfied(db, target_kind, target_id)
+        }
         "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
+}
+
+fn validation_criteria_satisfied(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind == "mission" {
+        let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+        return crate::commands::mission::mission_contract_audit_gate(db, &state_dir, target_id);
+    }
+    Ok((
+        true,
+        format!("validation criteria closeout does not apply to {target_kind} records"),
+    ))
 }
 
 fn issue_sections_parseable(
@@ -1238,6 +1253,7 @@ mod tests {
                 "no_open_work",
                 "evidence_attached",
                 "no_open_blockers",
+                "validation_criteria_satisfied",
                 "no_blocking_lints",
                 "command_surface_current",
                 "ignored_tests_reviewed",

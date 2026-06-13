@@ -7608,6 +7608,7 @@ fn test_mission_closeout_uses_contract_audit() {
     );
     assert!(stdout.contains("Mission closeout blocked"));
     assert!(stdout.contains("contract audit failed"));
+    assert!(stdout.contains("validation criteria: incomplete"));
     assert!(stdout.contains(&format!("atelier mission audit {mission_id}")));
     assert!(stderr.contains("mission closeout blocked"));
 }
@@ -8370,6 +8371,8 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_out.contains("Advanced Validator Detail"));
     assert!(verbose_out.contains("advanced closeout validator failure"));
+    assert!(verbose_out.contains("validation_criteria_satisfied"));
+    assert!(verbose_out.contains("mission contract audit failed"));
 }
 
 #[test]

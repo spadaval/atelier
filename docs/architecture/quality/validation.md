@@ -283,6 +283,11 @@ Mission completion is valid only when all linked work is closed, required
 evidence is attached, configured transition gates pass, docs/help/Agent Factory
 command guidance has no drift, stale obsolete-command tests are explicitly
 owned or deferred, and the Git worktree is clean.
+The `validation_criteria_satisfied` closeout gate is Atelier-owned: for mission
+closeout it delegates to `atelier mission audit`, so missing parent coverage,
+missing validation evidence, and linked epic outcome gaps surface through
+mission status, audit, and closeout failure output rather than through Agent
+Factory prose alone.
 
 ## Scenario Proof
 

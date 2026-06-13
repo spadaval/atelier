@@ -264,7 +264,7 @@ Version 1 built-in validator names are fixed:
 | `durable_state_current` | none | Fails when canonical tracker state or required export freshness is stale for the transition. |
 | `evidence_attached` | `min_count` (required integer >= 1), `kind` (optional evidence kind) | Fails when the issue does not have enough attached evidence records matching the params. |
 | `review_complete` | none | Fails when the issue has not gone through the expected review path for the transition. |
-| `validation_criteria_satisfied` | none | Fails when the issue or parent closeout criteria required by the workflow remain unproven. |
+| `validation_criteria_satisfied` | none | For mission closeout, runs the mission contract audit and fails when authored mission validation or linked epic outcomes are not mapped to proof. For other targets, reports that no parent closeout criteria apply. |
 | `no_open_blockers` | none | Fails when blocking issue dependencies remain open. |
 | `no_blocking_lints` | none | Fails when tracker lint reports blocking defects for the issue or transition. |
 | `git_worktree_clean` | none | Fails when the current worktree has tracked or untracked changes that make closeout non-clean. |
@@ -366,6 +366,11 @@ This workflow is intentionally strict at close:
 - at least one evidence record must be attached;
 - blockers and blocking lints must be clear; and
 - durable tracker state and the worktree must be current enough for closeout.
+
+Mission closeout additionally evaluates the `validation_criteria_satisfied`
+gate through `atelier mission audit`. `atelier mission status` reports the
+gate as actionable validation-criteria output, while verbose status keeps the
+raw validator name available for advanced diagnostics.
 
 ## Lightweight Spike Workflow Example
 

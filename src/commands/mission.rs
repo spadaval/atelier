@@ -699,15 +699,15 @@ struct MissionContractAuditItem {
 }
 
 impl MissionContractAudit {
-    fn passed(&self) -> bool {
+    pub(crate) fn passed(&self) -> bool {
         self.items.iter().all(|item| item.passed)
     }
 
-    fn failure_count(&self) -> usize {
+    pub(crate) fn failure_count(&self) -> usize {
         self.items.iter().filter(|item| !item.passed).count()
     }
 
-    fn pass_count(&self) -> usize {
+    pub(crate) fn pass_count(&self) -> usize {
         self.items.iter().filter(|item| item.passed).count()
     }
 
@@ -1128,6 +1128,12 @@ fn closeout_validator_user_text(
             "needed",
             "assign owners or remove stale ignored tests",
         )),
+        "validation_criteria_satisfied" => Some((
+            "Validation Criteria",
+            "satisfied",
+            "incomplete",
+            "atelier mission audit {mission}",
+        )),
         "git_worktree_clean" => Some((
             "Worktree",
             "clean",
@@ -1250,6 +1256,32 @@ fn mission_contract_audit(
     }
 
     Ok(MissionContractAudit { items })
+}
+
+pub(crate) fn mission_contract_audit_gate(
+    db: &Database,
+    state_dir: &Path,
+    mission_id: &str,
+) -> Result<(bool, String)> {
+    let mission = db.require_record(KIND, mission_id)?;
+    let audit = mission_contract_audit(db, state_dir, &mission)?;
+    if audit.passed() {
+        Ok((
+            true,
+            format!(
+                "mission contract audit passed: {} pass, 0 fail",
+                audit.pass_count()
+            ),
+        ))
+    } else {
+        Ok((
+            false,
+            format!(
+                "mission contract audit failed: {} unresolved item(s); run `atelier mission audit {mission_id}`",
+                audit.failure_count()
+            ),
+        ))
+    }
 }
 
 fn mission_linked_epics(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
