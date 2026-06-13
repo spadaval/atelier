@@ -21,9 +21,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T19:34:49.866848598+00:00"
+status: "done"
 title: "Epic: Enforce configured issue workflow transitions"
-updated_at: "2026-06-13T19:34:28.752112032+00:00"
+updated_at: "2026-06-13T19:34:49.866848598+00:00"
 ---
 
 ## Description
