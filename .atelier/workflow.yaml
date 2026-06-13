@@ -1,0 +1,79 @@
+schema: atelier.workflow
+schema_version: 1
+
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
+
+statuses:
+  open:
+    category: todo
+  closed:
+    category: done
+  archived:
+    category: done
+
+validators:
+  durable_current:
+    builtin: durable_state_current
+  review_ready:
+    builtin: review_complete
+  proof_attached:
+    builtin: evidence_attached
+    params:
+      min_count: 1
+  blockers_clear:
+    builtin: no_open_blockers
+  lint_clear:
+    builtin: no_blocking_lints
+  closeout_clean:
+    builtin: git_worktree_clean
+
+guidance_templates:
+  close_with_proof:
+    format: markdown
+    template: |
+      Closing {{ issue.id }} requires attached evidence and no open blockers.
+  record_spike_outcome:
+    format: markdown
+    template: |
+      Record a concise close reason that captures what {{ issue.id }} learned
+      and what follow-up work remains.
+
+workflows:
+  standard_review_proof:
+    initial_status: open
+    done_statuses: [closed, archived]
+    transitions:
+      close:
+        from: [open]
+        to: closed
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - blockers_clear
+          - lint_clear
+          - durable_current
+          - closeout_clean
+        guidance: [close_with_proof]
+      archive:
+        from: [open]
+        to: archived
+
+  lightweight_spike:
+    initial_status: open
+    done_statuses: [closed]
+    transitions:
+      close:
+        from: [open]
+        to: closed
+        required_fields: [close_reason]
+        validators:
+          - review_ready
+          - durable_current
+        guidance: [record_spike_outcome]

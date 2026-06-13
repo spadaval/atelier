@@ -311,6 +311,11 @@ fn ensure_no_unsupported_canonical_files(
         if relative == Path::new("manifest.json") || relative == Path::new("graph.json") {
             continue;
         }
+        if relative == Path::new("workflow.yaml")
+            || relative == Path::new(crate::workflow_policy::WORKFLOW_POLICY_PATH)
+        {
+            continue;
+        }
         let in_canonical_dir = record_store::canonical_record_dirs()
             .iter()
             .any(|dir| relative.starts_with(dir));

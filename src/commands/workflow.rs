@@ -22,6 +22,25 @@ pub struct ValidatorResult {
     pub elapsed_ms: u128,
 }
 
+pub fn check(db: &Database) -> Result<()> {
+    let repo_root = repo_root()?;
+    let report = crate::workflow_policy::check(db, &repo_root)?;
+    println!("Workflow Check");
+    println!("==============");
+    println!(
+        "Path:           {}",
+        crate::workflow_policy::WORKFLOW_POLICY_PATH
+    );
+    println!("Policy:         pass");
+    println!("Issue Types:    {}", report.policy.issue_types.len());
+    println!("Statuses:       {}", report.policy.statuses.len());
+    println!("Validators:     {}", report.policy.validators.len());
+    println!("Workflows:      {}", report.policy.workflows.len());
+    println!("Record Health:  pass");
+    println!("Issues Checked: {}", report.issue_count);
+    Ok(())
+}
+
 pub fn validate(
     db: &Database,
     target_kind: &str,

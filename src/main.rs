@@ -14,6 +14,7 @@ mod sync;
 mod telemetry;
 mod test_inventory;
 mod utils;
+mod workflow_policy;
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
@@ -871,6 +872,8 @@ enum EvidenceCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
+    /// Validate .atelier/workflow.yaml policy and current issue-record health
+    Check,
     /// Evaluate workflow validators as an advanced diagnostic without mutating record state
     Validate {
         target_kind: String,
@@ -2236,6 +2239,7 @@ fn run() -> Result<()> {
         Commands::Workflow { action } => {
             let db = projection_query_db()?;
             match action {
+                WorkflowCommands::Check => commands::workflow::check(&db),
                 WorkflowCommands::Validate {
                     target_kind,
                     target_id,
@@ -2441,6 +2445,7 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
+            WorkflowCommands::Check => "workflow check",
             WorkflowCommands::Validate { .. } => "workflow validate",
         },
         Commands::Work { action } => match action {
