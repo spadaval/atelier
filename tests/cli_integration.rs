@@ -4167,6 +4167,90 @@ fn test_create_with_template() {
 }
 
 #[test]
+fn test_issue_create_unifies_type_and_template_defaults() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, help_out, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(help_out.contains("Work type/body preset"));
+    assert!(help_out.contains("Explicit work type"));
+
+    let (success, parent_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Parent task"]);
+    assert!(success, "parent create failed: {stderr}");
+    assert!(parent_out.contains("Created issue atelier-"));
+    let parent_id = issue_id_by_title(dir.path(), "Parent task");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Parented bug",
+            "--template",
+            "bug",
+            "--parent",
+            &parent_id,
+        ],
+    );
+    assert!(success, "parented bug create failed: {stderr}");
+    let bug_id = issue_id_by_title(dir.path(), "Parented bug");
+    let bug_record = std::fs::read_to_string(canonical_issue_path(dir.path(), &bug_id)).unwrap();
+    assert!(bug_record.contains("issue_type: \"bug\""));
+    assert!(
+        bug_record.contains("priority: \"P1\"")
+            || bug_record.contains("priority: high")
+            || bug_record.contains("priority: \"high\"")
+    );
+    assert!(bug_record.contains("- \"bug\""));
+    assert!(bug_record.contains("Steps to reproduce"));
+    let parent_record =
+        std::fs::read_to_string(canonical_issue_path(dir.path(), &parent_id)).unwrap();
+    assert!(parent_record.contains(&format!("id: \"{bug_id}\"")));
+
+    let (success, validation_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Validation work",
+            "--issue-type",
+            "validation",
+            "--description",
+            "Validation body",
+        ],
+    );
+    assert!(success, "validation create failed: {stderr}");
+    assert!(validation_out.contains("Type:     validation"));
+    let validation_id = issue_id_by_title(dir.path(), "Validation work");
+    let validation_record =
+        std::fs::read_to_string(canonical_issue_path(dir.path(), &validation_id)).unwrap();
+    assert!(validation_record.contains("issue_type: \"validation\""));
+    assert!(validation_record.contains("Validation body"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Conflicting work type",
+            "--template",
+            "bug",
+            "--issue-type",
+            "feature",
+        ],
+    );
+    assert!(!success, "conflicting create options should fail");
+    assert!(
+        stderr.contains("Conflicting work type options")
+            && stderr.contains("--issue-type feature")
+            && stderr.contains("--template bug"),
+        "conflict error should be actionable: {stderr}"
+    );
+}
+
+#[test]
 fn test_create_all_priorities() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

@@ -117,6 +117,15 @@ Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier lint <id>`, and focused
 drill-down commands rather than generic command dumps.
+`atelier issue create` has one work-type decision. Use `--issue-type` for the
+canonical type (`bug`, `closeout`, `epic`, `feature`, `spike`, `task`, or
+`validation`) or use a template preset whose default type is documented by the
+template name (`bug` -> `bug`, `feature` -> `feature`, research/investigation ->
+`spike`, audit -> `validation`, refactor/continuation -> `task`). Templates
+also provide default labels, priorities, and body scaffolding, and those
+defaults still apply when `--parent` or a matching explicit `--issue-type` is
+supplied. Conflicting type choices fail with guidance rather than silently
+creating a surprising record.
 
 First-class mission, milestone, plan, evidence, relationship, and work lifecycle
 commands are now core as a staged implementation. Mission,

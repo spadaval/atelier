@@ -322,13 +322,13 @@ enum IssueCommands {
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
-        /// Template (bug, feature, refactor, research)
+        /// Work type/body preset (bug, feature, refactor, research)
         #[arg(short, long)]
         template: Option<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
-        /// Issue type for Agent Factory parity
+        /// Explicit work type (bug, closeout, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Parent issue ID or imported source ID
@@ -1153,35 +1153,41 @@ fn issue_create_parts(
     description: Option<&str>,
     template: Option<&str>,
     labels: &[String],
-) -> Result<(String, Option<String>, Vec<String>, &'static str)> {
+    issue_type: Option<&str>,
+) -> Result<(String, Option<String>, Vec<String>, String)> {
     let mut labels = labels.to_vec();
-    let (final_priority, final_description) = if let Some(template_name) = template {
-        let template = commands::create::get_template(template_name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Unknown template '{}'. Available: {}",
-                template_name,
-                commands::create::list_templates().join(", ")
-            )
-        })?;
-        if !labels.iter().any(|label| label == template.label) {
-            labels.push(template.label.to_string());
-        }
-        let priority = if priority != "medium" {
-            priority
-        } else {
-            template.priority
-        };
-        let description = match (template.description_prefix, description) {
-            (Some(prefix), Some(user_description)) => {
-                Some(format!("{prefix}\n\n{user_description}"))
+    let (final_priority, final_description, template_issue_type) =
+        if let Some(template_name) = template {
+            let template = commands::create::get_template(template_name).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unknown template '{}'. Available: {}",
+                    template_name,
+                    commands::create::list_templates().join(", ")
+                )
+            })?;
+            if !labels.iter().any(|label| label == template.label) {
+                labels.push(template.label.to_string());
             }
-            (Some(prefix), None) => Some(prefix.to_string()),
-            (None, description) => description.map(str::to_string),
+            let priority = if priority != "medium" {
+                priority
+            } else {
+                template.priority
+            };
+            let description = match (template.description_prefix, description) {
+                (Some(prefix), Some(user_description)) => {
+                    Some(format!("{prefix}\n\n{user_description}"))
+                }
+                (Some(prefix), None) => Some(prefix.to_string()),
+                (None, description) => description.map(str::to_string),
+            };
+            (
+                priority.to_string(),
+                description,
+                Some(template_default_issue_type(template_name)),
+            )
+        } else {
+            (priority.to_string(), description.map(str::to_string), None)
         };
-        (priority.to_string(), description)
-    } else {
-        (priority.to_string(), description.map(str::to_string))
-    };
 
     if !commands::create::validate_priority(&final_priority) {
         bail!(
@@ -1189,7 +1195,28 @@ fn issue_create_parts(
             final_priority
         );
     }
-    Ok((final_priority, final_description, labels, "task"))
+    let final_issue_type = match (issue_type, template_issue_type) {
+        (Some(explicit), Some(default)) if explicit != default => {
+            bail!(
+                "Conflicting work type options: --issue-type {explicit} does not match --template {} (default type {default}). Choose one work type or use a matching template.",
+                template.unwrap_or("(none)")
+            );
+        }
+        (Some(explicit), _) => explicit.to_string(),
+        (None, Some(default)) => default.to_string(),
+        (None, None) => "task".to_string(),
+    };
+    Ok((final_priority, final_description, labels, final_issue_type))
+}
+
+fn template_default_issue_type(template: &str) -> &'static str {
+    match template {
+        "bug" => "bug",
+        "feature" => "feature",
+        "research" | "investigation" => "spike",
+        "audit" => "validation",
+        _ => "task",
+    }
 }
 
 fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
@@ -1296,48 +1323,28 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
             let atelier_dir = find_atelier_dir().ok();
-            if issue_type.is_some() || parent.is_some() {
-                commands::agent_factory::create_lifecycle(
-                    &state_dir,
-                    &db_path,
-                    commands::agent_factory::LifecycleCreateInput {
-                        title: &title,
-                        description: description.as_deref(),
-                        priority: &priority,
-                        issue_type: issue_type
-                            .as_deref()
-                            .or(template.as_deref())
-                            .unwrap_or("task"),
-                        labels: &label,
-                        parent: parent.as_deref(),
-                        work,
-                        quiet,
-                        atelier_dir: atelier_dir.as_deref(),
-                    },
-                )
-            } else {
-                let (final_priority, final_description, labels, issue_type) = issue_create_parts(
-                    &priority,
-                    description.as_deref(),
-                    template.as_deref(),
-                    &label,
-                )?;
-                commands::agent_factory::create_lifecycle(
-                    &state_dir,
-                    &db_path,
-                    commands::agent_factory::LifecycleCreateInput {
-                        title: &title,
-                        description: final_description.as_deref(),
-                        priority: &final_priority,
-                        issue_type,
-                        labels: &labels,
-                        parent: None,
-                        work,
-                        quiet,
-                        atelier_dir: atelier_dir.as_deref(),
-                    },
-                )
-            }
+            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
+                &priority,
+                description.as_deref(),
+                template.as_deref(),
+                &label,
+                issue_type.as_deref(),
+            )?;
+            commands::agent_factory::create_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::agent_factory::LifecycleCreateInput {
+                    title: &title,
+                    description: final_description.as_deref(),
+                    priority: &final_priority,
+                    issue_type: &issue_type,
+                    labels: &labels,
+                    parent: parent.as_deref(),
+                    work,
+                    quiet,
+                    atelier_dir: atelier_dir.as_deref(),
+                },
+            )
         }
 
         IssueCommands::Quick {
@@ -1355,6 +1362,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 description.as_deref(),
                 template.as_deref(),
                 &label,
+                None,
             )?;
             commands::agent_factory::create_lifecycle(
                 &state_dir,
@@ -1363,7 +1371,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     title: &title,
                     description: final_description.as_deref(),
                     priority: &final_priority,
-                    issue_type,
+                    issue_type: &issue_type,
                     labels: &labels,
                     parent: None,
                     work: true,
