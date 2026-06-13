@@ -108,16 +108,17 @@ impl SmokeHarness {
         let summary = format!("issue close proof for {issue_id}");
         let evidence = self.run_ok(&[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
             "pass",
+            "--target",
+            &format!("issue/{issue_id}"),
             &summary,
         ]);
-        let evidence_id =
-            first_record_id(&evidence.stdout).expect("evidence add did not print an evidence id");
-        self.run_ok(&["evidence", "attach", &evidence_id, "issue", &issue_id]);
+        let evidence_id = first_record_id(&evidence.stdout)
+            .expect("evidence record did not print an evidence id");
         evidence_id
     }
 

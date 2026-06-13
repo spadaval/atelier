@@ -26,7 +26,6 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "note",
     "plan",
     "workflow",
-    "work",
     "worktree",
 ];
 
@@ -41,9 +40,15 @@ const REMOVED_ROOTS: &[&str] = &[
     "sync",
     "timer",
     "usage",
+    "work",
 ];
 
-const REMOVED_COMMAND_PATHS: &[&[&str]] = &[&["mission", "view"], &["work", "worktree"]];
+const REMOVED_COMMAND_PATHS: &[&[&str]] = &[
+    &["evidence", "add"],
+    &["evidence", "capture"],
+    &["mission", "view"],
+    &["work", "worktree"],
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DriftFinding {
@@ -352,7 +357,7 @@ fn documented_visible_roots(content: &str) -> BTreeMap<String, usize> {
                 let Some(root) = command.path.first() else {
                     continue;
                 };
-                if root == "help" || root == "workflow" || root == "work" {
+                if root == "help" || root == "workflow" {
                     continue;
                 }
                 roots.entry(root.clone()).or_insert(index + 1);
@@ -796,7 +801,7 @@ mod tests {
 
     #[test]
     fn extracts_visible_roots_without_removed_or_hidden_sections() {
-        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier mission show`\n\nHidden `atelier work status` helper.\n\n## Removed Behavior\n\nThere is no `atelier mission close`.\n";
+        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier mission show`\n\n## Removed Behavior\n\nThere is no `atelier work status`.\nThere is no `atelier mission close`.\n";
         let roots = documented_visible_roots(doc);
 
         assert!(roots.contains_key("status"));

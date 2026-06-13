@@ -235,7 +235,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission audit`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
-- `atelier evidence add/capture/show/list/attach`
+- `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier worktree for/status/merge/remove`
 - `atelier export`
@@ -308,23 +308,19 @@ fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary:
         dir,
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
             "pass",
+            "--target",
+            &format!("{target_kind}/{target_id}"),
             summary,
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass"), "{evidence_out}");
-    let evidence_id = record_id_by_title(dir, "evidence", summary);
-    let (success, _, stderr) = run_atelier(
-        dir,
-        &["evidence", "attach", &evidence_id, target_kind, target_id],
-    );
-    assert!(success, "evidence attach failed: {stderr}");
-    evidence_id
+    record_id_by_title(dir, "evidence", summary)
 }
 
 fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
@@ -1098,6 +1094,17 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
 }
 
 #[test]
+fn test_evidence_help_hides_predecessor_subcommands() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "--help"]);
+    assert!(success, "evidence help failed: {stderr}");
+    assert!(stdout.contains("record"));
+    assert!(stdout.contains("attach"));
+    assert!(!stdout.contains("\n  add "));
+    assert!(!stdout.contains("\n  capture "));
+}
+
+#[test]
 fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
     let guidance =
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("AGENTFACTORY.md"))
@@ -1531,9 +1538,9 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
         "{issue_text}"
     );
 
-    let (success, work_out, stderr) = run_atelier(dir.path(), &["work", "status"]);
-    assert!(success, "work status failed: {stderr}");
-    assert!(work_out.contains(&format!("Issue:    {issue_id} - Root start item")));
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains(&format!("Active work:   {issue_id} - Root start item")));
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1769,9 +1776,9 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"done\""), "{issue_text}");
 
-    let (success, work_out, stderr) = run_atelier(dir.path(), &["work", "status"]);
-    assert!(success, "work status failed: {stderr}");
-    assert!(work_out.contains("Active: no"), "{work_out}");
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains("Active work:   none"), "{status_out}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1894,9 +1901,9 @@ fn test_abandon_requires_reason_and_preserves_issue_status() {
         "{issue_text}"
     );
 
-    let (success, work_out, stderr) = run_atelier(dir.path(), &["work", "status"]);
-    assert!(success, "work status failed: {stderr}");
-    assert!(work_out.contains("Active: no"), "{work_out}");
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains("Active work:   none"), "{status_out}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -2137,34 +2144,25 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
 }
 
 #[test]
-fn test_hidden_issue_helpers_print_replacement_guidance() {
+fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Old surface source"]);
     run_atelier(dir.path(), &["issue", "create", "Old surface target"]);
 
-    for (args, replacement) in [
-        (vec!["issue", "search", "Old"], "atelier search <query>"),
-        (
-            vec!["issue", "comment", "1", "compat note"],
-            "atelier note add issue <id>",
-        ),
-        (
-            vec!["issue", "block", "1", "2"],
-            "atelier dep add <blocked> <blocker>",
-        ),
-        (
-            vec!["issue", "relate", "1", "2"],
-            "atelier link add issue <id> issue <related>",
-        ),
-        (vec!["issue", "impact", "1"], "atelier graph impact <id>"),
+    for args in [
+        vec!["issue", "search", "Old"],
+        vec!["issue", "comment", "1", "compat note"],
+        vec!["issue", "block", "1", "2"],
+        vec!["issue", "relate", "1", "2"],
+        vec!["issue", "impact", "1"],
     ] {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "{args:?} failed: {stderr}");
         assert!(
-            stderr.contains("Compatibility") && stderr.contains(replacement),
-            "{args:?} did not print replacement guidance:\n{stderr}"
+            !stderr.contains("Compatibility"),
+            "{args:?} leaked compatibility guidance:\n{stderr}"
         );
     }
 }
@@ -2209,6 +2207,7 @@ fn test_removed_aliases_fail_as_unknown_commands() {
         vec!["ready"],
         vec!["sync"],
         vec!["mission", "view"],
+        vec!["work", "status"],
         vec!["work", "worktree"],
     ] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
@@ -2665,7 +2664,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "test",
             "--result",
@@ -2673,7 +2672,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
             "Canonical evidence summary",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Canonical evidence summary");
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
@@ -2958,7 +2957,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "test",
             "--result",
@@ -2966,7 +2965,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
             "Cargo test passed",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Cargo test passed");
 
     let (success, _, stderr) = run_atelier(
@@ -6534,7 +6533,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "test",
             "--result",
@@ -6542,7 +6541,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
             "cargo test passed",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - cargo test passed"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "cargo test passed");
     let evidence_id = evidence_id.as_str();
@@ -6862,24 +6861,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         dir.path(),
         &[
             "evidence",
-            "capture",
+            "record",
             "--kind",
             "validation",
             "--result",
             "pass",
             "--summary",
             "issue command proof",
-            "--target-kind",
-            "issue",
-            "--target-id",
-            issue_id,
+            "--target",
+            &format!("issue/{issue_id}"),
             "--",
             "sh",
             "-c",
             "printf 'pass stdout\\n'; printf 'pass stderr\\n' >&2",
         ],
     );
-    assert!(success, "issue capture failed: {stderr}");
+    assert!(success, "issue command record failed: {stderr}");
     assert!(issue_capture.contains("[evidence] pass - issue command proof"));
     assert!(issue_capture.contains("Command:     sh -c"));
     assert!(issue_capture.contains("Exit Status: 0"));
@@ -7012,24 +7009,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         dir.path(),
         &[
             "evidence",
-            "capture",
+            "record",
             "--kind",
             "validation",
             "--result",
             "fail",
             "--summary",
             "epic failing command proof",
-            "--target-kind",
-            "epic",
-            "--target-id",
-            epic_id,
+            "--target",
+            &format!("epic/{epic_id}"),
             "--",
             "sh",
             "-c",
             "printf 'failing stdout\\n'; printf 'failing stderr\\n' >&2; exit 7",
         ],
     );
-    assert!(success, "epic capture failed: {stderr}");
+    assert!(success, "epic failing command record failed: {stderr}");
     let epic_evidence_id = record_id_by_title(dir.path(), "evidence", "epic failing command proof");
     let (success, epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &epic_evidence_id]);
@@ -7046,7 +7041,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -7054,7 +7049,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             manual_epic_summary,
         ],
     );
-    assert!(success, "manual evidence add failed: {stderr}");
+    assert!(success, "manual evidence record failed: {stderr}");
     let manual_epic_evidence_id = record_id_by_title(dir.path(), "evidence", manual_epic_summary);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -7096,24 +7091,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         dir.path(),
         &[
             "evidence",
-            "capture",
+            "record",
             "--kind",
             "validation",
             "--result",
             "blocked",
             "--summary",
             "mission blocked command proof",
-            "--target-kind",
-            "mission",
-            "--target-id",
-            mission_id,
+            "--target",
+            &format!("mission/{mission_id}"),
             "--",
             "sh",
             "-c",
             "i=0; while [ $i -lt 350 ]; do printf 'blocked-line-%03d\\n' \"$i\"; i=$((i + 1)); done; printf 'blocked stderr\\n' >&2; exit 2",
         ],
     );
-    assert!(success, "mission blocked capture failed: {stderr}");
+    assert!(success, "mission blocked command record failed: {stderr}");
     let mission_evidence_id =
         record_id_by_title(dir.path(), "evidence", "mission blocked command proof");
     let (success, mission_show, stderr) =
@@ -7151,7 +7144,7 @@ fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
         dir.path(),
         &[
             "evidence",
-            "capture",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -7369,7 +7362,7 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -7377,7 +7370,7 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
             "ignored blocker evidence",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - ignored blocker evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "ignored blocker evidence");
     let evidence_id = evidence_id.as_str();
@@ -7432,7 +7425,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -7440,7 +7433,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
             "stale test evidence",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - stale test evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "stale test evidence");
     let (success, _, stderr) = run_atelier(
@@ -8232,7 +8225,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -8240,7 +8233,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
             "strict closeout evidence",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - strict closeout evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "strict closeout evidence");
     let (success, _, stderr) = run_atelier(
@@ -8288,7 +8281,7 @@ fn test_dirty_worktree_blocks_mission_closeout() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -8296,7 +8289,7 @@ fn test_dirty_worktree_blocks_mission_closeout() {
             "dirty closeout evidence",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - dirty closeout evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "dirty closeout evidence");
     let (success, _, stderr) = run_atelier(
@@ -8696,7 +8689,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -8792,7 +8785,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "test",
             "--result",
@@ -8800,7 +8793,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
             "older mission evidence",
         ],
     );
-    assert!(success, "evidence add failed: {stderr}");
+    assert!(success, "evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - older mission evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "older mission evidence");
     let evidence_id = evidence_id.as_str();
@@ -8998,7 +8991,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
     assert!(status_out.contains(
-        "Record validation proof (1 evidence gap(s)): atelier evidence add --kind validation --result pass \"...\""
+        "Record validation proof (1 evidence gap(s)): atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
     ));
     assert!(
         !status_out.contains("workflow validate"),
@@ -9042,7 +9035,7 @@ fn test_mission_status_cli_reports_control_state() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -9050,7 +9043,7 @@ fn test_mission_status_cli_reports_control_state() {
             "closeout evidence",
         ],
     );
-    assert!(success, "closeout evidence add failed: {stderr}");
+    assert!(success, "closeout evidence record failed: {stderr}");
     assert!(evidence_out.contains("[evidence] pass - closeout evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "closeout evidence");
     let evidence_id = evidence_id.as_str();
@@ -9240,7 +9233,7 @@ fn test_mission_list_default_current_empty_state() {
         dir.path(),
         &[
             "evidence",
-            "add",
+            "record",
             "--kind",
             "validation",
             "--result",
@@ -10216,18 +10209,24 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
 }
 
 #[test]
-fn test_hidden_work_start_is_unsupported() {
+fn test_work_commands_are_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["work", "start", "atelier-z1p8"]);
-    assert!(!success, "hidden work start should be unsupported");
-    let transcript = format!("{stdout}\n{stderr}");
-    assert!(
-        transcript.contains("unrecognized subcommand 'start'")
-            && transcript.contains("Usage: atelier work"),
-        "missing unsupported-command transcript: {transcript}"
-    );
+    for args in [
+        vec!["work"],
+        vec!["work", "start", "atelier-z1p8"],
+        vec!["work", "status"],
+    ] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(!success, "{args:?} unexpectedly succeeded");
+        let transcript = format!("{stdout}\n{stderr}");
+        assert!(
+            transcript.contains("unrecognized subcommand 'work'")
+                && transcript.contains("Usage: atelier"),
+            "missing removed-command transcript for {args:?}: {transcript}"
+        );
+    }
 }
 
 #[test]
@@ -10298,17 +10297,12 @@ hooks:
     assert!(start_out.contains("Branch:"));
     assert!(start_out.contains("Worktree:"));
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["work", "status"]);
-    assert!(success, "work status failed: {stderr}");
-    assert!(status_out.contains(&format!("Issue:    {issue_id} - Work item")));
-
-    let (success, status_human, stderr) = run_atelier(dir.path(), &["work", "status"]);
-    assert!(success, "human work status failed: {stderr}");
-    assert!(status_human.contains("Work Status"));
-    assert!(status_human.contains("Active:   yes"));
-    assert!(status_human.contains(&format!("Issue:    {issue_id} - Work item")));
-    assert!(status_human.contains("Branch:"));
-    assert!(status_human.contains("Worktree:"));
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains("Atelier Status"));
+    assert!(status_out.contains(&format!("Active work:   {issue_id} - Work item")));
+    assert!(status_out.contains("Work branch:"));
+    assert!(status_out.contains("Worktree:"));
 
     let (success, abandon_out, stderr) = run_atelier(
         dir.path(),

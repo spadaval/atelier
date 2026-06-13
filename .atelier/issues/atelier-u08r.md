@@ -3,7 +3,6 @@ created_at: "2026-06-13T20:37:00.321850683+00:00"
 id: "atelier-u08r"
 issue_type: "task"
 labels:
-- "assignee:root"
 - "cleanup"
 - "cli"
 priority: "P1"
@@ -14,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Remove predecessor and compatibility command leakage"
-updated_at: "2026-06-13T22:54:41.969867031+00:00"
+updated_at: "2026-06-13T23:18:46.731788333+00:00"
 ---
 
 ## Description

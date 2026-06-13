@@ -107,8 +107,8 @@ fn print_essential_commands(
     println!("  `atelier issue transition <id> --options` - Inspect the next configured workflow steps for an issue.");
     println!("  `atelier issue close <id> --reason \"summary\"` - Apply the configured terminal transition and clear active local work.");
     println!("  `atelier abandon [issue-id] --reason \"...\"` - Clear local active work without changing issue status.");
-    println!("  `atelier evidence add --kind validation --result pass \"summary\"` - Create first-class proof for non-trivial claims.");
-    println!("  `atelier evidence attach <evidence-id> issue <issue-id>` - Link proof to the issue it validates.");
+    println!("  `atelier evidence record --target issue/<issue-id> --kind validation --result pass \"summary\"` - Create first-class proof on the accountable issue.");
+    println!("  `atelier evidence attach <evidence-id> issue <issue-id>` - Reuse existing proof on an additional target when mirroring or sharing evidence.");
     println!("  `atelier history --mission <id>` - Inspect mission and linked-work activity without expanding show output.");
     println!("  `atelier export --check` - Verify committed Markdown projection freshness when handoff requires it.");
     println!("  `atelier lint` - Validate canonical tracker records before closeout.");
@@ -136,7 +136,7 @@ fn print_common_workflows(
     println!("  Start assigned issue: `atelier issue show <id>` to verify the contract, then `atelier start <id>` to record active work.");
     println!("  Recover after checkout: `atelier prime` to reload rules, then `atelier status` to inspect live state.");
     println!("  Advance active work: `atelier issue transition <id> --options` to inspect the next workflow step before review, validation, close, or archive.");
-    println!("  Validate and close an issue: `atelier evidence add`, `atelier evidence attach`, `atelier issue transition <id> --options`, then `atelier issue close <id> --reason \"summary\"`.");
+    println!("  Validate and close an issue: `atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"`, `atelier issue transition <id> --options`, then `atelier issue close <id> --reason \"summary\"`.");
     println!("  Stop local work without closing: `atelier abandon [issue-id] --reason \"...\"`.");
     println!("  Inspect activity: `atelier history --issue <id>` for one issue or `atelier history --mission <id>` for mission-linked work.");
     match active_mission {

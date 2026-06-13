@@ -258,13 +258,6 @@ enum Commands {
         action: WorkflowCommands,
     },
 
-    /// Work lifecycle helpers
-    #[command(hide = true)]
-    Work {
-        #[command(subcommand)]
-        action: WorkCommands,
-    },
-
     /// Git worktree helpers for tracked work
     Worktree {
         #[command(subcommand)]
@@ -823,6 +816,7 @@ enum EvidenceCommands {
         command: Vec<String>,
     },
     /// Add validation evidence
+    #[command(hide = true)]
     Add {
         #[arg(long = "kind")]
         evidence_kind: String,
@@ -837,6 +831,7 @@ enum EvidenceCommands {
         producer: Option<String>,
     },
     /// Capture a command transcript as validation evidence
+    #[command(hide = true)]
     Capture {
         #[arg(long = "kind")]
         evidence_kind: String,
@@ -885,12 +880,6 @@ enum WorkflowCommands {
     },
     /// Validate .atelier/workflow.yaml policy and current issue-record health
     Check,
-}
-
-#[derive(Subcommand)]
-enum WorkCommands {
-    /// Show current work association
-    Status,
 }
 
 #[derive(Subcommand)]
@@ -1268,10 +1257,6 @@ fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
     Ok(())
 }
 
-fn issue_compat_guidance(replacement: &str) {
-    eprintln!("Compatibility: this hidden issue helper remains callable; use `{replacement}`.");
-}
-
 fn parse_evidence_target(target: &str) -> Result<(&str, &str)> {
     let Some((kind, id)) = target.split_once('/') else {
         bail!("--target must use kind/id syntax, for example issue/atelier-1234");
@@ -1353,7 +1338,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             template,
             label,
         } => {
-            issue_compat_guidance("atelier issue create <title> --work");
             let (state_dir, db_path) = state_and_db_paths()?;
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
@@ -1386,7 +1370,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             work,
         } => {
-            issue_compat_guidance("atelier issue create <title> --parent <id>");
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::agent_factory::create_lifecycle(
                 &state_dir,
@@ -1433,7 +1416,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Search { query } => {
-            issue_compat_guidance("atelier search <query>");
             let db = degraded_projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
@@ -1524,7 +1506,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::CloseAll { label, priority } => {
-            issue_compat_guidance("atelier issue close <id> --reason \"...\"");
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::status::close_all_lifecycle(
                 &state_dir,
@@ -1535,7 +1516,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Delete { id, force } => {
-            issue_compat_guidance("atelier maintenance delete issue <id> --force");
             let (state_dir, db_path) = state_and_db_paths()?;
             let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
@@ -1544,14 +1524,12 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Comment { id, text, kind } => {
-            issue_compat_guidance("atelier note add issue <id> \"...\" --kind <kind>");
             let db = canonical_mutation_db()?;
             let resolved = commands::agent_factory::resolve_id(&db, &id)?;
             commands::comment::run_canonical(&db, &resolved, &text, &kind)
         }
 
         IssueCommands::Label { id, label } => {
-            issue_compat_guidance("atelier issue update <id> --label <label>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1562,7 +1540,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unlabel { id, label } => {
-            issue_compat_guidance("atelier issue update <id> --remove-label <label>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1573,7 +1550,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Block { id, blocker } => {
-            issue_compat_guidance("atelier dep add <blocked> <blocker>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1583,7 +1559,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Unblock { id, blocker } => {
-            issue_compat_guidance("atelier dep remove <blocked> <blocker>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1593,7 +1568,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Blocked => {
-            issue_compat_guidance("atelier issue list --blocked");
             let db = projection_query_db()?;
             commands::deps::list_blocked(&db)
         }
@@ -1603,7 +1577,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            issue_compat_guidance("atelier link add issue <id> issue <related> --type <type>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1619,7 +1592,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             related,
             relation_type,
         } => {
-            issue_compat_guidance("atelier link remove issue <id> issue <related> --type <type>");
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
@@ -1631,27 +1603,23 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Related { id } => {
-            issue_compat_guidance("atelier link list issue <id>");
             let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::list(&db, &id)
         }
 
         IssueCommands::Impact { id } => {
-            issue_compat_guidance("atelier graph impact <id>");
             let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::relate::impact(&db, &id)
         }
 
         IssueCommands::Next => {
-            issue_compat_guidance("atelier status");
             let db = projection_query_db()?;
             commands::next::run(&db)
         }
 
         IssueCommands::Tree { status, compact } => {
-            issue_compat_guidance("atelier graph tree");
             let db = projection_query_db()?;
             if compact {
                 commands::tree::run_compact(&db, Some(&status))
@@ -1661,7 +1629,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Tested => {
-            issue_compat_guidance("atelier evidence add --kind validation --result pass \"...\"");
             let atelier_dir = find_atelier_dir()?;
             commands::tested::run(&atelier_dir)
         }
@@ -2264,13 +2231,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Work { action } => {
-            let db = runtime_db()?;
-            match action {
-                WorkCommands::Status => commands::work::status(&db),
-            }
-        }
-
         Commands::Worktree { action } => {
             let db = runtime_db()?;
             match action {
@@ -2440,9 +2400,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Workflow { action } => match action {
             WorkflowCommands::Init { .. } => "workflow init",
             WorkflowCommands::Check => "workflow check",
-        },
-        Commands::Work { action } => match action {
-            WorkCommands::Status => "work status",
         },
         Commands::Worktree { action } => match action {
             WorktreeCommands::For { .. } => "worktree for",
