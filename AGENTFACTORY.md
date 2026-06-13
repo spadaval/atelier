@@ -109,6 +109,9 @@ Do not preserve old command names, status aliases, output shims, or fallback
 readers unless a human explicitly asks for a compatibility window. Public
 compatibility decisions belong to Atelier help, product docs, workflow policy,
 or validators rather than to this binding.
+For issue queues, `--status` means an exact workflow status (or `all`) and
+`--category` means an exact derived workflow category; do not use or document
+category aliases such as `in_progress`.
 
 ## Checks
 

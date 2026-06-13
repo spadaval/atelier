@@ -162,6 +162,12 @@ Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier lint <id>`, and focused
 drill-down commands rather than generic command dumps.
+`atelier issue list --status <status>` filters by exact configured workflow
+status only, with `all` as the only special token. Derived status categories
+are a separate concept and use `atelier issue list --category <category>`.
+Category values are the exact category names from `.atelier/workflow.yaml`
+such as `todo`, `active`, `blocked`, `review`, `validation`, and `done`; status
+tokens such as `in_progress` are not category aliases.
 `atelier issue create` has one work-type decision. Use `--issue-type` for the
 canonical type (`bug`, `closeout`, `epic`, `feature`, `spike`, `task`, or
 `validation`) or use a template preset whose default type is documented by the

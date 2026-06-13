@@ -380,9 +380,12 @@ enum IssueCommands {
 
     /// List issues
     List {
-        /// Filter by status (todo, done, all)
+        /// Filter by exact workflow status, or all
         #[arg(short, long, default_value = "todo")]
         status: String,
+        /// Filter by derived workflow category
+        #[arg(long)]
+        category: Option<String>,
         /// Filter by label
         #[arg(short, long)]
         label: Option<String>,
@@ -1389,6 +1392,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::List {
             status,
+            category,
             label,
             priority,
             ready,
@@ -1399,14 +1403,15 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 if ready {
                     bail!("--blocked cannot be combined with --ready");
                 }
-                if status != "todo" || label.is_some() || priority.is_some() {
-                    bail!("--blocked cannot be combined with --status, --label, or --priority");
+                if status != "todo" || category.is_some() || label.is_some() || priority.is_some() {
+                    bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
                 }
                 commands::deps::list_blocked(&db)
             } else {
                 commands::agent_factory::list(
                     &db,
                     Some(&status),
+                    category.as_deref(),
                     label.as_deref(),
                     priority.as_deref(),
                     ready,

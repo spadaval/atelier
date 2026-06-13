@@ -88,32 +88,47 @@ pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
 }
 
 impl IssueStatusFilter {
-    fn from_input(policy: Option<&WorkflowPolicy>, input: &str) -> Self {
-        if input == "all" {
-            return Self::All;
-        }
-        let category = operator_category_filter(input);
-        if policy.is_none() {
-            return category
-                .map(Self::Category)
-                .unwrap_or_else(|| Self::Exact(input.to_string()));
-        }
+    fn from_input(
+        policy: Option<&WorkflowPolicy>,
+        status: &str,
+        category: Option<&str>,
+    ) -> Result<Self> {
         if let Some(category) = category {
-            return Self::Category(category);
+            if status != "todo" {
+                bail!("--status and --category cannot be combined");
+            }
+            return Self::category(policy, category);
+        }
+        Self::status(policy, status)
+    }
+
+    fn status(policy: Option<&WorkflowPolicy>, input: &str) -> Result<Self> {
+        if input == "all" {
+            return Ok(Self::All);
         }
         if let Some(policy) = policy {
             if policy.statuses.contains_key(input) {
-                return Self::Exact(input.to_string());
+                return Ok(Self::Exact(input.to_string()));
             }
-            if policy
-                .statuses
-                .values()
-                .any(|status| status.category == input)
-            {
-                return Self::Category(input.to_string());
-            }
+            bail!(
+                "Invalid issue status '{input}'. Use an exact workflow status, `all`, or `--category <category>`."
+            );
         }
-        Self::Exact(input.to_string())
+        Ok(Self::Exact(input.to_string()))
+    }
+
+    fn category(policy: Option<&WorkflowPolicy>, input: &str) -> Result<Self> {
+        let Some(policy) = policy else {
+            bail!("--category requires a workflow policy");
+        };
+        if policy
+            .statuses
+            .values()
+            .any(|status| status.category == input)
+        {
+            return Ok(Self::Category(input.to_string()));
+        }
+        bail!("Invalid issue category '{input}'. Use a category from the workflow policy.")
     }
 
     fn matches(
@@ -155,39 +170,19 @@ fn policy_status_known(policy: Option<&WorkflowPolicy>, status: &str) -> bool {
         .is_some()
 }
 
-fn operator_category_filter(input: &str) -> Option<String> {
-    match input {
-        "todo" => Some("todo".to_string()),
-        "in_progress" => Some("active".to_string()),
-        "active" => Some("active".to_string()),
-        "blocked" => Some("blocked".to_string()),
-        "review" => Some("review".to_string()),
-        "validation" => Some("validation".to_string()),
-        "done" => Some("done".to_string()),
-        _ => None,
-    }
-}
-
 pub(crate) fn issue_status_category(
     policy: Option<&WorkflowPolicy>,
     status: &str,
 ) -> Option<String> {
     policy
         .and_then(|policy| policy.status_category(status))
-        .map(operator_category_label)
+        .map(str::to_string)
 }
 
 fn workflow_category(policy: Option<&WorkflowPolicy>, status: &str) -> Option<String> {
     policy
         .and_then(|policy| policy.status_category(status))
         .map(str::to_string)
-}
-
-fn operator_category_label(category: &str) -> String {
-    match category {
-        "active" => "in_progress".to_string(),
-        other => other.to_string(),
-    }
 }
 
 pub(crate) fn issue_status_label(policy: Option<&WorkflowPolicy>, status: &str) -> String {
@@ -1026,6 +1021,7 @@ fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
 pub fn list(
     db: &Database,
     status: Option<&str>,
+    category: Option<&str>,
     label: Option<&str>,
     priority: Option<&str>,
     ready: bool,
@@ -1033,10 +1029,11 @@ pub fn list(
 ) -> Result<()> {
     let workflow_policy = load_issue_workflow_policy()?;
     let status_input = status.unwrap_or("todo");
-    if ready && status_input != "todo" {
-        bail!("--ready uses startable todo-category work; do not combine it with --status");
+    if ready && (status_input != "todo" || category.is_some()) {
+        bail!("--ready uses startable todo-category work; do not combine it with --status or --category");
     }
-    let status_filter = IssueStatusFilter::from_input(workflow_policy.as_ref(), status_input);
+    let status_filter =
+        IssueStatusFilter::from_input(workflow_policy.as_ref(), status_input, category)?;
     let mut read_context = WorkflowReadContext {
         missing_policy: workflow_policy.is_none(),
         unmigrated_filter: false,

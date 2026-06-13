@@ -7838,17 +7838,50 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let (success, active_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "in_progress"]);
     assert!(success, "in_progress filter failed: {stderr}");
-    assert!(
-        active_out.contains("Category: in_progress=1"),
-        "{active_out}"
-    );
+    assert!(active_out.contains("Category: active=1"), "{active_out}");
     assert!(active_out.contains("Status: in_progress=1"), "{active_out}");
-    assert!(
-        active_out.contains("in_progress/in_progress"),
-        "{active_out}"
-    );
+    assert!(active_out.contains("active/in_progress"), "{active_out}");
     assert!(active_out.contains(&active_id), "{active_out}");
     assert!(!active_out.contains(&todo_id), "{active_out}");
+
+    let (success, active_category_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--category", "active"]);
+    assert!(success, "active category filter failed: {stderr}");
+    assert!(
+        active_category_out.contains("Category: active=1"),
+        "{active_category_out}"
+    );
+    assert!(
+        active_category_out.contains("Status: in_progress=1"),
+        "{active_category_out}"
+    );
+    assert!(
+        active_category_out.contains("active/in_progress"),
+        "{active_category_out}"
+    );
+    assert!(
+        active_category_out.contains(&active_id),
+        "{active_category_out}"
+    );
+    assert!(
+        !active_category_out.contains(&todo_id),
+        "{active_category_out}"
+    );
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--category", "in_progress"]);
+    assert!(!success, "in_progress category alias should be rejected");
+    assert!(
+        stderr.contains("Invalid issue category 'in_progress'"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "list", "--status", "active"]);
+    assert!(
+        !success,
+        "active status/category ambiguity should be rejected"
+    );
+    assert!(stderr.contains("Invalid issue status 'active'"), "{stderr}");
 
     let (success, done_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "done"]);
@@ -7862,12 +7895,12 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(success, "issue show failed: {stderr}");
     assert!(
         show_out.contains(&format!(
-            "{active_id} [task] in_progress/in_progress - Active status item"
+            "{active_id} [task] active/in_progress - Active status item"
         )),
         "{show_out}"
     );
     assert!(show_out.contains("Status:   in_progress"), "{show_out}");
-    assert!(show_out.contains("Category: in_progress"), "{show_out}");
+    assert!(show_out.contains("Category: active"), "{show_out}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Workflow mission"]);
     assert!(success, "mission create failed: {stderr}");
@@ -7880,10 +7913,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("todo/todo"), "{mission_out}");
-    assert!(
-        mission_out.contains("in_progress/in_progress"),
-        "{mission_out}"
-    );
+    assert!(mission_out.contains("active/in_progress"), "{mission_out}");
     assert!(mission_out.contains("done/done"), "{mission_out}");
 }
 

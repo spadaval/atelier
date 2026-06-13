@@ -4,6 +4,7 @@ id: "atelier-5a73"
 issue_type: "task"
 labels:
 - "artifact-update"
+- "assignee:root"
 - "cli"
 - "stabilization"
 - "workflow"
@@ -15,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Clarify workflow status filters and category aliases"
-updated_at: "2026-06-13T21:58:03.428554959+00:00"
+updated_at: "2026-06-13T23:32:48.786334983+00:00"
 ---
 
 ## Description
