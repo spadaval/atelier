@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:16:24.916386399+00:00"
+status: "done"
 title: "Decide a repo-supported unused dependency scan"
-updated_at: "2026-06-13T23:12:40.883130056+00:00"
+updated_at: "2026-06-13T23:16:24.916386399+00:00"
 ---
 
 ## Description
