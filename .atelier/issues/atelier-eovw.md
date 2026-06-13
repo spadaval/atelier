@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T19:48:30.850231540+00:00"
+status: "done"
 title: "Create new issues with configured workflow initial status"
-updated_at: "2026-06-13T19:48:18.156902668+00:00"
+updated_at: "2026-06-13T19:48:30.850231540+00:00"
 ---
 
 ## Description
