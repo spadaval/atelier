@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair workflow validator expectation drift"
-updated_at: "2026-06-13T01:08:17.135459296+00:00"
+updated_at: "2026-06-13T01:11:12.684845003+00:00"
 ---
 
 ## Description
