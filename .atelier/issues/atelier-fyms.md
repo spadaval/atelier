@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T19:53:19.941183367+00:00"
+status: "done"
 title: "Independently validate repo-defined workflow behavior"
-updated_at: "2026-06-13T19:52:45.616632362+00:00"
+updated_at: "2026-06-13T19:53:19.941183367+00:00"
 ---
 
 ## Description
