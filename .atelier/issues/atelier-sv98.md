@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Simplify core command surface around user workflows"
-updated_at: "2026-06-13T04:01:43.142202423+00:00"
+updated_at: "2026-06-13T16:09:18.038144101+00:00"
 ---
 
 ## Description

@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Redesign evidence capture and proof coverage"
-updated_at: "2026-06-13T02:52:25.920806260+00:00"
+updated_at: "2026-06-13T16:09:11.601797088+00:00"
 ---
 
 ## Description

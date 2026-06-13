@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Define strong proof and contract-first workflow"
-updated_at: "2026-06-13T03:00:48.118729570+00:00"
+updated_at: "2026-06-13T16:09:15.927464357+00:00"
 ---
 
 ## Description
