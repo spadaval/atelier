@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Validate mission operator UX with transcripts"
-updated_at: "2026-06-13T02:36:06.022488205+00:00"
+updated_at: "2026-06-13T15:54:21.426709836+00:00"
 ---
 
 ## Description
