@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Repair status start history prime and transition surfaces"
-updated_at: "2026-06-13T00:20:47.457798158+00:00"
+updated_at: "2026-06-13T00:26:47.548027536+00:00"
 ---
 
 ## Description
