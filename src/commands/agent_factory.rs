@@ -1715,7 +1715,6 @@ fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> R
 pub struct UpdateInput<'a> {
     pub issue_ref: &'a str,
     pub title: Option<&'a str>,
-    pub description: Option<&'a str>,
     pub priority: Option<&'a str>,
     pub issue_type: Option<&'a str>,
     pub labels: &'a [String],
@@ -1731,11 +1730,11 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
     let mut changed_fields = Vec::new();
 
-    if input.title.is_some() || input.description.is_some() || input.priority.is_some() {
+    if input.title.is_some() || input.priority.is_some() {
         if let Some(priority) = input.priority {
             validate_priority(priority)?;
         }
-        if db.update_issue(&id, input.title, input.description, input.priority)? {
+        if db.update_issue(&id, input.title, None, input.priority)? {
             if input.title.is_some() {
                 changed_fields.push("title");
                 crate::commands::activity_log::record_field_changed(
@@ -1743,15 +1742,6 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
                     "title",
                     Some(&previous.title),
                     input.title,
-                )?;
-            }
-            if input.description.is_some() {
-                changed_fields.push("description");
-                crate::commands::activity_log::record_field_changed(
-                    &id,
-                    "description",
-                    previous.description.as_deref(),
-                    input.description,
                 )?;
             }
             if input.priority.is_some() {
@@ -1825,7 +1815,7 @@ pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
     }
 
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
     }
     changed_fields.sort_unstable();
     changed_fields.dedup();
@@ -1879,16 +1869,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
             "title",
             Some(&previous.title),
             Some(title),
-        )?;
-    }
-    if let Some(description) = input.description {
-        record.issue.description = Some(description.to_string());
-        changed_fields.push("description");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "description",
-            previous.description.as_deref(),
-            Some(description),
         )?;
     }
     if let Some(priority) = input.priority {
@@ -1969,7 +1949,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_note(&id, note)?;
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --description, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;

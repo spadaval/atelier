@@ -281,7 +281,7 @@ are classified as follows:
 | Table or field | Classification | Target ownership |
 | --- | --- | --- |
 | `issues.id`, `title`, `status`, `issue_type`, `priority`, `parent_id`, `created_at`, `updated_at`, `closed_at` | Projection metadata | Keep as the issue list, ready-work, graph, workflow, and Mission Control summary index. These fields are small and commonly used for sorting and filtering. |
-| `issues.description` | Removal candidate | Canonical Markdown body owned by `RecordStore`; detail views should load it from `.atelier/issues/*.md`. It remains only as migration compatibility until write paths stop depending on it. |
+| `issues.description` | Derived search index / removal candidate | Canonical Markdown body sections are owned by `RecordStore`; detail views load them from `.atelier/issues/*.md`. Rebuild currently stores derived section text here only for legacy search projection, not as a full Markdown body mirror. |
 | `labels.issue_id`, `labels.label` | Projection metadata | Keep for queue filters, ownership labels, and Mission Control facets. |
 | `dependencies.blocker_id`, `dependencies.blocked_id` | Projection metadata | Keep as derived graph edges for ready queries and workflow checks. |
 | `relations.issue_id_1`, `relations.issue_id_2`, `relations.relation_type`, `relations.created_at` | Projection metadata | Keep as derived typed issue-link edges for traversal and impact views. |
