@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:05:33.643143836+00:00"
+status: "done"
 title: "Delete or isolate inherited lock sync and compatibility residue"
-updated_at: "2026-06-13T22:55:08.963901128+00:00"
+updated_at: "2026-06-13T23:05:33.643143836+00:00"
 ---
 
 ## Description
