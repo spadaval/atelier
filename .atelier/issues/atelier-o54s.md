@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T22:08:01.634171323+00:00"
+status: "done"
 title: "Define Atelier human-output design system"
 updated_at: "2026-06-10T22:08:01.634171323+00:00"
 ---

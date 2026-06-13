@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:58.325373741+00:00"
+status: "done"
 title: "Remove --json CLI options for command result rendering"
 updated_at: "2026-06-11T03:50:58.325373741+00:00"
 ---

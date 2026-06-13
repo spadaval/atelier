@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:55:23.316750821+00:00"
+status: "done"
 title: "Separate atelier doctor runtime health from canonical lint"
 updated_at: "2026-06-11T23:55:23.316750821+00:00"
 ---

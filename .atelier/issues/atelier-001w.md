@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T20:33:19.746752141+00:00"
+status: "done"
 title: "Define TUI projection contract and navigation model"
 updated_at: "2026-06-09T20:33:19.746752141+00:00"
 ---

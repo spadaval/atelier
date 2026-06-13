@@ -115,6 +115,156 @@ pub struct WorkflowCheckReport {
     pub policy: WorkflowPolicy,
 }
 
+pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
+schema_version: 1
+
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
+
+statuses:
+  todo:
+    category: todo
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
+  archived:
+    category: done
+
+validators:
+  durable_current:
+    builtin: durable_state_current
+  review_ready:
+    builtin: review_complete
+  proof_attached:
+    builtin: evidence_attached
+    params:
+      min_count: 1
+  blockers_clear:
+    builtin: no_open_blockers
+  lint_clear:
+    builtin: no_blocking_lints
+  closeout_clean:
+    builtin: git_worktree_clean
+
+guidance_templates:
+  close_with_proof:
+    format: markdown
+    template: |
+      Closing {{ issue.id }} requires attached evidence and no open blockers.
+  record_spike_outcome:
+    format: markdown
+    template: |
+      Record a concise close reason that captures what {{ issue.id }} learned
+      and what follow-up work remains.
+
+workflows:
+  standard_review_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_ready]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - blockers_clear
+          - lint_clear
+          - durable_current
+          - closeout_clean
+        guidance: [close_with_proof]
+
+  lightweight_spike:
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      revise:
+        from: [review]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - review_ready
+          - durable_current
+        guidance: [record_spike_outcome]
+"#;
+
+impl WorkflowPolicy {
+    pub fn workflow_name_for_issue_type(&self, issue_type: &str) -> Result<&str> {
+        self.issue_types
+            .get(issue_type)
+            .map(String::as_str)
+            .ok_or_else(|| {
+                policy_error(
+                    "workflow_issue_type_unmapped",
+                    WORKFLOW_POLICY_PATH,
+                    format!("issue_type '{}' is not mapped to a workflow", issue_type),
+                )
+            })
+    }
+
+    pub fn workflow_for_issue_type(&self, issue_type: &str) -> Result<&WorkflowDefinition> {
+        let workflow_name = self.workflow_name_for_issue_type(issue_type)?;
+        self.workflows.get(workflow_name).ok_or_else(|| {
+            policy_error(
+                "workflow_issue_type_unmapped",
+                WORKFLOW_POLICY_PATH,
+                format!(
+                    "workflow '{}' selected by issue_type '{}' is not defined",
+                    workflow_name, issue_type
+                ),
+            )
+        })
+    }
+
+    pub fn status_category(&self, status: &str) -> Option<&str> {
+        self.statuses
+            .get(status)
+            .map(|status| status.category.as_str())
+    }
+
+    pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
+        Ok(workflow_statuses(self.workflow_for_issue_type(issue_type)?).contains(status))
+    }
+}
+
 #[derive(Debug, Clone)]
 struct WorkflowPolicyError {
     code: &'static str,
@@ -1218,72 +1368,7 @@ mod tests {
     use super::*;
 
     fn valid_policy() -> &'static str {
-        r#"schema: atelier.workflow
-schema_version: 1
-issue_types:
-  bug: standard_review_proof
-  closeout: standard_review_proof
-  epic: standard_review_proof
-  feature: standard_review_proof
-  spike: lightweight_spike
-  task: standard_review_proof
-  validation: standard_review_proof
-statuses:
-  open:
-    category: todo
-  closed:
-    category: done
-  archived:
-    category: done
-validators:
-  durable_current:
-    builtin: durable_state_current
-  review_ready:
-    builtin: review_complete
-  proof_attached:
-    builtin: evidence_attached
-    params:
-      min_count: 1
-  blockers_clear:
-    builtin: no_open_blockers
-  lint_clear:
-    builtin: no_blocking_lints
-  closeout_clean:
-    builtin: git_worktree_clean
-guidance_templates:
-  close_with_proof:
-    format: markdown
-    template: |
-      Closing {{ issue.id }} requires attached evidence and no open blockers.
-  record_spike_outcome:
-    format: markdown
-    template: |
-      Record a concise close reason that captures what {{ issue.id }} learned.
-workflows:
-  standard_review_proof:
-    initial_status: open
-    done_statuses: [closed, archived]
-    transitions:
-      close:
-        from: [open]
-        to: closed
-        required_fields: [close_reason]
-        validators: [proof_attached, blockers_clear, lint_clear, durable_current, closeout_clean]
-        guidance: [close_with_proof]
-      archive:
-        from: [open]
-        to: archived
-  lightweight_spike:
-    initial_status: open
-    done_statuses: [closed]
-    transitions:
-      close:
-        from: [open]
-        to: closed
-        required_fields: [close_reason]
-        validators: [review_ready, durable_current]
-        guidance: [record_spike_outcome]
-"#
+        STARTER_POLICY_YAML
     }
 
     #[test]
@@ -1296,7 +1381,7 @@ workflows:
         assert_eq!(
             policy
                 .statuses
-                .get("closed")
+                .get("done")
                 .map(|status| status.category.as_str()),
             Some("done")
         );
@@ -1340,8 +1425,8 @@ workflows:
     fn rejects_unknown_validator_reference() {
         let error = parse_policy_text(
             &valid_policy().replace(
-                "validators: [proof_attached, blockers_clear, lint_clear, durable_current, closeout_clean]",
-                "validators: [missing_validator, blockers_clear, lint_clear, durable_current, closeout_clean]",
+                "          - proof_attached\n",
+                "          - missing_validator\n",
             ),
             WORKFLOW_POLICY_PATH,
         )

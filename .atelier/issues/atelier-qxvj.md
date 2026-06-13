@@ -30,7 +30,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:25:44.417915345+00:00"
+status: "done"
 title: "Define canonical issue activity sidecars"
 updated_at: "2026-06-10T17:25:44.417915345+00:00"
 ---

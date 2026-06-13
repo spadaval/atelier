@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:07:08.490408135+00:00"
+status: "done"
 title: "Update product and architecture docs for the single .atelier contract"
 updated_at: "2026-06-11T23:07:08.490408135+00:00"
 ---

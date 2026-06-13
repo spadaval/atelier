@@ -872,6 +872,13 @@ enum EvidenceCommands {
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
+    /// Write the starter .atelier/workflow.yaml policy
+    Init {
+        #[arg(long)]
+        force: bool,
+    },
+    /// Migrate legacy issue statuses in canonical Markdown to workflow statuses
+    MigrateStatuses,
     /// Validate .atelier/workflow.yaml policy and current issue-record health
     Check,
     /// Evaluate workflow validators as an advanced diagnostic without mutating record state
@@ -2236,31 +2243,39 @@ fn run() -> Result<()> {
             )
         }
 
-        Commands::Workflow { action } => {
-            let db = projection_query_db()?;
-            match action {
-                WorkflowCommands::Check => commands::workflow::check(&db),
-                WorkflowCommands::Validate {
-                    target_kind,
-                    target_id,
-                    transition,
-                    validator,
-                } => {
-                    let target_id = if target_kind == "tracker" {
-                        target_id
-                    } else {
-                        resolve_record_arg(&db, &target_kind, &target_id)?
-                    };
-                    commands::workflow::validate(
-                        &db,
-                        &target_kind,
-                        &target_id,
-                        &transition,
-                        validator,
-                    )
-                }
+        Commands::Workflow { action } => match action {
+            WorkflowCommands::Init { force } => {
+                let repo_root = storage_layout::find_repo_root()?;
+                commands::workflow::init(&repo_root, force)
             }
-        }
+            WorkflowCommands::MigrateStatuses => {
+                let storage = command_storage(CommandStorageAccess::HealthRepair)?;
+                let repo_root = storage.repo_root().to_path_buf();
+                commands::workflow::migrate_statuses(
+                    &repo_root,
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                )
+            }
+            WorkflowCommands::Check => {
+                let db = projection_query_db()?;
+                commands::workflow::check(&db)
+            }
+            WorkflowCommands::Validate {
+                target_kind,
+                target_id,
+                transition,
+                validator,
+            } => {
+                let db = projection_query_db()?;
+                let target_id = if target_kind == "tracker" {
+                    target_id
+                } else {
+                    resolve_record_arg(&db, &target_kind, &target_id)?
+                };
+                commands::workflow::validate(&db, &target_kind, &target_id, &transition, validator)
+            }
+        },
 
         Commands::Work { action } => {
             let db = runtime_db()?;
@@ -2445,6 +2460,8 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
+            WorkflowCommands::Init { .. } => "workflow init",
+            WorkflowCommands::MigrateStatuses => "workflow migrate-statuses",
             WorkflowCommands::Check => "workflow check",
             WorkflowCommands::Validate { .. } => "workflow validate",
         },

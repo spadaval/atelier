@@ -30,7 +30,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T14:42:00.084850403+00:00"
+status: "done"
 title: "Mission: Replace Beads with Atelier for tracking and Agent Factory"
 updated_at: "2026-06-11T14:42:00.084850403+00:00"
 ---

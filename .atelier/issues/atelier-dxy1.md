@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:19:27.423552685+00:00"
+status: "done"
 title: "Update delegation prompt template for bounded proof slices"
 updated_at: "2026-06-13T04:19:27.423552685+00:00"
 ---

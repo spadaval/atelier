@@ -22,7 +22,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Epic: Validate and close repo-defined workflow rollout"
 updated_at: "2026-06-13T17:37:03.146921348+00:00"
 ---

@@ -11,7 +11,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:24.947650674+00:00"
+status: "done"
 title: "Preserve and document quiet output boundaries"
 updated_at: "2026-06-11T04:31:24.947650674+00:00"
 ---

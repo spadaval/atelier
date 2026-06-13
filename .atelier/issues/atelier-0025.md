@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T01:14:14.098013254+00:00"
+status: "done"
 title: "Remove manifest.json from canonical state"
 updated_at: "2026-06-10T01:14:14.098013254+00:00"
 ---

@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T17:20:17.141915982+00:00"
+status: "done"
 title: "Clarify unblock command success output"
 updated_at: "2026-06-09T17:20:17.141915982+00:00"
 ---

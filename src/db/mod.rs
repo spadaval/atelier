@@ -63,9 +63,6 @@ pub const COMPATIBILITY_TABLES: &[&str] = &["comments"];
 /// Valid values for issue priority.
 pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
 
-/// Valid values for issue status.
-pub const VALID_STATUSES: &[&str] = &["open", "closed", "archived"];
-
 /// Valid values for canonical issue type.
 pub const VALID_ISSUE_TYPES: &[&str] = &[
     "bug",
@@ -85,13 +82,15 @@ pub const MAX_COMMENT_LEN: usize = 1024 * 1024; // 1MB
 
 /// Validate that a status value is known, returning an error if not.
 pub fn validate_status(status: &str) -> Result<()> {
-    if VALID_STATUSES.contains(&status) {
+    let mut chars = status.chars();
+    if matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
+        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
         Ok(())
     } else {
         anyhow::bail!(
-            "Invalid status '{}'. Valid values: {}",
+            "Invalid status '{}'. Status values must match ^[a-z][a-z0-9_]*$",
             status,
-            VALID_STATUSES.join(", ")
         )
     }
 }

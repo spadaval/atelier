@@ -11,7 +11,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:58.378727872+00:00"
+status: "done"
 title: "Update product spec and domain docs for human-first CLI"
 updated_at: "2026-06-11T03:50:58.378727872+00:00"
 ---

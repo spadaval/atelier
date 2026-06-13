@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:43:46.296355536+00:00"
+status: "done"
 title: "Validate better issue show human output and regressions"
 updated_at: "2026-06-10T17:43:46.296355536+00:00"
 ---

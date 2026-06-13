@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T02:07:13.891383113+00:00"
+status: "done"
 title: "Group queue and relationship list output"
 updated_at: "2026-06-11T02:07:13.891383113+00:00"
 ---

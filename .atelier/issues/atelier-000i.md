@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T13:14:54.372653798+00:00"
+status: "done"
 title: "Decide future session export and run metadata policy"
 updated_at: "2026-06-11T13:14:54.372653798+00:00"
 ---

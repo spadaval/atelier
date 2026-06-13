@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T18:59:54.262718968+00:00"
+status: "done"
 title: "Introduce RecordStore for canonical issue Markdown"
 updated_at: "2026-06-10T18:59:54.262718968+00:00"
 ---

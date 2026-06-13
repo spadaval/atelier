@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:25:39.638484389+00:00"
+status: "done"
 title: "Design issue transition options surface"
 updated_at: "2026-06-12T03:25:39.638484389+00:00"
 ---

@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:22:24.975963037+00:00"
+status: "done"
 title: "Extract canonical and runtime path resolution into a storage layout module"
 updated_at: "2026-06-11T23:22:24.975963037+00:00"
 ---

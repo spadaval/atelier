@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:23:19.884296557+00:00"
+status: "done"
 title: "Prove direct Markdown edits refresh list, show, search, and relationships"
 updated_at: "2026-06-12T00:23:19.884296557+00:00"
 ---

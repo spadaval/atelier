@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:32:25.922110761+00:00"
+status: "done"
 title: "Rebuild and export issue activity sidecars"
 updated_at: "2026-06-10T17:32:25.922110761+00:00"
 ---

@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T18:55:47.763872390+00:00"
+status: "done"
 title: "Document CLI surface tiers and compatibility policy"
 updated_at: "2026-06-09T18:55:47.763872390+00:00"
 ---

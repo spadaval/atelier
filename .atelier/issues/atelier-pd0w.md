@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:43:52.159841537+00:00"
+status: "done"
 title: "Epic: Better issue show human view"
 updated_at: "2026-06-10T17:43:52.159841537+00:00"
 ---

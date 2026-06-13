@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:30:10.807923587+00:00"
+status: "done"
 title: "Constrain lifecycle status changes to explicit commands"
 updated_at: "2026-06-13T04:30:10.807923587+00:00"
 ---

@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:17:07.925041568+00:00"
+status: "done"
 title: "Dogfood Atelier as this repository's live tracker"
 updated_at: "2026-06-08T22:17:07.925041568+00:00"
 ---

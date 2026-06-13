@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:29:23.393254540+00:00"
+status: "done"
 title: "Render richer issue show human header and core sections"
 updated_at: "2026-06-10T17:29:23.393254540+00:00"
 ---

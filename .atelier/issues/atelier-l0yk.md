@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:54:00.991501933+00:00"
+status: "done"
 title: "Make ignored and stale tests visible blockers"
 updated_at: "2026-06-12T21:54:00.991501933+00:00"
 ---

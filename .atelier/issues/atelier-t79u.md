@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:38:39.026306267+00:00"
+status: "done"
 title: "Document issue activity history"
 updated_at: "2026-06-10T17:38:39.026306267+00:00"
 ---

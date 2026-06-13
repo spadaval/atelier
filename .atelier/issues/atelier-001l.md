@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T20:20:08.248232780+00:00"
+status: "done"
 title: "Define first-class milestone checkpoint records"
 updated_at: "2026-06-09T20:20:08.248232780+00:00"
 ---

@@ -44,7 +44,7 @@ issue_types:
   validation: standard_review_proof
 
 statuses:
-  open:
+  todo:
     category: todo
   in_progress:
     category: active
@@ -55,6 +55,8 @@ statuses:
   validation:
     category: validation
   done:
+    category: done
+  archived:
     category: done
 
 validators:
@@ -86,14 +88,14 @@ guidance_templates:
 
 workflows:
   standard_review_proof:
-    initial_status: open
-    done_statuses: [done]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open, blocked]
+        from: [todo, blocked]
         to: in_progress
       block:
-        from: [open, in_progress, review, validation]
+        from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
@@ -115,14 +117,14 @@ workflows:
         guidance: [close_with_proof]
 
   lightweight_spike:
-    initial_status: open
+    initial_status: todo
     done_statuses: [done]
     transitions:
       start:
-        from: [open, blocked]
+        from: [todo, blocked]
         to: in_progress
       block:
-        from: [open, in_progress, review]
+        from: [todo, in_progress, review]
         to: blocked
       request_review:
         from: [in_progress]
@@ -305,19 +307,20 @@ Error payloads should include `path`, `error`, and `message`, plus `line`,
 ## Standard Review/Proof Workflow Example
 
 The standard starter workflow is the contract for most issue types. It makes
-review and proof explicit before `done`:
+review and proof explicit before `done`, and it keeps `archived` available as a
+terminal legacy-migration status:
 
 ```yaml
 workflows:
   standard_review_proof:
-    initial_status: open
-    done_statuses: [done]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open, blocked]
+        from: [todo, blocked]
         to: in_progress
       block:
-        from: [open, in_progress, review, validation]
+        from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
@@ -355,14 +358,14 @@ path, but it does not require first-class evidence for low-risk closure:
 ```yaml
 workflows:
   lightweight_spike:
-    initial_status: open
+    initial_status: todo
     done_statuses: [done]
     transitions:
       start:
-        from: [open, blocked]
+        from: [todo, blocked]
         to: in_progress
       block:
-        from: [open, in_progress, review]
+        from: [todo, in_progress, review]
         to: blocked
       request_review:
         from: [in_progress]
@@ -386,6 +389,13 @@ This example makes the intended trade-off explicit:
 - spikes still record an inspectable `close_reason`; and
 - spikes do not require attached evidence unless a repository intentionally maps
   them to a stricter workflow.
+
+## Diagnostics
+
+Hidden advanced/internal workflow diagnostics remain separate from the normal
+operator workflow. Use `atelier lint` and `atelier doctor` for the human-facing
+record and runtime health checks, and reserve `atelier workflow validate` for
+explicit diagnostic or closeout contracts that name it.
 
 ## Deferred Features
 

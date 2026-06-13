@@ -809,6 +809,9 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_relationships(&mut output, &relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(ISSUE_KIND.schema))?;
     output.push_str(&format!("schema_version: {}\n", ISSUE_KIND.schema_version));
+    if let Some(closed_at) = record.issue.closed_at.as_ref() {
+        write_yaml_scalar(&mut output, "closed_at", Some(&closed_at.to_rfc3339()))?;
+    }
     write_yaml_scalar(&mut output, "status", Some(&record.issue.status))?;
     write_yaml_scalar(&mut output, "title", Some(&record.issue.title))?;
     write_yaml_scalar(
@@ -933,6 +936,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     crate::db::validate_issue_type(&issue_type)
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
+    let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
     let description = if body.is_empty() {
         None
     } else {
@@ -952,7 +956,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
             parent_id: None,
             created_at: require_datetime(&front_matter, "created_at", relative)?,
             updated_at,
-            closed_at: (status == "closed").then_some(updated_at),
+            closed_at: closed_at.or((status == "closed").then_some(updated_at)),
         },
         labels: string_array(&front_matter, "labels", relative)?,
         sections,
@@ -1690,6 +1694,36 @@ fn require_datetime(
     let value = require_scalar(values, key, relative)?;
     DateTime::parse_from_rfc3339(&value)
         .map(|dt| dt.with_timezone(&Utc))
+        .with_context(|| {
+            format!(
+                "Invalid datetime '{}' in key '{}' of {}",
+                value,
+                key,
+                display_state_path(relative)
+            )
+        })
+}
+
+fn optional_datetime(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<Option<DateTime<Utc>>> {
+    let Some(value) = values.get(key) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let Some(value) = value.as_str() else {
+        bail!(
+            "Front matter key '{}' in {} must be a string",
+            key,
+            display_state_path(relative)
+        );
+    };
+    DateTime::parse_from_rfc3339(value)
+        .map(|dt| Some(dt.with_timezone(&Utc)))
         .with_context(|| {
             format!(
                 "Invalid datetime '{}' in key '{}' of {}",
@@ -2518,6 +2552,22 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(!text.contains("evidence_required:"));
         assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
         assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
+        assert!(!text.contains("closed_at:"));
+    }
+
+    #[test]
+    fn issue_record_round_trips_explicit_closed_at_for_done_status() {
+        let mut record = issue_record("atelier-done");
+        let closed_at = Utc.with_ymd_and_hms(2026, 6, 10, 14, 0, 0).unwrap();
+        record.issue.status = "done".to_string();
+        record.issue.closed_at = Some(closed_at);
+
+        let text = render_issue_record(&record).unwrap();
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-done")).unwrap();
+
+        assert!(text.contains("closed_at: \"2026-06-10T14:00:00+00:00\""));
+        assert_eq!(parsed.issue.status, "done");
+        assert_eq!(parsed.issue.closed_at, Some(closed_at));
     }
 
     #[test]

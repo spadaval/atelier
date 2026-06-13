@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:32:48.880253737+00:00"
+status: "done"
 title: "Implement mission lifecycle statuses"
 updated_at: "2026-06-12T03:32:48.880253737+00:00"
 ---

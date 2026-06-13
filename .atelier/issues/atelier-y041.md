@@ -22,7 +22,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Replace issue transition engine"
 updated_at: "2026-06-13T17:36:54.438314837+00:00"
 ---

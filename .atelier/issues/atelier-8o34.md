@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T22:51:07.828862723+00:00"
+status: "done"
 title: "Make mission and issue validators target-aware"
 updated_at: "2026-06-12T22:51:07.828862723+00:00"
 ---

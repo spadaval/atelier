@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T21:43:06+00:00"
+status: "done"
 title: "Define Atelier replacement MVP for Beads users"
 updated_at: "2026-06-08T21:43:06+00:00"
 ---

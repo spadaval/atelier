@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T21:39:24.641767824+00:00"
+status: "done"
 title: "Delete associated internal code and storage"
 updated_at: "2026-06-10T21:39:24.641767824+00:00"
 ---

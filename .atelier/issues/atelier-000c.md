@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:18:57.261718121+00:00"
+status: "done"
 title: "Mission status and CLI control surfaces"
 updated_at: "2026-06-11T21:18:57.261718121+00:00"
 ---

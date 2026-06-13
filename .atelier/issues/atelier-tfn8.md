@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T23:49:12.021247310+00:00"
+status: "done"
 title: "Separate RuntimeState from canonical projection health"
 updated_at: "2026-06-10T23:49:12.021247310+00:00"
 ---

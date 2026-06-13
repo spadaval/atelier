@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:09.477545826+00:00"
+status: "done"
 title: "Decide quiet-mode contract for issues and missions"
 updated_at: "2026-06-12T03:35:09.477545826+00:00"
 ---

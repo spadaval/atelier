@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:29:23.603761796+00:00"
+status: "done"
 title: "Add recent activity preview and command footer to issue show"
 updated_at: "2026-06-10T17:29:23.603761796+00:00"
 ---

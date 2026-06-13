@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:11:50.732742289+00:00"
+status: "done"
 title: "Decide canonical activity, notes, and imported comment policy"
 updated_at: "2026-06-11T23:11:50.732742289+00:00"
 ---

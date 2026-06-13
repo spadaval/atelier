@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:56:32.539896293+00:00"
+status: "done"
 title: "Add worktree status and setup ergonomics"
 updated_at: "2026-06-10T14:56:32.539896293+00:00"
 ---

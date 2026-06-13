@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T02:19:09.851705843+00:00"
+status: "done"
 title: "Validate markdown-only canonical state cutover"
 updated_at: "2026-06-10T02:19:09.851705843+00:00"
 ---

@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T23:55:13.375529836+00:00"
+status: "done"
 title: "Harden mission closeout validators and evidence requirements"
 updated_at: "2026-06-12T23:55:13.375529836+00:00"
 ---

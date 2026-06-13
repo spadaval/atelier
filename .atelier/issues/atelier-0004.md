@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:19.776106093+00:00"
+status: "done"
 title: "Decide first artifact storage backends for evidence"
 updated_at: "2026-06-10T14:51:19.776106093+00:00"
 ---

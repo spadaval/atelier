@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T23:49:11.731358422+00:00"
+status: "done"
 title: "Migrate issue mutations to Markdown-first writes"
 updated_at: "2026-06-10T23:49:11.731358422+00:00"
 ---

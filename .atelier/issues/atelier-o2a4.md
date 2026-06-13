@@ -35,7 +35,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:36:04.665698736+00:00"
+status: "done"
 title: "Reshape command hierarchy for workflow ergonomics"
 updated_at: "2026-06-12T03:36:04.665698736+00:00"
 ---

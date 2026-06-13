@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:22:56.861917211+00:00"
+status: "done"
 title: "Write migration guidance for scripts and agents"
 updated_at: "2026-06-11T04:22:56.861917211+00:00"
 ---

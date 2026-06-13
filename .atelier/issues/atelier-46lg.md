@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:25:24.819494670+00:00"
+status: "done"
 title: "Specify setup, integrations, rebuild, maintenance, and state grouping"
 updated_at: "2026-06-12T03:25:24.819494670+00:00"
 ---

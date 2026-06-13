@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T22:28:56.925326255+00:00"
+status: "done"
 title: "Validate readable mission record workflow end to end"
 updated_at: "2026-06-12T22:28:56.925326255+00:00"
 ---

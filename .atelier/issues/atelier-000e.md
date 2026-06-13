@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T19:55:23+00:00"
+status: "done"
 title: "Rename package, binary, resources, and user-facing text for Atelier"
 updated_at: "2026-06-08T19:55:23+00:00"
 ---

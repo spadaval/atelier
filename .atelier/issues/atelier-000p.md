@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T21:38:57+00:00"
+status: "done"
 title: "[CLOSEOUT] Validate Milestone 2 storage contract"
 updated_at: "2026-06-08T21:38:57+00:00"
 ---

@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:17:57.101793541+00:00"
+status: "done"
 title: "Validate Agent Factory orchestrator loop end to end"
 updated_at: "2026-06-11T21:17:57.101793541+00:00"
 ---

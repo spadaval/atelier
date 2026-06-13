@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T23:49:22.961652574+00:00"
+status: "done"
 title: "Keep orientation commands usable with malformed records"
 updated_at: "2026-06-12T23:49:22.961652574+00:00"
 ---

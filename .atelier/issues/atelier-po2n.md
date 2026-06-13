@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T20:14:20.047794054+00:00"
+status: "done"
 title: "Extract ProjectionIndex freshness and reindex semantics"
 updated_at: "2026-06-10T20:14:20.047794054+00:00"
 ---

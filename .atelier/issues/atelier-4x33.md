@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:37:43.819345052+00:00"
+status: "done"
 title: "Add transcript-based CLI validation coverage"
 updated_at: "2026-06-12T03:37:43.819345052+00:00"
 ---

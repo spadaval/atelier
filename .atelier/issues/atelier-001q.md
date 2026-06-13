@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T13:11:00.683840448+00:00"
+status: "done"
 title: "Instrument CLI commands with structured duration events"
 updated_at: "2026-06-11T13:11:00.683840448+00:00"
 ---

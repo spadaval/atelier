@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:17:57.070914297+00:00"
+status: "done"
 title: "Implement configurable workflows and validator-backed transitions"
 updated_at: "2026-06-11T21:17:57.070914297+00:00"
 ---

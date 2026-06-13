@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T15:57:12.599042636+00:00"
+status: "done"
 title: "Detect stale installed CLI against canonical records"
 updated_at: "2026-06-13T15:57:12.599042636+00:00"
 ---

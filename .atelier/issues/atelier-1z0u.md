@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:35:56.806271575+00:00"
+status: "done"
 title: "Add atelier history command"
 updated_at: "2026-06-10T17:35:56.806271575+00:00"
 ---

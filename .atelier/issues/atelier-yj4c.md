@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:23:53.939748864+00:00"
+status: "done"
 title: "Fix mission next actions by state"
 updated_at: "2026-06-13T04:23:53.939748864+00:00"
 ---

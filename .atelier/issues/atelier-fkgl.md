@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:23:55.019447200+00:00"
+status: "done"
 title: "Update Agent Factory and tracker workflow examples"
 updated_at: "2026-06-11T04:23:55.019447200+00:00"
 ---

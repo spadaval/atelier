@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:19.805241515+00:00"
+status: "done"
 title: "Decide how much inherited Chainlink lock sync survives"
 updated_at: "2026-06-10T14:51:19.805241515+00:00"
 ---

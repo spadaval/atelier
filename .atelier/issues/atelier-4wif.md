@@ -23,7 +23,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:42:47.456351736+00:00"
+status: "done"
 title: "Validate and document the refinement pass"
 updated_at: "2026-06-12T03:42:47.456351736+00:00"
 ---

@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T19:47:40+00:00"
+status: "done"
 title: "Decide `.atelier/state.db` gitignore and runtime-state policy"
 updated_at: "2026-06-08T19:47:40+00:00"
 ---

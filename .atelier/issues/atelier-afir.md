@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T18:48:51.129399578+00:00"
+status: "done"
 title: "Retire export-as-writer compatibility path"
 updated_at: "2026-06-11T18:48:51.129399578+00:00"
 ---

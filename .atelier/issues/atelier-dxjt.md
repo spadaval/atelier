@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T22:23:48.770384478+00:00"
+status: "done"
 title: "Make workflow validate exit nonzero on failed validators"
 updated_at: "2026-06-11T22:23:48.770384478+00:00"
 ---

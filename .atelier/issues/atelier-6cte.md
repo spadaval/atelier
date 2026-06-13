@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:09:00.906432994+00:00"
+status: "done"
 title: "Define mission operator command contract"
 updated_at: "2026-06-13T04:09:00.906432994+00:00"
 ---

@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:17:39.389111395+00:00"
+status: "done"
 title: "Validate one-directory Atelier state cleanup end to end"
 updated_at: "2026-06-12T00:17:39.389111395+00:00"
 ---

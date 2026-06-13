@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T01:17:22.018741691+00:00"
+status: "done"
 title: "Repair canonical export sectioned-body expectations"
 updated_at: "2026-06-13T01:17:22.018741691+00:00"
 ---

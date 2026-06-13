@@ -11,9 +11,17 @@ issue_types:
   validation: standard_review_proof
 
 statuses:
-  open:
+  todo:
     category: todo
-  closed:
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
     category: done
   archived:
     category: done
@@ -47,12 +55,25 @@ guidance_templates:
 
 workflows:
   standard_review_proof:
-    initial_status: open
-    done_statuses: [closed, archived]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_ready]
       close:
-        from: [open]
-        to: closed
+        from: [validation]
+        to: done
         required_fields: [close_reason]
         validators:
           - proof_attached
@@ -61,17 +82,26 @@ workflows:
           - durable_current
           - closeout_clean
         guidance: [close_with_proof]
-      archive:
-        from: [open]
-        to: archived
 
   lightweight_spike:
-    initial_status: open
-    done_statuses: [closed]
+    initial_status: todo
+    done_statuses: [done]
     transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      revise:
+        from: [review]
+        to: in_progress
       close:
-        from: [open]
-        to: closed
+        from: [review]
+        to: done
         required_fields: [close_reason]
         validators:
           - review_ready

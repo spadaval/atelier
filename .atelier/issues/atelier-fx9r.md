@@ -29,7 +29,8 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:06:29.065788650+00:00"
+status: "done"
 title: "Fix projection stale rebuild races and diagnostics"
 updated_at: "2026-06-12T21:06:29.065788650+00:00"
 ---

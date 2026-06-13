@@ -25,7 +25,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T18:55:47.712538891+00:00"
+status: "done"
 title: "Classify current CLI commands into surface tiers"
 updated_at: "2026-06-09T18:55:47.712538891+00:00"
 ---

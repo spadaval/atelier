@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:07:08.456713794+00:00"
+status: "done"
 title: "Define the one-directory .atelier filesystem contract"
 updated_at: "2026-06-11T23:07:08.456713794+00:00"
 ---

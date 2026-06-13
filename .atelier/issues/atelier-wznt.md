@@ -29,7 +29,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:18:34.520571163+00:00"
+status: "done"
 title: "Collapse Atelier project state into one .atelier directory"
 updated_at: "2026-06-12T00:18:34.520571163+00:00"
 ---

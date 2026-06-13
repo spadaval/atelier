@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:34:43.808347023+00:00"
+status: "done"
 title: "Keep legacy .atelier-state discovery read-only during the migration window"
 updated_at: "2026-06-11T23:34:43.808347023+00:00"
 ---

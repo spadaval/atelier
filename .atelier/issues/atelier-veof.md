@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:11:50.749732882+00:00"
+status: "done"
 title: "Define deterministic direct-edit Markdown record rules"
 updated_at: "2026-06-11T23:11:50.749732882+00:00"
 ---

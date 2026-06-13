@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:38.585686715+00:00"
+status: "done"
 title: "Extend bulk apply to typed links and first-class records"
 updated_at: "2026-06-10T15:05:38.585686715+00:00"
 ---

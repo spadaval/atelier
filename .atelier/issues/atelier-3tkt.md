@@ -31,7 +31,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:13:05.117383453+00:00"
+status: "done"
 title: "Specify the Markdown-first single-tree contract"
 updated_at: "2026-06-11T23:13:05.117383453+00:00"
 ---

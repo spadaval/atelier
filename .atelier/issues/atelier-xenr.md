@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:21.587689662+00:00"
+status: "done"
 title: "Consolidate issue creation around file-first issue create"
 updated_at: "2026-06-12T03:35:21.587689662+00:00"
 ---

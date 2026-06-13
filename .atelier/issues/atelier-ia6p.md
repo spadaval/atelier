@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:22.806464987+00:00"
+status: "done"
 title: "Design next-action formatting helpers without generic policy"
 updated_at: "2026-06-12T03:35:22.806464987+00:00"
 ---

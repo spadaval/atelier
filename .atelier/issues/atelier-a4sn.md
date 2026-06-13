@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T23:36:46.918917736+00:00"
+status: "done"
 title: "Remove workflow validate from the normal public workflow"
 updated_at: "2026-06-12T23:36:46.918917736+00:00"
 ---

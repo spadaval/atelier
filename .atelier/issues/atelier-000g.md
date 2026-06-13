@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T21:31:43+00:00"
+status: "done"
 title: "Implement SQLite rebuild from `.atelier-state`"
 updated_at: "2026-06-08T21:31:43+00:00"
 ---

@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:29:15.426234076+00:00"
+status: "done"
 title: "Run markdown-first overhaul closeout validation"
 updated_at: "2026-06-12T00:29:15.426234076+00:00"
 ---

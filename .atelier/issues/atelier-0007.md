@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:18:40.832966369+00:00"
+status: "done"
 title: "[CLOSEOUT] Validate Milestone 5 workflow system"
 updated_at: "2026-06-11T21:18:40.832966369+00:00"
 ---

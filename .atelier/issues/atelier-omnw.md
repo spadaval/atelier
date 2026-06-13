@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T22:15:52.549031285+00:00"
+status: "done"
 title: "Replace flat issue queues with grouped scannable views"
 updated_at: "2026-06-10T22:15:52.549031285+00:00"
 ---

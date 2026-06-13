@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:21:52.672319566+00:00"
+status: "done"
 title: "Prove recovery when state.db is missing or stale"
 updated_at: "2026-06-12T00:21:52.672319566+00:00"
 ---

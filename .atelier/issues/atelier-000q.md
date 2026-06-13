@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:55.216685816+00:00"
+status: "done"
 title: "[CLOSEOUT] Validate Milestone 3 worktree ergonomics"
 updated_at: "2026-06-10T15:05:55.216685816+00:00"
 ---

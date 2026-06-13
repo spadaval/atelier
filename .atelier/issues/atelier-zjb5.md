@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:25.247085781+00:00"
+status: "done"
 title: "Epic: Remove command-result JSON mode from CLI commands"
 updated_at: "2026-06-11T04:31:25.247085781+00:00"
 ---

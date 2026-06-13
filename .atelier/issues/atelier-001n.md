@@ -25,7 +25,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:38.605006117+00:00"
+status: "done"
 title: "Add bulk graph apply from JSON plan files"
 updated_at: "2026-06-10T15:05:38.605006117+00:00"
 ---

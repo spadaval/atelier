@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T02:08:25.942856294+00:00"
+status: "done"
 title: "Validate human CLI ergonomics mission closeout"
 updated_at: "2026-06-11T02:08:25.942856294+00:00"
 ---

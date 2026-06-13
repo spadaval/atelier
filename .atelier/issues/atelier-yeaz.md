@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T22:23:51.078710261+00:00"
+status: "done"
 title: "Make mission status report concrete closeout blockers"
 updated_at: "2026-06-11T22:23:51.078710261+00:00"
 ---

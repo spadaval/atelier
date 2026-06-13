@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T21:51:20+00:00"
+status: "done"
 title: "Implement Beads data import into Atelier state"
 updated_at: "2026-06-08T21:51:20+00:00"
 ---

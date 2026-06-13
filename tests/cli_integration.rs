@@ -177,86 +177,14 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
         .join(format!("{issue_id}.md"))
 }
 
-fn write_workflow_policy(dir: &Path, include_archived_status: bool) {
-    let archived_status = if include_archived_status {
-        "  archived:\n    category: done\n"
-    } else {
-        ""
-    };
-    let standard_done_statuses = if include_archived_status {
-        "[closed, archived]"
-    } else {
-        "[closed]"
-    };
-    let archive_transition = if include_archived_status {
-        "      archive:\n        from: [open]\n        to: archived\n"
-    } else {
-        ""
-    };
-    let policy = format!(
-        r#"schema: atelier.workflow
-schema_version: 1
-issue_types:
-  bug: standard_review_proof
-  closeout: standard_review_proof
-  epic: standard_review_proof
-  feature: standard_review_proof
-  spike: lightweight_spike
-  task: standard_review_proof
-  validation: standard_review_proof
-statuses:
-  open:
-    category: todo
-  closed:
-    category: done
-{archived_status}validators:
-  durable_current:
-    builtin: durable_state_current
-  review_ready:
-    builtin: review_complete
-  proof_attached:
-    builtin: evidence_attached
-    params:
-      min_count: 1
-  blockers_clear:
-    builtin: no_open_blockers
-  lint_clear:
-    builtin: no_blocking_lints
-  closeout_clean:
-    builtin: git_worktree_clean
-guidance_templates:
-  close_with_proof:
-    format: markdown
-    template: |
-      Closing {{{{ issue.id }}}} requires attached evidence and no open blockers.
-  record_spike_outcome:
-    format: markdown
-    template: |
-      Record a concise close reason that captures what {{{{ issue.id }}}} learned.
-workflows:
-  standard_review_proof:
-    initial_status: open
-    done_statuses: {standard_done_statuses}
-    transitions:
-      close:
-        from: [open]
-        to: closed
-        required_fields: [close_reason]
-        validators: [proof_attached, blockers_clear, lint_clear, durable_current, closeout_clean]
-        guidance: [close_with_proof]
-{archive_transition}  lightweight_spike:
-    initial_status: open
-    done_statuses: [closed]
-    transitions:
-      close:
-        from: [open]
-        to: closed
-        required_fields: [close_reason]
-        validators: [review_ready, durable_current]
-        guidance: [record_spike_outcome]
-"#
-    );
-    std::fs::write(dir.join(".atelier").join("workflow.yaml"), policy).unwrap();
+fn front_matter_value(markdown: &str, key: &str) -> String {
+    markdown
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(&format!("{key}: "))
+                .map(|value| value.trim().trim_matches('"').to_string())
+        })
+        .unwrap_or_else(|| panic!("missing front matter key {key} in:\n{markdown}"))
 }
 
 fn canonical_evidence_data(dir: &Path, evidence_id: &str) -> serde_json::Value {
@@ -7784,10 +7712,181 @@ fn test_workflow_validate_defaults_for_evidence_and_tracker_health_targets() {
 }
 
 #[test]
+fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
+    assert!(
+        !policy_path.exists(),
+        "starter policy should not exist before init"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+    assert!(stdout.contains("Created .atelier/workflow.yaml"));
+    assert!(stdout.contains("atelier workflow migrate-statuses"));
+
+    let policy = std::fs::read_to_string(policy_path).unwrap();
+    assert!(policy.contains("  todo:\n    category: todo"));
+    assert!(policy.contains("  archived:\n    category: done"));
+    assert!(policy.contains("    initial_status: todo"));
+    assert!(policy.contains("    done_statuses: [done, archived]"));
+    assert!(policy.contains("  lightweight_spike:"));
+}
+
+#[test]
+fn test_workflow_init_refuses_existing_policy_without_force_and_overwrites_with_force() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
+    std::fs::write(&policy_path, "schema: custom\n").unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(
+        !success,
+        "workflow init should refuse overwrite without --force"
+    );
+    assert!(stderr.contains("workflow init --force"), "stderr: {stderr}");
+    assert_eq!(
+        std::fs::read_to_string(&policy_path).unwrap(),
+        "schema: custom\n"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init", "--force"]);
+    assert!(success, "workflow init --force failed: {stderr}");
+    assert!(stdout.contains("Replaced .atelier/workflow.yaml"));
+
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("schema: atelier.workflow"));
+    assert!(policy.contains("standard_review_proof"));
+    assert!(policy.contains("lightweight_spike"));
+}
+
+#[test]
+fn test_workflow_migrate_statuses_rewrites_legacy_issue_statuses_and_preserves_close_metadata() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy open"]);
+    assert!(success, "open issue create failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy closed"]);
+    assert!(success, "closed issue create failed: {stderr}");
+    let closed_id = issue_id_by_title(dir.path(), "Legacy closed");
+    attach_issue_pass_evidence(dir.path(), &closed_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &closed_id,
+            "--reason",
+            "Close reason body",
+        ],
+    );
+    assert!(success, "legacy close failed: {stderr}");
+    let closed_path = canonical_issue_path(dir.path(), &closed_id);
+    let closed_before = std::fs::read_to_string(&closed_path).unwrap();
+    let closed_timestamp = front_matter_value(&closed_before, "updated_at");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Legacy archived"]);
+    assert!(success, "archived issue create failed: {stderr}");
+    let archived_id = issue_id_by_title(dir.path(), "Legacy archived");
+    attach_issue_pass_evidence(dir.path(), &archived_id);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &archived_id,
+            "--reason",
+            "Archived reason body",
+        ],
+    );
+    assert!(success, "archived close failed: {stderr}");
+    let archived_path = canonical_issue_path(dir.path(), &archived_id);
+    let archived_before = std::fs::read_to_string(&archived_path).unwrap();
+    let archived_timestamp = front_matter_value(&archived_before, "updated_at");
+    std::fs::write(
+        &archived_path,
+        archived_before.replace(
+            "status: \"closed\"",
+            &format!("closed_at: \"{archived_timestamp}\"\nstatus: \"archived\""),
+        ),
+    )
+    .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
+    assert!(success, "workflow migrate-statuses failed: {stderr}");
+    assert!(stdout.contains("Migrated:  3"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("open -> initial(todo): 1"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("closed -> done: 1"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("archived -> archived: 1"),
+        "stdout: {stdout}"
+    );
+
+    let open_id = issue_id_by_title(dir.path(), "Legacy open");
+    let open_after = std::fs::read_to_string(canonical_issue_path(dir.path(), &open_id)).unwrap();
+    assert!(open_after.contains("status: \"todo\""));
+    assert!(!open_after.contains("closed_at:"));
+
+    let closed_after = std::fs::read_to_string(&closed_path).unwrap();
+    assert!(closed_after.contains("status: \"done\""));
+    assert!(closed_after.contains(&format!("closed_at: \"{closed_timestamp}\"")));
+
+    let archived_after = std::fs::read_to_string(&archived_path).unwrap();
+    assert!(archived_after.contains("status: \"archived\""));
+    assert!(archived_after.contains(&format!("closed_at: \"{archived_timestamp}\"")));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &closed_id]);
+    assert!(success, "issue show after migration failed: {stderr}");
+    assert!(stdout.contains("Close Reason"));
+    assert!(stdout.contains("Close reason body"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+    assert!(success, "workflow check after migration failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(success, "lint after migration failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
+    assert!(success, "export check after migration failed: {stderr}");
+}
+
+#[test]
+fn test_workflow_migrate_statuses_rejects_invalid_policy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
+    std::fs::write(
+        &policy_path,
+        "schema: atelier.workflow\nschema_version: 1\nissue_types: {}\n",
+    )
+    .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
+    assert!(!success, "migrate-statuses should fail with invalid policy");
+    assert!(
+        stderr.contains("workflow_config_missing_field")
+            || stderr.contains("workflow_config_invalid_issue_type_mapping")
+            || stderr.contains("workflow_config_parse_error")
+            || stderr.contains("workflow_config_unknown_reference"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn test_workflow_check_reports_policy_and_issue_record_health() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    write_workflow_policy(dir.path(), true);
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow check task"]);
     assert!(success, "issue create failed: {stderr}");
@@ -7802,6 +7901,10 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
         ],
     );
     assert!(success, "spike issue create failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
+    assert!(success, "workflow migrate-statuses failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
     assert!(success, "workflow check failed: {stderr}");
@@ -7809,7 +7912,7 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
     assert!(stdout.contains("Policy:         pass"));
     assert!(stdout.contains("Issue Types:    7"));
-    assert!(stdout.contains("Statuses:       3"));
+    assert!(stdout.contains("Statuses:       7"));
     assert!(stdout.contains("Workflows:      2"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
@@ -7819,16 +7922,19 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
 fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    write_workflow_policy(dir.path(), false);
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Workflow mismatch"]);
     assert!(success, "issue create failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(success, "workflow init failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "migrate-statuses"]);
+    assert!(success, "workflow migrate-statuses failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Workflow mismatch");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let issue_text = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(
         &issue_path,
-        issue_text.replace("status: \"open\"", "status: \"archived\""),
+        issue_text.replace("status: \"todo\"", "status: \"qa_hold\""),
     )
     .unwrap();
 
@@ -7842,9 +7948,11 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
         "stderr: {stderr}"
     );
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
-    assert!(stderr.contains("archived"), "stderr: {stderr}");
+    assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains("allowed statuses: closed, open"),
+        stderr.contains(
+            "allowed statuses: archived, blocked, done, in_progress, review, todo, validation"
+        ),
         "stderr: {stderr}"
     );
 }
@@ -9959,8 +10067,8 @@ fn test_focused_lint_validates_dependency_cycles() {
 fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     assert_lint_rejects_issue_edit(
         "Invalid status fixture",
-        |markdown, _issue_id| markdown.replace("status: \"open\"", "status: \"bogus\""),
-        &["Invalid status", "Invalid status 'bogus'"],
+        |markdown, _issue_id| markdown.replace("status: \"open\"", "status: \"bad-status\""),
+        &["Invalid status", "Invalid status 'bad-status'"],
     );
     assert_lint_rejects_issue_edit(
         "Invalid type fixture",

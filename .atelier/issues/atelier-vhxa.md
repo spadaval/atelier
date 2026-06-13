@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:15.968931201+00:00"
+status: "done"
 title: "Audit human views for post-JSON information gaps"
 updated_at: "2026-06-11T03:50:15.968931201+00:00"
 ---

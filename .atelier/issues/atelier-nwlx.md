@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:22:30.776797854+00:00"
+status: "done"
 title: "Track Atelier project config and ignore only runtime files"
 updated_at: "2026-06-11T23:22:30.776797854+00:00"
 ---

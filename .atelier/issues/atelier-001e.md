@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T18:55:47.741705917+00:00"
+status: "done"
 title: "Remove changelog behavior from issue closure"
 updated_at: "2026-06-09T18:55:47.741705917+00:00"
 ---

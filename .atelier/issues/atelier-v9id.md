@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T01:40:28.846769072+00:00"
+status: "done"
 title: "Adversarially validate repair mission outcomes"
 updated_at: "2026-06-13T01:40:28.846769072+00:00"
 ---

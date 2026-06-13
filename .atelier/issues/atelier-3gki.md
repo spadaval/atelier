@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T22:23:54.673231332+00:00"
+status: "done"
 title: "Implement enforceable workflow transitions"
 updated_at: "2026-06-11T22:23:54.673231332+00:00"
 ---

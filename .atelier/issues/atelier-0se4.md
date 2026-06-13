@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:15.674483497+00:00"
+status: "done"
 title: "Inventory command-result --json flags and formatter paths"
 updated_at: "2026-06-11T03:50:15.674483497+00:00"
 ---

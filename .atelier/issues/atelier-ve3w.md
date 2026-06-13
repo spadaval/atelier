@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:45.167209738+00:00"
+status: "done"
 title: "Standardize mutation output around explicit change summaries"
 updated_at: "2026-06-12T03:35:45.167209738+00:00"
 ---

@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T17:59:15+00:00"
+status: "done"
 title: "Configure Beads Dolt remote for Atelier"
 updated_at: "2026-06-08T17:59:15+00:00"
 ---

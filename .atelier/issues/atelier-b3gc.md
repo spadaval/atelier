@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T18:23:25.686942626+00:00"
+status: "done"
 title: "Move public durable mutations onto RecordStore"
 updated_at: "2026-06-11T18:23:25.686942626+00:00"
 ---

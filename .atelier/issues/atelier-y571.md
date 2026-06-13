@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:25.583219096+00:00"
+status: "done"
 title: "Epic: Strengthen focused human output after JSON removal"
 updated_at: "2026-06-11T04:31:25.583219096+00:00"
 ---

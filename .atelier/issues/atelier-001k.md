@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:43.085892951+00:00"
+status: "done"
 title: "Add workflow validator evaluation command"
 updated_at: "2026-06-10T14:51:43.085892951+00:00"
 ---

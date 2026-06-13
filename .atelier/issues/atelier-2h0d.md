@@ -11,7 +11,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:35:41.552112841+00:00"
+status: "done"
 title: "Mission closeout validation and evidence record"
 updated_at: "2026-06-11T04:35:41.552112841+00:00"
 ---

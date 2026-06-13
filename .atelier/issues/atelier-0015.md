@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:33:11.061279585+00:00"
+status: "done"
 title: "Validate Agent Factory workflows on Atelier"
 updated_at: "2026-06-08T22:33:11.061279585+00:00"
 ---

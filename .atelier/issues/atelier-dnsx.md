@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:20:54.636137024+00:00"
+status: "done"
 title: "Add migration fixture for old state plus runtime database"
 updated_at: "2026-06-12T00:20:54.636137024+00:00"
 ---

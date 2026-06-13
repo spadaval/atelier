@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:37:45.918283493+00:00"
+status: "done"
 title: "Measure automatic lint feasibility for command dispatch"
 updated_at: "2026-06-12T03:37:45.918283493+00:00"
 ---

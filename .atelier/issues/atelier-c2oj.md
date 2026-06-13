@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:37:44.576687346+00:00"
+status: "done"
 title: "Document file-first Markdown issue editing workflows"
 updated_at: "2026-06-12T03:37:44.576687346+00:00"
 ---

@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:29:23.402451775+00:00"
+status: "done"
 title: "Add hierarchy and dependency context to issue show"
 updated_at: "2026-06-10T17:29:23.402451775+00:00"
 ---

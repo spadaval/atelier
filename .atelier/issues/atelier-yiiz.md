@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T18:47:16.692189436+00:00"
+status: "done"
 title: "Move first-class record writes onto RecordStore"
 updated_at: "2026-06-11T18:47:16.692189436+00:00"
 ---

@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:11:51.171068876+00:00"
+status: "done"
 title: "Define validation placement and anti-red-tape guidance"
 updated_at: "2026-06-13T04:11:51.171068876+00:00"
 ---

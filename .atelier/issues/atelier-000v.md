@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:59.743735264+00:00"
+status: "done"
 title: "Implement worktree and branch helper commands"
 updated_at: "2026-06-10T14:51:59.743735264+00:00"
 ---

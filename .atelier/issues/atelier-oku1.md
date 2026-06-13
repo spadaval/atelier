@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T17:46:59.126452885+00:00"
+status: "done"
 title: "Record workflow-state architecture decision"
 updated_at: "2026-06-13T17:46:59.126452885+00:00"
 ---

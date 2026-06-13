@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:28:55.458093640+00:00"
+status: "done"
 title: "Update init and gitignore behavior for tracked .atelier records"
 updated_at: "2026-06-11T23:28:55.458093640+00:00"
 ---

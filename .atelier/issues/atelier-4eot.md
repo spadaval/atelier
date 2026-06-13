@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T05:02:21.466001699+00:00"
+status: "done"
 title: "Define issue section contract"
 updated_at: "2026-06-12T05:02:21.466001699+00:00"
 ---

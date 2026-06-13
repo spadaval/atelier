@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T13:07:09.145263865+00:00"
+status: "done"
 title: "Define telemetry storage, redaction, and retention policy"
 updated_at: "2026-06-11T13:07:09.145263865+00:00"
 ---

@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:34:53.437062263+00:00"
+status: "done"
 title: "Record Agent Factory Atelier validation evidence"
 updated_at: "2026-06-08T22:34:53.437062263+00:00"
 ---

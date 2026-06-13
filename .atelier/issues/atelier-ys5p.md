@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T22:18:24.731846166+00:00"
+status: "done"
 title: "Migrate mission records away from escaped data JSON"
 updated_at: "2026-06-12T22:18:24.731846166+00:00"
 ---

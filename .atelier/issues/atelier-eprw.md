@@ -22,7 +22,8 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:51:07.978213441+00:00"
+status: "done"
 title: "Fail projection queries clearly when canonical Markdown is invalid"
 updated_at: "2026-06-11T23:51:07.978213441+00:00"
 ---

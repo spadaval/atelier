@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T19:54:14.931558766+00:00"
+status: "done"
 title: "Implement read-only Mission Control TUI views"
 updated_at: "2026-06-11T19:54:14.931558766+00:00"
 ---

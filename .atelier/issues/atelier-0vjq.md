@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:19:42.539808852+00:00"
+status: "done"
 title: "Define unified evidence recording command contract"
 updated_at: "2026-06-13T04:19:42.539808852+00:00"
 ---

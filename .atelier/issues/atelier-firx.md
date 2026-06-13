@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T22:23:51.783036693+00:00"
+status: "done"
 title: "Prove dirty worktree blocks mission closeout"
 updated_at: "2026-06-11T22:23:51.783036693+00:00"
 ---

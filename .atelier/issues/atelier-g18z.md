@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T23:06:44.821490789+00:00"
+status: "done"
 title: "Block closeout on docs help and tests drift"
 updated_at: "2026-06-12T23:06:44.821490789+00:00"
 ---

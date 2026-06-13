@@ -31,7 +31,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:36:03.367841847+00:00"
+status: "done"
 title: "Improve human output and next-action guidance"
 updated_at: "2026-06-12T03:36:03.367841847+00:00"
 ---

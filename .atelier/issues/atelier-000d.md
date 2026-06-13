@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T19:51:35+00:00"
+status: "done"
 title: "Document Chainlink provenance and inherited architecture boundaries"
 updated_at: "2026-06-08T19:51:35+00:00"
 ---

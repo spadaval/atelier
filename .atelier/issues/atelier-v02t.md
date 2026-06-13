@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:24:14.433642375+00:00"
+status: "done"
 title: "Specify root status, mission status, and mission show contracts"
 updated_at: "2026-06-12T03:24:14.433642375+00:00"
 ---

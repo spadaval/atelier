@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:03:14.689647967+00:00"
+status: "done"
 title: "Explode work command group into domain start finish and status surfaces"
 updated_at: "2026-06-12T21:03:14.689647967+00:00"
 ---

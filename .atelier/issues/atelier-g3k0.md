@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:26:36.954904843+00:00"
+status: "done"
 title: "Harden projection rebuild contention and recovery"
 updated_at: "2026-06-13T04:26:36.954904843+00:00"
 ---

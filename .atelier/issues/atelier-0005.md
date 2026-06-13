@@ -25,7 +25,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:56:32.739557039+00:00"
+status: "done"
 title: "Implement atelier link add/remove/list with validation"
 updated_at: "2026-06-10T14:56:32.739557039+00:00"
 ---

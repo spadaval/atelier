@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:23:53.949302917+00:00"
+status: "done"
 title: "Make mission output compact by default"
 updated_at: "2026-06-13T04:23:53.949302917+00:00"
 ---

@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:35:56.728302758+00:00"
+status: "done"
 title: "Record evidence attachments in issue activity"
 updated_at: "2026-06-10T17:35:56.728302758+00:00"
 ---

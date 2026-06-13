@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T05:22:46.442482975+00:00"
+status: "done"
 title: "Integrate parsed issue sections across validators and command surfaces"
 updated_at: "2026-06-12T05:22:46.442482975+00:00"
 ---

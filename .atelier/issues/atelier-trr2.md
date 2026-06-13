@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T00:25:49.979408942+00:00"
+status: "done"
 title: "Validate workflow signpost surfaces end to end"
 updated_at: "2026-06-13T00:25:49.979408942+00:00"
 ---

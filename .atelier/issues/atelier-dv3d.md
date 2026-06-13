@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:24:01.173001255+00:00"
+status: "done"
 title: "Add command-backed evidence capture"
 updated_at: "2026-06-13T04:24:01.173001255+00:00"
 ---

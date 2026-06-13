@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T19:54:15.536904694+00:00"
+status: "done"
 title: "Validate TUI fixtures and terminal ergonomics"
 updated_at: "2026-06-11T19:54:15.536904694+00:00"
 ---

@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T22:18:35.525315733+00:00"
+status: "done"
 title: "Validate and document human CLI output conventions"
 updated_at: "2026-06-10T22:18:35.525315733+00:00"
 ---

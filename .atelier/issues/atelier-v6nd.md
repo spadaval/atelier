@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:25:55.304932055+00:00"
+status: "done"
 title: "Teach Agent Factory proof escalation rules"
 updated_at: "2026-06-12T21:25:55.304932055+00:00"
 ---

@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:28:37.515087379+00:00"
+status: "done"
 title: "Move non-lifecycle issue commands to explicit homes"
 updated_at: "2026-06-12T21:28:37.515087379+00:00"
 ---

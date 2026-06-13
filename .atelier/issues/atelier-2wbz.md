@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T16:09:09.597585550+00:00"
+status: "done"
 title: "Collapse mission operator CLI into contextual status"
 updated_at: "2026-06-13T16:09:09.597585550+00:00"
 ---

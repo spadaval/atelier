@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:26:41.680453642+00:00"
+status: "done"
 title: "Migrate canonical records from .atelier-state into .atelier"
 updated_at: "2026-06-11T23:26:41.680453642+00:00"
 ---

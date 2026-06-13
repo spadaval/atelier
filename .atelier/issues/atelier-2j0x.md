@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T22:23:53.917435528+00:00"
+status: "done"
 title: "Validate end-to-end mission lifecycle with real commands"
 updated_at: "2026-06-11T22:23:53.917435528+00:00"
 ---

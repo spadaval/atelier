@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T22:12:37.929534819+00:00"
+status: "done"
 title: "Add compact issue hierarchy output"
 updated_at: "2026-06-10T22:12:37.929534819+00:00"
 ---

@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:01.560730327+00:00"
+status: "done"
 title: "Delete or simplify JSON result formatter code"
 updated_at: "2026-06-11T04:31:01.560730327+00:00"
 ---

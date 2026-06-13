@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:58.356184726+00:00"
+status: "done"
 title: "Improve detail views with bounded actionable context"
 updated_at: "2026-06-11T03:50:58.356184726+00:00"
 ---

@@ -71,7 +71,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T01:40:43.774653803+00:00"
+status: "done"
 title: "Overhaul mission validation and reliability system"
 updated_at: "2026-06-13T01:40:43.774653803+00:00"
 ---

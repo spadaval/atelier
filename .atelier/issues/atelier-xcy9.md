@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:42:13.850110047+00:00"
+status: "done"
 title: "Simplify atelier init to create core tracker state only"
 updated_at: "2026-06-11T23:42:13.850110047+00:00"
 ---

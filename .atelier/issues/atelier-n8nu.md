@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:07:54.448356772+00:00"
+status: "done"
 title: "Document Agent Factory model routing policy"
 updated_at: "2026-06-13T04:07:54.448356772+00:00"
 ---

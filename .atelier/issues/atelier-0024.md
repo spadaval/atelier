@@ -27,7 +27,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T14:42:00.416727701+00:00"
+status: "done"
 title: "Epic: Markdown-only canonical state and record identity cutover"
 updated_at: "2026-06-11T14:42:00.416727701+00:00"
 ---

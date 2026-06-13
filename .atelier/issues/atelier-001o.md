@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T19:54:14.390172050+00:00"
+status: "done"
 title: "Add Mission Control terminal UI"
 updated_at: "2026-06-11T19:54:14.390172050+00:00"
 ---

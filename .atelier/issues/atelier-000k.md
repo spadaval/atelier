@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T20:03:43+00:00"
+status: "done"
 title: "[CLOSEOUT] Validate Milestone 1 fork establishment"
 updated_at: "2026-06-08T20:03:43+00:00"
 ---

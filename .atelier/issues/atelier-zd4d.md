@@ -35,7 +35,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T14:42:00.820251242+00:00"
+status: "done"
 title: "Epic: Execute Markdown-first durable state architecture cutover"
 updated_at: "2026-06-11T14:42:00.820251242+00:00"
 ---

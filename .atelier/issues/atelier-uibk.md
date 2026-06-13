@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T05:22:45.271218408+00:00"
+status: "done"
 title: "Migrate existing issue records to sectioned Markdown"
 updated_at: "2026-06-12T05:22:45.271218408+00:00"
 ---

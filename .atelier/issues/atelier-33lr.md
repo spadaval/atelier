@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:12:45.081141459+00:00"
+status: "done"
 title: "Document Markdown merge-conflict and recovery guidance"
 updated_at: "2026-06-11T23:12:45.081141459+00:00"
 ---

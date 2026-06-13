@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:40:41.088923833+00:00"
+status: "done"
 title: "[CLOSEOUT] Retire Beads from Atelier and Agent Factory"
 updated_at: "2026-06-08T22:40:41.088923833+00:00"
 ---

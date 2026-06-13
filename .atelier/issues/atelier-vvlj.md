@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:25.856615297+00:00"
+status: "done"
 title: "Epic: Reconcile docs and agent workflows for human-first CLI"
 updated_at: "2026-06-11T04:31:25.856615297+00:00"
 ---

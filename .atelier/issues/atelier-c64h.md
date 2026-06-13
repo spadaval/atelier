@@ -24,7 +24,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T17:48:45.708871912+00:00"
+status: "done"
 title: "Define v1 workflow YAML contract"
 updated_at: "2026-06-13T17:48:45.708871912+00:00"
 ---

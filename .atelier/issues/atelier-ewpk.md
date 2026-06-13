@@ -20,7 +20,7 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "todo"
 title: "Remove misleading legacy workflow surfaces"
 updated_at: "2026-06-13T17:36:58.862190950+00:00"
 ---

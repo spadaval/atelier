@@ -30,7 +30,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:59.670497926+00:00"
+status: "done"
 title: "Add first-class mission, milestone checkpoint, plan, evidence, and workflow validator records"
 updated_at: "2026-06-10T14:51:59.670497926+00:00"
 ---

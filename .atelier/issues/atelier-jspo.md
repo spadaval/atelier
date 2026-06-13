@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T01:17:16.783421376+00:00"
+status: "done"
 title: "Repair success-close integration fixtures"
 updated_at: "2026-06-13T01:17:16.783421376+00:00"
 ---

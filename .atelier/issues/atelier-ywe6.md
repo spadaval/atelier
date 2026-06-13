@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T00:23:16.530191920+00:00"
+status: "done"
 title: "Repair SPEC workflow command drift"
 updated_at: "2026-06-13T00:23:16.530191920+00:00"
 ---

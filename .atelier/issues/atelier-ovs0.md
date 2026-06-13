@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T15:54:06.450537319+00:00"
+status: "done"
 title: "Validate strong-proof guidance against representative work"
 updated_at: "2026-06-13T15:54:06.450537319+00:00"
 ---

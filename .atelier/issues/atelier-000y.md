@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T21:23:39+00:00"
+status: "done"
 title: "Implement deterministic per-record export and `export --check`"
 updated_at: "2026-06-08T21:23:39+00:00"
 ---

@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T22:10:25.441696940+00:00"
+status: "done"
 title: "Repair root and mission status signpost surfaces"
 updated_at: "2026-06-12T22:10:25.441696940+00:00"
 ---

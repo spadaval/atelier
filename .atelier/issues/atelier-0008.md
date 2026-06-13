@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:18:12.462311269+00:00"
+status: "done"
 title: "Implement lint severities, waivers, and action-aware guidance"
 updated_at: "2026-06-11T21:18:12.462311269+00:00"
 ---

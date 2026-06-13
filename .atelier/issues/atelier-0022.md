@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:38.612806202+00:00"
+status: "done"
 title: "Add mission progress view over linked work graph"
 updated_at: "2026-06-10T15:05:38.612806202+00:00"
 ---

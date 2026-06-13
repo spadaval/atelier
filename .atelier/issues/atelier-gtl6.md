@@ -12,7 +12,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:10.220599036+00:00"
+status: "done"
 title: "Define output style rules for empty states and next actions"
 updated_at: "2026-06-12T03:35:10.220599036+00:00"
 ---

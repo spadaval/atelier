@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:10:56+00:00"
+status: "done"
 title: "Implement Agent Factory tracker command parity in Atelier"
 updated_at: "2026-06-08T22:10:56+00:00"
 ---

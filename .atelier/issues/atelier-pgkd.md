@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:31:47.652647633+00:00"
+status: "done"
 title: "Add one-shot markdown-first layout migration"
 updated_at: "2026-06-11T23:31:47.652647633+00:00"
 ---

@@ -27,7 +27,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:08:06.847192187+00:00"
+status: "done"
 title: "Strengthen canonical Markdown lint and direct-edit validation"
 updated_at: "2026-06-12T00:08:06.847192187+00:00"
 ---

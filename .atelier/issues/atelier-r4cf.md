@@ -35,7 +35,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T17:43:57.667530036+00:00"
+status: "done"
 title: "Epic: Issue-centered activity history"
 updated_at: "2026-06-10T17:43:57.667530036+00:00"
 ---

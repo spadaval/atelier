@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T20:27:37.504138712+00:00"
+status: "done"
 title: "Define bulk plan JSON schema and validation"
 updated_at: "2026-06-09T20:27:37.504138712+00:00"
 ---

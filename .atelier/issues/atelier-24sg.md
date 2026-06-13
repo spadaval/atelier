@@ -25,7 +25,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:30:14.129098182+00:00"
+status: "done"
 title: "Validate markdown-first migration, recovery, and cache behavior"
 updated_at: "2026-06-12T00:30:14.129098182+00:00"
 ---

@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T18:56:01.276721478+00:00"
+status: "done"
 title: "Demote or remove inherited utility commands from primary help"
 updated_at: "2026-06-09T18:56:01.276721478+00:00"
 ---

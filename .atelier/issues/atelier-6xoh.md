@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T16:26:29.809160363+00:00"
+status: "done"
 title: "Migrate first-class record detail views off records.body and records.data_json"
 updated_at: "2026-06-11T16:26:29.809160363+00:00"
 ---

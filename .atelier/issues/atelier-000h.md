@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:55.226416391+00:00"
+status: "done"
 title: "[CLOSEOUT] Validate Milestone 4 domain model"
 updated_at: "2026-06-10T15:05:55.226416391+00:00"
 ---

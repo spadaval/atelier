@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T21:16:20.886569002+00:00"
+status: "done"
 title: "Make Agent Factory guidance Atelier-native"
 updated_at: "2026-06-11T21:16:20.886569002+00:00"
 ---

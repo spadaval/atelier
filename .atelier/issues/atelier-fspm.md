@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T03:50:22.253595690+00:00"
+status: "done"
 title: "Decide JSON boundary exceptions before implementation"
 updated_at: "2026-06-11T03:50:22.253595690+00:00"
 ---

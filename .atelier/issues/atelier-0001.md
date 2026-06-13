@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T20:42:33.793331698+00:00"
+status: "done"
 title: "Decide the default workflow for non-mission issue tasks"
 updated_at: "2026-06-11T20:42:33.793331698+00:00"
 ---

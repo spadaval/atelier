@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T02:05:29.277336564+00:00"
+status: "done"
 title: "Enrich plan evidence workflow and work status output"
 updated_at: "2026-06-11T02:05:29.277336564+00:00"
 ---

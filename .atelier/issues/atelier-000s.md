@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-09T20:09:55.000848680+00:00"
+status: "done"
 title: "Define repository-owned workflow configuration contract"
 updated_at: "2026-06-09T20:09:55.000848680+00:00"
 ---

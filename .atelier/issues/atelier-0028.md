@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T01:03:17.819291168+00:00"
+status: "done"
 title: "Separate issue type, record kind, and labels in canonical state"
 updated_at: "2026-06-10T01:03:17.819291168+00:00"
 ---

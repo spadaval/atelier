@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:24:09.956008450+00:00"
+status: "done"
 title: "Specify shared work context model across status surfaces"
 updated_at: "2026-06-12T03:24:09.956008450+00:00"
 ---

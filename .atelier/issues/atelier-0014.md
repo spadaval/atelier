@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-08T22:28:18.592363471+00:00"
+status: "done"
 title: "Update Agent Factory skill to support Atelier tracker bindings"
 updated_at: "2026-06-08T22:28:18.592363471+00:00"
 ---

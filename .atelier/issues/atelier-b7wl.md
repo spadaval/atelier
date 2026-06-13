@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:16:44.013937370+00:00"
+status: "done"
 title: "Fold mission audit into contextual status or closeout"
 updated_at: "2026-06-13T04:16:44.013937370+00:00"
 ---

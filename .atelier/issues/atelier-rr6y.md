@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T15:57:34.759490885+00:00"
+status: "done"
 title: "Finish Markdown-first writes and transparent projection rebuild"
 updated_at: "2026-06-11T15:57:34.759490885+00:00"
 ---

@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T15:05:38.596309925+00:00"
+status: "done"
 title: "Validate and document bulk plan apply workflow"
 updated_at: "2026-06-10T15:05:38.596309925+00:00"
 ---

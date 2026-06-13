@@ -21,7 +21,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:08:59.680155697+00:00"
+status: "done"
 title: "Define simple operator command taxonomy"
 updated_at: "2026-06-13T04:08:59.680155697+00:00"
 ---

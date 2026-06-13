@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:58:45.303708996+00:00"
+status: "done"
 title: "Audit remaining projection payload fields after layout migration"
 updated_at: "2026-06-11T23:58:45.303708996+00:00"
 ---

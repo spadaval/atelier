@@ -17,7 +17,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T04:11:52.365854305+00:00"
+status: "done"
 title: "Define contract-first workflow policy"
 updated_at: "2026-06-13T04:11:52.365854305+00:00"
 ---

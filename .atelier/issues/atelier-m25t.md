@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T18:59:58.882617064+00:00"
+status: "done"
 title: "Extend Markdown-first storage to first-class records"
 updated_at: "2026-06-10T18:59:58.882617064+00:00"
 ---

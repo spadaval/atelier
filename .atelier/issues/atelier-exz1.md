@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T20:59:21.370723616+00:00"
+status: "done"
 title: "Classify current issue subcommands against lifecycle contract"
 updated_at: "2026-06-12T20:59:21.370723616+00:00"
 ---

@@ -15,7 +15,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:32:48.055172483+00:00"
+status: "done"
 title: "Specify mission lifecycle status contract"
 updated_at: "2026-06-12T03:32:48.055172483+00:00"
 ---

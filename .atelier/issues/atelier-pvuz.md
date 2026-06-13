@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T23:32:51.177579643+00:00"
+status: "done"
 title: "Expose closeout proof requirements through domain commands"
 updated_at: "2026-06-12T23:32:51.177579643+00:00"
 ---

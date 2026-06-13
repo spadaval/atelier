@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:35:22.221929929+00:00"
+status: "done"
 title: "Enrich command and command-group help text"
 updated_at: "2026-06-12T03:35:22.221929929+00:00"
 ---

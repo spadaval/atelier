@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:25:34.607296507+00:00"
+status: "done"
 title: "Define command removal and migration behavior"
 updated_at: "2026-06-12T03:25:34.607296507+00:00"
 ---

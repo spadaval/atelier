@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T04:30:15.245386891+00:00"
+status: "done"
 title: "Add first-class mission commands"
 updated_at: "2026-06-10T04:30:15.245386891+00:00"
 ---

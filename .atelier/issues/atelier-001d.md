@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T02:44:12.362979445+00:00"
+status: "done"
 title: "Replace assumption-specific relation commands with generic link impact"
 updated_at: "2026-06-10T02:44:12.362979445+00:00"
 ---

@@ -26,7 +26,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T02:18:00.651875871+00:00"
+status: "done"
 title: "Cut over record identity to project-scoped random IDs"
 updated_at: "2026-06-10T02:18:00.651875871+00:00"
 ---

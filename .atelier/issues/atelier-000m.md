@@ -25,7 +25,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T14:41:59.247541613+00:00"
+status: "done"
 title: "Milestone 3: Work, branch, and worktree ergonomics"
 updated_at: "2026-06-11T14:41:59.247541613+00:00"
 ---

@@ -18,7 +18,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T23:42:14.026415256+00:00"
+status: "done"
 title: "Introduce explicit command storage access modes"
 updated_at: "2026-06-11T23:42:14.026415256+00:00"
 ---

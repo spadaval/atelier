@@ -27,7 +27,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T14:41:57.657636476+00:00"
+status: "done"
 title: "Milestone 2: Canonical export and rebuild"
 updated_at: "2026-06-11T14:41:57.657636476+00:00"
 ---

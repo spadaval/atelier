@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T14:51:26.280656318+00:00"
+status: "done"
 title: "Add first-class evidence commands"
 updated_at: "2026-06-10T14:51:26.280656318+00:00"
 ---

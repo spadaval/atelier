@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T13:15:09.034591115+00:00"
+status: "done"
 title: "Add local command telemetry and performance diagnostics"
 updated_at: "2026-06-11T13:15:09.034591115+00:00"
 ---

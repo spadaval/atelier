@@ -76,7 +76,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:20:46.055118125+00:00"
+status: "done"
 title: "Capture current CLI surface and output pain points"
 updated_at: "2026-06-12T03:20:46.055118125+00:00"
 ---

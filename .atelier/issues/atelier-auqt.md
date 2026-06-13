@@ -22,7 +22,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:37:04.161674575+00:00"
+status: "done"
 title: "Validate reduced issue command surface end to end"
 updated_at: "2026-06-12T21:37:04.161674575+00:00"
 ---

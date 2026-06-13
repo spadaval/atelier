@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T21:39:24.628351615+00:00"
+status: "done"
 title: "Remove legacy command groups"
 updated_at: "2026-06-10T21:39:24.628351615+00:00"
 ---

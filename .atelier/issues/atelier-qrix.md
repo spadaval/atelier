@@ -16,7 +16,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T00:07:06.603846521+00:00"
+status: "done"
 title: "Add hard-failure fixtures for invalid Markdown records"
 updated_at: "2026-06-12T00:07:06.603846521+00:00"
 ---

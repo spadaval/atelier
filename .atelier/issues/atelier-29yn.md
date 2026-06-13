@@ -14,7 +14,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-13T16:06:51.932475096+00:00"
+status: "done"
 title: "Dogfood delegation policy on a bounded multi-agent run"
 updated_at: "2026-06-13T16:06:51.932475096+00:00"
 ---

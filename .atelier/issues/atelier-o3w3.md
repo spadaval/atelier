@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:25:29.887215590+00:00"
+status: "done"
 title: "Specify issue start and work command relationship"
 updated_at: "2026-06-12T03:25:29.887215590+00:00"
 ---

@@ -31,7 +31,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T21:19:32.235226646+00:00"
+status: "done"
 title: "Capture and attach validation evidence from commands"
 updated_at: "2026-06-12T21:19:32.235226646+00:00"
 ---

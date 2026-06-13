@@ -19,7 +19,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-10T01:14:14.182337625+00:00"
+status: "done"
 title: "Move graph relationships into record files"
 updated_at: "2026-06-10T01:14:14.182337625+00:00"
 ---

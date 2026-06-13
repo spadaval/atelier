@@ -23,7 +23,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-11T04:31:02.400112498+00:00"
+status: "done"
 title: "Epic: Inventory JSON result surfaces and confirm removal boundaries"
 updated_at: "2026-06-11T04:31:02.400112498+00:00"
 ---

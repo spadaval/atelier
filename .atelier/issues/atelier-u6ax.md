@@ -20,7 +20,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T22:43:06.996294620+00:00"
+status: "done"
 title: "Enforce concrete Evidence sections in lint"
 updated_at: "2026-06-12T22:43:06.996294620+00:00"
 ---

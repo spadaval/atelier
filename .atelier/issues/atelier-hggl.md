@@ -13,7 +13,8 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "closed"
+closed_at: "2026-06-12T03:24:30.219128385+00:00"
+status: "done"
 title: "Specify repo-wide and scoped history views"
 updated_at: "2026-06-12T03:24:30.219128385+00:00"
 ---
