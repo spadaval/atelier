@@ -1,0 +1,36 @@
+---
+created_at: "2026-06-13T02:36:08.361649921+00:00"
+id: "atelier-dxy1"
+issue_type: "task"
+labels:
+- "agent-factory"
+- "delegation"
+priority: "P1"
+relationships:
+  blocks:
+  - kind: "issue"
+    id: "atelier-29yn"
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Update delegation prompt template for bounded proof slices"
+updated_at: "2026-06-13T02:36:08.361649921+00:00"
+---
+
+## Description
+
+Revise delegation guidance so subagents receive narrow, evidence-producing assignments earlier in the mission. The template should reduce private context and avoid main-agent over-collection.
+
+## Outcome
+
+- Worker assignments require one role, exact tracker IDs, owned files or workflows, out-of-scope boundaries, expected proof, evidence destination, independence requirement, and model rationale.
+- Guidance encourages early scout/audit/validation subagents for bounded slices.
+- Delegation handoffs produce evidence or tracker updates, not only prose summaries.
+
+## Evidence
+
+- File-change review of Agent Factory procedure docs shows the updated template.
+- Review artifact or validation evidence record confirms the template would have caught the atelier-tcmr weak-proof pattern earlier.

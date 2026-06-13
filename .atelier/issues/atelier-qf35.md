@@ -1,0 +1,43 @@
+---
+created_at: "2026-06-13T02:33:41.341571624+00:00"
+id: "atelier-qf35"
+issue_type: "epic"
+labels:
+- "process"
+- "proof"
+- "validation"
+priority: "P1"
+relationships:
+  blocks: []
+  children:
+  - kind: "issue"
+    id: "atelier-b2vi"
+  - kind: "issue"
+    id: "atelier-ovs0"
+  - kind: "issue"
+    id: "atelier-rc1v"
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Define strong proof and contract-first workflow"
+updated_at: "2026-06-13T02:35:54.474582860+00:00"
+---
+
+## Description
+
+Define what strong proof means in Atelier and make contract-first work the default for public behavior, workflow policy, and closeout rules. This epic should turn weak-proof lessons from atelier-tcmr into durable product and Agent Factory guidance.
+
+## Outcome
+
+- Strong proof is defined in product and quality vocabulary as claim-specific, reproducible, attached, classified, scoped, and independently validated when risk requires it.
+- Weak proof is defined as broad, summary-only, unattached, unverifiable, or not mapped to a claim.
+- Docs-first and test-first expectations are explicit for public CLI behavior, tracker transitions, evidence policy, and Agent Factory workflow changes.
+- Work-item authoring guidance tells agents when broad checks support proof and when scenario proof is required.
+
+## Evidence
+
+- Documentation diff updates CONTEXT and validation/process guidance with the strong-proof vocabulary.
+- Focused examples show strong and weak proof for ordinary issues, parent closeout, CLI behavior, and validation items.
+- Tracker lint and export checks pass after the guidance changes.

@@ -1,0 +1,34 @@
+---
+created_at: "2026-06-13T02:36:00.415872253+00:00"
+id: "atelier-rzsg"
+issue_type: "validation"
+labels:
+- "evidence"
+- "validation"
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "open"
+title: "Validate evidence model on mission fixtures"
+updated_at: "2026-06-13T02:36:00.415872253+00:00"
+---
+
+## Description
+
+Validate the structured evidence model against representative mission, epic, issue, pass, fail, blocked, deferred, and not-applicable scenarios.
+
+## Outcome
+
+- Validator confirms claim mapping works for ordinary issue proof, epic closeout, mission closeout, failed validation, and deferred checks.
+- Any missing migration or rendering behavior is filed as follow-up work.
+- Existing mission fixtures either migrate cleanly or have explicit compatibility handling.
+
+## Evidence
+
+- Attach first-class validation evidence containing the scenario matrix and command transcripts.
+- Include `atelier lint`, `atelier export --check`, and focused test results.
