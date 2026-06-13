@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "open"
+status: "closed"
 title: "Align docs tests and Agent Factory process with enforced proof"
-updated_at: "2026-06-12T19:39:54.111802532+00:00"
+updated_at: "2026-06-13T00:27:27.360198689+00:00"
 ---
 
 ## Description
