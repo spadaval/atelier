@@ -32,6 +32,8 @@ relationships:
   - kind: "issue"
     id: "atelier-hah9"
   - kind: "issue"
+    id: "atelier-jk6c"
+  - kind: "issue"
     id: "atelier-jqds"
   - kind: "issue"
     id: "atelier-k9m8"
@@ -51,7 +53,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "open"
 title: "Overhaul mission validation and reliability system"
-updated_at: "2026-06-12T21:42:51.151434546+00:00"
+updated_at: "2026-06-13T00:37:50.973932126+00:00"
 ---
 
 ## Description
