@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:34:06.605277194+00:00"
+status: "done"
 title: "Encode proof and closeout policy in Atelier gates"
-updated_at: "2026-06-13T23:33:38.235938973+00:00"
+updated_at: "2026-06-13T23:34:06.605277194+00:00"
 ---
 
 ## Description
