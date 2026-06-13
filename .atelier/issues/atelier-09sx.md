@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T19:36:12.225776238+00:00"
+status: "done"
 title: "Workflow docs overstate repo-defined workflow implementation"
-updated_at: "2026-06-13T19:35:52.687436094+00:00"
+updated_at: "2026-06-13T19:36:12.225776238+00:00"
 ---
 
 ## Description
