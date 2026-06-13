@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-13T23:39:58.544828560+00:00"
+status: "done"
 title: "Clarify workflow status filters and category aliases"
-updated_at: "2026-06-13T23:32:48.786334983+00:00"
+updated_at: "2026-06-13T23:39:58.544828560+00:00"
 ---
 
 ## Description
