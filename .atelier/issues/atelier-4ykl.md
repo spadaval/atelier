@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Replace Agent Factory command recipes with Atelier-owned command contracts"
-updated_at: "2026-06-13T20:55:09.157083606+00:00"
+updated_at: "2026-06-13T23:45:32.278844+00:00"
 ---
 
 ## Description

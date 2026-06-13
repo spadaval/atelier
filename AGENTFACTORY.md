@@ -46,21 +46,18 @@ This file binds Agent Factory to this repository.
 - Validation criteria must name observable completion behavior: command output,
   rejected commands, help text, file contents, tests, lint/export checks, or
   evidence records.
-- Use Atelier-owned proof and closeout surfaces for proof routing:
-  `docs/architecture/quality/validation.md`, `atelier mission status`,
-  `atelier mission audit`, `atelier issue transition <id> --options`,
-  `atelier lint`, `atelier export --check`, and `atelier doctor`.
+- Use Atelier-owned proof, closeout, health, and transition surfaces through
+  the destinations named in the validation router and product command docs.
 - Record handoff context in durable issue notes and non-trivial proof as
   first-class evidence on the accountable issue-shaped work. Let mission status
   and audit report missing proof, missing validation/closeout work, stale
   closeout checks, and parent coverage gaps instead of restating those rules in
   this binding.
 - Mutating subagents should use isolated issue worktrees unless the
-  assignment explicitly explains why a shared checkout is safer. If setup or
-  removal is interrupted and the recorded worktree path no longer exists,
-  inspect with `atelier worktree status`, clear the stale association with
-  `atelier worktree remove <issue-id>` when appropriate, then rerun
-  `atelier worktree for <issue-id>`; do not edit runtime state by hand.
+  assignment explicitly explains why a shared checkout is safer. Worktree
+  setup, interruption recovery, and stale association handling belong to
+  Atelier-owned worktree status/help and product docs; do not edit runtime
+  state by hand.
 - Hidden workflow diagnostics are not normal planning, implementation, or
   closeout commands. Use them only when a binding, assignment, workflow policy,
   or closeout contract explicitly names the diagnostic command; they do not
@@ -102,6 +99,7 @@ surfaces rather than restating the full command or policy contract here.
 | Evidence routing, proof placement, and independent-validation triggers | `docs/architecture/quality/validation.md`, `atelier evidence record --target issue/<id> ...` |
 | Tracker health, export freshness, and runtime diagnostics | `atelier lint`, `atelier export --check`, `atelier doctor` |
 | Onboarding and recovery signposts for normal tracker work | `atelier prime`, `atelier status`, `docs/product/cli-surface.md` |
+| Validation and handoff check selection | `docs/architecture/quality/validation.md`, `atelier workflow check`, issue Evidence sections, mission closeout criteria |
 
 Do not preserve old command names, status aliases, output shims, or fallback
 readers unless a human explicitly asks for a compatibility window. Public
@@ -111,16 +109,10 @@ For issue queues, `--status` means an exact workflow status (or `all`) and
 `--category` means an exact derived workflow category; do not use or document
 category aliases such as `in_progress`.
 
-## Checks
+## Validation Routing
 
-- Markdown formatting: `git diff --check -- '*.md'`
-- Rust formatting: `cargo fmt -- --check`
-- Diff whitespace: `git diff --check`
-- Rust test suite: `cargo nextest run`
-- Extended property tests:
-  `cargo nextest run --profile extended --run-ignored=only`
-- Docs/help and Agent Factory command freshness:
-  `atelier workflow check`
-- Tracker export freshness: `atelier export --check`
-- Tracker lint: `atelier lint`
-- Tracker health: `atelier doctor`
+Use `docs/architecture/quality/validation.md`, the assigned issue Evidence
+section, and mission closeout criteria to choose checks for the current slice.
+The binding may name the readiness entrypoint, but the durable check contract
+belongs to Atelier-owned validation guidance, product docs, workflow policy,
+and command help.

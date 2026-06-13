@@ -1111,8 +1111,12 @@ fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("AGENTFACTORY.md"))
             .unwrap();
     assert!(guidance.contains("Hidden workflow diagnostics are not normal"));
+    assert!(guidance.contains("## Validation Routing"));
     assert!(!guidance.contains("atelier workflow validate issue"));
     assert!(!guidance.contains("atelier workflow validate mission"));
+    assert!(!guidance.contains("## Checks"));
+    assert!(!guidance.contains("atelier worktree remove <issue-id>"));
+    assert!(!guidance.contains("cargo nextest run --profile extended --run-ignored=only"));
 }
 
 #[test]
