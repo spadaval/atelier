@@ -198,10 +198,13 @@ is required.
 exists; otherwise it reports the available ready missions and the command to
 select one. With an ID, the command is scoped to that mission regardless of the
 active runtime association. Default output is compact and answers: mission
-identity and state, tracker health, work counts, open blockers, missing proof,
-closeout readiness, and one or two state-specific next actions. Verbose output
-keeps the same sections but expands the record lists, evidence gaps, blocked
-work, and degraded health details enough for a handoff transcript.
+identity and state, tracker health, work counts, selectable work, blocked work,
+open blockers, missing proof, closeout readiness, and one or two state-specific
+next actions. Selectable-work rows name the issue to start, its parent context,
+and whether proof is already attached; blocked-work rows name the blocked issue,
+the blocker IDs, parent context, and proof state. Verbose output keeps the same
+sections but expands the record lists, evidence gaps, blocked work, and degraded
+health details enough for a handoff transcript.
 
 State-specific next actions are part of the command contract:
 

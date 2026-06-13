@@ -4,6 +4,7 @@ id: "atelier-i9ob"
 issue_type: "feature"
 labels:
 - "agent-readiness"
+- "assignee:root"
 - "cli"
 priority: "P2"
 relationships:
@@ -13,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Move work selection guidance into Atelier status surfaces"
-updated_at: "2026-06-13T20:55:09.170535879+00:00"
+updated_at: "2026-06-13T23:51:48.858292322+00:00"
 ---
 
 ## Description

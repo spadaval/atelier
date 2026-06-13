@@ -126,11 +126,17 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!();
         println!("Ready In Active Mission");
         println!("-----------------------");
-        if snapshot.ready_issues.is_empty() {
+        if snapshot.selectable_issues.is_empty() {
             println!("(none)");
         } else {
-            for issue in snapshot.ready_issues.iter().take(5) {
-                println!("  {} - {}", issue.id, issue.title);
+            for issue in snapshot.selectable_issues.iter().take(5) {
+                println!(
+                    "  {} - {} | ready: no open blockers; {}; {}",
+                    issue.id,
+                    issue.title,
+                    parent_context(issue),
+                    proof_context(db, &issue.id)?
+                );
             }
         }
 
@@ -189,10 +195,10 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                     "  Abandon local work ({}) if you are switching away: atelier abandon {} --reason \"...\"",
                     issue.id, issue.id
                 );
-            } else if let Some(issue) = snapshot.ready_issues.first() {
+            } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
-                    "  Start ready active-mission work ({} ready issue(s)): atelier start {}",
-                    snapshot.ready_issues.len(),
+                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
+                    snapshot.selectable_issues.len(),
                     issue.id
                 );
             } else if snapshot.blocked > 0 || !snapshot.open_blockers.is_empty() {
@@ -253,6 +259,7 @@ struct MissionSnapshot {
     issue_ids: BTreeSet<String>,
     active_issue: Option<Issue>,
     ready_issues: Vec<Issue>,
+    selectable_issues: Vec<Issue>,
     open_blockers: Vec<String>,
     active: usize,
     ready: usize,
@@ -313,6 +320,9 @@ fn mission_snapshot(
             }
             IssueBucket::Ready => {
                 snapshot.ready += 1;
+                if is_selectable_work(db, &issue)? {
+                    snapshot.selectable_issues.push(issue.clone());
+                }
                 snapshot.ready_issues.push(issue);
             }
             IssueBucket::Blocked => snapshot.blocked += 1,
@@ -321,6 +331,7 @@ fn mission_snapshot(
         }
     }
     snapshot.ready_issues.sort_by(|a, b| a.id.cmp(&b.id));
+    snapshot.selectable_issues.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(snapshot)
 }
 
@@ -370,6 +381,37 @@ fn open_issue_blockers(
     }
     blockers.sort();
     Ok(blockers)
+}
+
+fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
+    Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
+}
+
+fn parent_context(issue: &Issue) -> String {
+    match issue.parent_id.as_deref() {
+        Some(parent_id) => format!("parent {parent_id}"),
+        None => "mission-linked root".to_string(),
+    }
+}
+
+fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
+    if has_validating_evidence(db, issue_id)? {
+        Ok("proof attached")
+    } else {
+        Ok("proof missing")
+    }
+}
+
+fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        if link.source_kind == "evidence" || link.target_kind == "evidence" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
