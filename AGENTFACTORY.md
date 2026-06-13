@@ -46,17 +46,15 @@ This file binds Agent Factory to this repository.
 - Validation criteria must name observable completion behavior: command output,
   rejected commands, help text, file contents, tests, lint/export checks, or
   evidence records.
-- Use the validation router for proof routing:
-  `docs/architecture/quality/validation.md`. Ordinary executable issues prove
-  their own scoped Outcome on the issue. Risky, broad, public-contract,
-  process-policy, migration, cross-cutting, Agent Factory process, stale-test,
-  docs/help parity, parent-level, epic, and mission claims require first-class
-  evidence and may require a separate validation or closeout issue.
-- Use durable issue notes for handoff context, caveats, skipped optional checks,
-  or trivial docs-only proof. Use first-class evidence for non-trivial proof,
-  advanced policy checks, process-policy changes, failed or deferred checks,
-  and any result a future worker must inspect. Use separate validation issues
-  when the implementer should not validate their own claim.
+- Use Atelier-owned proof and closeout surfaces for proof routing:
+  `docs/architecture/quality/validation.md`, `atelier mission status`,
+  `atelier mission audit`, `atelier issue transition <id> --options`,
+  `atelier lint`, `atelier export --check`, and `atelier doctor`.
+- Record handoff context in durable issue notes and non-trivial proof as
+  first-class evidence on the accountable issue-shaped work. Let mission status
+  and audit report missing proof, missing validation/closeout work, stale
+  closeout checks, and parent coverage gaps instead of restating those rules in
+  this binding.
 - Mutating subagents should use isolated issue worktrees unless the
   assignment explicitly explains why a shared checkout is safer. If setup or
   removal is interrupted and the recorded worktree path no longer exists,

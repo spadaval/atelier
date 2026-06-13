@@ -4,6 +4,7 @@ id: "atelier-3iom"
 issue_type: "feature"
 labels:
 - "agent-readiness"
+- "assignee:root"
 - "validation"
 priority: "P2"
 relationships:
@@ -13,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-13T23:34:06.605277194+00:00"
+status: "done"
 title: "Encode proof and closeout policy in Atelier gates"
-updated_at: "2026-06-13T20:55:09.103395868+00:00"
+updated_at: "2026-06-13T23:34:06.605277194+00:00"
 ---
 
 ## Description
