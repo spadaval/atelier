@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Add explicit mission close command"
-updated_at: "2026-06-14T07:45:16.123888257+00:00"
+updated_at: "2026-06-14T07:51:12.648962859+00:00"
 ---
 
 ## Description
