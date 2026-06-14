@@ -14,6 +14,9 @@ unattached, unverifiable, stale, or not mapped to a claim. A full test suite,
 lint run, or mission status page can support proof, but it is weak by itself
 when it does not show the exact changed behavior, file content, command result,
 rejected command, help text, benchmark, or evidence record named by the claim.
+Workers should quote or paraphrase the exact `Outcome` or `Evidence` line they
+proved when they close work or hand it off, especially for parent-level,
+process-policy, and other broad claims.
 
 Epics and missions coordinate work; they are not the normal executable proof
 surface. Their claims are proven by evidence on accountable child work plus a
@@ -90,6 +93,27 @@ assignment rules are orchestration-only; and the former command-family cookbook
 (`Mission`, `Work/evidence`, `Issues`, `Sync/state`, `Health`, and mission
 completion detail) should be routed to Atelier-owned help, docs, status, audit,
 lint, doctor, export, and workflow-policy surfaces.
+
+## Stale-State Preflight
+
+Before mutating workflow state, trust normal Atelier-owned health surfaces
+first. If `atelier lint`, `atelier export --check`, `atelier status`,
+`atelier mission status`, or another normal tracker read reports invalid
+canonical Markdown, stale projections, or unreadable tracker state, stop
+workflow mutation until the state is repaired.
+
+Use this recovery order:
+
+1. Read the named error and rerun the failing command without adding nearby
+   command guesses.
+2. Repair tracked canonical Markdown or workflow config when `atelier lint`
+   names them.
+3. Use `atelier doctor` for ignored runtime/cache or derived-state repair.
+4. Return to `atelier status`, `atelier mission status`, or the relevant
+   `issue show`/`mission show` command only after the health check passes.
+
+Do not edit `.atelier/runtime/`, `.atelier/cache/`, local locks, or identity
+files by hand as a substitute for the documented repair surfaces.
 
 ## Default Proof By Issue Type
 
@@ -266,7 +290,8 @@ Install `cargo-nextest` before running the default Rust test command:
 
 ### Validation Command Recipes
 
-Use these forms when reproducing common validation steps:
+These are the repository-owned shell recipes that `AGENTFACTORY.md` should
+route to when a worker needs concrete command forms:
 
 | Purpose | Known-good form |
 | --- | --- |
@@ -283,6 +308,20 @@ Use these forms when reproducing common validation steps:
 When a Rust test needs more than one target, run separate `cargo test`
 invocations or switch to a `cargo nextest run -E` expression. Do not combine
 multiple bare positional filters in one `cargo test` command.
+When a search pattern contains shell metacharacters, quote the pattern so `rg`
+receives it literally. Prefer a literal path or ID over command substitution
+when the command already accepts the direct value you want to inspect.
+
+### Command-Surface Stop Rule
+
+After the first clear unrecognized command or wrong command-family error, stop
+and consult the repository-owned command map instead of probing neighboring
+names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier prime`,
+`atelier status`, or `atelier mission status` to recover the correct surface
+for the current job.
+
+The stop rule exists to avoid retry loops around removed commands, hidden
+diagnostics, or command families that belong to a different record kind.
 
 | Command | Owns |
 | --- | --- |

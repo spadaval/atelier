@@ -72,9 +72,16 @@ fn init_atelier(dir: &Path) {
 fn init_atelier_without_workflow(dir: &Path) {
     let (success, _, stderr) = run_atelier(dir, &["init"]);
     assert!(success, "Failed to init: {}", stderr);
+    let workflow_path = dir.join(".atelier").join("workflow.yaml");
+    if workflow_path.exists() {
+        fs::remove_file(workflow_path).unwrap();
+    }
 }
 
 fn migrate_default_issue_workflow(dir: &Path) {
+    if dir.join(".atelier").join("workflow.yaml").exists() {
+        return;
+    }
     let (success, _, stderr) = run_atelier(dir, &["workflow", "init"]);
     assert!(
         success || stderr.contains("workflow.yaml already exists"),
@@ -370,7 +377,13 @@ fn resolve_test_issue_ref(dir: &Path, issue_ref_value: &str) -> String {
         .unwrap_or_else(|| issue_ref_value.to_string())
 }
 
-fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {
+fn attach_evidence(
+    dir: &Path,
+    target_kind: &str,
+    target_id: &str,
+    result: &str,
+    summary: &str,
+) -> String {
     if target_kind == "issue" {
         ensure_all_issue_closeout_sections(dir);
     }
@@ -382,15 +395,33 @@ fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary:
             "--kind",
             "validation",
             "--result",
-            "pass",
+            result,
             "--target",
             &format!("{target_kind}/{target_id}"),
             summary,
         ],
     );
     assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass"), "{evidence_out}");
+    assert!(
+        evidence_out.contains(&format!("[evidence] {result}")),
+        "{evidence_out}"
+    );
     record_id_by_title(dir, "evidence", summary)
+}
+
+fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {
+    attach_evidence(dir, target_kind, target_id, "pass", summary)
+}
+
+fn attach_non_pass_evidence(
+    dir: &Path,
+    target_kind: &str,
+    target_id: &str,
+    result: &str,
+    summary: &str,
+) -> String {
+    assert!(result != "pass");
+    attach_evidence(dir, target_kind, target_id, result, summary)
 }
 
 fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
@@ -636,18 +667,21 @@ fn test_init_creates_atelier_directory() {
 
     assert!(success);
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
-    assert!(stdout.contains("atelier workflow init"));
-    assert!(stdout.contains("atelier workflow check"));
+    assert!(stdout.contains("Created"));
+    assert!(stdout.contains(".atelier/workflow.yaml"));
+    assert!(stdout.contains("atelier lint"));
     assert!(stdout.contains("atelier issue create \"Task\""));
-    let workflow_pos = stdout.find("atelier workflow init").unwrap();
+    assert!(stdout.contains("atelier prime"));
+    let lint_pos = stdout.find("atelier lint").unwrap();
     let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
     assert!(
-        workflow_pos < issue_pos,
-        "fresh init must not suggest issue creation before workflow setup:\n{stdout}"
+        lint_pos < issue_pos,
+        "fresh init must verify setup before suggesting issue creation:\n{stdout}"
     );
     assert!(dir.path().join(".atelier").exists());
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
+    assert!(dir.path().join(".atelier").join("workflow.yaml").exists());
     assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".atelier").join("rules.local").exists());
     assert!(!dir
@@ -1155,9 +1189,10 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["workflow", "--help"]);
     assert!(success, "workflow help failed: {stderr}");
-    assert!(stdout.contains("Advanced/internal workflow policy diagnostics"));
+    assert!(stdout.contains("Advanced/debug workflow policy setup and diagnostics"));
     assert!(stdout.contains("init"));
     assert!(stdout.contains("check"));
+    assert!(stdout.contains("normal operator checks use lint and status surfaces"));
     assert!(!stdout.contains("validate"));
 }
 
@@ -7565,6 +7600,69 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
 }
 
 #[test]
+fn test_validation_issue_closeout_reports_blocked_requirement_coverage() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let validation_body = "## Description\n\nValidation blocker body.\n\n## Outcome\n\nThe validation item reports blocked requirement coverage.\n\n## Evidence\n\n- Blocked transcript proves the validator could not complete the requirement.";
+    let (success, validation_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Blocked validation proof",
+            "--issue-type",
+            "validation",
+            "--description",
+            validation_body,
+        ],
+    );
+    assert!(success, "validation issue create failed: {stderr}");
+    assert!(validation_out.contains("Created issue atelier-"));
+    let validation_id = issue_id_by_title(dir.path(), "Blocked validation proof");
+
+    move_issue_to_validation(dir.path(), &validation_id);
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "broad default nextest suite passes",
+    );
+    attach_non_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "blocked",
+        "Blocked transcript proves the validator could not complete the requirement.",
+    );
+
+    let (success, transitions, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "--options"],
+    );
+    assert!(success, "transition options failed: {stderr}");
+    assert!(transitions.contains("close"));
+    assert!(transitions.contains("Evidence requirement 1 is blocked"));
+    assert!(transitions.contains("atelier-"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &validation_id,
+            "--reason",
+            "still blocked",
+        ],
+    );
+    assert!(
+        !success,
+        "blocked validation requirement must block closeout"
+    );
+    assert!(stderr.contains("Evidence requirement 1 is blocked"));
+}
+
+#[test]
 fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -7813,6 +7911,170 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
 }
 
 #[test]
+fn test_mission_audit_reports_parent_proof_coverage_classifications() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "create",
+            "Coverage audit",
+            "--validation",
+            "Covered validation line.",
+            "--validation",
+            "Blocked validation line.",
+            "--validation",
+            "Deferred validation line.",
+            "--validation",
+            "Not applicable validation line.",
+            "--validation",
+            "Missing validation line.",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Coverage audit");
+    let mission_id = mission_id.as_str();
+
+    let epic_body = "## Description\n\nCoverage epic body.\n\n## Outcome\n\n- Covered epic outcome line.\n- Failed epic outcome line.\n- Missing epic outcome line.\n\n## Evidence\n\n- Attached validation evidence proves the epic outcome audit.";
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Coverage epic",
+            "--issue-type",
+            "epic",
+            "--description",
+            epic_body,
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Coverage epic");
+    let epic_id = epic_id.as_str();
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, epic_id]);
+    assert!(success, "mission add work failed: {stderr}");
+
+    let covered_mission_evidence = attach_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "Covered validation line.",
+    );
+    let blocked_mission_evidence = attach_non_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "blocked",
+        "Blocked validation line.",
+    );
+    let deferred_mission_evidence = attach_non_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "deferred",
+        "Deferred validation line.",
+    );
+    let na_mission_evidence = attach_non_pass_evidence(
+        dir.path(),
+        "mission",
+        mission_id,
+        "not-applicable",
+        "Not applicable validation line.",
+    );
+
+    let covered_epic_evidence =
+        attach_pass_evidence(dir.path(), "issue", epic_id, "Covered epic outcome line.");
+    let failed_epic_evidence = attach_non_pass_evidence(
+        dir.path(),
+        "issue",
+        epic_id,
+        "fail",
+        "Failed epic outcome line.",
+    );
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        epic_id,
+        "Attached validation evidence proves the epic outcome audit.",
+    );
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        epic_id,
+        "Mission contract audit line-by-line classification maps child work to proof",
+    );
+    close_issue_with_evidence(dir.path(), epic_id, Some("epic coverage ready"));
+
+    let (success, audit_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
+    assert!(
+        !success,
+        "audit should fail with unresolved coverage: {stderr}"
+    );
+    assert!(audit_out.contains(
+        "Coverage: covered 2, missing 2, failed 1, blocked 1, deferred 1, not-applicable 1"
+    ));
+    assert!(audit_out.contains(&format!(
+        "[covered] {mission_id} - Covered validation line."
+    )));
+    assert!(audit_out.contains(&format!(
+        "Covered by evidence: {covered_mission_evidence} [pass]"
+    )));
+    assert!(audit_out.contains(&format!(
+        "[blocked] {mission_id} - Blocked validation line."
+    )));
+    assert!(audit_out.contains(&format!(
+        "Matching evidence is blocked: {blocked_mission_evidence} [blocked]"
+    )));
+    assert!(audit_out.contains(&format!(
+        "[deferred] {mission_id} - Deferred validation line."
+    )));
+    assert!(audit_out.contains(&format!(
+        "Matching evidence is deferred: {deferred_mission_evidence} [deferred]"
+    )));
+    assert!(audit_out.contains(&format!(
+        "[not-applicable] {mission_id} - Not applicable validation line."
+    )));
+    assert!(audit_out.contains(&format!(
+        "Marked not-applicable by evidence: {na_mission_evidence} [not-applicable]"
+    )));
+    assert!(audit_out.contains(&format!(
+        "[missing] {mission_id} - Missing validation line."
+    )));
+    assert!(audit_out.contains("No matching validation evidence is attached to the mission."));
+    assert!(audit_out.contains(&format!("[covered] {epic_id} - Covered epic outcome line.")));
+    assert!(audit_out.contains(&format!(
+        "Covered by evidence: {covered_epic_evidence} [pass]"
+    )));
+    assert!(audit_out.contains(&format!("[failed] {epic_id} - Failed epic outcome line.")));
+    assert!(audit_out.contains(&format!(
+        "Matching evidence failed: {failed_epic_evidence} [fail]"
+    )));
+    assert!(audit_out.contains(&format!("[missing] {epic_id} - Missing epic outcome line.")));
+    assert!(audit_out.contains("No matching validation evidence is attached to this linked epic."));
+
+    let (success, closeout_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--closeout", mission_id]);
+    assert!(
+        !success,
+        "closeout view should fail with unresolved coverage: {stderr}"
+    );
+    assert!(closeout_out.contains("Mission Contract Audit"));
+    assert!(closeout_out.contains(
+        "Coverage: covered 2, missing 2, failed 1, blocked 1, deferred 1, not-applicable 1"
+    ));
+    assert!(closeout_out.contains(&format!(
+        "[blocked] {mission_id} - Blocked validation line."
+    )));
+    assert!(closeout_out.contains(&format!("[failed] {epic_id} - Failed epic outcome line.")));
+}
+
+#[test]
 fn test_mission_closeout_uses_contract_audit() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -7869,7 +8131,7 @@ fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
     assert!(success, "workflow init failed: {stderr}");
     assert!(stdout.contains("Created .atelier/workflow.yaml"));
-    assert!(stdout.contains("atelier workflow check"));
+    assert!(stdout.contains("atelier lint"));
 
     let policy = std::fs::read_to_string(policy_path).unwrap();
     assert!(policy.contains("  todo:\n    category: todo"));
@@ -9409,7 +9671,10 @@ fn test_mission_status_cli_reports_control_state() {
         run_atelier(dir.path(), &["mission", "status", closeout_mission]);
     assert!(success, "closeout mission status failed: {stderr}");
     assert!(closeout_status.contains("Health:   closeout"));
-    assert!(closeout_status.contains("Closeout: ready"));
+    assert!(
+        closeout_status.contains("Closeout: ready"),
+        "unexpected closeout mission status:\n{closeout_status}"
+    );
     assert!(closeout_status.contains("Reliability"));
     assert!(closeout_status.contains("Attached Proof: complete"));
     assert!(closeout_status.contains("Docs/Help Drift: clear"));
@@ -9437,6 +9702,69 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(stale_status.contains("Tracker:  ok"));
     assert!(stale_status.contains("Worktree: dirty"));
     assert!(!stale_status.contains("advanced closeout validator failure detected."));
+}
+
+#[test]
+fn test_mission_status_deduplicates_duplicate_reachability() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Duplicate reachability"]);
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Duplicate reachability");
+
+    let (success, epic_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Duplicate epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    assert!(epic_out.contains("Created issue atelier-"));
+    let epic_id = issue_id_by_title(dir.path(), "Duplicate epic");
+
+    let (success, child_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "subissue",
+            epic_id.as_str(),
+            "Duplicate child",
+            "--description",
+            "## Description\n\nDuplicate reachability child.\n\n## Outcome\n\nMission status counts this child once.\n\n## Evidence\n\n- `atelier mission status <mission-id>` counts this child once and reports duplicate reachability.",
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    assert!(child_out.contains(&epic_id));
+    let child_id = issue_id_by_title(dir.path(), "Duplicate child");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-work", mission_id.as_str(), epic_id.as_str()],
+    );
+    assert!(success, "mission add epic failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "add-work",
+            mission_id.as_str(),
+            child_id.as_str(),
+        ],
+    );
+    assert!(success, "mission add child failed: {stderr}");
+
+    let (success, status_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Total: 2 ready"));
+    assert!(status_out.contains(&format!(
+        "Graph Hygiene: warning - duplicate reachability for 1 issue(s): {child_id} ({epic_id} + direct)"
+    )));
+    assert!(status_out.contains(
+        "Totals count each unique issue once. Keep mission links on root issues or epics and let child issues flow through hierarchy."
+    ));
 }
 
 #[test]

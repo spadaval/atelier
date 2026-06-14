@@ -26,14 +26,18 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
-- `atelier mission create/show/list/status/update/close`
-- `atelier mission add-work/unlink/add-blocker`
+- `atelier mission create/show/list/status/update`
+- `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier history`
+- `atelier note add issue <id> "..."`
 - `atelier start`
 - `atelier abandon`
 - `atelier worktree for/status/merge/remove`
+- `atelier integrations ...`
+- `atelier maintenance ...`
+- `atelier import-beads <path>`
 - `atelier lint`
 - `atelier doctor`
 
@@ -85,10 +89,11 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `issue` | Create, list, show, update, transition, close, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, and blocker inspection stays under `issue blocked`. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
-| `mission` | Create, focus, inspect, update, close, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; `close` runs closeout gates. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
+| `mission` | Create, focus, inspect, update, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; lifecycle changes stay on `update`. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
 | `plan` | Author, inspect, revise, link, and apply durable plans. | `show` and `list` are readable plan views; `apply` prints preview or created-record summaries rather than raw JSON internals. | Plan IDs, affected-record counts, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
+| `note` | Append durable issue activity notes without mutating issue fields. | Confirmation of the note target and stored activity text. | Issue ID and success token. | `issue show <id>`, `history --issue <id>`. |
 | `worktree` | Create, inspect, merge, repair, and remove issue worktrees. | `for`, `merge`, `repair`, and `remove` acknowledge the affected issue/path; `status` stays scan-friendly and bounded. | Issue IDs, paths, and worktree-state tokens. | `worktree status`, `status`, `issue show <id>`. |
 
 ### Specialized But Visible Surfaces
@@ -96,6 +101,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
+| `integrations` | Install or refresh optional external-tool integrations. | Acknowledges the targeted integration and the managed files it wrote or verified. | Integration name and success token. | Re-run the same integration command or inspect the managed files. |
+| `import-beads` | Import a repo-local or explicit Beads backup into canonical Atelier records. | Import summary, created-record counts, and any follow-up lint or review guidance. | Imported counts and success token. | `history`, `issue show <id>`, `lint`. |
 | `diagnostics` | Inspect local command telemetry for Atelier itself. | Stable diagnostic output for the named probe, currently `slow`; hidden or advanced only, never a normal mission or issue next action and never the source of ready-work, blocker, validation, or closeout decisions. | Same diagnostic result trimmed to essential rows or counts. | `doctor`, performance follow-up issues, or the owning architecture docs. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
@@ -116,7 +123,7 @@ time pressure:
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, closeout readiness, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
-  `atelier mission add-work/unlink/add-blocker`, and `atelier mission close`.
+  `atelier mission add-work/add-blocker`, and `atelier mission audit`.
 - Manage relationships: record issue blockers and inspect cross-record impact
   when the next action depends on graph shape. Owned by issue blocker
   subcommands, mission work-link subcommands, evidence attachment, plan
@@ -157,11 +164,10 @@ back to `ready` when `--switch` is supplied. Mission commands do not accept
 committed mission records should be migrated directly to the lifecycle status
 they mean.
 
-Mission closeout uses `atelier mission close <id> --reason "..."`, which runs
-the mission closeout gates. Raw `mission update --status closed` should not be
-the normal closeout path because it makes mission lifecycle look like generic
-field mutation. Reopening with `atelier mission update <id> --status ready`
-does not run closeout validators.
+Mission closeout currently uses `atelier mission update <id> --status closed`,
+which runs the mission closeout gates before it commits the lifecycle change.
+Reopening with `atelier mission update <id> --status ready` does not run
+closeout validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands

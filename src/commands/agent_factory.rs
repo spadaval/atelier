@@ -161,13 +161,13 @@ fn print_workflow_read_guidance(context: WorkflowReadContext) {
     if context.missing_policy {
         println!();
         println!(
-            "Workflow policy missing: run `atelier workflow init`, then `atelier workflow check`."
+            "Workflow policy missing: run `atelier lint` to inspect tracker setup and restore the committed policy."
         );
     }
     if context.unmigrated_filter {
         println!();
         println!(
-            "Issue statuses outside the configured workflow are present; fix the records, then run `atelier workflow check`."
+            "Issue statuses outside the configured workflow are present; fix the records, then rerun `atelier lint`."
         );
     }
 }
@@ -593,6 +593,39 @@ pub(crate) struct EvidenceGateStatus {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProofCoverageStatus {
+    Covered,
+    Missing,
+    Failed,
+    Blocked,
+    Deferred,
+    NotApplicable,
+}
+
+impl ProofCoverageStatus {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Covered => "covered",
+            Self::Missing => "missing",
+            Self::Failed => "failed",
+            Self::Blocked => "blocked",
+            Self::Deferred => "deferred",
+            Self::NotApplicable => "not-applicable",
+        }
+    }
+
+    pub(crate) fn satisfies_closeout(self) -> bool {
+        matches!(self, Self::Covered | Self::NotApplicable)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProofCoverage {
+    pub status: ProofCoverageStatus,
+    pub evidence_refs: Vec<String>,
+}
+
 pub(crate) fn issue_evidence_gate_status(
     db: &Database,
     issue: &Issue,
@@ -613,6 +646,24 @@ fn issue_evidence_gate_status_from_records(
         return evidence_gate(false, "no validating evidence link found");
     }
 
+    let requirements = issue_evidence_requirements(issue, sections);
+    if !requirements.is_empty() {
+        if let Some((index, requirement)) =
+            requirements.iter().enumerate().find(|(_, requirement)| {
+                !classify_requirement_coverage(requirement, evidence)
+                    .status
+                    .satisfies_closeout()
+            })
+        {
+            let coverage = classify_requirement_coverage(requirement, evidence);
+            return evidence_gate(
+                false,
+                coverage_failure_reason(index + 1, requirement, &coverage),
+            );
+        }
+        return evidence_gate(true, "passing evidence matches issue Evidence requirements");
+    }
+
     let passing = evidence
         .iter()
         .filter(|record| record.status == "pass")
@@ -627,27 +678,6 @@ fn issue_evidence_gate_status_from_records(
             false,
             format!("linked validating evidence is not passing: {statuses}"),
         );
-    }
-
-    let requirements = issue_evidence_requirements(issue, sections);
-    if !requirements.is_empty() {
-        if let Some((index, requirement)) =
-            requirements.iter().enumerate().find(|(_, requirement)| {
-                !passing
-                    .iter()
-                    .any(|record| evidence_record_matches_requirement(record, requirement))
-            })
-        {
-            return evidence_gate(
-                false,
-                format!(
-                    "missing Evidence requirement {}: {}",
-                    index + 1,
-                    requirement
-                ),
-            );
-        }
-        return evidence_gate(true, "passing evidence matches issue Evidence requirements");
     }
 
     if issue_requires_line_by_line_proof(issue) {
@@ -670,6 +700,83 @@ fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus 
     EvidenceGateStatus {
         passed,
         reason: reason.into(),
+    }
+}
+
+pub(crate) fn classify_requirement_coverage(
+    requirement: &str,
+    evidence: &[DomainRecord],
+) -> ProofCoverage {
+    let matches = evidence
+        .iter()
+        .filter(|record| evidence_record_matches_requirement(record, requirement))
+        .collect::<Vec<_>>();
+    if matches.is_empty() {
+        return ProofCoverage {
+            status: ProofCoverageStatus::Missing,
+            evidence_refs: Vec::new(),
+        };
+    }
+
+    for (result, status) in [
+        ("pass", ProofCoverageStatus::Covered),
+        ("fail", ProofCoverageStatus::Failed),
+        ("blocked", ProofCoverageStatus::Blocked),
+        ("deferred", ProofCoverageStatus::Deferred),
+        ("not-applicable", ProofCoverageStatus::NotApplicable),
+    ] {
+        let refs = matches
+            .iter()
+            .filter(|record| record.status == result)
+            .map(|record| format!("{} [{}]", record.id, record.status))
+            .collect::<Vec<_>>();
+        if !refs.is_empty() {
+            return ProofCoverage {
+                status,
+                evidence_refs: refs,
+            };
+        }
+    }
+
+    ProofCoverage {
+        status: ProofCoverageStatus::Missing,
+        evidence_refs: matches
+            .iter()
+            .map(|record| format!("{} [{}]", record.id, record.status))
+            .collect(),
+    }
+}
+
+fn coverage_failure_reason(index: usize, requirement: &str, coverage: &ProofCoverage) -> String {
+    let evidence = if coverage.evidence_refs.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", coverage.evidence_refs.join(", "))
+    };
+    match coverage.status {
+        ProofCoverageStatus::Missing => {
+            format!("missing Evidence requirement {}: {}", index, requirement)
+        }
+        ProofCoverageStatus::Failed => format!(
+            "Evidence requirement {} failed: {}{}",
+            index, requirement, evidence
+        ),
+        ProofCoverageStatus::Blocked => format!(
+            "Evidence requirement {} is blocked: {}{}",
+            index, requirement, evidence
+        ),
+        ProofCoverageStatus::Deferred => format!(
+            "Evidence requirement {} is deferred: {}{}",
+            index, requirement, evidence
+        ),
+        ProofCoverageStatus::NotApplicable => format!(
+            "Evidence requirement {} is not applicable: {}{}",
+            index, requirement, evidence
+        ),
+        ProofCoverageStatus::Covered => format!(
+            "Evidence requirement {} is covered: {}{}",
+            index, requirement, evidence
+        ),
     }
 }
 
@@ -789,15 +896,24 @@ const EVIDENCE_REQUIREMENT_STOPWORDS: &[&str] = &[
     "as",
     "attached",
     "by",
+    "criteria",
+    "criterion",
     "demonstrates",
     "evidence",
+    "epic",
     "for",
     "issue",
     "it",
     "its",
+    "line",
+    "lines",
+    "linked",
+    "mission",
     "of",
     "on",
     "or",
+    "outcome",
+    "outcomes",
     "proof",
     "record",
     "records",
@@ -808,6 +924,7 @@ const EVIDENCE_REQUIREMENT_STOPWORDS: &[&str] = &[
     "to",
     "validat",
     "validates",
+    "validation",
     "with",
 ];
 
@@ -1688,7 +1805,7 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
     })?;
     crate::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
         anyhow!(
-            "workflow policy file is required at {}; run `atelier workflow init` before creating issues",
+            "workflow policy file is required at {}; run `atelier lint` to inspect setup and restore the committed policy before creating issues",
             crate::workflow_policy::WORKFLOW_POLICY_PATH
         )
     })

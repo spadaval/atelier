@@ -46,12 +46,6 @@ impl SmokeHarness {
         // Run atelier init
         let result = harness.run(&["init"]);
         assert!(result.success, "atelier init failed: {}", result.stderr);
-        let result = harness.run(&["workflow", "init"]);
-        assert!(
-            result.success,
-            "atelier workflow init failed: {}",
-            result.stderr
-        );
 
         harness
     }

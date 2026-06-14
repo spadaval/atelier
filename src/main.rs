@@ -253,7 +253,7 @@ enum Commands {
         limit: usize,
     },
 
-    /// Advanced/internal workflow policy diagnostics
+    /// Advanced/debug workflow policy setup and diagnostics
     #[command(hide = true)]
     Workflow {
         #[command(subcommand)]
@@ -833,12 +833,12 @@ another target.")]
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Write the starter .atelier/workflow.yaml policy
+    /// Write or replace the starter .atelier/workflow.yaml policy for debug or recovery work
     Init {
         #[arg(long)]
         force: bool,
     },
-    /// Validate .atelier/workflow.yaml policy and current issue-record health
+    /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
     Check,
 }
 

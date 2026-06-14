@@ -3,6 +3,7 @@ created_at: "2026-06-14T02:52:58.762631667+00:00"
 id: "atelier-hf3f"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "evidence"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Render proof coverage summaries for parent closeout"
-updated_at: "2026-06-14T02:52:58.762631667+00:00"
+updated_at: "2026-06-14T07:00:28.237330580+00:00"
 ---
 
 ## Description

@@ -40,7 +40,7 @@ pub fn init(repo_root: &Path, force: bool) -> Result<()> {
     println!("Starter workflows: standard_review_proof, lightweight_spike");
     println!();
     print_heading("Next Commands");
-    println!("  atelier workflow check");
+    println!("  atelier lint");
     Ok(())
 }
 

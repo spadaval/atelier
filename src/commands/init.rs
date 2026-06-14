@@ -89,13 +89,21 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         println!("Created {}", db_path.display());
     }
 
+    let workflow_path = path.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !workflow_path.exists() {
+        fs::write(&workflow_path, crate::workflow_policy::STARTER_POLICY_YAML)
+            .context("Failed to write .atelier/workflow.yaml")?;
+        crate::workflow_policy::load(path)?;
+        println!("Created {}", workflow_path.display());
+    }
+
     ensure_root_gitignore(path, force)?;
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
-    println!("  atelier workflow init            # Create the issue workflow policy");
-    println!("  atelier workflow check           # Verify tracker workflow setup");
-    println!("  atelier issue create \"Task\"     # Create an issue after workflow setup");
+    println!("  atelier lint                     # Verify tracker records and workflow setup");
+    println!("  atelier issue create \"Task\"     # Create the first tracked issue");
+    println!("  atelier prime                    # Review orientation and handoff guidance");
 
     Ok(())
 }
@@ -119,6 +127,7 @@ mod tests {
         assert!(dir.path().join(".atelier/milestones").exists());
         assert!(dir.path().join(".atelier/plans").exists());
         assert!(dir.path().join(".atelier/evidence").exists());
+        assert!(dir.path().join(".atelier/workflow.yaml").exists());
         assert!(dir.path().join(".atelier/runtime/state.db").exists());
         assert!(!dir.path().join(".atelier/rules").exists());
         assert!(!dir.path().join(".atelier/rules.local").exists());
@@ -141,6 +150,10 @@ mod tests {
         assert!(config.contains("state_root = \".atelier\""));
         assert!(config.contains("runtime_dir = \".atelier/runtime\""));
         assert!(config.contains("runtime_database = \".atelier/runtime/state.db\""));
+
+        let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
+        assert!(workflow.contains("schema: atelier.workflow"));
+        assert!(workflow.contains("standard_review_proof"));
     }
 
     #[test]

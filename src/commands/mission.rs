@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use crate::commands::agent_factory::{classify_requirement_coverage, ProofCoverageStatus};
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::record_store::{self, RecordStore, MISSION_EMPTY_DATA_JSON};
@@ -726,21 +727,36 @@ struct MissionContractAuditItem {
     group: String,
     target: String,
     text: String,
-    passed: bool,
+    coverage_status: ProofCoverageStatus,
     reason: String,
 }
 
 impl MissionContractAudit {
     pub(crate) fn passed(&self) -> bool {
-        self.items.iter().all(|item| item.passed)
+        self.items
+            .iter()
+            .all(|item| item.coverage_status.satisfies_closeout())
     }
 
     pub(crate) fn failure_count(&self) -> usize {
-        self.items.iter().filter(|item| !item.passed).count()
+        self.items
+            .iter()
+            .filter(|item| !item.coverage_status.satisfies_closeout())
+            .count()
     }
 
     pub(crate) fn pass_count(&self) -> usize {
-        self.items.iter().filter(|item| item.passed).count()
+        self.items
+            .iter()
+            .filter(|item| item.coverage_status.satisfies_closeout())
+            .count()
+    }
+
+    fn coverage_count(&self, status: ProofCoverageStatus) -> usize {
+        self.items
+            .iter()
+            .filter(|item| item.coverage_status == status)
+            .count()
     }
 
     fn print_human(&self, mission: &DomainRecord) {
@@ -757,6 +773,15 @@ impl MissionContractAudit {
             self.failure_count(),
             self.items.len()
         );
+        println!(
+            "Coverage: covered {}, missing {}, failed {}, blocked {}, deferred {}, not-applicable {}",
+            self.coverage_count(ProofCoverageStatus::Covered),
+            self.coverage_count(ProofCoverageStatus::Missing),
+            self.coverage_count(ProofCoverageStatus::Failed),
+            self.coverage_count(ProofCoverageStatus::Blocked),
+            self.coverage_count(ProofCoverageStatus::Deferred),
+            self.coverage_count(ProofCoverageStatus::NotApplicable),
+        );
         if self.items.is_empty() {
             println!("No authored mission validation or linked epic outcome items.");
         }
@@ -771,8 +796,12 @@ impl MissionContractAudit {
             println!("{group}");
             println!("{}", "-".repeat(group.len()));
             for item in self.items.iter().filter(|item| item.group == group) {
-                let status = if item.passed { "pass" } else { "fail" };
-                println!("  {status} {} - {}", item.target, item.text);
+                println!(
+                    "  [{}] {} - {}",
+                    item.coverage_status.label(),
+                    item.target,
+                    item.text
+                );
                 println!("    {}", item.reason);
             }
         }
@@ -942,6 +971,7 @@ fn print_reliability_summary(
 
     print_section_gap_signal("Missing Outcome Sections", &section_gaps.missing_outcome);
     print_section_gap_signal("Missing Evidence Sections", &section_gaps.missing_evidence);
+    print_graph_hygiene_signal(summary);
 
     let mut proof_parts = Vec::new();
     if summary.evidence_count == 0 {
@@ -996,6 +1026,27 @@ fn print_reliability_summary(
     println!("  atelier lint");
     println!("  atelier doctor");
     Ok(())
+}
+
+fn print_graph_hygiene_signal(summary: &MissionListSummary) {
+    if summary.duplicate_reachability.is_empty() {
+        println!("Graph Hygiene: clear");
+        return;
+    }
+
+    let details = summary
+        .duplicate_reachability
+        .iter()
+        .map(format_duplicate_reachability)
+        .collect::<Vec<_>>();
+    println!(
+        "Graph Hygiene: warning - duplicate reachability for {} issue(s): {}",
+        summary.duplicate_reachability.len(),
+        compact_strings(&details)
+    );
+    println!(
+        "  Totals count each unique issue once. Keep mission links on root issues or epics and let child issues flow through hierarchy."
+    );
 }
 
 fn print_section_gap_signal(label: &str, ids: &[String]) {
@@ -1189,47 +1240,39 @@ fn mission_contract_audit(
 ) -> Result<MissionContractAudit> {
     let mut items = Vec::new();
     let sections = record_store::mission_sections_from_domain_record(mission)?;
-    let mission_evidence = validating_evidence_ids(db, KIND, &mission.id)?;
+    let mission_evidence = validating_evidence_records(db, KIND, &mission.id)?;
     let mission_work = mission_issue_ids(db, &mission.id)?;
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
 
     for item in contract_items_from_text(&sections.validation) {
-        let (passed, reason) = if mission_work.is_empty() {
+        let (coverage_status, reason) = if mission_work.is_empty() {
             (
-                false,
+                ProofCoverageStatus::Missing,
                 "No linked mission work exists for this validation expectation.".to_string(),
             )
         } else if !open_work.is_empty() {
             (
-                false,
+                ProofCoverageStatus::Missing,
                 format!("Open linked work remains: {}", compact_strings(&open_work)),
             )
         } else if !open_blockers.is_empty() {
             (
-                false,
+                ProofCoverageStatus::Blocked,
                 format!("Open blockers remain: {}", compact_strings(&open_blockers)),
             )
-        } else if mission_evidence.is_empty() {
-            (
-                false,
-                "No validation evidence is attached to the mission.".to_string(),
-            )
         } else {
-            (
-                true,
-                format!(
-                    "Mission has done-category linked work and validation evidence: {}",
-                    compact_strings(&mission_evidence)
-                ),
+            coverage_reason(
+                classify_requirement_coverage(&item, &mission_evidence),
+                "No matching validation evidence is attached to the mission.",
             )
         };
         items.push(MissionContractAuditItem {
             group: "Mission Validation".to_string(),
             target: mission.id.clone(),
             text: item,
-            passed,
+            coverage_status,
             reason,
         });
     }
@@ -1238,41 +1281,34 @@ fn mission_contract_audit(
     for epic in mission_linked_epics(db, &mission.id)? {
         match store.load_issue_by_id(&epic.id) {
             Ok(record) => {
-                let evidence = validating_evidence_ids(db, "issue", &epic.id)?;
+                let evidence = validating_evidence_records(db, "issue", &epic.id)?;
                 for item in contract_items_from_text(&record.sections.outcome) {
-                    let (passed, reason) = if !crate::commands::issue_workflow::issue_is_done(
-                        workflow_policy.as_ref(),
-                        &epic,
-                    ) {
-                        (
-                            false,
-                            format!(
-                                "Linked epic is still {}.",
-                                crate::commands::issue_workflow::issue_status_label(
-                                    workflow_policy.as_ref(),
-                                    &epic.status,
-                                )
-                            ),
-                        )
-                    } else if evidence.is_empty() {
-                        (
-                            false,
-                            "No validation evidence is attached to this linked epic.".to_string(),
-                        )
-                    } else {
-                        (
-                            true,
-                            format!(
-                                "Linked epic is done-category with validation evidence: {}",
-                                compact_strings(&evidence)
-                            ),
-                        )
-                    };
+                    let (coverage_status, reason) =
+                        if !crate::commands::issue_workflow::issue_is_done(
+                            workflow_policy.as_ref(),
+                            &epic,
+                        ) {
+                            (
+                                ProofCoverageStatus::Missing,
+                                format!(
+                                    "Linked epic is still {}.",
+                                    crate::commands::issue_workflow::issue_status_label(
+                                        workflow_policy.as_ref(),
+                                        &epic.status,
+                                    )
+                                ),
+                            )
+                        } else {
+                            coverage_reason(
+                                classify_requirement_coverage(&item, &evidence),
+                                "No matching validation evidence is attached to this linked epic.",
+                            )
+                        };
                     items.push(MissionContractAuditItem {
                         group: "Linked Epic Outcomes".to_string(),
                         target: epic.id.clone(),
                         text: item,
-                        passed,
+                        coverage_status,
                         reason,
                     });
                 }
@@ -1281,7 +1317,7 @@ fn mission_contract_audit(
                 group: "Linked Epic Outcomes".to_string(),
                 target: epic.id.clone(),
                 text: epic.title.clone(),
-                passed: false,
+                coverage_status: ProofCoverageStatus::Failed,
                 reason: format!("Linked epic record is malformed: {error}"),
             }),
         }
@@ -1326,12 +1362,35 @@ fn mission_linked_epics(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
     Ok(epics)
 }
 
-fn validating_evidence_ids(
+fn coverage_reason(
+    coverage: crate::commands::agent_factory::ProofCoverage,
+    missing_reason: &str,
+) -> (ProofCoverageStatus, String) {
+    let status = coverage.status;
+    let evidence = if coverage.evidence_refs.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", compact_strings(&coverage.evidence_refs))
+    };
+    let reason = match coverage.status {
+        ProofCoverageStatus::Covered => format!("Covered by evidence{evidence}"),
+        ProofCoverageStatus::Missing => missing_reason.to_string(),
+        ProofCoverageStatus::Failed => format!("Matching evidence failed{evidence}"),
+        ProofCoverageStatus::Blocked => format!("Matching evidence is blocked{evidence}"),
+        ProofCoverageStatus::Deferred => format!("Matching evidence is deferred{evidence}"),
+        ProofCoverageStatus::NotApplicable => {
+            format!("Marked not-applicable by evidence{evidence}")
+        }
+    };
+    (status, reason)
+}
+
+fn validating_evidence_records(
     db: &Database,
     target_kind: &str,
     target_id: &str,
-) -> Result<Vec<String>> {
-    let mut ids = db
+) -> Result<Vec<DomainRecord>> {
+    let mut records = db
         .list_record_links(target_kind, target_id)?
         .into_iter()
         .filter(|link| link.relation_type == "validates")
@@ -1344,10 +1403,22 @@ fn validating_evidence_ids(
                 None
             }
         })
-        .collect::<Vec<_>>();
-    ids.sort();
-    ids.dedup();
-    Ok(ids)
+        .map(|id| db.require_record("evidence", &id))
+        .collect::<Result<Vec<_>>>()?;
+    records.sort_by(|a, b| a.id.cmp(&b.id));
+    records.dedup_by(|a, b| a.id == b.id);
+    Ok(records)
+}
+
+fn validating_evidence_ids(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<String>> {
+    Ok(validating_evidence_records(db, target_kind, target_id)?
+        .into_iter()
+        .map(|record| record.id)
+        .collect())
 }
 
 fn contract_items_from_text(text: &str) -> Vec<String> {
@@ -1378,7 +1449,13 @@ fn contract_items_from_text(text: &str) -> Vec<String> {
 }
 
 fn is_placeholder_contract_item(item: &str) -> bool {
-    let normalized = item.trim().trim_end_matches('.').to_ascii_lowercase();
+    let normalized = item
+        .trim()
+        .trim_start_matches("- ")
+        .trim_start_matches("* ")
+        .trim()
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
     matches!(
         normalized.as_str(),
         "none" | "validation was not specified" | "outcome was not specified"
@@ -1432,9 +1509,7 @@ fn mission_closeout_status(
                 transition: "close".to_string(),
                 validator: "workflow_policy".to_string(),
                 passed: false,
-                reason: format!(
-                    "{error:#}; run `atelier workflow init`, then `atelier workflow check`"
-                ),
+                reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
                 elapsed_ms: 0,
             }],
         };
@@ -1546,6 +1621,7 @@ struct MissionListSummary {
     blocked_work: Vec<BlockedMissionWork>,
     open_blockers: usize,
     evidence_count: usize,
+    duplicate_reachability: Vec<DuplicateReachability>,
 }
 
 struct MissionListEpic {
@@ -1556,6 +1632,11 @@ struct MissionListEpic {
 struct BlockedMissionWork {
     issue: Issue,
     blockers: Vec<String>,
+}
+
+struct DuplicateReachability {
+    issue_id: String,
+    roots: Vec<String>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1609,9 +1690,16 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         .filter(|issue| issue.issue_type == "epic")
         .map(|issue| issue.id.clone())
         .collect::<BTreeSet<_>>();
+    let mission_issue_ids = mission_issue_ids(db, mission_id)?;
+
+    for issue_id in &mission_issue_ids {
+        summary
+            .work
+            .add_bucket(issue_bucket(db, &db.require_issue(issue_id)?)?);
+    }
+    summary.duplicate_reachability = duplicate_reachability(db, &mission_issue_ids, &seen_work)?;
 
     for issue in linked_work {
-        summary.work.add_bucket(issue_bucket(db, &issue)?);
         if issue.issue_type == "epic" {
             summary.epics.push(MissionListEpic {
                 work: epic_work_counts(db, &issue.id)?,
@@ -1623,7 +1711,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
     }
 
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    for issue_id in mission_issue_ids(db, mission_id)? {
+    for issue_id in mission_issue_ids {
         let issue = db.require_issue(&issue_id)?;
         if !is_selectable_work(db, &issue)? {
             continue;
@@ -1657,11 +1745,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
 
 impl MissionListSummary {
     fn total_work(&self) -> WorkCounts {
-        let mut counts = self.work;
-        for epic in &self.epics {
-            counts.add_counts(epic.work);
-        }
-        counts
+        self.work
     }
 
     fn evidence_gap_count(&self) -> usize {
@@ -1906,6 +1990,60 @@ fn collect_descendant_work_counts(
     Ok(())
 }
 
+fn duplicate_reachability(
+    db: &Database,
+    mission_issue_ids: &BTreeSet<String>,
+    linked_root_ids: &BTreeSet<String>,
+) -> Result<Vec<DuplicateReachability>> {
+    let mut duplicates = Vec::new();
+    for issue_id in mission_issue_ids {
+        if let Some(roots) = duplicate_reachability_roots(db, issue_id, linked_root_ids)? {
+            duplicates.push(DuplicateReachability {
+                issue_id: issue_id.clone(),
+                roots,
+            });
+        }
+    }
+    duplicates.sort_by(|a, b| a.issue_id.cmp(&b.issue_id));
+    Ok(duplicates)
+}
+
+fn duplicate_reachability_roots(
+    db: &Database,
+    issue_id: &str,
+    linked_root_ids: &BTreeSet<String>,
+) -> Result<Option<Vec<String>>> {
+    let mut roots = Vec::new();
+    let mut current_id = Some(issue_id.to_string());
+    while let Some(id) = current_id {
+        if linked_root_ids.contains(&id) {
+            roots.push(id.clone());
+        }
+        current_id = db.require_issue(&id)?.parent_id;
+    }
+    if roots.len() > 1 {
+        Ok(Some(roots))
+    } else {
+        Ok(None)
+    }
+}
+
+fn format_duplicate_reachability(duplicate: &DuplicateReachability) -> String {
+    let mut qualifiers = duplicate
+        .roots
+        .iter()
+        .map(|root| {
+            if root == &duplicate.issue_id {
+                "direct".to_string()
+            } else {
+                root.clone()
+            }
+        })
+        .collect::<Vec<_>>();
+    qualifiers.sort();
+    format!("{} ({})", duplicate.issue_id, qualifiers.join(" + "))
+}
+
 fn compare_mission_list_epics(a: &MissionListEpic, b: &MissionListEpic) -> std::cmp::Ordering {
     mission_status_rank(&a.issue.status)
         .cmp(&mission_status_rank(&b.issue.status))
@@ -1935,13 +2073,6 @@ impl WorkCounts {
             "done" => self.done += 1,
             _ => self.backlog += 1,
         }
-    }
-
-    fn add_counts(&mut self, other: WorkCounts) {
-        self.ready += other.ready;
-        self.blocked += other.blocked;
-        self.done += other.done;
-        self.backlog += other.backlog;
     }
 
     fn is_empty(self) -> bool {

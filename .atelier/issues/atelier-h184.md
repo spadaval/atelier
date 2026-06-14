@@ -3,6 +3,7 @@ created_at: "2026-06-14T03:47:07.684316124+00:00"
 id: "atelier-h184"
 issue_type: "bug"
 labels:
+- "assignee:root"
 - "mission-status"
 priority: "P1"
 relationships:
@@ -12,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Prevent mission status from double-counting nested work"
-updated_at: "2026-06-14T03:47:07.684316124+00:00"
+updated_at: "2026-06-14T06:50:46.507113170+00:00"
 ---
 
 ## Description
