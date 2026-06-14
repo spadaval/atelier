@@ -300,7 +300,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier abandon`
 - `atelier issue ...`
 - `atelier search <query>`
-- `atelier link add/remove/list`
 - `atelier graph impact/tree`
 - `atelier issue note`
 - `atelier mission note`
@@ -645,11 +644,6 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
             index == offset + 2 || index == offset + 3
         }
         ["issue", "subissue", ..] => index == offset + 2,
-        ["link", "add" | "remove", source_kind, _, target_kind, ..] => {
-            (*source_kind == "issue" && index == offset + 3)
-                || (*target_kind == "issue" && index == offset + 5)
-        }
-        ["link", "list", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
         ["graph", "impact", ..] => index == offset + 2,
         ["note", "add", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
         ["maintenance", "delete", target_kind, ..] => {
@@ -1246,6 +1240,12 @@ fn test_top_level_help_only_shows_core_commands() {
     assert!(
         !stdout
             .lines()
+            .any(|line| line.trim_start().starts_with("link ")),
+        "root help should not expose generic link:\n{stdout}"
+    );
+    assert!(
+        !stdout
+            .lines()
             .any(|line| line.trim_start().starts_with("export ")),
         "root help should not present export as a normal operator command:\n{stdout}"
     );
@@ -1320,6 +1320,25 @@ fn test_generic_note_command_rejects_with_record_specific_guidance() {
     assert!(!success, "generic note command should be removed");
     assert!(stderr.contains("was removed"));
     assert!(stderr.contains("atelier issue note atelier-missing"));
+}
+
+#[test]
+fn test_generic_link_command_rejects_with_record_specific_guidance() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["link", "add", "issue", "atelier-a", "issue", "atelier-b"],
+    );
+
+    assert!(!success, "generic link command should be removed");
+    assert!(stderr.contains("`atelier link` was removed"));
+    assert!(stderr.contains("atelier mission add-work"));
+    assert!(stderr.contains("atelier mission unlink"));
+    assert!(stderr.contains("atelier issue block"));
+    assert!(stderr.contains("atelier issue unblock"));
+    assert!(stderr.contains("atelier evidence attach"));
+    assert!(stderr.contains("atelier graph impact"));
 }
 
 #[test]
@@ -2421,15 +2440,14 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let (success, link_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "link", "add", "issue", &source_id, "issue", &target_id, "--type", "derived",
+            "issue", "relate", &source_id, &target_id, "--type", "derived",
         ],
     );
-    assert!(success, "link add failed: {stderr}");
+    assert!(success, "issue relate failed: {stderr}");
     assert!(link_out.contains("Linked"));
 
-    let (success, list_out, stderr) =
-        run_atelier(dir.path(), &["link", "list", "issue", &source_id]);
-    assert!(success, "link list failed: {stderr}");
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "related", &source_id]);
+    assert!(success, "issue related failed: {stderr}");
     assert!(list_out.contains("derived"));
     assert!(list_out.contains("Target graph item"));
 
@@ -2462,10 +2480,10 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let (success, unlink_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "link", "remove", "issue", &source_id, "issue", &target_id, "--type", "derived",
+            "issue", "unrelate", &source_id, &target_id, "--type", "derived",
         ],
     );
-    assert!(success, "link remove failed: {stderr}");
+    assert!(success, "issue unrelate failed: {stderr}");
     assert!(unlink_out.contains("Unlinked"));
 
     let (success, delete_out, stderr) = run_atelier(
@@ -2501,7 +2519,7 @@ fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
 }
 
 #[test]
-fn test_explicit_homes_reject_non_issue_targets_until_supported() {
+fn test_generic_link_rejection_names_record_specific_replacements() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2510,8 +2528,17 @@ fn test_explicit_homes_reject_non_issue_targets_until_supported() {
         dir.path(),
         &["link", "add", "mission", "atelier-none", "issue", "1"],
     );
-    assert!(!success, "link add unexpectedly accepted a mission target");
-    assert!(stderr.contains("supports issue records only"));
+    assert!(!success, "generic link command should be removed");
+    assert!(stderr.contains("`atelier link` was removed"));
+    assert!(stderr.contains("atelier mission add-work"));
+    assert!(stderr.contains("atelier issue block"));
+    assert!(stderr.contains("atelier evidence attach"));
+}
+
+#[test]
+fn test_explicit_homes_reject_non_issue_targets_until_supported() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
 
     let (success, _, stderr) = run_atelier(
         dir.path(),

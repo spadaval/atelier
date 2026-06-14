@@ -44,7 +44,6 @@ Orientation:
 Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
-  link          Manage typed issue links
   graph         Inspect issue hierarchy and impact
 
 Missions and planning:
@@ -154,12 +153,6 @@ enum Commands {
     Search {
         /// Search query
         query: String,
-    },
-
-    /// Typed issue link commands
-    Link {
-        #[command(subcommand)]
-        action: LinkCommands,
     },
 
     /// Issue graph and hierarchy commands
@@ -615,35 +608,6 @@ enum IssueCommands {
     /// Mark tests as run (resets test reminder)
     #[command(hide = true)]
     Tested,
-}
-
-#[derive(Subcommand)]
-enum LinkCommands {
-    /// Add a typed link between two records
-    Add {
-        source_kind: String,
-        source_id: String,
-        target_kind: String,
-        target_id: String,
-        /// Relation type
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-    /// Remove a typed link between two records
-    Remove {
-        source_kind: String,
-        source_id: String,
-        target_kind: String,
-        target_id: String,
-        /// Relation type
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-    /// List typed links for a record
-    List {
-        target_kind: String,
-        target_id: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -1489,66 +1453,6 @@ fn run() -> Result<()> {
             commands::agent_factory::search(&db, &query, quiet)
         }
 
-        Commands::Link { action } => match action {
-            LinkCommands::Add {
-                source_kind,
-                source_id,
-                target_kind,
-                target_id,
-                relation_type,
-            } => {
-                require_issue_kind(&source_kind, "atelier link add")?;
-                require_issue_kind(&target_kind, "atelier link add")?;
-                let db = canonical_mutation_db()?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let store = RecordStore::new(&state_dir);
-                let source_id = resolve_issue_arg(&db, &source_id)?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                commands::relate::add_typed_canonical(
-                    &db,
-                    &store,
-                    &source_id,
-                    &target_id,
-                    &relation_type,
-                )?;
-                drop(db);
-                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-            }
-            LinkCommands::Remove {
-                source_kind,
-                source_id,
-                target_kind,
-                target_id,
-                relation_type,
-            } => {
-                require_issue_kind(&source_kind, "atelier link remove")?;
-                require_issue_kind(&target_kind, "atelier link remove")?;
-                let db = canonical_mutation_db()?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let store = RecordStore::new(&state_dir);
-                let source_id = resolve_issue_arg(&db, &source_id)?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                commands::relate::remove_typed_canonical(
-                    &db,
-                    &store,
-                    &source_id,
-                    &target_id,
-                    &relation_type,
-                )?;
-                drop(db);
-                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-            }
-            LinkCommands::List {
-                target_kind,
-                target_id,
-            } => {
-                require_issue_kind(&target_kind, "atelier link list")?;
-                let db = projection_query_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                commands::relate::list(&db, &target_id)
-            }
-        },
-
         Commands::Graph { action } => match action {
             GraphCommands::Impact { id } => {
                 let db = projection_query_db()?;
@@ -2099,6 +2003,9 @@ fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
         ["work", ..] => Some(
             "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, `atelier abandon`, or `atelier worktree ...`.",
         ),
+        ["link", ..] => Some(
+            "`atelier link` was removed. Use record-specific commands: `atelier mission add-work` or `atelier mission unlink` for mission work, `atelier issue block` or `atelier issue unblock` for blockers, `atelier evidence attach` for evidence, and `atelier graph impact` or `atelier graph tree` for inspection.",
+        ),
         ["archive", ..] => Some(
             "`atelier archive` was removed; use workflow-backed `atelier issue close <id> --to archived --reason \"...\"` when the configured workflow allows archive.",
         ),
@@ -2174,11 +2081,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Tested => "issue tested",
         },
         Commands::Search { .. } => "search",
-        Commands::Link { action } => match action {
-            LinkCommands::Add { .. } => "link add",
-            LinkCommands::Remove { .. } => "link remove",
-            LinkCommands::List { .. } => "link list",
-        },
         Commands::Graph { action } => match action {
             GraphCommands::Impact { .. } => "graph impact",
             GraphCommands::Tree { .. } => "graph tree",

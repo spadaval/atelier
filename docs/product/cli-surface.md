@@ -366,7 +366,7 @@ surface is `delete` unless it is in the core list above.
 | Hidden work-status helper and any legacy work-start path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and work-start under that removed group is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle and blockers; `graph` owns cross-record impact/tree inspection. |
-| Generic `atelier link` | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers use issue commands; evidence uses evidence commands; graph inspects impact. |
+| Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers use issue commands; evidence uses evidence commands; graph inspects impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
 | Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `init --import-beads` and temporarily hidden/manual `import-beads` for migration. |
 | `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | `graph impact`, record-specific note commands, and lifecycle commands. |
 
@@ -417,7 +417,7 @@ Generic replacements should use domain language. `atelier graph impact <id>` is
 the visible cross-record impact command, and `atelier search <query>` owns text
 search. Impact follows mission work links, issue hierarchy, blocking
 relationships, and any explicitly impact-bearing relationship types that remain
-after generic `atelier link` is removed. The inherited `cascade` and `falsify`
+after the generic link root is removed. The inherited `cascade` and `falsify`
 commands are removed so reassessment stays an explicit operator action through
 graph, record-specific notes, and lifecycle commands instead of an
 assumption-specific command path.
