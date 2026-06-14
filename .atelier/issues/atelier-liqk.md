@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Suggest supported replacements for removed commands"
-updated_at: "2026-06-14T02:52:30.599229887+00:00"
+updated_at: "2026-06-14T07:22:08.338528742+00:00"
 ---
 
 ## Description
