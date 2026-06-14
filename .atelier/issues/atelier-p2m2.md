@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Make the CLI surface purposeful and compact"
-updated_at: "2026-06-13T21:58:03.428554959+00:00"
+updated_at: "2026-06-14T00:23:52.936660657+00:00"
 ---
 
 ## Description
