@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:16:06.141159669+00:00"
+status: "done"
 title: "Extract issue workflow orientation from Agent Factory commands"
-updated_at: "2026-06-14T00:15:37.744896611+00:00"
+updated_at: "2026-06-14T00:16:06.141159669+00:00"
 ---
 
 ## Description
