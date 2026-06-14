@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:28:40.032623649+00:00"
+status: "done"
 title: "Document record-kind command boundaries"
-updated_at: "2026-06-14T08:27:39.416885998+00:00"
+updated_at: "2026-06-14T08:28:40.032623649+00:00"
 ---
 
 ## Description
