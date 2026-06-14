@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Split RecordStore god module by cohesive ownership"
-updated_at: "2026-06-14T00:09:01.116549689+00:00"
+updated_at: "2026-06-14T00:13:14.623470264+00:00"
 ---
 
 ## Description
