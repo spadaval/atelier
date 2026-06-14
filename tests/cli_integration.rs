@@ -2170,6 +2170,7 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
 
     let (success, update_help, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
     assert!(success, "issue update help failed: {stderr}");
+    assert!(!update_help.contains("--claim"));
     assert!(!update_help.contains("--status"));
     assert!(!update_help.contains("--description"));
 }

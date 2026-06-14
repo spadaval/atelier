@@ -455,7 +455,7 @@ enum IssueCommands {
         #[arg(long)]
         no_parent: bool,
         /// Claim this issue for the current agent/user
-        #[arg(long)]
+        #[arg(long, hide = true)]
         claim: bool,
         /// Append durable notes without opening an editor
         #[arg(long)]

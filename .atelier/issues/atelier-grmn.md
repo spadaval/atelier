@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Remove duplicate claim workflow"
-updated_at: "2026-06-14T05:58:17.063833002+00:00"
+updated_at: "2026-06-14T06:52:18.028484850+00:00"
 ---
 
 ## Description
