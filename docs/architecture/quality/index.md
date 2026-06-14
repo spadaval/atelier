@@ -9,6 +9,11 @@
   result states.
 - `agent-factory-atelier-validation.md`: scenario proof that Agent Factory can
   operate through Atelier.
+- `cli-zen-audit-2026-06-14.md`: CLI surface audit against the Zen of Atelier,
+  including command hierarchy, relationship ownership, proof capture, and
+  recovery-surface findings.
+- `codex-mission-log-insights-2026-06-14.md`: mined Codex mission transcript
+  findings for repository docs, Agent Factory, and CLI improvements.
 - `stabilization-closeout-inventory-2026-06-13.md`: current stabilization
   mission audit inventory, owner map, residue classifications, and health
   transcript for `atelier-man9`.

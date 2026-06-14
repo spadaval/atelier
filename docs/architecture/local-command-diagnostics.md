@@ -83,7 +83,7 @@ The required fields and defaults are:
 | `schema` | string | Always `atelier.command_event`. |
 | `schema_version` | integer | Always `1` for the first format. |
 | `event_id` | string | Locally unique opaque ID; timestamp plus randomness is sufficient. |
-| `command` | string | Top-level command path such as `issue show`, `export --check`, or `doctor`. |
+| `command` | string | Top-level command path such as `issue show`, `doctor`, or an advanced diagnostic command. |
 | `argv_redacted` | array of strings | Redacted command arguments. Empty unless verbose capture is enabled or a diagnostics command needs safe filters. |
 | `argv_capture` | string | `none`, `redacted`, or `verbose`. Default `none`. |
 | `started_at` | string | UTC RFC3339 timestamp recorded before command execution. |
@@ -182,14 +182,28 @@ Exported or committed data:
 - no Mission Control `runs[]`, `agents[]`, or command-performance fields until a
   later issue defines a projection contract.
 
-`atelier export`, `atelier export --check`, `atelier rebuild`, `atelier lint`,
-and `atelier doctor` must not require the diagnostics store to exist. A missing
+`atelier lint`, `atelier doctor`, `doctor --fix`, and any advanced export or
+rebuild diagnostics must not require the diagnostics store to exist. A missing
 or unreadable diagnostics store may be reported by future diagnostics commands,
 but it is not tracker corruption.
 
 Mission Control may eventually consume aggregate diagnostics such as slow
 command counts or last-seen agent hints. That projection must use summaries,
 not raw command logs, and must be added by an explicit follow-up contract.
+
+## Operator Boundary
+
+Diagnostics JSON is for inspecting Atelier itself. It is appropriate for local
+telemetry, command-performance analysis, debugging diagnostics storage, and
+future tools that summarize command behavior. It is not the contract for normal
+project operation.
+
+Normal mission, issue, validation, and closeout workflows must use
+human-oriented operator surfaces: `atelier status`, `atelier mission status`,
+`atelier issue transition <id> --options`, `atelier lint`, `atelier doctor`,
+and `atelier evidence record`. Agents and scripts must not parse diagnostics
+JSON to choose ready work, decide blockers, prove validation, infer evidence
+coverage, or close work.
 
 ## Slow Command Query Defaults
 

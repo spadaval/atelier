@@ -11,9 +11,9 @@ and fork provenance is documented in [Chainlink Provenance](provenance.md).
 Atelier currently starts from the Chainlink Rust CLI:
 
 - `src/main.rs`: Clap command routing and global CLI options.
-- `src/commands/`: command handlers for the documented core CLI surface:
-  issues, missions, plans, evidence, links, workflow validation, work/worktrees,
-  canonical export/rebuild, import-beads, lint, and doctor.
+- `src/commands/`: command handlers for the documented CLI surface: issues,
+  missions, plans, evidence, graph, workflow validation, work/worktrees,
+  predecessor import, low-level export/rebuild diagnostics, lint, and doctor.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
 - `resources/atelier/` and `resources/claude/`: bundled rule and integration
@@ -57,14 +57,15 @@ Accepted ADRs record cross-cutting product choices:
   projection contract explicitly opts in.
 - Mutating commands are migrating toward Markdown-first writes through
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
-- `export --check` detects stale canonical records and derived projections.
-- `rebuild` recreates SQLite projection state from committed Markdown records.
+- `doctor` and `lint` detect stale, invalid, or missing tracker state through
+  operator-facing health checks.
+- `doctor --fix` repairs ignored local projection/runtime state from committed
+  Markdown records when it is safe to do so.
 - First-class concepts include missions, milestone checkpoint records, issues,
   plans, evidence, runs, typed links, workflows, and workflow validators; their
   user-visible behavior is defined in [Product](../product/index.md).
 - Repository-owned workflow policy lives in `.atelier/config.toml` or a
-  documented workflow policy file selected by config; copied rule trees are
-  integrations, not project tracker state.
+  documented workflow policy file selected by config.
 
 ## Boundaries
 
