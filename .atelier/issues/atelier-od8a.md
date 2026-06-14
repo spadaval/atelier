@@ -3,6 +3,7 @@ created_at: "2026-06-14T03:47:12.542064132+00:00"
 id: "atelier-od8a"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -12,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add mission unlink repair command"
-updated_at: "2026-06-14T03:47:12.542064132+00:00"
+updated_at: "2026-06-14T07:25:41.537714687+00:00"
 ---
 
 ## Description

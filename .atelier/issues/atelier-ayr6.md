@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Fix validation proof fixture coverage for contract-audit closeout"
-updated_at: "2026-06-14T07:11:02.906366509+00:00"
+updated_at: "2026-06-14T07:26:38.431454425+00:00"
 ---
 
 ## Description

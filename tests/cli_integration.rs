@@ -7688,6 +7688,24 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         "Mission contract audit line-by-line classification maps validation outcome lines to proof",
     );
 
+    let (success, transitions, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "--options"],
+    );
+    assert!(
+        success,
+        "transition options after audit proof failed: {stderr}"
+    );
+    assert!(transitions.contains("missing Evidence requirement 2"));
+    assert!(transitions.contains("Manual review artifact"));
+
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "Manual review artifact records line-by-line validation classifications as evidence",
+    );
+
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
