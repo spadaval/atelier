@@ -756,6 +756,8 @@ enum MissionCommands {
     },
     /// Add issue work to a mission
     AddWork { id: String, issue: String },
+    /// Remove issue work from a mission
+    Unlink { id: String, issue: String },
     /// Add an issue blocker to a mission
     AddBlocker { id: String, issue: String },
 }
@@ -1698,6 +1700,13 @@ fn run() -> Result<()> {
                 let issue = resolve_issue_arg(storage.db(), &issue)?;
                 commands::mission::add_work(&state_dir, &db_path, &id, &issue)
             }
+            MissionCommands::Unlink { id, issue } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                commands::mission::unlink(&state_dir, &db_path, &id, &issue)
+            }
             MissionCommands::AddBlocker { id, issue } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
                 let db_path = storage.db_path();
@@ -2166,6 +2175,7 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Update { .. } => "mission update",
             MissionCommands::Note { .. } => "mission note",
             MissionCommands::AddWork { .. } => "mission add-work",
+            MissionCommands::Unlink { .. } => "mission unlink",
             MissionCommands::AddBlocker { .. } => "mission add-blocker",
         },
         Commands::Plan { action } => match action {

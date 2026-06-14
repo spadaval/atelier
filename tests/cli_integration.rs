@@ -306,7 +306,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission note`
 - `atelier mission create/show/list/status/update`
 - `atelier mission audit`
-- `atelier mission add-work/add-blocker`
+- `atelier mission add-work/unlink/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier history`
@@ -1264,6 +1264,7 @@ fn test_mission_help_uses_show_not_view() {
     assert!(success, "mission help failed: {stderr}");
 
     assert!(stdout.contains("show"));
+    assert!(stdout.contains("unlink"));
     assert!(!stdout.contains("view"));
 }
 
@@ -7145,6 +7146,50 @@ fn test_mission_relationship_filtering_keeps_supporting_records_out_of_work() {
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains("Total: 1 ready"));
     assert!(status_out.contains("Mission blockers: 1 open"));
+}
+
+#[test]
+fn test_mission_unlink_removes_added_work() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Repair mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Repair mission");
+    let mission_id = mission_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Accidental work"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Accidental work");
+    let issue_id = issue_id.as_str();
+
+    let (success, add_out, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+    assert!(add_out.contains(&format!("Added work {issue_id} to mission {mission_id}")));
+
+    let (success, linked_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
+    assert!(success, "mission show after add-work failed: {stderr}");
+    assert!(linked_out.contains("Linked Work"));
+    assert!(linked_out.contains("Accidental work"));
+
+    let (success, unlink_out, stderr) =
+        run_atelier(dir.path(), &["mission", "unlink", mission_id, issue_id]);
+    assert!(success, "mission unlink failed: {stderr}");
+    assert!(unlink_out.contains(&format!(
+        "Unlinked work {issue_id} from mission {mission_id}"
+    )));
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
+    assert!(success, "mission show after unlink failed: {stderr}");
+    assert!(show_out.contains("Linked Work"));
+    assert!(!show_out.contains("Accidental work"));
+    assert!(show_out.contains("Work: ready=0 blocked=0 done=0 backlog=0"));
+
+    let mission_markdown = read_canonical_record(dir.path(), "missions", mission_id);
+    assert!(!mission_markdown.contains(&format!(
+        "  - kind: \"issue\"\n    id: \"{issue_id}\"\n    type: \"advances\""
+    )));
 }
 
 #[test]

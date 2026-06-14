@@ -27,7 +27,7 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier search <query>`
 - `atelier graph impact/tree`
 - `atelier mission create/show/list/status/update/note`
-- `atelier mission add-work/add-blocker`
+- `atelier mission add-work/unlink/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier history`
@@ -122,7 +122,7 @@ time pressure:
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, closeout readiness, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
-  `atelier mission add-work/add-blocker`, and `atelier mission audit`.
+  `atelier mission add-work/unlink/add-blocker`, and `atelier mission audit`.
 - Manage relationships: record issue blockers and inspect cross-record impact
   when the next action depends on graph shape. Owned by issue blocker
   subcommands, mission work-link subcommands, evidence attachment, plan

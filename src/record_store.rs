@@ -400,6 +400,30 @@ impl RecordStore {
         Ok(true)
     }
 
+    pub fn remove_relates_relationship(
+        &self,
+        source_kind: &str,
+        source_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_type: &str,
+    ) -> Result<bool> {
+        crate::db::validate_relationship_type(relation_type)?;
+        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+        let original_len = record.relationships.relates.len();
+        record.relationships.relates.retain(|existing| {
+            existing.kind != target_kind
+                || existing.id != target_id
+                || existing.relation_type != relation_type
+        });
+        if record.relationships.relates.len() == original_len {
+            return Ok(false);
+        }
+        record.record.updated_at = Utc::now();
+        self.write_domain_record_atomic(&record)?;
+        Ok(true)
+    }
+
     pub fn add_issue_label(&self, issue_id: &str, label: &str) -> Result<bool> {
         if label.len() > crate::db::MAX_LABEL_LEN {
             bail!(

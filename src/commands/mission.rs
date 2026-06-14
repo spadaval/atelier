@@ -684,6 +684,22 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
     Ok(())
 }
 
+pub fn unlink(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
+    let db = Database::open(db_path)?;
+    db.require_record(KIND, id)?;
+    let issue = db.require_issue(issue_id)?;
+    drop(db);
+    let store = RecordStore::new(state_dir);
+    let removed = store.remove_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
+    refresh_projection(state_dir, db_path)?;
+    if removed {
+        println!("Unlinked work {} from mission {}", issue.id, id);
+    } else {
+        println!("Work {} is not linked to mission {}", issue.id, id);
+    }
+    Ok(())
+}
+
 pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<()> {
     let mission = db.require_record(KIND, id)?;
     let audit = mission_contract_audit(db, state_dir, &mission)?;
