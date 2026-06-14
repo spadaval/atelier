@@ -20,9 +20,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:27:47.139367359+00:00"
+status: "done"
 title: "Epic: Validate stabilization closeout end to end"
-updated_at: "2026-06-14T00:27:43.397249285+00:00"
+updated_at: "2026-06-14T00:27:47.139367359+00:00"
 ---
 
 ## Description
