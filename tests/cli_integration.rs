@@ -129,6 +129,20 @@ fn commit_all(dir: &Path, message: &str) {
     );
 }
 
+fn git_status_short(dir: &Path) -> String {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["status", "--short"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git status --short failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
 fn init_atelier_with_telemetry_disabled(dir: &Path) {
     let (success, _, stderr) =
         run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);
@@ -1901,6 +1915,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
     let issue_id = issue_id_by_title(dir.path(), "Root workflow item");
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "tracker setup");
+    let git_before = git_status_short(dir.path());
 
     let (success, transition_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
@@ -1915,6 +1930,11 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
+    let git_after = git_status_short(dir.path());
+    assert_eq!(
+        git_before, git_after,
+        "--options should not dirty the worktree:\nbefore:\n{git_before}\nafter:\n{git_after}"
+    );
 
     let (success, start_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
@@ -1939,6 +1959,57 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
             "Applied transition start",
             "transition: \"start\"",
             "to: \"in_progress\"",
+        ],
+    );
+}
+
+#[test]
+fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Options read-only item"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Options read-only item");
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "options read-only baseline");
+
+    let git_before = git_status_short(dir.path());
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options_out.contains("Issue Transitions"), "{options_out}");
+    let git_after = git_status_short(dir.path());
+    assert_eq!(
+        git_before, git_after,
+        "--options should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_validation"],
+    );
+    assert!(
+        !success,
+        "request_validation should fail without a completed review"
+    );
+    assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(stderr.contains("review_ready"), "{stderr}");
+
+    let activities = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activities,
+        "transition_blocked",
+        &[
+            "Blocked transition request_validation from in_progress",
+            "transition: \"request_validation\"",
+            "reason: \"validator review_ready failed:",
         ],
     );
 }

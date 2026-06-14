@@ -3,6 +3,7 @@ created_at: "2026-06-14T16:31:22.846639192+00:00"
 id: "atelier-zrmo"
 issue_type: "bug"
 labels:
+- "assignee:root"
 - "tracker"
 priority: "P1"
 relationships:
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Make issue transition --options read-only"
-updated_at: "2026-06-14T16:31:22.846639192+00:00"
+updated_at: "2026-06-14T16:50:44.569915639+00:00"
 ---
 
 ## Description
