@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split runtime database schema and projection migration hotspots"
-updated_at: "2026-06-14T00:15:16.618435365+00:00"
+updated_at: "2026-06-14T00:15:41.589821206+00:00"
 ---
 
 ## Description
