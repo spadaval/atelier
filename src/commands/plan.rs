@@ -569,6 +569,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             &mission.title,
             mission.body.as_deref(),
             json!({}),
+            mission_labels(mission),
         )?;
     }
     for milestone in &plan.records.milestones {
@@ -586,6 +587,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             &milestone.title,
             Some(&milestone.desired_state),
             serde_json::to_value(data)?,
+            Vec::new(),
         )?;
     }
     for record in &plan.records.plans {
@@ -607,6 +609,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             &record.title,
             Some(&record.body),
             serde_json::to_value(data)?,
+            Vec::new(),
         )?;
     }
     for evidence in &plan.records.evidence {
@@ -638,6 +641,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             &evidence.title,
             Some(&evidence.body),
             serde_json::to_value(data)?,
+            Vec::new(),
         )?;
     }
 
@@ -908,10 +912,15 @@ fn create_bulk_record(
     title: &str,
     body: Option<&str>,
     data: Value,
+    labels: Vec<String>,
 ) -> Result<()> {
     let status = if kind == "mission" { "ready" } else { "open" };
-    let record =
+    let mut record =
         store.create_domain_record(kind, title, status, body, &serde_json::to_string(&data)?)?;
+    if !labels.is_empty() {
+        record.labels = labels;
+        store.write_domain_record_atomic(&record)?;
+    }
     let id = record.record.id;
     resolved.insert(
         client_ref.to_string(),
@@ -1158,6 +1167,12 @@ fn sorted(mut values: Vec<String>) -> Vec<String> {
     values.sort();
     values.dedup();
     values
+}
+
+fn mission_labels(mission: &BulkMission) -> Vec<String> {
+    let mut labels = mission.labels.clone();
+    labels.push("mission".to_string());
+    sorted(labels)
 }
 
 fn created_key(kind: &str) -> &str {

@@ -10336,6 +10336,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "client_ref": "mission.bulk",
         "title": "Bulk mission",
         "body": "Mission from bulk plan",
+        "labels": ["bulk", "mission"],
         "work": [{ "client_ref": "issue.work" }],
         "plans": [{ "client_ref": "plan.bulk" }],
         "milestones": [{ "client_ref": "milestone.bulk" }]
@@ -10401,6 +10402,14 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
     assert!(success, "mission show after bulk apply failed: {stderr}");
     assert!(view_out.contains("Records: plans=1 milestones=1 evidence=1"));
     assert!(view_out.contains("Work: ready=0 blocked=0 done=0 backlog=1"));
+    let mission_markdown = std::fs::read_to_string(
+        dir.path()
+            .join(".atelier/missions")
+            .join(format!("{mission_id}.md")),
+    )
+    .unwrap();
+    assert!(mission_markdown.contains("- \"bulk\"\n"));
+    assert!(mission_markdown.contains("- \"mission\"\n"));
 }
 
 #[test]
