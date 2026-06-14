@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T17:23:15.554356882+00:00"
+status: "done"
 title: "Remove heuristic evidence text matching from close gates"
-updated_at: "2026-06-14T17:22:17.901493500+00:00"
+updated_at: "2026-06-14T17:23:15.554356882+00:00"
 ---
 
 ## Description

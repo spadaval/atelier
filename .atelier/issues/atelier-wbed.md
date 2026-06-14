@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T17:23:24.245316739+00:00"
+status: "done"
 title: "Route proof approval through workflow validation"
-updated_at: "2026-06-14T17:22:28.057195526+00:00"
+updated_at: "2026-06-14T17:23:24.245316739+00:00"
 ---
 
 ## Description

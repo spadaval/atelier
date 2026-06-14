@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T17:23:28.628579745+00:00"
+status: "done"
 title: "Scope clean-worktree closeout checks around tracker-generated state"
-updated_at: "2026-06-14T17:22:15.536830368+00:00"
+updated_at: "2026-06-14T17:23:28.628579745+00:00"
 ---
 
 ## Description
