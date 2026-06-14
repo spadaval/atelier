@@ -114,6 +114,13 @@ struct CommandUse {
     options: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReferenceVisibility {
+    VisibleWorkflow,
+    HiddenAdvanced,
+    RemovalHistory,
+}
+
 struct HelpCatalog {
     exe: PathBuf,
     cache: BTreeMap<Vec<String>, Option<String>>,
@@ -200,8 +207,9 @@ fn scan_guidance_file(
         if let Some(title) = markdown_heading(line) {
             section = title;
         }
+        let visibility = reference_visibility(&section, line);
         for raw in command_spans(line) {
-            if removed_or_deferred_context(&section, line) {
+            if matches!(visibility, ReferenceVisibility::RemovalHistory) {
                 continue;
             }
             for command in expand_command_reference(&raw) {
@@ -350,7 +358,10 @@ fn documented_visible_roots(content: &str) -> BTreeMap<String, usize> {
         if let Some(title) = markdown_heading(line) {
             section = title;
         }
-        if removed_or_deferred_context(&section, line) || hidden_context(line) {
+        if !matches!(
+            reference_visibility(&section, line),
+            ReferenceVisibility::VisibleWorkflow
+        ) {
             continue;
         }
         for raw in command_spans(line) {
@@ -567,11 +578,37 @@ fn is_command_word(token: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
+fn reference_visibility(section: &str, line: &str) -> ReferenceVisibility {
+    if removed_or_deferred_context(section, line) {
+        return ReferenceVisibility::RemovalHistory;
+    }
+    if hidden_or_advanced_context(section, line) {
+        return ReferenceVisibility::HiddenAdvanced;
+    }
+    ReferenceVisibility::VisibleWorkflow
+}
+
 fn removed_or_deferred_context(section: &str, line: &str) -> bool {
     let section = section.to_ascii_lowercase();
     let line = line.to_ascii_lowercase();
-    section.contains("removed")
-        || section.contains("deferred")
+    section.contains("removed behavior")
+        || section.contains("removed or deferred")
+        || section.contains("removed")
+            && (line.contains("remove")
+                || line.contains("removed")
+                || line.contains("predecessor")
+                || line.contains("legacy")
+                || line.contains("replacement")
+                || line.contains("unsupported")
+                || line.contains("transitional"))
+        || section.contains("compatibility classification")
+            && (line.contains("remove")
+                || line.contains("removed")
+                || line.contains("predecessor")
+                || line.contains("legacy")
+                || line.contains("replacement")
+                || line.contains("unsupported")
+                || line.contains("transitional"))
         || line.contains("there is no `atelier")
         || line.contains("no `atelier")
         || line.contains("not part of the normal")
@@ -580,9 +617,26 @@ fn removed_or_deferred_context(section: &str, line: &str) -> bool {
         || line.contains("removed command")
 }
 
-fn hidden_context(line: &str) -> bool {
+fn hidden_or_advanced_context(section: &str, line: &str) -> bool {
+    let section = section.to_ascii_lowercase();
     let line = line.to_ascii_lowercase();
-    line.contains("hidden `atelier") || line.contains("not need the hidden")
+    section.contains("low-level")
+        || section.contains("advanced diagnostics")
+        || section.contains("debug and repair")
+        || section.contains("integration or experimental")
+        || line.contains("hidden `atelier")
+        || line.contains("hidden/advanced")
+        || line.contains("hidden diagnostic")
+        || line.contains("advanced diagnostic")
+        || line.contains("low-level diagnostic")
+        || line.contains("advanced/internal")
+        || line.contains("raw workflow diagnostics")
+        || line.contains("local-only telemetry")
+        || line.contains("not normal operator route")
+        || line.contains("not normal workflow")
+        || line.contains("do not teach as a normal")
+        || line.contains("must not appear as ordinary next actions")
+        || line.contains("not need the hidden")
 }
 
 #[derive(Debug)]

@@ -3,6 +3,7 @@ created_at: "2026-06-14T16:31:30.996733591+00:00"
 id: "atelier-9soq"
 issue_type: "feature"
 labels:
+- "assignee:root"
 - "docs"
 priority: "P2"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Teach docs/help drift checker about hidden command visibility"
-updated_at: "2026-06-14T16:31:30.996733591+00:00"
+updated_at: "2026-06-14T16:57:30.940642932+00:00"
 ---
 
 ## Description

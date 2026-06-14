@@ -336,19 +336,20 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
-- `atelier export`
-- `atelier rebuild`
 - `atelier maintenance delete`
-- `atelier diagnostics slow`
 - `atelier lint`
 - `atelier doctor`
 "#
 }
 
-fn write_valid_command_guidance(dir: &Path) {
+fn write_command_surface_doc(dir: &Path, content: &str) {
     let docs_dir = dir.join("docs/product");
     fs::create_dir_all(&docs_dir).unwrap();
-    fs::write(docs_dir.join("cli-surface.md"), valid_command_surface_doc()).unwrap();
+    fs::write(docs_dir.join("cli-surface.md"), content).unwrap();
+}
+
+fn write_valid_command_guidance(dir: &Path) {
+    write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
         "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
@@ -9255,6 +9256,126 @@ fn test_workflow_check_rejects_stale_agent_guidance_options() {
     assert!(!success, "workflow check should reject stale AGENTS option");
     assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
     assert!(stdout.contains("AGENTS.md"), "{stdout}");
+    assert!(stdout.contains("--not-a-real-option"), "{stdout}");
+    assert!(
+        stderr.contains("workflow_command_surface_drift"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_workflow_check_allows_hidden_command_only_in_hidden_context() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    let surface = format!(
+        "{}\n## Low-Level Debug And Repair\n\n- `atelier diagnostics slow`\n",
+        valid_command_surface_doc()
+    );
+    write_command_surface_doc(dir.path(), &surface);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        success,
+        "workflow check should accept hidden command context: {stderr}"
+    );
+    assert!(stdout.contains("Docs/Help Drift: clear"), "{stdout}");
+}
+
+#[test]
+fn test_workflow_check_rejects_hidden_command_as_normal_workflow() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    let surface = format!(
+        "{}\n## Core\n\n- `atelier diagnostics slow`\n",
+        valid_command_surface_doc()
+    );
+    write_command_surface_doc(dir.path(), &surface);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        !success,
+        "workflow check should reject hidden command as normal guidance"
+    );
+    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
+    assert!(stdout.contains("atelier diagnostics"), "{stdout}");
+    assert!(
+        stderr.contains("workflow_command_surface_drift"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_workflow_check_allows_removed_command_only_in_removal_history_context() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    let surface = format!(
+        "{}\n## Removed Behavior\n\n- `atelier session start`\n",
+        valid_command_surface_doc()
+    );
+    write_command_surface_doc(dir.path(), &surface);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        success,
+        "workflow check should accept removal-history context: {stderr}"
+    );
+    assert!(stdout.contains("Docs/Help Drift: clear"), "{stdout}");
+}
+
+#[test]
+fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    let surface = format!(
+        "{}\n## Core\n\n- `atelier session start`\n",
+        valid_command_surface_doc()
+    );
+    write_command_surface_doc(dir.path(), &surface);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        !success,
+        "workflow check should reject removed command as normal guidance"
+    );
+    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
+    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(
+        stderr.contains("workflow_command_surface_drift"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_workflow_check_rejects_nonexistent_option_in_hidden_context() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_valid_command_guidance(dir.path());
+
+    let surface = format!(
+        "{}\n## Low-Level Debug And Repair\n\n- `atelier diagnostics slow --not-a-real-option`\n",
+        valid_command_surface_doc()
+    );
+    write_command_surface_doc(dir.path(), &surface);
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
+
+    assert!(
+        !success,
+        "workflow check should reject nonexistent option in hidden context"
+    );
+    assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
     assert!(stdout.contains("--not-a-real-option"), "{stdout}");
     assert!(
         stderr.contains("workflow_command_surface_drift"),
