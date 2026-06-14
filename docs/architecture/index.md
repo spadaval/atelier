@@ -16,9 +16,8 @@ Atelier is currently a single Rust crate:
   behavior.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
-- `resources/atelier/` and `resources/claude/`: bundled rule and integration
-  assets. Core `atelier init` does not copy these into repositories; optional
-  integration commands install the relevant assets explicitly.
+- `resources/atelier/`: inherited bundled rule assets. Core `atelier init`
+  does not copy these into repositories.
 - `tests/`: CLI integration and smoke coverage.
 - `fuzz/`: libFuzzer targets for CLI output, create, dependencies, import,
   search, and state-machine behavior.

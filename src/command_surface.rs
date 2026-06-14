@@ -18,7 +18,6 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "diagnostics",
     "evidence",
     "graph",
-    "integrations",
     "issue",
     "maintenance",
     "mission",
@@ -33,6 +32,7 @@ const REMOVED_ROOTS: &[&str] = &[
     "archive",
     "cpitd",
     "daemon",
+    "integrations",
     "link",
     "locks",
     "milestone",
@@ -388,7 +388,6 @@ fn parse_root_help_commands(help: &str) -> BTreeSet<String> {
         "Records",
         "Advanced work",
         "State management",
-        "Integrations",
         "Maintenance",
     ]);
     let mut current_visible_section = false;
@@ -535,12 +534,6 @@ fn intended_command_path_len(tokens: &[String]) -> usize {
     };
     if root == "help" {
         return 1;
-    }
-    if root == "integrations"
-        && tokens.get(1).is_some_and(|token| token == "claude")
-        && tokens.get(2).is_some_and(|token| is_command_word(token))
-    {
-        return 3;
     }
     if COMMAND_GROUP_ROOTS.contains(&root.as_str())
         && tokens.get(1).is_some_and(|token| is_command_word(token))

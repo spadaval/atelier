@@ -104,8 +104,6 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || relative_path == Path::new(CONFIG_FILE)
         || relative_path == Path::new(RUNTIME_DB_FILE)
         || relative_path == Path::new("agent.json")
-        || relative_path == Path::new("hook-config.json")
-        || relative_path == Path::new("hook-config.local.json")
 }
 
 fn is_local_artifact_path(relative_path: &Path) -> bool {

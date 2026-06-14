@@ -312,7 +312,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier worktree for/status/merge/remove`
 - `atelier export`
 - `atelier rebuild`
-- `atelier integrations claude install`
 - `atelier maintenance delete`
 - `atelier diagnostics slow`
 - `atelier lint`
@@ -738,7 +737,7 @@ fn test_init_import_beads_requires_explicit_flag() {
 }
 
 #[test]
-fn test_claude_integration_install_is_explicit() {
+fn test_integrations_command_is_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -747,24 +746,29 @@ fn test_claude_integration_install_is_explicit() {
     assert!(!dir.path().join(".atelier").join("rules").exists());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["integrations", "claude", "install"]);
-    assert!(success, "claude integration install failed: {stderr}");
-    assert!(stdout.contains("Claude integration installed."));
+    assert!(
+        !success,
+        "removed integrations command unexpectedly succeeded"
+    );
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'integrations'"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("`atelier integrations` was removed"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("external assistant hooks are not an Atelier product feature"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Claude"), "{stderr}");
 
-    assert!(dir.path().join(".claude/settings.json").exists());
-    assert!(dir.path().join(".claude/hooks/prompt-guard.py").exists());
-    assert!(dir.path().join(".claude/hooks/post-edit-check.py").exists());
-    assert!(dir.path().join(".claude/hooks/session-start.py").exists());
-    assert!(dir.path().join(".claude/hooks/pre-web-check.py").exists());
-    assert!(dir.path().join(".claude/hooks/work-check.py").exists());
-    assert!(dir.path().join(".claude/hooks/atelier_config.py").exists());
-    assert!(dir.path().join(".claude/mcp/safe-fetch-server.py").exists());
-    assert!(dir.path().join(".atelier/hook-config.json").exists());
+    assert!(!dir.path().join(".claude").exists());
+    assert!(!dir.path().join(".mcp.json").exists());
+    assert!(!dir.path().join(".atelier/hook-config.json").exists());
     assert!(!dir.path().join(".atelier/rules").exists());
-
-    let mcp: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.path().join(".mcp.json")).unwrap())
-            .unwrap();
-    assert!(mcp["mcpServers"]["atelier-safe-fetch"].is_object());
 }
 
 #[test]
@@ -1276,6 +1280,12 @@ fn test_top_level_help_only_shows_core_commands() {
     assert!(
         !stdout
             .lines()
+            .any(|line| line.trim_start().starts_with("integrations ")),
+        "root help should not expose integrations:\n{stdout}"
+    );
+    assert!(
+        !stdout
+            .lines()
             .any(|line| line.trim_start().starts_with("export ")),
         "root help should not present export as a normal operator command:\n{stdout}"
     );
@@ -1316,6 +1326,7 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for removed in [
         "archive",
+        "integrations",
         "timer",
         "milestone",
         "session",
