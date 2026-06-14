@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T06:47:13.990178830+00:00"
+status: "done"
 title: "Qualify closeout evidence against issue Evidence requirements"
-updated_at: "2026-06-14T06:44:43.080303607+00:00"
+updated_at: "2026-06-14T06:47:13.990178830+00:00"
 ---
 
 ## Description
