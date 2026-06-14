@@ -317,12 +317,12 @@ commands must transparently keep local projection state usable, and degraded
 states must be reported as record or workflow repair problems rather than cache
 maintenance chores.
 
-Low-level debug and repair commands may expose cache mechanics when diagnosing
-Atelier itself. `atelier export`, `atelier rebuild`, and similar repair checks
-must not appear as ordinary next actions from core workflow surfaces or root
-help, and their output should make clear that they are diagnostic tools rather
-than required user workflow. `doctor --fix` is the normal explicit repair path
-for ignored local runtime/cache/projection state and must not edit tracked
+Low-level debug and repair surfaces may expose cache mechanics when diagnosing
+Atelier itself. Export/rebuild diagnostics and similar repair checks must not
+appear as ordinary next actions from core workflow surfaces or root help, and
+their output should make clear that they are diagnostic tools rather than
+required user workflow. `atelier doctor --fix` is the normal explicit repair
+path for ignored local runtime/cache/projection state and must not edit tracked
 `.atelier/` canonical records. `atelier diagnostics slow` summarizes local
 command telemetry for command-performance investigations; it is an advanced
 diagnostic, not a normal mission or issue workflow step. Its JSON is stable for
@@ -357,9 +357,9 @@ surface is `delete` unless it is in the core list above.
 | Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
 | Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
-| `atelier export --check` | Low-level diagnostic | Cache/projection state should be transparent; normal health and closeout routes use `lint`, `doctor`, mission status/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
-| `atelier export` | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
-| `atelier rebuild` | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
+| Export check diagnostic | Low-level diagnostic | Cache/projection state should be transparent; normal health and closeout routes use `lint`, `doctor`, mission status/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
+| Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
+| Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use `issue create/list/show/update/transition/close/block/unblock/blocked`, root `search`, cross-record `graph`, record-specific notes, `evidence`, and `status`. |
 | Hidden work-status helper and any legacy work-start path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and work-start under that removed group is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
@@ -393,12 +393,12 @@ normal workflow path.
 
 ## Low-Level Debug And Repair
 
-The implementation may retain low-level commands such as `atelier export`,
-`atelier rebuild`, raw workflow diagnostics, `import-beads`, and command
-diagnostics for development, diagnostics, migration, and test evidence. They
-are not part of the normal product workflow or root help. Public orientation
-commands such as `atelier status`, `atelier doctor`, `atelier lint`, and
-record-specific repair guidance should absorb routine cache recovery.
+The implementation may retain low-level export/rebuild commands, raw workflow
+diagnostics, import helpers, and command diagnostics for development,
+diagnostics, migration, and test evidence. They are not part of the normal
+product workflow or root help. Public orientation commands such as
+`atelier status`, `atelier doctor`, `atelier lint`, and record-specific repair
+guidance should absorb routine cache recovery.
 
 Internal helpers may remain only when a core workflow still uses them. For
 example, session rows remain an implementation detail of current work
