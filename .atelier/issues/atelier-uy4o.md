@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Enforce one active issue per worktree"
-updated_at: "2026-06-14T01:09:29.731606411+00:00"
+updated_at: "2026-06-14T02:53:31.733372035+00:00"
 ---
 
 ## Description

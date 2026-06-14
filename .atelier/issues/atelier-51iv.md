@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Read commands should degrade when canonical rebuild fails"
-updated_at: "2026-06-14T01:02:45.714730495+00:00"
+updated_at: "2026-06-14T02:53:28.418166502+00:00"
 ---
 
 ## Description

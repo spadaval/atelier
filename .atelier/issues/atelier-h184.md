@@ -1,0 +1,31 @@
+---
+created_at: "2026-06-14T03:47:07.684316124+00:00"
+id: "atelier-h184"
+issue_type: "bug"
+labels:
+- "mission-status"
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+status: "todo"
+title: "Prevent mission status from double-counting nested work"
+updated_at: "2026-06-14T03:47:07.684316124+00:00"
+---
+
+## Description
+
+Mission status should not double-count work when an issue is reachable by more than one route, such as both direct mission advances and epic child hierarchy. The rollup should deduplicate by issue ID and should make the recommended mission-to-epic graph shape clear in output.
+
+## Outcome
+
+Mission status and closeout rollups count each unique issue once, regardless of duplicate relationship paths, and identify duplicate reachability as a graph hygiene warning rather than inflating totals.
+
+## Evidence
+
+Focused CLI test or transcript creates a mission with an epic and child also directly linked, then shows mission status counting the child once; Lint passed., Canonical export is current
+State: /root/atelier/.atelier, and  pass.
