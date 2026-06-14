@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:11:21.726434820+00:00"
+status: "done"
 title: "Add active-work repair or reconcile command"
-updated_at: "2026-06-14T08:08:24.432071142+00:00"
+updated_at: "2026-06-14T08:11:21.726434820+00:00"
 ---
 
 ## Description
