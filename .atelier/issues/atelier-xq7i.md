@@ -7,7 +7,9 @@ labels:
 - "postmortem"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-jxs8"
   children:
   - kind: "issue"
     id: "atelier-9soq"

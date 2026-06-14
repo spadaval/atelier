@@ -15,28 +15,33 @@ relationships:
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"
-title: "Ignore canonical tracker files in clean-worktree closeout checks"
+title: "Scope clean-worktree closeout checks around tracker-generated state"
 updated_at: "2026-06-14T16:31:25.550179352+00:00"
 ---
 
 ## Description
 
-Clean-worktree validators should block on uncommitted source, docs, tests, and config changes that can invalidate proof, but not on canonical tracker records produced by tracker workflow commands.
+Clean-worktree validators should block on uncommitted source, docs, tests, workflow config, lockfiles, and hand-authored canonical tracker edits that can invalidate proof. They should not self-block solely because the current tracker transition produced deterministic activity or closeout bookkeeping.
 
 ## Outcome
 
-- The clean-worktree closeout validator ignores canonical tracker records under
-  `.atelier/` and ignored tracker runtime/cache paths.
-- The same validator still blocks on dirty source, product docs, tests,
-  workflow config, lockfiles, or other non-tracker files that can invalidate
-  proof.
-- Status output can report uncommitted tracker state as handoff guidance, but
-  tracker canonical updates alone do not block workflow close transitions.
+- The clean-worktree closeout validator ignores ignored tracker runtime/cache
+  paths and deterministic tracker-generated activity from the current
+  transition or closeout operation.
+- The validator still blocks on dirty source, product docs, tests, workflow
+  config, lockfiles, and hand-authored canonical issue, mission, evidence, or
+  workflow records that can invalidate proof or handoff.
+- Status output reports uncommitted tracker canonical state clearly enough for
+  handoff, even when a narrow tracker-generated exemption lets closeout
+  proceed.
 
 ## Evidence
 
-- Focused tests or transcripts cover dirty `.atelier/issues/*.md` and
-  `.atelier/*activity*` records being ignored by the clean-worktree validator.
+- Focused tests or transcripts cover tracker-generated activity from the
+  current transition not self-blocking the clean-worktree validator.
+- Focused tests or transcripts cover hand-authored dirty `.atelier/issues/*.md`,
+  `.atelier/missions/*.md`, or `.atelier/workflow.yaml` changes still blocking
+  unless they are explicitly classified by the implemented policy.
 - Focused tests or transcripts cover dirty non-tracker files still blocking the
   validator.
 - `git diff --check` and `atelier lint` pass.

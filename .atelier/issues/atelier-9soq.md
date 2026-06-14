@@ -26,12 +26,14 @@ Command-surface drift should distinguish visible root-help commands from explici
 ## Outcome
 
 - The docs/help drift scanner has a visibility model for command references:
-  visible, hidden/advanced, removed/deferred, and normal workflow.
+  visible workflow, hidden/advanced callable, and removal-history references.
 - Hidden/advanced references are not compared against root visible help as if
   they were public commands.
 - Hidden/advanced references still fail when they point to a nonexistent
-  command or option, unless the surrounding context explicitly marks the command
-  removed/deferred.
+  command or option.
+- Removed or unsupported command names are allowed only in explicit
+  removal-history or compatibility-classification contexts, and still fail when
+  presented as current workflow guidance.
 
 ## Evidence
 
@@ -39,5 +41,7 @@ Command-surface drift should distinguish visible root-help commands from explici
   hidden/advanced context.
 - Tests cover a hidden command recommended as normal workflow still failing the
   drift check.
+- Tests cover removed commands being allowed only in removal-history context
+  and rejected when presented as workflow guidance.
 - Tests cover nonexistent options still failing.
 - `git diff --check` and `atelier lint` pass.

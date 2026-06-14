@@ -6,20 +6,26 @@ labels:
 - "docs"
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-c4uz"
+  - kind: "issue"
+    id: "atelier-mllk"
+  - kind: "issue"
+    id: "atelier-wbed"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"
-title: "Update proof and mission closeout docs for shell missions"
+title: "Define shell-mission proof contract before implementation"
 updated_at: "2026-06-14T16:31:09.407778079+00:00"
 ---
 
 ## Description
 
-Product and Agent Factory docs should describe missions as coordination shells and route optional mission-level validation into linked validation work.
+Before implementation changes land, product, workflow, validation, and Agent Factory docs should define the shell-mission proof contract: missions coordinate linked work by default, and optional mission-level validation is explicit linked validation work or workflow approval.
 
 ## Outcome
 
@@ -30,6 +36,9 @@ Product and Agent Factory docs should describe missions as coordination shells a
   mission validator system.
 - Guidance distinguishes local issue/epic proof from optional mission-level
   validation without duplicating proof requirements.
+- The contract is explicit enough for implementation issues `atelier-c4uz`,
+  `atelier-mllk`, and `atelier-wbed` to follow without inventing divergent
+  closeout semantics.
 
 ## Evidence
 
@@ -38,4 +47,7 @@ Product and Agent Factory docs should describe missions as coordination shells a
   `AGENTFACTORY.md` or records why a file does not need changes.
 - File diff or review artifact shows documentation examples for linked
   validation work when explicit mission-level validation is needed.
+- `atelier issue blocked atelier-c4uz`, `atelier issue blocked atelier-mllk`,
+  and `atelier issue blocked atelier-wbed` show those implementation issues are
+  blocked on this contract issue until it closes.
 - `git diff --check` and `atelier lint` pass.

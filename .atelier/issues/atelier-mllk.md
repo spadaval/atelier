@@ -6,9 +6,7 @@ labels:
 - "workflow"
 priority: "P1"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "atelier-c9eo"
+  blocks: []
   children: []
   attachments: []
   relates: []
