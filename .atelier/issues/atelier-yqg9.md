@@ -36,9 +36,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Reduce code complexity and module boundary drift"
-updated_at: "2026-06-13T23:10:38.230151438+00:00"
+updated_at: "2026-06-14T00:24:52.353866518+00:00"
 ---
 
 ## Description
