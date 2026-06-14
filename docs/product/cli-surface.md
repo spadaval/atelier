@@ -103,10 +103,9 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
 
-Hidden advanced diagnostics such as `atelier diagnostics slow` may remain
-callable for local performance analysis, but they are not visible root-help
-surfaces and must not appear as normal mission, issue, blocker, evidence, or
-closeout next actions.
+Hidden advanced diagnostics probes may remain callable for local performance
+analysis, but they are not visible root-help surfaces and must not appear as
+normal mission, issue, blocker, evidence, or closeout next actions.
 
 ## Operator Jobs
 
@@ -334,12 +333,11 @@ appear as ordinary next actions from core workflow surfaces or root help, and
 their output should make clear that they are diagnostic tools rather than
 required user workflow. `atelier doctor --fix` is the normal explicit repair
 path for ignored local runtime/cache/projection state and must not edit tracked
-`.atelier/` canonical records. `atelier diagnostics slow` summarizes local
-command telemetry for command-performance investigations; it is an advanced
-diagnostic, not a normal mission or issue workflow step. Its JSON is stable for
-diagnostic tooling and local analysis, but normal recipes must not parse it to
-decide ready work, validation status, blockers, evidence coverage, or closeout
-readiness.
+`.atelier/` canonical records. Hidden slow-command telemetry summarizes local
+command performance for investigations; it is an advanced diagnostic, not a
+normal mission or issue workflow step. Its JSON is stable for diagnostic tooling
+and local analysis, but normal recipes must not parse it to decide ready work,
+validation status, blockers, evidence coverage, or closeout readiness.
 
 Installed-binary drift is distinct from malformed records. Normal tracker work
 uses the installed `atelier` command. When a command reports that canonical
