@@ -54,76 +54,200 @@ pub(crate) fn validate_canonical_state(state_dir: &Path) -> Result<()> {
 }
 
 fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
-    let mut issues = Vec::new();
-    let mut records = Vec::new();
-    let mut issue_ids = BTreeSet::new();
-    let mut global_ids = BTreeSet::new();
-    let mut record_refs = BTreeSet::new();
-    let mut canonical_paths = BTreeSet::new();
-    let mut activity_subject_ids = BTreeSet::new();
+    ProjectionLoader::new(state_dir).load()
+}
 
-    let store = record_store::RecordStore::new(state_dir);
-    for relative in store.discover_issue_paths()? {
-        canonical_paths.insert(relative.clone());
-        let record = store.load_issue(&relative)?;
-        let issue = CanonicalIssue {
-            issue: record.issue,
-            labels: record.labels,
-            sections: record.sections,
-            relationships: record.relationships,
-        };
-        if !issue_ids.insert(issue.issue.id.clone()) {
-            bail!(
-                "Duplicate issue ID in canonical projection: {}",
-                issue.issue.id
-            );
+struct ProjectionLoader<'a> {
+    state_dir: &'a Path,
+    store: record_store::RecordStore,
+    issues: Vec<CanonicalIssue>,
+    records: Vec<CanonicalDomainRecord>,
+    issue_ids: BTreeSet<String>,
+    global_ids: BTreeSet<String>,
+    record_refs: BTreeSet<(String, String)>,
+    canonical_paths: BTreeSet<PathBuf>,
+    activity_subject_ids: BTreeSet<String>,
+}
+
+impl<'a> ProjectionLoader<'a> {
+    fn new(state_dir: &'a Path) -> Self {
+        Self {
+            state_dir,
+            store: record_store::RecordStore::new(state_dir),
+            issues: Vec::new(),
+            records: Vec::new(),
+            issue_ids: BTreeSet::new(),
+            global_ids: BTreeSet::new(),
+            record_refs: BTreeSet::new(),
+            canonical_paths: BTreeSet::new(),
+            activity_subject_ids: BTreeSet::new(),
         }
-        if !global_ids.insert(issue.issue.id.clone()) {
+    }
+
+    fn load(mut self) -> Result<RebuildProjection> {
+        self.load_issues()?;
+        self.load_issue_activities()?;
+        self.load_domain_records()?;
+        ensure_no_unsupported_canonical_files(self.state_dir, &self.canonical_paths)?;
+
+        let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
+        let record_links = self.collect_record_links()?;
+        validate_issue_child_cycles(&child_edges)?;
+        validate_dependency_cycles(&dependency_edges)?;
+
+        self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
+        self.records
+            .sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
+        Ok(RebuildProjection {
+            issues: self.issues,
+            records: self.records,
+            child_edges,
+            dependency_edges,
+            relations,
+            record_links,
+        })
+    }
+
+    fn load_issues(&mut self) -> Result<()> {
+        for relative in self.store.discover_issue_paths()? {
+            self.canonical_paths.insert(relative.clone());
+            let record = self.store.load_issue(&relative)?;
+            let issue = CanonicalIssue {
+                issue: record.issue,
+                labels: record.labels,
+                sections: record.sections,
+                relationships: record.relationships,
+            };
+            self.register_issue_id(&issue.issue.id)?;
+            self.issues.push(issue);
+        }
+        Ok(())
+    }
+
+    fn register_issue_id(&mut self, id: &str) -> Result<()> {
+        if !self.issue_ids.insert(id.to_string()) {
+            bail!("Duplicate issue ID in canonical projection: {}", id);
+        }
+        if !self.global_ids.insert(id.to_string()) {
+            bail!("Duplicate record ID in canonical projection: {}", id);
+        }
+        Ok(())
+    }
+
+    fn load_issue_activities(&mut self) -> Result<()> {
+        for relative in discover_issue_activity_paths(self.state_dir)? {
+            let activity = IssueActivity::load(self.state_dir, &relative)?;
+            self.canonical_paths.insert(relative);
+            self.activity_subject_ids.insert(activity.subject_id);
+        }
+        Ok(())
+    }
+
+    fn load_domain_records(&mut self) -> Result<()> {
+        for spec in FIRST_CLASS_RECORD_KINDS {
+            for relative in discover_record_paths(self.state_dir, spec)? {
+                self.canonical_paths.insert(relative.clone());
+                let record = self.store.load_domain_record(&relative, spec)?;
+                self.register_domain_record(&record)?;
+                self.records.push(record);
+            }
+        }
+        Ok(())
+    }
+
+    fn register_domain_record(&mut self, record: &CanonicalDomainRecord) -> Result<()> {
+        if !self.global_ids.insert(record.record.id.clone()) {
             bail!(
                 "Duplicate record ID in canonical projection: {}",
-                issue.issue.id
+                record.record.id
             );
         }
-        issues.push(issue);
-    }
-    let activity_paths = discover_issue_activity_paths(state_dir)?;
-    for relative in activity_paths {
-        let activity = IssueActivity::load(state_dir, &relative)?;
-        canonical_paths.insert(relative);
-        activity_subject_ids.insert(activity.subject_id);
-    }
-    for spec in FIRST_CLASS_RECORD_KINDS {
-        for relative in discover_record_paths(state_dir, spec)? {
-            canonical_paths.insert(relative.clone());
-            let record = store.load_domain_record(&relative, spec)?;
-            if !global_ids.insert(record.record.id.clone()) {
-                bail!(
-                    "Duplicate record ID in canonical projection: {}",
-                    record.record.id
-                );
-            }
-            if !record_refs.insert((record.record.kind.clone(), record.record.id.clone())) {
-                bail!(
-                    "Duplicate {} ID in canonical projection: {}",
-                    record.record.kind,
-                    record.record.id
-                );
-            }
-            records.push(record);
+        if !self
+            .record_refs
+            .insert((record.record.kind.clone(), record.record.id.clone()))
+        {
+            bail!(
+                "Duplicate {} ID in canonical projection: {}",
+                record.record.kind,
+                record.record.id
+            );
         }
+        Ok(())
     }
-    ensure_no_unsupported_canonical_files(state_dir, &canonical_paths)?;
 
-    let mut relations = Vec::new();
-    let mut relation_keys = BTreeSet::new();
-    let mut child_edges = Vec::new();
-    let mut child_edge_keys = BTreeSet::new();
-    let mut dependency_edges = Vec::new();
-    let mut dependency_edge_keys = BTreeSet::new();
-    for subject_id in &activity_subject_ids {
-        ensure_issue_exists(subject_id, &issue_ids, "activity", subject_id)?;
+    fn validate_issue_relationships(
+        &self,
+    ) -> Result<(
+        Vec<(String, String)>,
+        Vec<(String, String)>,
+        Vec<(String, String, String)>,
+    )> {
+        let mut graph = IssueRelationshipProjection::default();
+        for subject_id in &self.activity_subject_ids {
+            ensure_issue_exists(subject_id, &self.issue_ids, "activity", subject_id)?;
+        }
+        for issue in &self.issues {
+            graph.collect_issue(issue, &self.issue_ids, &self.record_refs)?;
+        }
+        Ok((graph.child_edges, graph.dependency_edges, graph.relations))
     }
-    for issue in &issues {
+
+    fn collect_record_links(&self) -> Result<Vec<(String, String, String, String, String)>> {
+        let mut record_links = Vec::new();
+        let mut record_link_keys = BTreeSet::new();
+        for issue in &self.issues {
+            collect_record_relationship_links(
+                &mut record_links,
+                &mut record_link_keys,
+                "issue",
+                &issue.issue.id,
+                &issue.relationships,
+                &self.issue_ids,
+                &self.record_refs,
+            )?;
+        }
+        for record in &self.records {
+            collect_record_relationship_links(
+                &mut record_links,
+                &mut record_link_keys,
+                &record.record.kind,
+                &record.record.id,
+                &record.relationships,
+                &self.issue_ids,
+                &self.record_refs,
+            )?;
+        }
+        Ok(record_links)
+    }
+}
+
+#[derive(Default)]
+struct IssueRelationshipProjection {
+    relations: Vec<(String, String, String)>,
+    relation_keys: BTreeSet<(String, String, String)>,
+    child_edges: Vec<(String, String)>,
+    child_edge_keys: BTreeSet<(String, String)>,
+    dependency_edges: Vec<(String, String)>,
+    dependency_edge_keys: BTreeSet<(String, String)>,
+}
+
+impl IssueRelationshipProjection {
+    fn collect_issue(
+        &mut self,
+        issue: &CanonicalIssue,
+        issue_ids: &BTreeSet<String>,
+        record_refs: &BTreeSet<(String, String)>,
+    ) -> Result<()> {
+        self.collect_blocks(issue, issue_ids)?;
+        self.collect_children(issue, issue_ids)?;
+        self.collect_relations(issue, issue_ids, record_refs)
+    }
+
+    fn collect_blocks(
+        &mut self,
+        issue: &CanonicalIssue,
+        issue_ids: &BTreeSet<String>,
+    ) -> Result<()> {
         for blocked in &issue.relationships.blocks {
             if blocked.kind != "issue" {
                 bail!(
@@ -133,13 +257,21 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
                     blocked.id
                 );
             }
-            ensure_issue_exists(&blocked.id, &issue_ids, "blocks", &issue.issue.id)?;
+            ensure_issue_exists(&blocked.id, issue_ids, "blocks", &issue.issue.id)?;
             let key = (blocked.id.clone(), issue.issue.id.clone());
-            if !dependency_edge_keys.insert(key.clone()) {
+            if !self.dependency_edge_keys.insert(key.clone()) {
                 bail!("Duplicate blocks edge {} blocks {}", key.1, key.0);
             }
-            dependency_edges.push(key);
+            self.dependency_edges.push(key);
         }
+        Ok(())
+    }
+
+    fn collect_children(
+        &mut self,
+        issue: &CanonicalIssue,
+        issue_ids: &BTreeSet<String>,
+    ) -> Result<()> {
         for child in &issue.relationships.children {
             if child.kind != "issue" {
                 bail!(
@@ -149,19 +281,28 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
                     child.id
                 );
             }
-            ensure_issue_exists(&child.id, &issue_ids, "children", &issue.issue.id)?;
+            ensure_issue_exists(&child.id, issue_ids, "children", &issue.issue.id)?;
             let key = (child.id.clone(), issue.issue.id.clone());
-            if !child_edge_keys.insert(key.clone()) {
+            if !self.child_edge_keys.insert(key.clone()) {
                 bail!("Duplicate children edge {} contains {}", key.1, key.0);
             }
-            child_edges.push(key);
+            self.child_edges.push(key);
         }
+        Ok(())
+    }
+
+    fn collect_relations(
+        &mut self,
+        issue: &CanonicalIssue,
+        issue_ids: &BTreeSet<String>,
+        record_refs: &BTreeSet<(String, String)>,
+    ) -> Result<()> {
         for relation in &issue.relationships.relates {
             ensure_record_exists(
                 &relation.kind,
                 &relation.id,
-                &issue_ids,
-                &record_refs,
+                issue_ids,
+                record_refs,
                 &relation.relation_type,
                 &issue.issue.id,
             )?;
@@ -173,51 +314,13 @@ fn load_projection(state_dir: &Path) -> Result<RebuildProjection> {
                 relation.id.clone(),
                 relation.relation_type.clone(),
             );
-            if !relation_keys.insert(key.clone()) {
+            if !self.relation_keys.insert(key.clone()) {
                 bail!("Duplicate typed link {} -> {} ({})", key.0, key.1, key.2);
             }
-            relations.push(key);
+            self.relations.push(key);
         }
+        Ok(())
     }
-
-    let mut record_links = Vec::new();
-    let mut record_link_keys = BTreeSet::new();
-    for issue in &issues {
-        collect_record_relationship_links(
-            &mut record_links,
-            &mut record_link_keys,
-            "issue",
-            &issue.issue.id,
-            &issue.relationships,
-            &issue_ids,
-            &record_refs,
-        )?;
-    }
-    for record in &records {
-        collect_record_relationship_links(
-            &mut record_links,
-            &mut record_link_keys,
-            &record.record.kind,
-            &record.record.id,
-            &record.relationships,
-            &issue_ids,
-            &record_refs,
-        )?;
-    }
-
-    validate_issue_child_cycles(&child_edges)?;
-    validate_dependency_cycles(&dependency_edges)?;
-
-    issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
-    records.sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
-    Ok(RebuildProjection {
-        issues,
-        records,
-        child_edges,
-        dependency_edges,
-        relations,
-        record_links,
-    })
 }
 
 fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
