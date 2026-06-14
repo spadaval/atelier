@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T06:46:01.739943265+00:00"
+status: "done"
 title: "Read commands should degrade when canonical rebuild fails"
-updated_at: "2026-06-14T06:25:49.905392874+00:00"
+updated_at: "2026-06-14T06:46:01.739943265+00:00"
 ---
 
 ## Description
