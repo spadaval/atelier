@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:11:10.703840719+00:00"
+status: "done"
 title: "Make worktree setup and active-work association atomic"
-updated_at: "2026-06-14T08:03:44.066798569+00:00"
+updated_at: "2026-06-14T08:11:10.703840719+00:00"
 ---
 
 ## Description
