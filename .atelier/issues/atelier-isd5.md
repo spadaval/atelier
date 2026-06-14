@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add transcript-derived operator command map"
-updated_at: "2026-06-14T02:50:18.340424688+00:00"
+updated_at: "2026-06-14T08:25:05.688125199+00:00"
 ---
 
 ## Description

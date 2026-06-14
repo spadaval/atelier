@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Document record-kind command boundaries"
-updated_at: "2026-06-14T02:51:53.262125535+00:00"
+updated_at: "2026-06-14T08:25:02.687334595+00:00"
 ---
 
 ## Description

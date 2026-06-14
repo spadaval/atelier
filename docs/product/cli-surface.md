@@ -430,6 +430,67 @@ commands are removed so reassessment stays an explicit operator action through
 graph, record-specific notes, and lifecycle commands instead of an
 assumption-specific command path.
 
+## Operator Command Map
+
+Use the record kind to choose the command family first. Do not start from a
+generic relationship verb.
+
+| Need | Record kinds accepted | Supported command path | Boundary |
+| --- | --- | --- | --- |
+| Show mission intent, linked work, blockers, plans, evidence, and closeout state | mission ID | `atelier mission show <mission-id>` or `atelier mission status <mission-id>` | Mission reads own mission coordination. It does not replace issue detail or proof records. |
+| Show issue accountability, status, blockers, notes, and closeout readiness | issue ID | `atelier issue show <issue-id>` or `atelier issue transition <issue-id> --options` | Issue commands accept issue IDs. Passing a mission, evidence, plan, or milestone ID should produce wrong-kind guidance to the matching show surface. |
+| Add or remove mission work | mission ID plus issue or epic ID | `atelier mission add-work <mission-id> <issue-id>` and `atelier mission unlink <mission-id> <issue-id>` | Mission work links use the `advances` relation. Do not use a generic link command. |
+| Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier mission add-blocker <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
+| Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation --result pass "summary"` or `atelier evidence record --target issue/<id> --kind test --result pass -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit closeout mirroring. |
+| Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
+| Inspect cross-record impact or hierarchy | mission or issue ID for impact; all records for tree | `atelier graph impact <mission-or-issue-id>` and `atelier graph tree --compact` | Graph commands inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
+| Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on closeout claims. |
+| Create or relate durable plans | plan, mission, issue, and evidence IDs as required by the subcommand | `atelier plan create`, `atelier plan show <plan-id>`, `atelier plan link <plan-id> <kind>/<id>`, and `atelier plan apply <plan-id>` | Plans own authored execution graphs. Plan links do not replace issue blockers or mission work links. |
+| Inspect first-class evidence, plan, or milestone records | evidence, plan, or milestone ID | `atelier evidence show <evidence-id>`, `atelier plan show <plan-id>`, or the milestone surface when enabled | These records are supporting artifacts. Issue commands should reject their IDs with corrective wrong-kind guidance. |
+
+Mission-vs-issue example:
+
+```text
+atelier mission add-work atelier-hy2i atelier-4p7q
+atelier issue block atelier-isd5 atelier-a625
+atelier evidence record --target issue/atelier-isd5 --kind validation --result pass "operator command map checked against current help"
+atelier graph impact atelier-hy2i
+atelier issue note atelier-isd5 "CLI surface examples checked against root help."
+```
+
+If an operator retries removed names such as workflow check/init, finish,
+archive, session, timer, current-work, issue new, top-level dep, generic link,
+import-beads, export, rebuild, or integrations during normal work, the supported
+path is to stop and choose the record-specific command above. Low-level export,
+rebuild, predecessor import, and workflow diagnostics may still exist for
+development, migration, or targeted diagnostics, but they are not the normal
+operator route for mission progress, proof, blockers, or closeout.
+
+## Canonical And Projection Recovery
+
+Tracked Markdown under `.atelier/` is the durable source of truth. The local
+SQLite projection, runtime state, locks, diagnostics, and cache files are
+rebuildable checkout state. A command that writes canonical Markdown has landed
+durable state when the tracked Markdown diff exists and `atelier lint` accepts
+the record; a stale projection can block reads without invalidating the durable
+write.
+
+Use this recovery order:
+
+| Symptom | First command | Repair path |
+| --- | --- | --- |
+| Unsure whether committed tracker records are valid | `atelier lint` | Edit the named `.atelier/` Markdown or workflow config, then rerun `atelier lint`. |
+| Operator-facing command reports stale or missing derived state | Re-run the same command once after the automatic refresh path, or run `atelier doctor` when it reports degraded health | Use `atelier doctor --fix` for ignored runtime/cache/projection repair. It must not edit tracked canonical records. |
+| Canonical Markdown parse or schema error | `atelier lint <id-or-path>` | Fix the named tracked file. Do not treat parser failures as cache problems. |
+| Active local work points at a missing worktree | `atelier status` then `atelier repair [issue-id]` | `repair` clears stale active-work runtime state only when the recorded path is gone. Use `abandon` for intentional context switches. |
+| Worktree setup or association failed mid-command | `atelier worktree status` then `atelier worktree repair <issue-id>` when available | Confirm the issue/path association before starting new work. |
+| Installed binary does not understand committed record shape | `cargo build` then `target/debug/atelier <command>` for local CLI changes | Update or rebuild the binary before diagnosing canonical records. |
+
+Export and rebuild diagnostics are advanced implementation tools. Normal
+handoff and closeout should cite `atelier lint`, `atelier doctor`, `atelier
+status`, `atelier mission status`, and the specific command that was retried
+after repair.
+
 ## Removed Or Deferred Behavior
 
 The daemon surface and changelog-on-close behavior are not part of the target

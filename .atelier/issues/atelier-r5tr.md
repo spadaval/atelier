@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Document canonical projection recovery model"
-updated_at: "2026-06-14T02:52:02.984801054+00:00"
+updated_at: "2026-06-14T08:25:08.504657430+00:00"
 ---
 
 ## Description
