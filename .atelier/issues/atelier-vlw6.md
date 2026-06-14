@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:41:14.957967982+00:00"
+status: "done"
 title: "Document mission epic task graph shape"
-updated_at: "2026-06-14T07:36:40.801091591+00:00"
+updated_at: "2026-06-14T07:41:14.957967982+00:00"
 ---
 
 ## Description
