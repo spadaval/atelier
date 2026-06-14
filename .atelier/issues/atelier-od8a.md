@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:30:34.988246131+00:00"
+status: "done"
 title: "Add mission unlink repair command"
-updated_at: "2026-06-14T07:29:37.604492759+00:00"
+updated_at: "2026-06-14T07:30:34.988246131+00:00"
 ---
 
 ## Description
