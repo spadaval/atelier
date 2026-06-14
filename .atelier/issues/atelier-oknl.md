@@ -19,6 +19,8 @@ relationships:
   - kind: "issue"
     id: "atelier-9cix"
   - kind: "issue"
+    id: "atelier-ayr6"
+  - kind: "issue"
     id: "atelier-bqau"
   - kind: "issue"
     id: "atelier-hf3f"
@@ -30,7 +32,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Epic: Match evidence and closeout gates to proved claims"
-updated_at: "2026-06-14T02:53:02.020781782+00:00"
+updated_at: "2026-06-14T07:11:02.906366509+00:00"
 ---
 
 ## Description

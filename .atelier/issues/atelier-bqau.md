@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "blocked"
 title: "Validate transcript-derived proof gates end to end"
-updated_at: "2026-06-14T02:53:02.020781782+00:00"
+updated_at: "2026-06-14T07:11:51.180102031+00:00"
 ---
 
 ## Description
