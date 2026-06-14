@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:30:39.163594472+00:00"
+status: "done"
 title: "Fix validation proof fixture coverage for contract-audit closeout"
-updated_at: "2026-06-14T07:26:38.431454425+00:00"
+updated_at: "2026-06-14T07:30:39.163594472+00:00"
 ---
 
 ## Description
