@@ -179,4 +179,3 @@ becomes documented or recommended again.
 - `atelier-4yrt`: align root CLI identity and command hierarchy with Zen.
 - `atelier-xbr0`: clarify mission create section semantics in help.
 - `atelier-gh3m`: resolve workflow check visibility and operator contract.
-
