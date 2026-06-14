@@ -3,6 +3,7 @@ created_at: "2026-06-14T16:31:25.550179352+00:00"
 id: "atelier-ux3k"
 issue_type: "feature"
 labels:
+- "assignee:root"
 - "tracker"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Scope clean-worktree closeout checks around tracker-generated state"
-updated_at: "2026-06-14T16:31:25.550179352+00:00"
+updated_at: "2026-06-14T17:02:29.859199504+00:00"
 ---
 
 ## Description
