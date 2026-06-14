@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add type-aware wrong-kind ID errors"
-updated_at: "2026-06-14T02:52:27.481147296+00:00"
+updated_at: "2026-06-14T07:48:48.848202536+00:00"
 ---
 
 ## Description

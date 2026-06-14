@@ -6924,6 +6924,141 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 }
 
 #[test]
+fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "create",
+            "Corrective mission",
+            "--body",
+            "Mission body",
+            "--validation",
+            "Wrong-kind command output is corrective",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Corrective mission");
+    let mission_id = mission_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Corrective issue",
+            "--description",
+            "## Description\n\nIssue fixture.\n\n## Outcome\n\nWrong-kind command output is corrective.\n\n## Evidence\n\n- Focused CLI checks pass.",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = record_id_by_title(dir.path(), "issues", "Corrective issue");
+    let issue_id = issue_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "wrong-kind fixture evidence",
+        ],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "wrong-kind fixture evidence");
+    let evidence_id = evidence_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", mission_id]);
+    assert!(!success, "mission ID should not resolve as an issue");
+    assert!(
+        stderr.contains(&format!(
+            "{mission_id} is a mission record, not an issue record"
+        )),
+        "wrong-kind issue read should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier mission show {mission_id}")),
+        "wrong-kind issue read should suggest mission show: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", mission_id, "--reason", "wrong kind"],
+    );
+    assert!(!success, "mission ID should not close as an issue");
+    assert!(
+        stderr.contains(&format!(
+            "{mission_id} is a mission record, not an issue record"
+        )),
+        "wrong-kind issue mutation should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier mission show {mission_id}")),
+        "wrong-kind issue mutation should suggest mission show: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", evidence_id]);
+    assert!(!success, "evidence ID should not resolve as an issue");
+    assert!(
+        stderr.contains(&format!(
+            "{evidence_id} is a evidence record, not an issue record"
+        )),
+        "wrong-kind evidence lookup should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier evidence show {evidence_id}")),
+        "wrong-kind evidence lookup should suggest evidence show: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "status", issue_id]);
+    assert!(!success, "issue ID should not resolve as a mission");
+    assert!(
+        stderr.contains(&format!(
+            "{issue_id} is a issue record, not a mission record"
+        )),
+        "wrong-kind mission read should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier issue show {issue_id}")),
+        "wrong-kind mission read should suggest issue show: {stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "note", issue_id, "wrong kind mission note"],
+    );
+    assert!(!success, "issue ID should not accept a mission note");
+    assert!(
+        stderr.contains(&format!(
+            "{issue_id} is a issue record, not a mission record"
+        )),
+        "wrong-kind mission mutation should name actual and expected kinds: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("atelier issue show {issue_id}")),
+        "wrong-kind mission mutation should suggest issue show: {stderr}"
+    );
+
+    let unknown_id = "atelier-zzzz";
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", unknown_id]);
+    assert!(!success, "unknown ID should fail");
+    assert!(
+        stderr.contains("was not found"),
+        "unknown ID should keep concise not-found error: {stderr}"
+    );
+    assert!(
+        !stderr.contains("record, not"),
+        "unknown ID should not imply a wrong-kind match: {stderr}"
+    );
+}
+
+#[test]
 fn test_first_class_records_export_rebuild_and_validate() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

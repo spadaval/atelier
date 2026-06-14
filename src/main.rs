@@ -1001,6 +1001,14 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
+fn resolve_optional_record_arg(
+    db: &Database,
+    kind: &str,
+    id: Option<String>,
+) -> Result<Option<String>> {
+    id.map(|id| resolve_record_arg(db, kind, &id)).transpose()
+}
+
 fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
     let suggested = show_command_for_kind(actual_kind)
         .map(|command| format!(" Use `{command} {id}`."))
@@ -1651,6 +1659,7 @@ fn run() -> Result<()> {
                 verbose,
             } => {
                 let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+                let id = resolve_optional_record_arg(storage.db(), "mission", id)?;
                 commands::mission::status(
                     storage.db(),
                     &storage.state_dir(),
@@ -1662,6 +1671,7 @@ fn run() -> Result<()> {
             }
             MissionCommands::Audit { id } => {
                 let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
             }
             MissionCommands::List { status } => {
@@ -1680,6 +1690,7 @@ fn run() -> Result<()> {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::update(
                     &state_dir,
                     &db_path,
@@ -1694,12 +1705,14 @@ fn run() -> Result<()> {
             }
             MissionCommands::Note { id, text, kind } => {
                 let db = canonical_mutation_db()?;
+                let id = resolve_record_arg(&db, "mission", &id)?;
                 commands::comment::run_mission_note(&db, &id, &text, &kind)
             }
             MissionCommands::AddWork { id, issue } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 let issue = resolve_issue_arg(storage.db(), &issue)?;
                 commands::mission::add_work(&state_dir, &db_path, &id, &issue)
             }
@@ -1707,6 +1720,7 @@ fn run() -> Result<()> {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 let issue = resolve_issue_arg(storage.db(), &issue)?;
                 commands::mission::unlink(&state_dir, &db_path, &id, &issue)
             }
@@ -1714,6 +1728,7 @@ fn run() -> Result<()> {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 let issue = resolve_issue_arg(storage.db(), &issue)?;
                 commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
             }
