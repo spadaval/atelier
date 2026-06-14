@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Teach docs/help drift checker about hidden command visibility"
-updated_at: "2026-06-14T16:57:30.940642932+00:00"
+updated_at: "2026-06-14T17:00:32.800459395+00:00"
 ---
 
 ## Description
