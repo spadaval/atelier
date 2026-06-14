@@ -123,6 +123,31 @@ review, validation, documentation, or closeout slices under a shared objective,
 the shared objective should be a mission and the executable slices should live
 under one or more epics or issues linked to that mission.
 
+## Mission Graph Shape
+
+Prefer a shallow mission graph: the mission links to epics, closeout issues, or
+other root work that directly advances the objective, and those epics own their
+executable child tasks. Ordinary child tasks should not also be direct mission
+work unless the duplicate link is deliberate and useful for a specific
+closeout, migration, or emergency tracking reason.
+
+```text
+mission atelier-hy2i
+  advances epic atelier-4p7q
+    child task atelier-liqk
+    child task atelier-qnxs
+  advances epic atelier-a625
+    child task atelier-oqtz
+    child task atelier-qdaw
+  advances closeout issue atelier-mission-closeout
+```
+
+In this shape, the mission carries objective scope and validation expectations,
+epics group accountable work packages, and child issues execute under their
+epic. Mission status should count each unique issue once even when a deliberate
+duplicate path exists, but planners should avoid duplicate mission links by
+default because they make readiness and closeout harder to scan.
+
 ## Relationships
 
 Use hierarchy for ownership and typed links for contribution, validation, and
