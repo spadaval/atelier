@@ -4,6 +4,7 @@ id: "atelier-d7lw"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "refactor"
 priority: "P2"
 relationships:
@@ -13,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Thin main command routing and oversized command handlers"
-updated_at: "2026-06-13T20:37:14.944847400+00:00"
+updated_at: "2026-06-14T00:14:02.492349849+00:00"
 ---
 
 ## Description

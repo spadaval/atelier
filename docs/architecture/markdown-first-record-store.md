@@ -421,6 +421,14 @@ but normal public durable commands no longer call export to become recoverable.
 
 ## Projection Refresh After Canonical Writes
 
+`src/command_storage.rs` owns the command-side storage access policy. Command
+routing in `src/main.rs` selects an access mode, while the command storage
+boundary opens the runtime database, checks projection freshness for query and
+canonical-mutation commands, transparently rebuilds missing or stale
+projections, and names degraded-orientation behavior. This keeps CLI dispatch
+focused on public command contracts instead of embedding projection freshness
+rules in every match arm.
+
 For RecordStore-owned mutations, Atelier uses a runtime-preserving projection
 refresh after each successful canonical write. Mutation commands write
 tracked `.atelier/` records first through `RecordStore`, then call

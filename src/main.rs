@@ -1,4 +1,5 @@
 mod activity;
+mod command_storage;
 mod command_surface;
 mod commands;
 mod db;
@@ -14,13 +15,16 @@ mod test_inventory;
 mod utils;
 mod workflow_policy;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 use std::env;
-use std::path::PathBuf;
 use std::time::Instant;
 
+use command_storage::{
+    canonical_mutation_db, command_storage, degraded_projection_query_db, find_atelier_dir,
+    lint_db, projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
+};
 use db::Database;
 use record_store::RecordStore;
 
@@ -882,223 +886,6 @@ enum DiagnosticsCommands {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-fn find_atelier_dir() -> Result<PathBuf> {
-    storage_layout::find_atelier_dir()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CommandStorageAccess {
-    /// Read/query commands that depend on a fresh SQLite projection.
-    ProjectionQuery,
-    /// Orientation reads that can fall back to the existing projection when
-    /// canonical records are malformed, as long as the degraded state is named.
-    DegradedProjectionQuery,
-    /// Commands that write canonical Markdown and then refresh the projection.
-    CanonicalMutation,
-    /// Runtime-local commands that must not refresh or mutate canonical state.
-    RuntimeOnly,
-    /// Diagnostics, export, rebuild, and repair flows that own freshness policy.
-    HealthRepair,
-}
-
-impl CommandStorageAccess {
-    fn requires_fresh_projection(self) -> bool {
-        matches!(
-            self,
-            CommandStorageAccess::ProjectionQuery
-                | CommandStorageAccess::DegradedProjectionQuery
-                | CommandStorageAccess::CanonicalMutation
-        )
-    }
-
-    fn allows_degraded_projection(self) -> bool {
-        matches!(self, CommandStorageAccess::DegradedProjectionQuery)
-    }
-}
-
-struct CommandStorage {
-    layout: storage_layout::StorageLayout,
-    db: Database,
-    runtime_db_existed: bool,
-}
-
-impl CommandStorage {
-    fn db(&self) -> &Database {
-        &self.db
-    }
-
-    fn into_db(self) -> Database {
-        self.db
-    }
-
-    fn state_dir(&self) -> PathBuf {
-        self.layout.canonical_dir()
-    }
-
-    fn db_path(&self) -> PathBuf {
-        self.layout.runtime_db_path()
-    }
-
-    fn state_and_db_paths(&self) -> (PathBuf, PathBuf) {
-        (self.state_dir(), self.db_path())
-    }
-
-    fn repo_root(&self) -> &std::path::Path {
-        self.layout.repo_root()
-    }
-}
-
-fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
-    let layout = storage_layout::StorageLayout::discover()?;
-    let runtime_db_existed = layout.runtime_db_path().exists();
-    let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
-    let db = if mode.requires_fresh_projection() {
-        ensure_fresh_projection_db(
-            db,
-            &layout,
-            runtime_db_existed,
-            mode.allows_degraded_projection(),
-        )?
-    } else {
-        db
-    };
-    Ok(CommandStorage {
-        layout,
-        db,
-        runtime_db_existed,
-    })
-}
-
-fn ensure_fresh_projection_db(
-    db: Database,
-    layout: &storage_layout::StorageLayout,
-    runtime_db_existed: bool,
-    allow_degraded_projection: bool,
-) -> Result<Database> {
-    let state_dir = layout.canonical_dir();
-    if state_dir.is_dir() {
-        if !runtime_db_existed {
-            commands::rebuild::validate_canonical_state(&state_dir).map_err(|error| {
-                projection_validation_error(error, "Runtime projection database is missing")
-            })?;
-            let db_path = layout.runtime_db_path();
-            drop(db);
-            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
-                format!(
-                    "Runtime projection database is missing and automatic rebuild failed for {}",
-                    state_dir.display()
-                )
-            })?;
-            eprintln!(
-                "Runtime projection database was missing; rebuilt local SQLite projection from {}",
-                state_dir.display()
-            );
-            return Database::open(&db_path).context("Failed to open database");
-        }
-
-        let report = projection_index::check(&db, &state_dir)?;
-        if !report.is_fresh() {
-            if let Err(error) = commands::rebuild::validate_canonical_state(&state_dir) {
-                if allow_degraded_projection {
-                    eprintln!(
-                        "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
-                    );
-                    eprintln!("Repair: run `atelier lint` for record diagnostics, then fix the named Markdown before closing or mutating work.");
-                    eprintln!(
-                        "Projection freshness: {}",
-                        report.problem_messages().join("; ")
-                    );
-                    eprintln!("Canonical diagnostic: {error:#}");
-                    return Ok(db);
-                }
-                return Err(projection_validation_error(
-                    error,
-                    "Canonical tracker Markdown is invalid",
-                ));
-            }
-            let db_path = layout.runtime_db_path();
-            drop(db);
-            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
-                format!(
-                    "Projection index is stale and automatic rebuild failed for {}\n{}",
-                    state_dir.display(),
-                    report.problem_messages().join("\n")
-                )
-            })?;
-            eprintln!(
-                "Projection index was stale; rebuilt local SQLite projection from {}",
-                state_dir.display()
-            );
-            return Database::open(&db_path).context("Failed to open database");
-        }
-    }
-    Ok(db)
-}
-
-fn projection_validation_error(error: anyhow::Error, prefix: &str) -> anyhow::Error {
-    let detail = format!("{error:#}");
-    if looks_like_schema_drift(&detail) {
-        error.context(format!(
-            "{prefix}: canonical tracker records use a schema this atelier binary does not understand. \
-             Rebuild and use `target/debug/atelier` when testing local CLI changes, or update the installed `atelier` binary before continuing."
-        ))
-    } else {
-        error.context(format!(
-            "{prefix}; run `atelier lint` for details, then fix canonical tracker records before querying."
-        ))
-    }
-}
-
-fn looks_like_schema_drift(detail: &str) -> bool {
-    detail.contains("Unsupported schema") || detail.contains("Unsupported schema_version")
-}
-
-fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
-    Ok(command_storage(CommandStorageAccess::CanonicalMutation)?.state_and_db_paths())
-}
-
-fn runtime_db() -> Result<Database> {
-    Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
-}
-
-fn projection_query_db() -> Result<Database> {
-    Ok(command_storage(CommandStorageAccess::ProjectionQuery)?.into_db())
-}
-
-fn degraded_projection_query_db() -> Result<Database> {
-    Ok(command_storage(CommandStorageAccess::DegradedProjectionQuery)?.into_db())
-}
-
-fn lint_db() -> Result<Database> {
-    let layout = storage_layout::StorageLayout::discover()?;
-    if layout.runtime_db_path().exists() {
-        Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
-    } else {
-        projection_query_db()
-    }
-}
-
-fn canonical_mutation_db() -> Result<Database> {
-    Ok(command_storage(CommandStorageAccess::CanonicalMutation)?.into_db())
-}
-
-#[cfg(test)]
-mod command_storage_tests {
-    use super::CommandStorageAccess;
-
-    #[test]
-    fn access_modes_declare_projection_freshness_policy() {
-        assert!(CommandStorageAccess::ProjectionQuery.requires_fresh_projection());
-        assert!(CommandStorageAccess::DegradedProjectionQuery.requires_fresh_projection());
-        assert!(CommandStorageAccess::CanonicalMutation.requires_fresh_projection());
-        assert!(!CommandStorageAccess::RuntimeOnly.requires_fresh_projection());
-        assert!(!CommandStorageAccess::HealthRepair.requires_fresh_projection());
-        assert!(!CommandStorageAccess::ProjectionQuery.allows_degraded_projection());
-        assert!(CommandStorageAccess::DegradedProjectionQuery.allows_degraded_projection());
-        assert!(!CommandStorageAccess::CanonicalMutation.allows_degraded_projection());
-    }
-}
 
 fn issue_create_parts(
     priority: &str,
