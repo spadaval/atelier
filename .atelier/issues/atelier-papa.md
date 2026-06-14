@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:31:43.693854675+00:00"
+status: "done"
 title: "Make evidence relation errors corrective"
-updated_at: "2026-06-14T07:31:34.069251142+00:00"
+updated_at: "2026-06-14T07:31:43.693854675+00:00"
 ---
 
 ## Description
