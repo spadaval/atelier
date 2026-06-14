@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Make mission closeout aggregate linked work only"
-updated_at: "2026-06-14T16:54:56.496895541+00:00"
+updated_at: "2026-06-14T17:22:25.891331258+00:00"
 ---
 
 ## Description
