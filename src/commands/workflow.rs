@@ -552,7 +552,6 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
             "durable_state_current",
             "issue_sections_parseable",
             "no_open_work",
-            "evidence_attached",
             "no_open_blockers",
             "validation_criteria_satisfied",
             "no_blocking_lints",
@@ -840,8 +839,7 @@ fn validation_criteria_satisfied(
     target_id: &str,
 ) -> Result<(bool, String)> {
     if target_kind == "mission" {
-        let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-        return crate::commands::mission::mission_contract_audit_gate(db, &state_dir, target_id);
+        return crate::commands::mission::mission_validation_criteria_gate(db, target_id);
     }
     Ok((
         true,

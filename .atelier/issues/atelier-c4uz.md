@@ -3,6 +3,7 @@ created_at: "2026-06-14T16:31:01.342764800+00:00"
 id: "atelier-c4uz"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "workflow"
 priority: "P1"
 relationships:
@@ -14,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Remove heuristic evidence text matching from close gates"
-updated_at: "2026-06-14T16:31:01.342764800+00:00"
+updated_at: "2026-06-14T16:54:54.567084875+00:00"
 ---
 
 ## Description

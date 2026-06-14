@@ -3,6 +3,7 @@ created_at: "2026-06-14T16:31:03.958530812+00:00"
 id: "atelier-mllk"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "workflow"
 priority: "P1"
 relationships:
@@ -14,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Make mission closeout aggregate linked work only"
-updated_at: "2026-06-14T16:31:03.958530812+00:00"
+updated_at: "2026-06-14T16:54:56.496895541+00:00"
 ---
 
 ## Description

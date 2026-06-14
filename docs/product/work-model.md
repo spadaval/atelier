@@ -134,12 +134,11 @@ automation-heavy, high-risk, or repeated audit work, but ordinary issues should
 not need line-level claim plumbing.
 
 A mission closeout summary, when the mission needs one, lives on explicit
-validation or closeout issue-shaped work. It maps mission validation
-expectations and linked epic outcomes to implementation, review, validation,
-and closeout issues. The mission derives readiness from closed linked work,
-clear blockers, configured health gates, coverage classifications on that
-accountable work, and independent closeout validation when configured. Direct
-mission evidence is not the normal coverage source.
+validation or closeout issue-shaped work. It maps explicit approval work and
+linked execution status to implementation, review, validation, and closeout
+issues. The mission derives readiness from closed linked work, clear blockers,
+configured health gates, and independent closeout validation when configured.
+Direct mission evidence is not the normal coverage source.
 
 Existing prose evidence migrates as structured evidence with the original text
 as `summary`, best-effort `kind` and `result`, the linked issue as `targets`,

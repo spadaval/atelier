@@ -238,9 +238,10 @@ mandatory line IDs.
 
 `atelier mission status` is the normal operator surface for mission state,
 blockers, evidence gaps, next actions, and closeout readiness. `atelier mission
-audit` is closeout drill-down: it exists to map mission validation expectations
-and linked epic outcomes to child work and evidence, and may be folded into a
-verbose closeout mode of mission status. Hidden workflow validators are
+audit` is closeout drill-down: it exists to report mission shell readiness and
+any explicit linked validation or closeout work that supplies workflow
+approval, and may be folded into a verbose closeout mode of mission status.
+Hidden workflow validators are
 advanced diagnostics; use them only when the binding, assignment, or closeout
 contract explicitly requires them, and attach the human-readable result to the
 accountable issue that performed the check.

@@ -508,7 +508,7 @@ enum MissionCommands {
     },
     /// Show mission-control status for one mission or all current missions
     Status {
-        /// Show closeout contract audit detail for the mission
+        /// Show closeout audit detail for the mission
         #[arg(long)]
         closeout: bool,
         /// Show verbose validator detail in the status summary
@@ -516,7 +516,7 @@ enum MissionCommands {
         verbose: bool,
         id: Option<String>,
     },
-    /// Audit mission validation and linked epic outcomes against proof
+    /// Audit mission shell closeout and explicit workflow approval
     Audit { id: String },
     /// Close a mission after all closeout gates pass
     Close {

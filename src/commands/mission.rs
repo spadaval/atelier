@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::commands::agent_factory::{classify_requirement_coverage, ProofCoverageStatus};
+use crate::commands::agent_factory::ProofCoverageStatus;
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::record_store::{self, RecordStore, MISSION_EMPTY_DATA_JSON};
@@ -307,9 +307,9 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
 
     print_mission_heading("Evidence");
     if summary.evidence_count == 0 {
-        println!("Gap: no evidence records are linked to this mission.");
+        println!("Direct mission evidence: none");
     } else {
-        println!("Linked evidence: {}", summary.evidence_count);
+        println!("Direct mission evidence: {}", summary.evidence_count);
     }
 
     print_mission_heading("Reliability");
@@ -408,7 +408,7 @@ fn print_status_next_commands(
         );
     } else {
         println!(
-            "  Inspect closeout audit (mission validation and linked epic outcomes): atelier mission status --closeout {}",
+            "  Inspect closeout gate detail: atelier mission status --closeout {}",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -753,7 +753,7 @@ pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<(
         Ok(())
     } else {
         bail!(
-            "mission contract audit failed; resolve failing items or attach proof before closing {}",
+            "mission closeout audit found unresolved items for {}",
             mission.id
         )
     }
@@ -761,10 +761,9 @@ pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<(
 
 struct MissionCloseoutStatus {
     mission_id: String,
+    has_work: bool,
     open_work: Vec<String>,
     open_blockers: Vec<String>,
-    evidence_missing: bool,
-    contract_audit: MissionContractAudit,
     validator_results: Vec<crate::commands::workflow::ValidatorResult>,
 }
 
@@ -803,17 +802,10 @@ impl MissionContractAudit {
             .count()
     }
 
-    fn coverage_count(&self, status: ProofCoverageStatus) -> usize {
-        self.items
-            .iter()
-            .filter(|item| item.coverage_status == status)
-            .count()
-    }
-
     fn print_human(&self, mission: &DomainRecord) {
         let status = if self.passed() { "pass" } else { "fail" };
         let identity = format!(
-            "Mission Contract Audit {} [{}] - {}",
+            "Mission Closeout Audit {} [{}] - {}",
             mission.id, status, mission.title
         );
         println!("{identity}");
@@ -824,17 +816,8 @@ impl MissionContractAudit {
             self.failure_count(),
             self.items.len()
         );
-        println!(
-            "Coverage: covered {}, missing {}, failed {}, blocked {}, deferred {}, not-applicable {}",
-            self.coverage_count(ProofCoverageStatus::Covered),
-            self.coverage_count(ProofCoverageStatus::Missing),
-            self.coverage_count(ProofCoverageStatus::Failed),
-            self.coverage_count(ProofCoverageStatus::Blocked),
-            self.coverage_count(ProofCoverageStatus::Deferred),
-            self.coverage_count(ProofCoverageStatus::NotApplicable),
-        );
         if self.items.is_empty() {
-            println!("No authored mission validation or linked epic outcome items.");
+            println!("No closeout audit items.");
         }
 
         let groups = self
@@ -871,7 +854,7 @@ impl MissionContractAudit {
                 mission.id
             );
             println!(
-                "  Attach missing proof: atelier evidence attach <evidence-id> mission {}",
+                "  Inspect closeout audit detail: atelier mission audit {}",
                 mission.id
             );
         }
@@ -880,10 +863,9 @@ impl MissionContractAudit {
 
 impl MissionCloseoutStatus {
     fn ready(&self) -> bool {
-        self.open_work.is_empty()
+        self.has_work
+            && self.open_work.is_empty()
             && self.open_blockers.is_empty()
-            && !self.evidence_missing
-            && self.contract_audit.passed()
             && self.validator_results.iter().all(|result| result.passed)
     }
 
@@ -896,6 +878,11 @@ impl MissionCloseoutStatus {
 
     fn blocking_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
+        if !self.has_work {
+            messages.push(
+                "no linked mission work: add accountable work before mission closeout".to_string(),
+            );
+        }
         if !self.open_work.is_empty() {
             messages.push(format!(
                 "open mission work: {}; close or defer linked work before mission closeout",
@@ -906,18 +893,6 @@ impl MissionCloseoutStatus {
             messages.push(format!(
                 "open blockers: {}; close or remove blocker links before mission closeout",
                 compact_strings(&self.open_blockers)
-            ));
-        }
-        if self.evidence_missing {
-            messages.push(
-                "missing mission proof: attach validation evidence to the mission".to_string(),
-            );
-        }
-        if !self.contract_audit.passed() {
-            messages.push(format!(
-                "contract audit failed: {} unresolved item(s); run `atelier mission audit {}`",
-                self.contract_audit.failure_count(),
-                self.mission_id
             ));
         }
         for result in self
@@ -944,7 +919,10 @@ impl MissionCloseoutStatus {
             }
             return;
         }
-        if self.open_work.is_empty() {
+        if !self.has_work {
+            println!("Work: missing");
+            println!("  Next: atelier mission add-work <mission-id> <issue-id>");
+        } else if self.open_work.is_empty() {
             println!("Work: closed");
         } else {
             println!("Work: open - {}", compact_strings(&self.open_work));
@@ -955,24 +933,6 @@ impl MissionCloseoutStatus {
         } else {
             println!("Blockers: open - {}", compact_strings(&self.open_blockers));
             println!("  Next: close or unblock the blocker issues.");
-        }
-        if self.evidence_missing {
-            println!("Mission Proof: missing");
-            println!(
-                "  Next: atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
-            );
-            println!("  Next: atelier evidence attach <evidence-id> mission <mission-id>");
-        } else {
-            println!("Mission Proof: attached");
-        }
-        if self.contract_audit.passed() {
-            println!("Contract Audit: pass");
-        } else {
-            println!(
-                "Contract Audit: fail - {} unresolved item(s)",
-                self.contract_audit.failure_count()
-            );
-            println!("  Next: atelier mission audit {}", self.mission_id);
         }
         for result in &self.validator_results {
             if let Some(line) = closeout_validator_status_line(result, &self.mission_id) {
@@ -1031,20 +991,13 @@ fn print_reliability_summary(
     print_section_gap_signal("Missing Evidence Sections", &section_gaps.missing_evidence);
     print_graph_hygiene_signal(summary);
 
-    let mut proof_parts = Vec::new();
-    if summary.evidence_count == 0 {
-        proof_parts.push("mission proof is not attached".to_string());
-    }
-    if !issue_proof_gaps.is_empty() {
-        proof_parts.push(format!(
-            "issue proof gaps: {}",
-            compact_strings(&issue_proof_gaps)
-        ));
-    }
-    if proof_parts.is_empty() {
+    if issue_proof_gaps.is_empty() {
         println!("Attached Proof: complete");
     } else {
-        println!("Attached Proof: missing - {}", proof_parts.join("; "));
+        println!(
+            "Attached Proof: missing - issue proof gaps: {}",
+            compact_strings(&issue_proof_gaps)
+        );
         println!(
             "  Next: atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
         );
@@ -1300,154 +1253,144 @@ fn closeout_validator_user_text(
 
 fn mission_contract_audit(
     db: &Database,
-    state_dir: &Path,
+    _state_dir: &Path,
     mission: &DomainRecord,
 ) -> Result<MissionContractAudit> {
     let mut items = Vec::new();
-    let sections = record_store::mission_sections_from_domain_record(mission)?;
-    let mission_evidence = validating_evidence_records(db, KIND, &mission.id)?;
     let mission_work = mission_issue_ids(db, &mission.id)?;
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let approval = mission_workflow_approval(db, &mission.id)?;
 
-    for item in contract_items_from_text(&sections.validation) {
-        let (coverage_status, reason) = if mission_work.is_empty() {
-            (
-                ProofCoverageStatus::Missing,
-                "No linked mission work exists for this validation expectation.".to_string(),
-            )
-        } else if !open_work.is_empty() {
-            (
-                ProofCoverageStatus::Missing,
-                format!("Open linked work remains: {}", compact_strings(&open_work)),
-            )
-        } else if !open_blockers.is_empty() {
-            (
-                ProofCoverageStatus::Blocked,
-                format!("Open blockers remain: {}", compact_strings(&open_blockers)),
-            )
-        } else {
-            coverage_reason(
-                classify_requirement_coverage(&item, &mission_evidence),
-                "No matching validation evidence is attached to the mission.",
-            )
-        };
+    let (work_status, work_reason) = if mission_work.is_empty() {
+        (
+            ProofCoverageStatus::Missing,
+            "No linked mission work exists.".to_string(),
+        )
+    } else if !open_work.is_empty() {
+        (
+            ProofCoverageStatus::Missing,
+            format!("Open linked work remains: {}", compact_strings(&open_work)),
+        )
+    } else {
+        (
+            ProofCoverageStatus::Covered,
+            format!("All {} linked work item(s) are closed.", mission_work.len()),
+        )
+    };
+    items.push(MissionContractAuditItem {
+        group: "Mission Shell".to_string(),
+        target: mission.id.clone(),
+        text: "Linked work is closed.".to_string(),
+        coverage_status: work_status,
+        reason: work_reason,
+    });
+
+    let (blocker_status, blocker_reason) = if open_blockers.is_empty() {
+        (
+            ProofCoverageStatus::Covered,
+            "No mission blockers are open.".to_string(),
+        )
+    } else {
+        (
+            ProofCoverageStatus::Blocked,
+            format!("Open blockers remain: {}", compact_strings(&open_blockers)),
+        )
+    };
+    items.push(MissionContractAuditItem {
+        group: "Mission Shell".to_string(),
+        target: mission.id.clone(),
+        text: "Mission blockers are clear.".to_string(),
+        coverage_status: blocker_status,
+        reason: blocker_reason,
+    });
+
+    if approval.is_empty() {
         items.push(MissionContractAuditItem {
-            group: "Mission Validation".to_string(),
+            group: "Workflow Approval".to_string(),
             target: mission.id.clone(),
-            text: item,
-            coverage_status,
-            reason,
+            text: "No explicit linked validation or closeout work is required.".to_string(),
+            coverage_status: ProofCoverageStatus::Covered,
+            reason: "Mission closeout relies on linked work, blockers, and configured health gates unless linked validation or closeout work makes parent-level approval explicit.".to_string(),
         });
-    }
-
-    let store = RecordStore::new(state_dir);
-    for epic in mission_linked_epics(db, &mission.id)? {
-        match store.load_issue_by_id(&epic.id) {
-            Ok(record) => {
-                let evidence = validating_evidence_records(db, "issue", &epic.id)?;
-                for item in contract_items_from_text(&record.sections.outcome) {
-                    let (coverage_status, reason) =
-                        if !crate::commands::issue_workflow::issue_is_done(
-                            workflow_policy.as_ref(),
-                            &epic,
-                        ) {
-                            (
-                                ProofCoverageStatus::Missing,
-                                format!(
-                                    "Linked epic is still {}.",
-                                    crate::commands::issue_workflow::issue_status_label(
-                                        workflow_policy.as_ref(),
-                                        &epic.status,
-                                    )
-                                ),
-                            )
-                        } else {
-                            coverage_reason(
-                                classify_requirement_coverage(&item, &evidence),
-                                "No matching validation evidence is attached to this linked epic.",
-                            )
-                        };
-                    items.push(MissionContractAuditItem {
-                        group: "Linked Epic Outcomes".to_string(),
-                        target: epic.id.clone(),
-                        text: item,
-                        coverage_status,
-                        reason,
-                    });
-                }
-            }
-            Err(error) => items.push(MissionContractAuditItem {
-                group: "Linked Epic Outcomes".to_string(),
-                target: epic.id.clone(),
-                text: epic.title.clone(),
-                coverage_status: ProofCoverageStatus::Failed,
-                reason: format!("Linked epic record is malformed: {error}"),
-            }),
+    } else {
+        for issue in &approval.done {
+            items.push(MissionContractAuditItem {
+                group: "Workflow Approval".to_string(),
+                target: issue.id.clone(),
+                text: issue.title.clone(),
+                coverage_status: ProofCoverageStatus::Covered,
+                reason: format!(
+                    "Workflow approval closed via linked {} work.",
+                    issue.issue_type
+                ),
+            });
+        }
+        for issue in &approval.open {
+            items.push(MissionContractAuditItem {
+                group: "Workflow Approval".to_string(),
+                target: issue.id.clone(),
+                text: issue.title.clone(),
+                coverage_status: ProofCoverageStatus::Missing,
+                reason: format!(
+                    "Linked {} work is still {}.",
+                    issue.issue_type,
+                    approval_issue_status_label(issue)?
+                ),
+            });
+        }
+        for issue in &approval.blocked {
+            items.push(MissionContractAuditItem {
+                group: "Workflow Approval".to_string(),
+                target: issue.id.clone(),
+                text: issue.title.clone(),
+                coverage_status: ProofCoverageStatus::Blocked,
+                reason: format!(
+                    "Linked {} work is blocked: {}.",
+                    issue.issue_type,
+                    approval_issue_status_label(issue)?
+                ),
+            });
         }
     }
 
     Ok(MissionContractAudit { items })
 }
 
-pub(crate) fn mission_contract_audit_gate(
+pub(crate) fn mission_validation_criteria_gate(
     db: &Database,
-    state_dir: &Path,
     mission_id: &str,
 ) -> Result<(bool, String)> {
-    let mission = db.require_record(KIND, mission_id)?;
-    let audit = mission_contract_audit(db, state_dir, &mission)?;
-    if audit.passed() {
-        Ok((
+    let approval = mission_workflow_approval(db, mission_id)?;
+    if approval.is_empty() {
+        return Ok((
+            true,
+            "no explicit linked validation or closeout work requires workflow approval".to_string(),
+        ));
+    }
+    if approval.open.is_empty() && approval.blocked.is_empty() {
+        return Ok((
             true,
             format!(
-                "mission contract audit passed: {} pass, 0 fail",
-                audit.pass_count()
+                "workflow approval complete via linked validation/closeout work: {}",
+                compact_strings(&approval.issue_ids())
             ),
-        ))
-    } else {
-        Ok((
-            false,
-            format!(
-                "mission contract audit failed: {} unresolved item(s); run `atelier mission audit {mission_id}`",
-                audit.failure_count()
-            ),
-        ))
+        ));
     }
-}
-
-fn mission_linked_epics(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut epics = mission_issue_ids(db, mission_id)?
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| issue.issue_type == "epic")
+    let mut pending = approval
+        .open
+        .iter()
+        .map(|issue| issue.id.clone())
         .collect::<Vec<_>>();
-    epics.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(epics)
-}
-
-fn coverage_reason(
-    coverage: crate::commands::agent_factory::ProofCoverage,
-    missing_reason: &str,
-) -> (ProofCoverageStatus, String) {
-    let status = coverage.status;
-    let evidence = if coverage.evidence_refs.is_empty() {
-        String::new()
-    } else {
-        format!(": {}", compact_strings(&coverage.evidence_refs))
-    };
-    let reason = match coverage.status {
-        ProofCoverageStatus::Covered => format!("Covered by evidence{evidence}"),
-        ProofCoverageStatus::Missing => missing_reason.to_string(),
-        ProofCoverageStatus::Failed => format!("Matching evidence failed{evidence}"),
-        ProofCoverageStatus::Blocked => format!("Matching evidence is blocked{evidence}"),
-        ProofCoverageStatus::Deferred => format!("Matching evidence is deferred{evidence}"),
-        ProofCoverageStatus::NotApplicable => {
-            format!("Marked not-applicable by evidence{evidence}")
-        }
-    };
-    (status, reason)
+    pending.extend(approval.blocked.iter().map(|issue| issue.id.clone()));
+    pending.sort();
+    Ok((
+        false,
+        format!(
+            "workflow approval is still pending on linked validation/closeout work: {}",
+            compact_strings(&pending)
+        ),
+    ))
 }
 
 fn validating_evidence_records(
@@ -1486,45 +1429,62 @@ fn validating_evidence_ids(
         .collect())
 }
 
-fn contract_items_from_text(text: &str) -> Vec<String> {
-    let mut items = text
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            trimmed
-                .strip_prefix("- ")
-                .or_else(|| trimmed.strip_prefix("* "))
-                .map(str::trim)
-                .filter(|item| !is_placeholder_contract_item(item))
-                .map(ToOwned::to_owned)
-        })
-        .collect::<Vec<_>>();
-    if items.is_empty() {
-        let paragraph = text
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        if !paragraph.is_empty() && !is_placeholder_contract_item(&paragraph) {
-            items.push(paragraph);
-        }
-    }
-    items
+#[derive(Default)]
+struct MissionWorkflowApproval {
+    done: Vec<Issue>,
+    open: Vec<Issue>,
+    blocked: Vec<Issue>,
 }
 
-fn is_placeholder_contract_item(item: &str) -> bool {
-    let normalized = item
-        .trim()
-        .trim_start_matches("- ")
-        .trim_start_matches("* ")
-        .trim()
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
-    matches!(
-        normalized.as_str(),
-        "none" | "validation was not specified" | "outcome was not specified"
-    )
+impl MissionWorkflowApproval {
+    fn is_empty(&self) -> bool {
+        self.done.is_empty() && self.open.is_empty() && self.blocked.is_empty()
+    }
+
+    fn issue_ids(&self) -> Vec<String> {
+        let mut ids = self
+            .done
+            .iter()
+            .chain(self.open.iter())
+            .chain(self.blocked.iter())
+            .map(|issue| issue.id.clone())
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids
+    }
+}
+
+fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionWorkflowApproval> {
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut approval = MissionWorkflowApproval::default();
+    for issue_id in mission_issue_ids(db, mission_id)? {
+        let issue = db.require_issue(&issue_id)?;
+        if !matches!(issue.issue_type.as_str(), "validation" | "closeout") {
+            continue;
+        }
+        match crate::commands::issue_workflow::issue_status_category(
+            workflow_policy.as_ref(),
+            &issue.status,
+        )
+        .as_deref()
+        {
+            Some("done") => approval.done.push(issue),
+            Some("blocked") => approval.blocked.push(issue),
+            _ => approval.open.push(issue),
+        }
+    }
+    approval.done.sort_by(|a, b| a.id.cmp(&b.id));
+    approval.open.sort_by(|a, b| a.id.cmp(&b.id));
+    approval.blocked.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(approval)
+}
+
+fn approval_issue_status_label(issue: &Issue) -> Result<String> {
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    Ok(crate::commands::issue_workflow::issue_status_label(
+        workflow_policy.as_ref(),
+        &issue.status,
+    ))
 }
 
 fn compact_strings(values: &[String]) -> String {
@@ -1558,13 +1518,13 @@ fn enforce_closeout(db: &Database, state_dir: &Path, mission_id: &str) -> Result
 
 fn mission_closeout_status(
     db: &Database,
-    state_dir: &Path,
+    _state_dir: &Path,
     mission: &DomainRecord,
-    summary: &MissionListSummary,
+    _summary: &MissionListSummary,
 ) -> Result<MissionCloseoutStatus> {
+    let has_work = !mission_issue_ids(db, &mission.id)?.is_empty();
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let contract_audit = mission_contract_audit(db, state_dir, mission)?;
     let validator_results =
         match crate::commands::workflow::evaluate(db, KIND, &mission.id, "close", Vec::new()) {
             Ok(results) => results,
@@ -1580,10 +1540,9 @@ fn mission_closeout_status(
         };
     Ok(MissionCloseoutStatus {
         mission_id: mission.id.clone(),
+        has_work,
         open_work,
         open_blockers,
-        evidence_missing: summary.evidence_count == 0,
-        contract_audit,
         validator_results,
     })
 }
@@ -1686,6 +1645,8 @@ struct MissionListSummary {
     blocked_work: Vec<BlockedMissionWork>,
     open_blockers: usize,
     evidence_count: usize,
+    issue_proof_gap_count: usize,
+    approval_pending_count: usize,
     duplicate_reachability: Vec<DuplicateReachability>,
 }
 
@@ -1757,10 +1718,18 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         .collect::<BTreeSet<_>>();
     let mission_issue_ids = mission_issue_ids(db, mission_id)?;
 
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     for issue_id in &mission_issue_ids {
-        summary
-            .work
-            .add_bucket(issue_bucket(db, &db.require_issue(issue_id)?)?);
+        let issue = db.require_issue(issue_id)?;
+        summary.work.add_bucket(issue_bucket(db, &issue)?);
+        if validating_evidence_ids(db, "issue", issue_id)?.is_empty() {
+            summary.issue_proof_gap_count += 1;
+        }
+        if matches!(issue.issue_type.as_str(), "validation" | "closeout")
+            && !crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), &issue)
+        {
+            summary.approval_pending_count += 1;
+        }
     }
     summary.duplicate_reachability = duplicate_reachability(db, &mission_issue_ids, &seen_work)?;
 
@@ -1775,7 +1744,6 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         }
     }
 
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     for issue_id in mission_issue_ids {
         let issue = db.require_issue(&issue_id)?;
         if !is_selectable_work(db, &issue)? {
@@ -1814,7 +1782,7 @@ impl MissionListSummary {
     }
 
     fn evidence_gap_count(&self) -> usize {
-        usize::from(self.evidence_count == 0)
+        self.issue_proof_gap_count
     }
 
     fn closeout_needed(&self) -> bool {
@@ -1824,7 +1792,8 @@ impl MissionListSummary {
             && work.blocked == 0
             && work.backlog == 0
             && self.open_blockers == 0
-            && self.evidence_count > 0
+            && self.issue_proof_gap_count == 0
+            && self.approval_pending_count == 0
     }
 }
 
@@ -2209,7 +2178,7 @@ fn mission_health(summary: &MissionListSummary) -> &'static str {
         "closeout"
     } else if work.ready > 0 {
         "ready"
-    } else if summary.evidence_gap_count() > 0 {
+    } else if summary.evidence_gap_count() > 0 || summary.approval_pending_count > 0 {
         "needs-evidence"
     } else {
         "steady"
