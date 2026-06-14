@@ -3,6 +3,7 @@ created_at: "2026-06-13T20:37:18.342077260+00:00"
 id: "atelier-bk6n"
 issue_type: "closeout"
 labels:
+- "assignee:root"
 - "closeout"
 - "validation"
 priority: "P2"
@@ -13,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Close out stabilization and simplification mission"
-updated_at: "2026-06-13T20:37:18.342077260+00:00"
+updated_at: "2026-06-14T00:25:28.117558668+00:00"
 ---
 
 ## Description
