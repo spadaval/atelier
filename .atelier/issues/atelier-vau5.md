@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:58:31.793989798+00:00"
+status: "done"
 title: "Remove Claude integrations command surface"
-updated_at: "2026-06-14T07:50:27.020628074+00:00"
+updated_at: "2026-06-14T07:58:31.793989798+00:00"
 ---
 
 ## Description
