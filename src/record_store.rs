@@ -13,147 +13,18 @@ use crate::models::{
 };
 use crate::record_id;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct RecordKindSpec {
-    pub kind: &'static str,
-    pub schema: &'static str,
-    pub schema_version: i64,
-    pub canonical_dir: Option<&'static str>,
-}
+mod record_kinds;
+mod relationships;
 
-pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
-    kind: "issue",
-    schema: "atelier.issue",
-    schema_version: 1,
-    canonical_dir: Some("issues"),
+pub use record_kinds::{
+    canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
+    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, FIRST_CLASS_RECORD_KINDS,
+    ISSUE_KIND,
 };
-
-pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
-    RecordKindSpec {
-        kind: "mission",
-        schema: "atelier.mission",
-        schema_version: 1,
-        canonical_dir: Some("missions"),
-    },
-    RecordKindSpec {
-        kind: "milestone",
-        schema: "atelier.milestone",
-        schema_version: 1,
-        canonical_dir: Some("milestones"),
-    },
-    RecordKindSpec {
-        kind: "plan",
-        schema: "atelier.plan",
-        schema_version: 1,
-        canonical_dir: Some("plans"),
-    },
-    RecordKindSpec {
-        kind: "evidence",
-        schema: "atelier.evidence",
-        schema_version: 1,
-        canonical_dir: Some("evidence"),
-    },
-];
-
-pub const NON_CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
-    kind: "workflow_validator",
-    schema: "atelier.workflow_validator",
-    schema_version: 1,
-    canonical_dir: None,
-}];
-
-pub fn record_kind(kind: &str) -> Option<&'static RecordKindSpec> {
-    std::iter::once(&ISSUE_KIND)
-        .chain(FIRST_CLASS_RECORD_KINDS.iter())
-        .chain(NON_CANONICAL_RECORD_KINDS.iter())
-        .find(|spec| spec.kind == kind)
-}
-
-pub fn canonical_record_kind(kind: &str) -> Result<&'static RecordKindSpec> {
-    let Some(spec) = FIRST_CLASS_RECORD_KINDS
-        .iter()
-        .find(|spec| spec.kind == kind && spec.canonical_dir.is_some())
-    else {
-        bail!(
-            "Record kind '{}' is not a canonical first-class record",
-            kind
-        );
-    };
-    Ok(spec)
-}
-
-pub fn validate_canonical_record_kind(kind: &str) -> Result<()> {
-    canonical_record_kind(kind).map(|_| ())
-}
-
-pub fn validate_record_kind(kind: &str) -> Result<()> {
-    if record_kind(kind).is_some() {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid record kind '{}'. Valid values: {}",
-            kind,
-            all_record_kind_names().join(", ")
-        )
-    }
-}
-
-pub fn canonical_record_path(spec: &RecordKindSpec, id: &str) -> Result<PathBuf> {
-    let Some(dir) = spec.canonical_dir else {
-        bail!("Record kind '{}' has no canonical directory", spec.kind);
-    };
-    Ok(PathBuf::from(dir).join(format!("{id}.md")))
-}
-
-pub fn issue_record_path(id: &str) -> PathBuf {
-    PathBuf::from(ISSUE_KIND.canonical_dir.expect("issue has canonical dir"))
-        .join(format!("{id}.md"))
-}
-
-pub fn canonical_record_dirs() -> Vec<&'static str> {
-    std::iter::once(ISSUE_KIND.canonical_dir.expect("issue has canonical dir"))
-        .chain(
-            FIRST_CLASS_RECORD_KINDS
-                .iter()
-                .filter_map(|spec| spec.canonical_dir),
-        )
-        .collect()
-}
-
-fn all_record_kind_names() -> Vec<&'static str> {
-    std::iter::once(ISSUE_KIND.kind)
-        .chain(FIRST_CLASS_RECORD_KINDS.iter().map(|spec| spec.kind))
-        .chain(NON_CANONICAL_RECORD_KINDS.iter().map(|spec| spec.kind))
-        .collect()
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RelationshipTarget {
-    pub kind: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct AttachmentRelationship {
-    pub kind: String,
-    pub id: String,
-    pub role: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RelatesRelationship {
-    pub kind: String,
-    pub id: String,
-    pub relation_type: String,
-}
-
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub struct Relationships {
-    pub blocks: Vec<RelationshipTarget>,
-    pub children: Vec<RelationshipTarget>,
-    pub attachments: Vec<AttachmentRelationship>,
-    pub relates: Vec<RelatesRelationship>,
-}
+pub use relationships::{
+    issue_relates_relationship, issue_relationship_target, sort_relationships,
+    AttachmentRelationship, RelatesRelationship, RelationshipTarget, Relationships,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanonicalIssueRecord {
@@ -736,21 +607,6 @@ fn unique_temp_path(path: &Path, suffix: &str) -> Result<PathBuf> {
         nanos,
         suffix
     )))
-}
-
-fn issue_relationship_target(id: &str) -> RelationshipTarget {
-    RelationshipTarget {
-        kind: ISSUE_KIND.kind.to_string(),
-        id: id.to_string(),
-    }
-}
-
-fn issue_relates_relationship(id: &str, relation_type: &str) -> RelatesRelationship {
-    RelatesRelationship {
-        kind: ISSUE_KIND.kind.to_string(),
-        id: id.to_string(),
-        relation_type: relation_type.to_string(),
-    }
 }
 
 pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
@@ -2699,17 +2555,6 @@ fn validate_relationships(relationships: &Relationships, relative: &Path) -> Res
     }
     let _ = relative;
     Ok(())
-}
-
-pub fn sort_relationships(relationships: &mut Relationships) {
-    relationships.blocks.sort();
-    relationships.blocks.dedup();
-    relationships.children.sort();
-    relationships.children.dedup();
-    relationships.attachments.sort();
-    relationships.attachments.dedup();
-    relationships.relates.sort();
-    relationships.relates.dedup();
 }
 
 fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Result<()> {

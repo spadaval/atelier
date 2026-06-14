@@ -52,6 +52,15 @@ missions, milestone checkpoint records, plans, and evidence; workflow validator
 records are recognized as a future kind but do not yet have a canonical
 `.atelier/` directory.
 
+In code, the low-level `RecordStore` module is split by durable ownership:
+`record_store::record_kinds` owns the kind registry and canonical path
+derivation, while `record_store::relationships` owns relationship data
+structures, sorting, and issue-link constructors. The top-level `RecordStore`
+keeps file discovery, atomic writes, ID allocation, parsing/rendering entry
+points, and known-ID mutation methods. Record-kind modules may depend on those
+shared primitives, but command modules should not duplicate record-kind lists or
+relationship constructors.
+
 The first issue-focused `RecordStore` slice was implemented as a testable file
 API for the legacy `.atelier/issues/*.md` layout. The single-tree
 migration keeps the same responsibilities while moving the target path to

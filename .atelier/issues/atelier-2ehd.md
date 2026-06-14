@@ -4,6 +4,7 @@ id: "atelier-2ehd"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "refactor"
 priority: "P1"
 relationships:
@@ -13,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split RecordStore god module by cohesive ownership"
-updated_at: "2026-06-13T20:37:10.204903692+00:00"
+updated_at: "2026-06-14T00:09:01.116549689+00:00"
 ---
 
 ## Description
