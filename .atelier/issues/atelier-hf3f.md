@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:07:44.715215114+00:00"
+status: "done"
 title: "Render proof coverage summaries for parent closeout"
-updated_at: "2026-06-14T07:07:22.721002850+00:00"
+updated_at: "2026-06-14T07:07:44.715215114+00:00"
 ---
 
 ## Description
