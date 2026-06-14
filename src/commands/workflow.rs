@@ -167,110 +167,32 @@ pub fn transition_issue(
     let before = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
     let workflow = policy.workflow_for_issue_type(&before.issue_type)?;
-    let Some(transition) = workflow.transitions.get(transition_name) else {
-        let available = workflow
-            .transitions
-            .iter()
-            .filter(|(_, candidate)| candidate.from.iter().any(|from| from == &before.status))
-            .map(|(name, _)| name.as_str())
-            .collect::<Vec<_>>();
-        if available.is_empty() {
-            bail!(
-                "Unknown transition '{}' for issue {}; no transitions are configured from status '{}'",
-                transition_name,
-                before.id,
-                before.status
-            );
-        }
-        bail!(
-            "Unknown transition '{}' for issue {}; available from '{}' are: {}",
-            transition_name,
-            before.id,
-            before.status,
-            available.join(", ")
-        );
-    };
-
-    if !transition.from.iter().any(|from| from == &before.status) {
-        crate::commands::activity_log::record_transition_blocked(
-            &before.id,
-            transition_name,
-            &before.status,
-            Some(&transition.to),
-            &format!(
-                "transition '{}' is not available from status '{}'",
-                transition_name, before.status
-            ),
-        )?;
-        bail!(
-            "Transition '{}' is not available from status '{}' for issue {}",
-            transition_name,
-            before.status,
-            before.id
-        );
-    }
+    let transition = resolve_issue_transition(workflow, &before, transition_name)?;
+    ensure_transition_available(&before, transition_name, transition)?;
 
     let store = RecordStore::new(state_dir);
     let mut record = store.load_issue_by_id(&before.id)?;
-    let mut blockers = required_field_failures(&record, transition, close_reason)?;
-    let validator_results = evaluate_policy_transition(
+    let (blockers, validator_results) = transition_blockers(
         db,
         &policy,
-        "issue",
-        &before.id,
+        &record,
         transition_name,
-        &transition.validators,
+        transition,
+        close_reason,
     )?;
-    blockers.extend(
-        validator_results
-            .iter()
-            .filter(|result| !result.passed)
-            .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
-    );
     if !blockers.is_empty() {
-        let reason = blockers.join("; ");
-        crate::commands::activity_log::record_transition_blocked(
-            &before.id,
-            transition_name,
-            &before.status,
-            Some(&transition.to),
-            &reason,
-        )?;
-        print_transition_attempt(
+        report_blocked_transition(
+            &policy,
             &before,
             transition_name,
-            &transition.to,
+            transition,
             &validator_results,
             &blockers,
-            &render_transition_guidance(&policy, &before, transition_name, transition)?,
-            &transition_command(&before.id, transition_name, transition),
-        );
-        bail!(
-            "Transition '{}' is blocked for issue {}: {}",
-            transition_name,
-            before.id,
-            reason
-        );
+        )?;
     }
 
-    let now = Utc::now();
-    record.issue.status = transition.to.clone();
-    record.issue.updated_at = now;
-    record.issue.closed_at = if policy.status_category(&transition.to) == Some("done") {
-        Some(now)
-    } else {
-        None
-    };
-    store.write_issue_atomic(&record)?;
-    if let Some(reason) = close_reason {
-        crate::commands::activity_log::record_close_reason(&before.id, reason)?;
-    }
-    crate::commands::activity_log::record_transition_applied(
-        &before.id,
-        transition_name,
-        &before.status,
-        &transition.to,
-    )?;
+    apply_transition_record(&policy, &store, &mut record, transition, close_reason)?;
+    record_applied_transition(&before, transition_name, transition)?;
 
     super::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = Database::open(db_path)?;
@@ -282,6 +204,158 @@ pub fn transition_issue(
     println!("  atelier issue show {}", issue.id);
     println!("  atelier issue transition {} --options", issue.id);
     Ok(())
+}
+
+fn resolve_issue_transition<'a>(
+    workflow: &'a crate::workflow_policy::WorkflowDefinition,
+    issue: &Issue,
+    transition_name: &str,
+) -> Result<&'a crate::workflow_policy::TransitionDefinition> {
+    if let Some(transition) = workflow.transitions.get(transition_name) {
+        return Ok(transition);
+    }
+    let available = workflow
+        .transitions
+        .iter()
+        .filter(|(_, candidate)| candidate.from.iter().any(|from| from == &issue.status))
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>();
+    if available.is_empty() {
+        bail!(
+            "Unknown transition '{}' for issue {}; no transitions are configured from status '{}'",
+            transition_name,
+            issue.id,
+            issue.status
+        );
+    }
+    bail!(
+        "Unknown transition '{}' for issue {}; available from '{}' are: {}",
+        transition_name,
+        issue.id,
+        issue.status,
+        available.join(", ")
+    )
+}
+
+fn ensure_transition_available(
+    issue: &Issue,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+) -> Result<()> {
+    if transition.from.iter().any(|from| from == &issue.status) {
+        return Ok(());
+    }
+    let reason = format!(
+        "transition '{}' is not available from status '{}'",
+        transition_name, issue.status
+    );
+    crate::commands::activity_log::record_transition_blocked(
+        &issue.id,
+        transition_name,
+        &issue.status,
+        Some(&transition.to),
+        &reason,
+    )?;
+    bail!(
+        "Transition '{}' is not available from status '{}' for issue {}",
+        transition_name,
+        issue.status,
+        issue.id
+    )
+}
+
+fn transition_blockers(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    record: &CanonicalIssueRecord,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+    close_reason: Option<&str>,
+) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
+    let mut blockers = required_field_failures(record, transition, close_reason)?;
+    let validator_results = evaluate_policy_transition(
+        db,
+        policy,
+        "issue",
+        &record.issue.id,
+        transition_name,
+        &transition.validators,
+    )?;
+    blockers.extend(
+        validator_results
+            .iter()
+            .filter(|result| !result.passed)
+            .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
+    );
+    Ok((blockers, validator_results))
+}
+
+fn report_blocked_transition(
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    issue: &Issue,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+    validator_results: &[ValidatorResult],
+    blockers: &[String],
+) -> Result<()> {
+    let reason = blockers.join("; ");
+    crate::commands::activity_log::record_transition_blocked(
+        &issue.id,
+        transition_name,
+        &issue.status,
+        Some(&transition.to),
+        &reason,
+    )?;
+    print_transition_attempt(
+        issue,
+        transition_name,
+        &transition.to,
+        validator_results,
+        blockers,
+        &render_transition_guidance(policy, issue, transition_name, transition)?,
+        &transition_command(&issue.id, transition_name, transition),
+    );
+    bail!(
+        "Transition '{}' is blocked for issue {}: {}",
+        transition_name,
+        issue.id,
+        reason
+    )
+}
+
+fn apply_transition_record(
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    store: &RecordStore,
+    record: &mut CanonicalIssueRecord,
+    transition: &crate::workflow_policy::TransitionDefinition,
+    close_reason: Option<&str>,
+) -> Result<()> {
+    let now = Utc::now();
+    record.issue.status = transition.to.clone();
+    record.issue.updated_at = now;
+    record.issue.closed_at = if policy.status_category(&transition.to) == Some("done") {
+        Some(now)
+    } else {
+        None
+    };
+    store.write_issue_atomic(record)?;
+    if let Some(reason) = close_reason {
+        crate::commands::activity_log::record_close_reason(&record.issue.id, reason)?;
+    }
+    Ok(())
+}
+
+fn record_applied_transition(
+    issue: &Issue,
+    transition_name: &str,
+    transition: &crate::workflow_policy::TransitionDefinition,
+) -> Result<()> {
+    crate::commands::activity_log::record_transition_applied(
+        &issue.id,
+        transition_name,
+        &issue.status,
+        &transition.to,
+    )
 }
 
 pub fn close_issue(
