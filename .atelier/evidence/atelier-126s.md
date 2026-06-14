@@ -1,0 +1,35 @@
+---
+created_at: "2026-06-14T07:10:48.723938872+00:00"
+id: "atelier-126s"
+evidence_type: "validation"
+captured_at: "2026-06-14T07:10:48.723837048+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+target:
+  kind: "issue"
+  id: "atelier-xbr0"
+  role: "validates"
+follow_up_ids: []
+residual_risks: []
+output: null
+relationships:
+  blocks: []
+  children: []
+  attachments:
+  - kind: "issue"
+    id: "atelier-xbr0"
+    role: "validates"
+  relates: []
+schema: "atelier.evidence"
+schema_version: 1
+status: "pass"
+title: "Mission create help names generated mission sections and states that --body maps to the Intent section; docs/product/work-model.md shows a mission create example with --constraint, --risk, and --validation. Proof: cargo nextest run --test cli_integration -E 'test(test_mission_create_help_names_generated_sections) or test(test_first_class_records_export_rebuild_and_validate)'; cargo fmt -- --check; git diff --check; atelier lint."
+updated_at: "2026-06-14T07:10:51.243667199+00:00"
+---
+
+Mission create help names generated mission sections and states that --body maps to the Intent section; docs/product/work-model.md shows a mission create example with --constraint, --risk, and --validation. Proof: cargo nextest run --test cli_integration -E 'test(test_mission_create_help_names_generated_sections) or test(test_first_class_records_export_rebuild_and_validate)'; cargo fmt -- --check; git diff --check; atelier lint.

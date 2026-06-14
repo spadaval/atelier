@@ -46,7 +46,6 @@ Issues:
   search        Search issue text
   link          Manage typed issue links
   graph         Inspect issue hierarchy and impact
-  note          Add issue activity notes
 
 Missions and planning:
   mission       Create, list, show, status, and update durable missions
@@ -169,7 +168,8 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Issue activity note commands
+    /// Removed generic activity note commands
+    #[command(hide = true)]
     Note {
         #[command(subcommand)]
         action: NoteCommands,
@@ -457,9 +457,17 @@ enum IssueCommands {
         /// Claim this issue for the current agent/user
         #[arg(long, hide = true)]
         claim: bool,
-        /// Append durable notes without opening an editor
-        #[arg(long)]
-        append_notes: Option<String>,
+    },
+
+    /// Add an activity note to an issue
+    Note {
+        /// Issue ID
+        id: String,
+        /// Note text
+        text: String,
+        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
+        #[arg(long, default_value = "note")]
+        kind: String,
     },
 
     /// Close an issue
@@ -654,7 +662,7 @@ enum GraphCommands {
 
 #[derive(Subcommand)]
 enum NoteCommands {
-    /// Add an activity note to a target
+    /// Removed: use record-specific note commands
     Add {
         target_kind: String,
         target_id: String,
@@ -679,15 +687,19 @@ enum MaintenanceCommands {
 
 #[derive(Subcommand)]
 enum MissionCommands {
-    /// Create a mission
+    /// Create a mission with generated Intent, Constraints, Risks, and Validation sections
     Create {
         title: String,
+        /// Intent section text; this does not replace the full mission Markdown body
         #[arg(short, long)]
         body: Option<String>,
+        /// Add one Constraints section bullet; repeat for multiple constraints
         #[arg(long)]
         constraint: Vec<String>,
+        /// Add one Risks section bullet; repeat for multiple risks
         #[arg(long)]
         risk: Vec<String>,
+        /// Add one Validation section bullet; repeat for multiple validation criteria
         #[arg(long)]
         validation: Vec<String>,
     },
@@ -733,6 +745,14 @@ enum MissionCommands {
         risk: Vec<String>,
         #[arg(long)]
         validation: Vec<String>,
+    },
+    /// Add an activity note to a mission
+    Note {
+        id: String,
+        text: String,
+        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
+        #[arg(long, default_value = "note")]
+        kind: String,
     },
     /// Add issue work to a mission
     AddWork { id: String, issue: String },

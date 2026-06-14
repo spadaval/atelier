@@ -1247,6 +1247,20 @@ fn test_mission_help_uses_show_not_view() {
 }
 
 #[test]
+fn test_mission_create_help_names_generated_sections() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "create", "--help"]);
+    assert!(success, "mission create help failed: {stderr}");
+
+    assert!(stdout.contains("generated Intent, Constraints, Risks, and Validation sections"));
+    assert!(stdout
+        .contains("Intent section text; this does not replace the full mission Markdown body"));
+    assert!(stdout.contains("Constraints section bullet"));
+    assert!(stdout.contains("Risks section bullet"));
+    assert!(stdout.contains("Validation section bullet"));
+}
+
+#[test]
 fn test_mission_status_help_exposes_closeout_drilldown() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);

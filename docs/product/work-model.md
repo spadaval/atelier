@@ -201,6 +201,14 @@ Repair CLI workflow rework and validation gaps.
 The abbreviated readable shape keeps the mission content where reviewers can see
 it and keeps relationships typed:
 
+```bash
+atelier mission create "Repair CLI workflow rework and validation gaps" \
+  --body "Repair the CLI workflow and validation gaps." \
+  --constraint "Use sectioned issue Markdown." \
+  --risk "Large rework can sprawl." \
+  --validation "Closeout requires linked work closed and validation evidence attached."
+```
+
 ```markdown
 ---
 id: "atelier-tcmr"

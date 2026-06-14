@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Clarify mission create section semantics in help"
-updated_at: "2026-06-14T03:51:21.428697688+00:00"
+updated_at: "2026-06-14T07:11:02.787837052+00:00"
 ---
 
 ## Description
