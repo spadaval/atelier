@@ -4,6 +4,7 @@ id: "atelier-wj05"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "refactor"
 - "workflow"
 priority: "P2"
@@ -14,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T00:16:50.020146279+00:00"
+status: "done"
 title: "Split workflow policy parser and validation hotspots"
-updated_at: "2026-06-13T23:10:38.230151438+00:00"
+updated_at: "2026-06-14T00:16:50.020146279+00:00"
 ---
 
 ## Description

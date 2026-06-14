@@ -890,120 +890,191 @@ fn parse_workflows(
     }
     let mut workflows = BTreeMap::new();
     for (key, value) in mapping {
-        let Some(name) = key.as_str() else {
+        let Some(workflow_name) = key.as_str() else {
             return Err(policy_error(
                 "workflow_config_invalid_workflow",
                 display_path,
                 "workflow names must be strings",
             ));
         };
-        ensure_identifier(
-            name,
-            display_path,
-            &format!("workflows.{}", name),
-            "workflow_config_invalid_workflow",
-            "workflow names",
-        )?;
-        let raw = deserialize_entry::<WorkflowDefinitionRaw>(
-            value,
-            display_path,
-            &format!("workflows.{}", name),
-            "workflow_config_invalid_workflow",
-        )?;
-        if raw.done_statuses.is_empty() {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_workflow",
-                display_path,
-                format!("workflows.{}.done_statuses", name),
-                "workflow done_statuses must contain at least one terminal status",
-            ));
-        }
-        if raw.transitions.is_empty() {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_workflow",
-                display_path,
-                format!("workflows.{}.transitions", name),
-                "workflow transitions must contain at least one transition",
-            ));
-        }
-
-        let mut transitions = BTreeMap::new();
-        for (transition_key, transition_value) in &raw.transitions {
-            let Some(transition_name) = transition_key.as_str() else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_transition",
-                    display_path,
-                    format!("workflows.{}.transitions", name),
-                    "transition names must be strings",
-                ));
-            };
-            ensure_identifier(
-                transition_name,
-                display_path,
-                &format!("workflows.{}.transitions.{}", name, transition_name),
-                "workflow_config_invalid_transition",
-                "transition names",
-            )?;
-            let transition_raw = deserialize_entry::<TransitionDefinitionRaw>(
-                transition_value,
-                display_path,
-                &format!("workflows.{}.transitions.{}", name, transition_name),
-                "workflow_config_invalid_transition",
-            )?;
-            let from = match transition_raw.from {
-                StatusSelectorRaw::One(status) => vec![status],
-                StatusSelectorRaw::Many(statuses) if !statuses.is_empty() => statuses,
-                StatusSelectorRaw::Many(_) => {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_transition",
-                        display_path,
-                        format!("workflows.{}.transitions.{}.from", name, transition_name),
-                        "transition from must be a status name or a non-empty list of status names",
-                    ));
-                }
-            };
-            for required_field in &transition_raw.required_fields {
-                if !ALLOWED_REQUIRED_FIELDS.contains(&required_field.as_str()) {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_transition",
-                        display_path,
-                        format!(
-                            "workflows.{}.transitions.{}.required_fields",
-                            name, transition_name
-                        ),
-                        format!(
-                            "unsupported required field '{}'; expected {}",
-                            required_field,
-                            ALLOWED_REQUIRED_FIELDS.join(", ")
-                        ),
-                    ));
-                }
-            }
-            transitions.insert(
-                transition_name.to_string(),
-                TransitionDefinition {
-                    from,
-                    to: transition_raw.to,
-                    required_fields: transition_raw.required_fields,
-                    validators: transition_raw.validators,
-                    guidance: transition_raw.guidance,
-                },
-            );
-        }
-
         workflows.insert(
-            name.to_string(),
-            WorkflowDefinition {
-                initial_status: raw.initial_status,
-                done_statuses: raw.done_statuses,
-                transitions,
-            },
+            workflow_name.to_string(),
+            parse_workflow_definition(workflow_name, value, display_path)?,
         );
     }
     Ok(workflows)
 }
 
+fn parse_workflow_definition(
+    workflow_name: &str,
+    value: &Value,
+    display_path: &str,
+) -> Result<WorkflowDefinition> {
+    let workflow_field = format!("workflows.{}", workflow_name);
+    ensure_identifier(
+        workflow_name,
+        display_path,
+        &workflow_field,
+        "workflow_config_invalid_workflow",
+        "workflow names",
+    )?;
+    let raw = deserialize_entry::<WorkflowDefinitionRaw>(
+        value,
+        display_path,
+        &workflow_field,
+        "workflow_config_invalid_workflow",
+    )?;
+    validate_workflow_shape(workflow_name, &raw, display_path)?;
+    let transitions = parse_transitions(workflow_name, &raw.transitions, display_path)?;
+
+    Ok(WorkflowDefinition {
+        initial_status: raw.initial_status,
+        done_statuses: raw.done_statuses,
+        transitions,
+    })
+}
+
+fn validate_workflow_shape(
+    workflow_name: &str,
+    raw: &WorkflowDefinitionRaw,
+    display_path: &str,
+) -> Result<()> {
+    if raw.done_statuses.is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_workflow",
+            display_path,
+            format!("workflows.{}.done_statuses", workflow_name),
+            "workflow done_statuses must contain at least one terminal status",
+        ));
+    }
+    if raw.transitions.is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_workflow",
+            display_path,
+            format!("workflows.{}.transitions", workflow_name),
+            "workflow transitions must contain at least one transition",
+        ));
+    }
+    Ok(())
+}
+
+fn parse_transitions(
+    workflow_name: &str,
+    mapping: &Mapping,
+    display_path: &str,
+) -> Result<BTreeMap<String, TransitionDefinition>> {
+    let mut transitions = BTreeMap::new();
+    for (key, value) in mapping {
+        let Some(transition_name) = key.as_str() else {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_transition",
+                display_path,
+                format!("workflows.{}.transitions", workflow_name),
+                "transition names must be strings",
+            ));
+        };
+        transitions.insert(
+            transition_name.to_string(),
+            parse_transition_definition(workflow_name, transition_name, value, display_path)?,
+        );
+    }
+    Ok(transitions)
+}
+
+fn parse_transition_definition(
+    workflow_name: &str,
+    transition_name: &str,
+    value: &Value,
+    display_path: &str,
+) -> Result<TransitionDefinition> {
+    let transition_field = format!(
+        "workflows.{}.transitions.{}",
+        workflow_name, transition_name
+    );
+    ensure_identifier(
+        transition_name,
+        display_path,
+        &transition_field,
+        "workflow_config_invalid_transition",
+        "transition names",
+    )?;
+    let raw = deserialize_entry::<TransitionDefinitionRaw>(
+        value,
+        display_path,
+        &transition_field,
+        "workflow_config_invalid_transition",
+    )?;
+    let from = parse_transition_from(workflow_name, transition_name, raw.from, display_path)?;
+    validate_required_fields(
+        workflow_name,
+        transition_name,
+        &raw.required_fields,
+        display_path,
+    )?;
+
+    Ok(TransitionDefinition {
+        from,
+        to: raw.to,
+        required_fields: raw.required_fields,
+        validators: raw.validators,
+        guidance: raw.guidance,
+    })
+}
+
+fn parse_transition_from(
+    workflow_name: &str,
+    transition_name: &str,
+    from: StatusSelectorRaw,
+    display_path: &str,
+) -> Result<Vec<String>> {
+    match from {
+        StatusSelectorRaw::One(status) => Ok(vec![status]),
+        StatusSelectorRaw::Many(statuses) if !statuses.is_empty() => Ok(statuses),
+        StatusSelectorRaw::Many(_) => Err(policy_error_with_field(
+            "workflow_config_invalid_transition",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.from",
+                workflow_name, transition_name
+            ),
+            "transition from must be a status name or a non-empty list of status names",
+        )),
+    }
+}
+
+fn validate_required_fields(
+    workflow_name: &str,
+    transition_name: &str,
+    required_fields: &[String],
+    display_path: &str,
+) -> Result<()> {
+    for required_field in required_fields {
+        if !ALLOWED_REQUIRED_FIELDS.contains(&required_field.as_str()) {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_transition",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.required_fields",
+                    workflow_name, transition_name
+                ),
+                format!(
+                    "unsupported required field '{}'; expected {}",
+                    required_field,
+                    ALLOWED_REQUIRED_FIELDS.join(", ")
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_policy(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
+    validate_issue_type_mappings(policy, display_path)?;
+    validate_workflows(policy, display_path)?;
+    Ok(())
+}
+
+fn validate_issue_type_mappings(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
     for (issue_type, workflow_name) in &policy.issue_types {
         if !policy.workflows.contains_key(workflow_name) {
             return Err(policy_error_with_reference(
@@ -1018,114 +1089,190 @@ fn validate_policy(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
             ));
         }
     }
+    Ok(())
+}
 
+fn validate_workflows(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
     for (workflow_name, workflow) in &policy.workflows {
+        validate_workflow_statuses(policy, workflow_name, workflow, display_path)?;
+        validate_workflow_transitions(policy, workflow_name, workflow, display_path)?;
+    }
+    Ok(())
+}
+
+fn validate_workflow_statuses(
+    policy: &WorkflowPolicy,
+    workflow_name: &str,
+    workflow: &WorkflowDefinition,
+    display_path: &str,
+) -> Result<()> {
+    ensure_known_status(
+        &policy.statuses,
+        &workflow.initial_status,
+        display_path,
+        &format!("workflows.{}.initial_status", workflow_name),
+    )?;
+    if workflow.done_statuses.contains(&workflow.initial_status) {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_workflow",
+            display_path,
+            format!("workflows.{}.initial_status", workflow_name),
+            format!(
+                "workflow '{}' initial_status '{}' cannot also be terminal",
+                workflow_name, workflow.initial_status
+            ),
+        ));
+    }
+    for done_status in &workflow.done_statuses {
+        ensure_identifier(
+            done_status,
+            display_path,
+            &format!("workflows.{}.done_statuses", workflow_name),
+            "workflow_config_invalid_workflow",
+            "workflow terminal status names",
+        )?;
+        ensure_terminal_status(policy, workflow_name, done_status, display_path)?;
+    }
+    Ok(())
+}
+
+fn ensure_terminal_status(
+    policy: &WorkflowPolicy,
+    workflow_name: &str,
+    done_status: &str,
+    display_path: &str,
+) -> Result<()> {
+    ensure_known_status(
+        &policy.statuses,
+        done_status,
+        display_path,
+        &format!("workflows.{}.done_statuses", workflow_name),
+    )?;
+    let category = &policy.statuses[done_status].category;
+    if category != "done" {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_workflow",
+            display_path,
+            format!("workflows.{}.done_statuses", workflow_name),
+            format!(
+                "workflow '{}' terminal status '{}' must use category 'done', found '{}'",
+                workflow_name, done_status, category
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_workflow_transitions(
+    policy: &WorkflowPolicy,
+    workflow_name: &str,
+    workflow: &WorkflowDefinition,
+    display_path: &str,
+) -> Result<()> {
+    for (transition_name, transition) in &workflow.transitions {
+        validate_transition_statuses(
+            policy,
+            workflow_name,
+            workflow,
+            transition_name,
+            transition,
+            display_path,
+        )?;
+        validate_transition_references(
+            policy,
+            workflow_name,
+            transition_name,
+            transition,
+            display_path,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_transition_statuses(
+    policy: &WorkflowPolicy,
+    workflow_name: &str,
+    workflow: &WorkflowDefinition,
+    transition_name: &str,
+    transition: &TransitionDefinition,
+    display_path: &str,
+) -> Result<()> {
+    ensure_known_status(
+        &policy.statuses,
+        &transition.to,
+        display_path,
+        &format!(
+            "workflows.{}.transitions.{}.to",
+            workflow_name, transition_name
+        ),
+    )?;
+    for from_status in &transition.from {
         ensure_known_status(
             &policy.statuses,
-            &workflow.initial_status,
+            from_status,
             display_path,
-            &format!("workflows.{}.initial_status", workflow_name),
+            &format!(
+                "workflows.{}.transitions.{}.from",
+                workflow_name, transition_name
+            ),
         )?;
-        if workflow.done_statuses.contains(&workflow.initial_status) {
+        if workflow.done_statuses.contains(from_status) {
             return Err(policy_error_with_field(
-                "workflow_config_invalid_workflow",
+                "workflow_config_invalid_transition",
                 display_path,
-                format!("workflows.{}.initial_status", workflow_name),
                 format!(
-                    "workflow '{}' initial_status '{}' cannot also be terminal",
-                    workflow_name, workflow.initial_status
+                    "workflows.{}.transitions.{}.from",
+                    workflow_name, transition_name
+                ),
+                format!(
+                    "transition '{}' in workflow '{}' cannot leave terminal status '{}'",
+                    transition_name, workflow_name, from_status
                 ),
             ));
         }
-        for done_status in &workflow.done_statuses {
-            ensure_known_status(
-                &policy.statuses,
-                done_status,
+    }
+    Ok(())
+}
+
+fn validate_transition_references(
+    policy: &WorkflowPolicy,
+    workflow_name: &str,
+    transition_name: &str,
+    transition: &TransitionDefinition,
+    display_path: &str,
+) -> Result<()> {
+    for validator_name in &transition.validators {
+        if !policy.validators.contains_key(validator_name) {
+            return Err(policy_error_with_reference(
+                "workflow_config_unknown_reference",
                 display_path,
-                &format!("workflows.{}.done_statuses", workflow_name),
-            )?;
-            let category = &policy.statuses[done_status].category;
-            if category != "done" {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_workflow",
-                    display_path,
-                    format!("workflows.{}.done_statuses", workflow_name),
-                    format!(
-                        "workflow '{}' terminal status '{}' must use category 'done', found '{}'",
-                        workflow_name, done_status, category
-                    ),
-                ));
-            }
-        }
-        for (transition_name, transition) in &workflow.transitions {
-            ensure_known_status(
-                &policy.statuses,
-                &transition.to,
-                display_path,
-                &format!(
-                    "workflows.{}.transitions.{}.to",
+                format!(
+                    "workflows.{}.transitions.{}.validators",
                     workflow_name, transition_name
                 ),
-            )?;
-            for from_status in &transition.from {
-                ensure_known_status(
-                    &policy.statuses,
-                    from_status,
-                    display_path,
-                    &format!(
-                        "workflows.{}.transitions.{}.from",
-                        workflow_name, transition_name
-                    ),
-                )?;
-                if workflow.done_statuses.contains(from_status) {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_transition",
-                        display_path,
-                        format!(
-                            "workflows.{}.transitions.{}.from",
-                            workflow_name, transition_name
-                        ),
-                        format!(
-                            "transition '{}' in workflow '{}' cannot leave terminal status '{}'",
-                            transition_name, workflow_name, from_status
-                        ),
-                    ));
-                }
-            }
-            for validator_name in &transition.validators {
-                if !policy.validators.contains_key(validator_name) {
-                    return Err(policy_error_with_reference(
-                        "workflow_config_unknown_reference",
-                        display_path,
-                        format!(
-                            "workflows.{}.transitions.{}.validators",
-                            workflow_name, transition_name
-                        ),
-                        validator_name,
-                        format!(
-                            "transition '{}' in workflow '{}' references undefined validator '{}'",
-                            transition_name, workflow_name, validator_name
-                        ),
-                    ));
-                }
-            }
-            for guidance_name in &transition.guidance {
-                if !policy.guidance_templates.contains_key(guidance_name) {
-                    return Err(policy_error_with_reference(
-                        "workflow_config_unknown_reference",
-                        display_path,
-                        format!(
-                            "workflows.{}.transitions.{}.guidance",
-                            workflow_name, transition_name
-                        ),
-                        guidance_name,
-                        format!(
-                            "transition '{}' in workflow '{}' references undefined guidance template '{}'",
-                            transition_name, workflow_name, guidance_name
-                        ),
-                    ));
-                }
-            }
+                validator_name,
+                format!(
+                    "transition '{}' in workflow '{}' references undefined validator '{}'",
+                    transition_name, workflow_name, validator_name
+                ),
+            ));
+        }
+    }
+    for guidance_name in &transition.guidance {
+        if !policy.guidance_templates.contains_key(guidance_name) {
+            return Err(policy_error_with_reference(
+                "workflow_config_unknown_reference",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.guidance",
+                    workflow_name, transition_name
+                ),
+                guidance_name,
+                format!(
+                    "transition '{}' in workflow '{}' references undefined guidance template '{}'",
+                    transition_name, workflow_name, guidance_name
+                ),
+            ));
         }
     }
     Ok(())
