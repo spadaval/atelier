@@ -220,7 +220,7 @@ than "make mission status faster."
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export check, and degraded-state or recovery transcript when relevant. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, closeout, mission orchestration, or future worker behavior. |
 | Epic closeout | Closeout issue maps each epic Outcome line to child work and evidence, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured closeout check, and records residual risks. | First-class evidence attached to the closeout issue; the epic derives readiness from that linked closeout plus child evidence. | Always required, performed by a closeout or validation worker that did not implement the bulk of the children. |
-| Mission closeout | Contract audit maps each mission validation expectation and linked epic outcome to evidence; run mission status, workflow validation, lint, doctor, export, docs/help parity, and stale-test inventory checks. | First-class evidence attached to the mission closeout issue; a direct mission link is retained only when the closeout workflow explicitly mirrors the same artifact for legacy closeout gates. | Always required, including an adversarial validation pass by a worker that did not implement the mission slices. |
+| Mission closeout | Explicit validation or closeout work maps each mission validation expectation and linked epic outcome to evidence when parent-level judgment is required; run mission status, workflow validation, lint, doctor, export, docs/help parity, and stale-test inventory checks. | First-class evidence attached to the mission validation or closeout issue; a direct mission link is retained only when the closeout workflow explicitly mirrors the same artifact for legacy closeout gates. | Always required, including an adversarial validation pass by a worker that did not implement the mission slices. |
 
 Unavailable optional tooling should not be converted into an implicit failure.
 When a repo-supported tool has an install path, install it and rerun before
@@ -340,15 +340,17 @@ Rust hazard scan classifications live in
 `docs/architecture/quality/rust-quality-hazard-scans.md`.
 
 Workflow and closeout validation failures are command failures by default.
-Mission completion is valid only when all linked work is closed, required
-evidence is attached, configured transition gates pass, docs/help/Agent Factory
-command guidance has no drift, stale obsolete-command tests are explicitly
-owned or deferred, and the Git worktree is clean.
+Mission completion is valid only when all linked work is closed, mission
+blockers are clear, required evidence is attached to accountable child work,
+configured transition gates pass, docs/help/Agent Factory command guidance has
+no drift, stale obsolete-command tests are explicitly owned or deferred, and
+the Git worktree is clean.
 The `validation_criteria_satisfied` closeout gate is Atelier-owned: for mission
-closeout it delegates to `atelier mission audit`, so missing parent coverage,
+closeout it checks configured workflow approval on explicit validation or
+closeout work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through
-mission status, audit, and closeout failure output rather than through Agent
-Factory prose alone.
+mission status, validation issue output, and closeout failure output rather
+than through Agent Factory prose alone.
 
 ## Scenario Proof
 

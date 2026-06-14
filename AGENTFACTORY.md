@@ -124,12 +124,12 @@ restating the full command or policy contract here.
 | Normal command purposes, public command families, and removed-command policy | `atelier --help`, `docs/product/cli-surface.md` |
 | Workflow transitions, policy diagnostics, and command-specific readiness | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition <id> --options` |
 | Mission and work selection, blocker explanation, proof gaps, and next actions | `atelier status`, `atelier mission status [<id>]`, `atelier mission show <id>` |
-| Closeout drill-down and parent-proof mapping | `atelier mission audit <id>`, `docs/architecture/quality/validation.md` |
+| Closeout drill-down and parent-proof mapping | `atelier mission status [<id>]`, explicit validation or closeout issue evidence, `docs/architecture/quality/validation.md` |
 | Evidence routing, proof placement, and independent-validation triggers | `docs/architecture/quality/validation.md`, `atelier evidence record --target issue/<id> ...` |
 | Tracker health, derived-state freshness, and runtime diagnostics | `atelier lint`, `atelier doctor`, `atelier status`, `atelier mission status` |
 | Onboarding and recovery signposts for normal tracker work | `atelier prime`, `atelier status`, `docs/product/cli-surface.md` |
 | Validation command recipes and shell hygiene | `docs/architecture/quality/validation.md` |
-| Validation and handoff check selection | `docs/architecture/quality/validation.md`, `atelier lint`, `atelier issue transition <id> --options`, issue Evidence sections, mission closeout criteria |
+| Validation and handoff check selection | `docs/architecture/quality/validation.md`, `atelier lint`, `atelier issue transition <id> --options`, issue Evidence sections, explicit mission validation or closeout work |
 
 Do not preserve old command names, status aliases, output shims, or fallback
 readers unless a human explicitly asks for a compatibility window. Public
@@ -142,7 +142,8 @@ category aliases such as `in_progress`.
 ## Validation Routing
 
 Use `docs/architecture/quality/validation.md`, the assigned issue Evidence
-section, and mission closeout criteria to choose checks for the current slice.
+section, and explicit mission validation or closeout work to choose checks for
+the current slice.
 The binding may name the readiness entrypoint, but the durable check contract
 belongs to Atelier-owned validation guidance, product docs, workflow policy,
 and command help.

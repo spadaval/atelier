@@ -74,11 +74,13 @@ not validate the claim alone: migrations, public command or API contracts,
 docs/help parity, stale-test risk, cross-cutting workflow or persistence
 behavior, Agent Factory process changes, and all epic or mission closeouts.
 
-Missions are objectives, not work logs. A mission may retain direct evidence
-links only for legacy imports, migration notes, or a final closeout artifact
-whose accountable owner is also a linked closeout issue. Normal mission
-readiness is computed from closed linked work, attached evidence on that work,
-and the closeout audit that maps parent validation lines to the child proof.
+Missions are coordination shells by default, not work logs. A mission may
+retain direct evidence links only for legacy imports, migration notes, or an
+explicit mirrored closeout artifact whose accountable owner is also linked
+issue-shaped validation or closeout work. Normal mission readiness is computed
+from closed linked work, clear mission blockers, configured health gates, and
+workflow approval on accountable child work; mission `Validation` prose guides
+human closeout and validation but is not parsed as a coded evidence contract.
 
 The detailed routing table lives in
 [Validation](../architecture/quality/validation.md). Product docs should point
@@ -95,7 +97,7 @@ Choose the proof surface by the claim being closed:
 | Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test --result pass -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
 | Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent closeout should map the parent claim to the independent validation issue and its evidence ID. |
-| Epic or mission closeout | Closeout issue or closeout evidence that maps parent claims to child proof | Record evidence on the closeout issue and, when explicitly needed, mirror the final closeout artifact to the mission. | Mission readiness comes from closed linked work, attached proof on accountable work, and the closeout audit. |
+| Epic or mission closeout | Validation or closeout issue that maps parent claims to child proof | Record evidence on the validation or closeout issue and, when explicitly needed, mirror the final closeout artifact to the mission. | Mission readiness comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
 
 Example for ordinary documentation work:
 
@@ -114,7 +116,7 @@ atelier evidence record --target issue/atelier-zrqa --kind test --result pass --
 Example for independent closeout proof:
 
 ```text
-atelier evidence record --target issue/<closeout-issue-id> --kind validation --result pass "mission audit maps each validation line to closed linked work and evidence IDs"
+atelier evidence record --target issue/<validation-issue-id> --kind validation --result pass "mission closeout validation maps mission expectations to closed linked work and evidence IDs"
 atelier mission close <mission-id> --reason "linked work closed and closeout proof attached"
 ```
 
@@ -131,11 +133,13 @@ residual risks plus follow-up IDs. It may use stable claim anchors for
 automation-heavy, high-risk, or repeated audit work, but ordinary issues should
 not need line-level claim plumbing.
 
-A mission closeout summary maps mission validation expectations and linked epic
-outcomes to implementation, review, validation, and closeout issues. The
-mission derives readiness from closed linked work, coverage classifications,
-attached evidence, current tracker health, and independent closeout validation.
-Direct mission evidence is not the normal coverage source.
+A mission closeout summary, when the mission needs one, lives on explicit
+validation or closeout issue-shaped work. It maps mission validation
+expectations and linked epic outcomes to implementation, review, validation,
+and closeout issues. The mission derives readiness from closed linked work,
+clear blockers, configured health gates, coverage classifications on that
+accountable work, and independent closeout validation when configured. Direct
+mission evidence is not the normal coverage source.
 
 Existing prose evidence migrates as structured evidence with the original text
 as `summary`, best-effort `kind` and `result`, the linked issue as `targets`,

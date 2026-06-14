@@ -233,7 +233,8 @@ State-specific next actions are part of the command contract:
 - `blocked`: show the open blocker records first and point to the specific
   blocker or dependent issue to resolve.
 - `close-ready`: show the closeout command only after linked work is closed,
-  required proof is attached to accountable work, the contract audit passes,
+  required proof is attached to accountable work, explicit validation or
+  closeout work has approved any parent-level judgment required by the mission,
   health gates are current, and the worktree is clean:
   `atelier mission close <id> --reason "..."`.
 - `closed`: show the close reason, closeout evidence or closeout issue, and
@@ -242,14 +243,14 @@ State-specific next actions are part of the command contract:
 `atelier mission audit <id>` is not a normal daily status command. Its fate is
 to remain a closeout drill-down and, where practical, become the verbose
 closeout section behind `atelier mission status --closeout` or equivalent. The
-audit maps authored mission validation expectations and linked epic outcomes to
-closed work, blockers, and evidence on accountable implementation, review,
-validation, and closeout issues. Raw workflow validator names are diagnostic
-detail; normal closeout output names the operator-facing blocker class and the
-next domain command. `atelier lint` owns committed workflow/config validity,
-`issue transition --options` owns issue-level readiness inspection, and
-`mission status` plus `mission audit` own mission closeout inspection; removed
-policy-debug commands do not replace them. Fast docs/help drift guards for
+audit is advisory orientation unless a workflow explicitly requires it; parent
+judgment that can block closeout belongs to linked validation or closeout work
+with attached evidence and workflow approval. Raw workflow validator names are
+diagnostic detail; normal closeout output names the operator-facing blocker
+class and the next domain command. `atelier lint` owns committed
+workflow/config validity, `issue transition --options` owns issue-level
+readiness inspection, and `mission status` owns mission closeout inspection;
+removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, `AGENTFACTORY.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier lint` or an explicitly
 named development-only diagnostic, not a required normal workflow command.
@@ -313,10 +314,12 @@ Worktree helpers expose scan-friendly JSON status, create/remove associated Git
 worktrees, and prepare local runtime state in new worktrees.
 Workflow-defined hooks are deferred in v1 and are not part of the normal
 worktree helper contract.
-Mission closeout is ready only when all linked work is closed, required proof is
-attached to the accountable implementation, review, validation, or closeout
-work, the contract audit passes, linked issue records are parseable, docs/help
-and ignored-test review gates are current, and the Git worktree is clean.
+Mission closeout is ready only when all linked work is closed, mission blockers
+are clear, required proof is attached to the accountable implementation,
+review, validation, or closeout work, configured validation or closeout work has
+approved any parent-level judgment, linked issue records are parseable,
+docs/help and ignored-test review gates are current, and the Git worktree is
+clean.
 
 ## Cache Transparency
 
