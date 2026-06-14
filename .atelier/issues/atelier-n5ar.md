@@ -28,9 +28,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:29:37.121444245+00:00"
+status: "done"
 title: "Epic: Document the transcript-derived operator model"
-updated_at: "2026-06-14T08:29:28.117661353+00:00"
+updated_at: "2026-06-14T08:29:37.121444245+00:00"
 ---
 
 ## Description
