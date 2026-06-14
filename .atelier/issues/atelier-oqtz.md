@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:33:07.361955145+00:00"
+status: "done"
 title: "Improve stale projection and invalid canonical recovery messages"
-updated_at: "2026-06-14T07:32:58.007271561+00:00"
+updated_at: "2026-06-14T07:33:07.361955145+00:00"
 ---
 
 ## Description
