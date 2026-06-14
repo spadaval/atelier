@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define diagnostics JSON boundary for operator workflows"
-updated_at: "2026-06-14T04:03:19.642443618+00:00"
+updated_at: "2026-06-14T07:35:25.432748226+00:00"
 ---
 
 ## Description
