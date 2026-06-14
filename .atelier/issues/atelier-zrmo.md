@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Make issue transition --options read-only"
-updated_at: "2026-06-14T16:50:44.569915639+00:00"
+updated_at: "2026-06-14T16:57:55.161326812+00:00"
 ---
 
 ## Description
