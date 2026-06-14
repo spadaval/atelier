@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Make projection rebuild lock-aware and atomic"
-updated_at: "2026-06-14T02:52:43.165440069+00:00"
+updated_at: "2026-06-14T07:24:16.127680358+00:00"
 ---
 
 ## Description

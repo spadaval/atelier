@@ -1,9 +1,12 @@
 use anyhow::{anyhow, bail, Context, Result};
+use fs2::FileExt;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::activity::IssueActivity;
 use crate::db::Database;
@@ -32,6 +35,7 @@ struct RebuildProjection {
 }
 
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
+    let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild, None)?;
     eprintln!("Rebuilt {} from {}", db_path.display(), state_dir.display());
@@ -39,6 +43,7 @@ pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
 }
 
 pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -> Result<()> {
+    let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild, Some(db_path))?;
     eprintln!(
@@ -47,6 +52,90 @@ pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -
         state_dir.display()
     );
     Ok(())
+}
+
+struct ProjectionRebuildLock {
+    file: File,
+}
+
+impl ProjectionRebuildLock {
+    fn acquire(db_path: &Path) -> Result<Self> {
+        let path = rebuild_lock_path(db_path)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow!("Cannot determine parent directory for {}", path.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create {}", parent.display()))?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&path)
+            .with_context(|| {
+                format!("Failed to open projection rebuild lock {}", path.display())
+            })?;
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match file.try_lock_exclusive() {
+                Ok(()) => {
+                    file.set_len(0).with_context(|| {
+                        format!(
+                            "Failed to refresh projection rebuild lock {}",
+                            path.display()
+                        )
+                    })?;
+                    writeln!(
+                        file,
+                        "pid={}\nstarted_at={}",
+                        process::id(),
+                        chrono::Utc::now().to_rfc3339()
+                    )
+                    .with_context(|| {
+                        format!("Failed to write projection rebuild lock {}", path.display())
+                    })?;
+                    return Ok(Self { file });
+                }
+                Err(error) if is_lock_contention(&error) && Instant::now() < deadline => {
+                    thread::sleep(Duration::from_millis(25));
+                }
+                Err(error) => {
+                    return Err(error).with_context(|| {
+                        format!(
+                            "Projection rebuild is already running for {}; retry the command after the current rebuild finishes. \
+                             If no Atelier command appears to be running, inspect the rebuild lock file {} before retrying.",
+                            db_path.display(),
+                            path.display()
+                        )
+                    });
+                }
+            }
+        }
+    }
+}
+
+impl Drop for ProjectionRebuildLock {
+    fn drop(&mut self) {
+        if let Err(error) = self.file.unlock() {
+            tracing::warn!("failed to unlock projection rebuild lock: {}", error);
+        }
+    }
+}
+
+fn is_lock_contention(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::AlreadyExists
+    )
+}
+
+fn rebuild_lock_path(db_path: &Path) -> Result<PathBuf> {
+    let file_name = db_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("Database path has no file name: {}", db_path.display()))?;
+    Ok(db_path.with_file_name(format!(".{file_name}.rebuild.lock")))
 }
 
 pub(crate) fn validate_canonical_state(state_dir: &Path) -> Result<()> {

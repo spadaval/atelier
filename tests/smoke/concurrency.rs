@@ -149,3 +149,48 @@ fn test_concurrent_mixed_operations() {
     let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }
+
+#[test]
+fn test_concurrent_rebuilds_and_reads_are_serialized() {
+    let h = SmokeHarness::new();
+    h.run_ok(&["issue", "create", "Serialized rebuild source"]);
+    let issue_id = h.issue_id(1);
+    h.run_ok(&["export"]);
+    h.edit_canonical_issue(&issue_id, |markdown| {
+        markdown.replace("Serialized rebuild source", "Serialized rebuild changed")
+    });
+
+    let bin = h.atelier_bin.clone();
+    let dir = h.temp_dir.path().to_path_buf();
+    let mut handles = Vec::new();
+    for index in 0..16 {
+        let bin = bin.clone();
+        let dir = dir.clone();
+        let args: Vec<&'static str> = if index % 2 == 0 {
+            vec!["rebuild"]
+        } else {
+            vec!["issue", "list", "--status", "all"]
+        };
+        handles.push(thread::spawn(move || {
+            Command::new(&bin)
+                .current_dir(&dir)
+                .args(args)
+                .output()
+                .expect("failed to execute atelier")
+        }));
+    }
+
+    for handle in handles {
+        let output = handle.join().expect("thread panicked");
+        assert!(
+            output.status.success(),
+            "concurrent rebuild/read failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let result = h.run_ok(&["issue", "list", "--status", "all"]);
+    assert!(result.stdout.contains("Serialized rebuild changed"));
+    h.run_ok(&["export", "--check"]);
+}

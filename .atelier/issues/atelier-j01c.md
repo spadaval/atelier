@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Auto-refresh projection caches before operator-facing commands"
-updated_at: "2026-06-14T03:47:15.649260323+00:00"
+updated_at: "2026-06-14T07:24:07.471517786+00:00"
 ---
 
 ## Description

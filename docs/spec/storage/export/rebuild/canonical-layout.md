@@ -631,6 +631,13 @@ records, and normal durable writes target `.atelier/` directly.
 in a fresh checkout. Backup export formats are no longer command surfaces;
 predecessor imports use `atelier import-beads`.
 
+Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
+write to a unique temporary database before atomically replacing `state.db`.
+Concurrent rebuilds and projection-backed reads therefore serialize refresh
+instead of observing a partial database or colliding on a fixed temporary file.
+If lock acquisition cannot complete because another Atelier command is
+rebuilding, the command reports a retry/recovery message naming the lock file.
+
 Rebuild also recreates local `ProjectionIndex` source metadata in SQLite. The
 metadata records canonical file paths, size and modified-time hints, and content
 hashes so query commands can detect stale projections before reading SQLite.
