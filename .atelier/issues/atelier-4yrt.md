@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:20:34.726869210+00:00"
+status: "done"
 title: "Align root CLI identity and command hierarchy with Zen"
-updated_at: "2026-06-14T08:15:50.610183028+00:00"
+updated_at: "2026-06-14T08:20:34.726869210+00:00"
 ---
 
 ## Description
