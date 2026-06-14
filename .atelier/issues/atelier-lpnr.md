@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:23:00.218871469+00:00"
+status: "done"
 title: "Epic: Normalize canonical Markdown and record data"
-updated_at: "2026-06-14T00:22:31.509193536+00:00"
+updated_at: "2026-06-14T00:23:00.218871469+00:00"
 ---
 
 ## Description
