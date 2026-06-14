@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T17:06:30.740592702+00:00"
+status: "done"
 title: "Update command-surface docs for hidden diagnostics without workarounds"
-updated_at: "2026-06-14T17:06:11.751109269+00:00"
+updated_at: "2026-06-14T17:06:30.740592702+00:00"
 ---
 
 ## Description
