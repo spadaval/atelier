@@ -4,6 +4,7 @@ id: "atelier-kpm8"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "stabilization"
 - "tests"
 priority: "P2"
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Consolidate RecordStore-aware integration test fixtures"
-updated_at: "2026-06-13T21:58:03.385736554+00:00"
+updated_at: "2026-06-14T00:18:37.179477279+00:00"
 ---
 
 ## Description
