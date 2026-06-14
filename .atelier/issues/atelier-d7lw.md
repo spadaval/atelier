@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:17:50.431684829+00:00"
+status: "done"
 title: "Thin main command routing and oversized command handlers"
-updated_at: "2026-06-14T00:17:34.174985397+00:00"
+updated_at: "2026-06-14T00:17:50.431684829+00:00"
 ---
 
 ## Description
