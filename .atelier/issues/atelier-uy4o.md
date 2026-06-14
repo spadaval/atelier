@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:11:31.390615165+00:00"
+status: "done"
 title: "Enforce one active issue per worktree"
-updated_at: "2026-06-14T08:05:20.573480473+00:00"
+updated_at: "2026-06-14T08:11:31.390615165+00:00"
 ---
 
 ## Description
