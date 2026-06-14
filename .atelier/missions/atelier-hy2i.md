@@ -9,6 +9,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4p7q"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-a625"
     type: "advances"
   - kind: "issue"
@@ -23,14 +26,11 @@ relationships:
   - kind: "issue"
     id: "atelier-zah8"
     type: "advances"
-  - kind: "issue"
-    id: "atelier-4p7q"
-    type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Turn Codex mission log insights into agent operability improvements"
-updated_at: "2026-06-14T02:53:36.538227701+00:00"
+updated_at: "2026-06-14T08:32:07.131474160+00:00"
 ---
 
 ## Intent
@@ -55,3 +55,7 @@ Turn the 2026-06-14 Codex mission-log findings into durable improvements across 
 - Agent Factory guidance includes stale-state, command-surface, shell, checkout, and proof safeguards.
 - Focused CLI tests prove corrective errors, stale-state recovery, worktree behavior, and closeout proof matching where implemented.
 - Mission closeout records atelier lint, atelier doctor, relevant focused tests, and git diff --check proof; low-level export/rebuild diagnostics are recorded only when a failure specifically requires them.
+
+## Closeout Notes
+
+- Close reason: All linked epics and closeout work are done; mission audit covers all validation lines and epic outcomes with evidence; lint, doctor, focused tests, docs/help drift, and git diff checks passed.
