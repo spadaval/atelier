@@ -28,8 +28,7 @@ that can be implemented and validated.
 ## Interfaces
 
 - [Development Setup](development-setup.md): required tools, fresh-checkout
-  commands, local env/secrets policy, optional integrations, and devcontainer
-  rationale.
+  commands, local env/secrets policy, and devcontainer rationale.
 - [Repository Contribution Policy](repository-contribution.md): contribution
   entry point, GitHub template classification, dependency update automation,
   and tracker-first ownership policy.

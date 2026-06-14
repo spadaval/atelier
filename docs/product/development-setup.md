@@ -59,12 +59,6 @@ secrets out of committed files.
 Diagnostics storage and retention details are defined in
 [Local Command Diagnostics](../architecture/local-command-diagnostics.md).
 
-## Optional Integrations
-
-The repository includes optional integration assets under `resources/`. Core
-tracker setup does not install them automatically. Use `atelier integrations`
-only when you explicitly need one of those tool-specific setups.
-
 `cargo udeps` is not part of required setup. It remains an advisory
 nightly-toolchain cross-check for deeper dependency review when a reviewer asks
 for it.

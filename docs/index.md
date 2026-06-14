@@ -24,8 +24,8 @@
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required
-  tools, Rust toolchain, `cargo-nextest`, optional integrations, local
-  environment/secrets policy, and devcontainer decision.
+  tools, Rust toolchain, `cargo-nextest`, local environment/secrets policy, and
+  devcontainer decision.
 - [docs/product/repository-contribution.md](product/repository-contribution.md):
   repository contribution entry points, GitHub collaboration-file
   classification, and tracker-first ownership policy.

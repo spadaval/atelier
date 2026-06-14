@@ -414,12 +414,15 @@ This example makes the intended trade-off explicit:
 
 ## Diagnostics
 
-Workflow diagnostics stay on supported operator surfaces. Use `atelier workflow
-check` for policy and record-health checks, `atelier issue transition <id>
---options` for transition gate inspection, and `atelier lint`, `atelier doctor`,
-`atelier mission status`, or `atelier mission audit` for closeout and runtime
-health. The previous `atelier workflow validate` diagnostic command is not part
-of the v1 surface.
+Workflow diagnostics stay on supported operator surfaces. Use `atelier lint`
+for committed workflow configuration and canonical record-health checks,
+`atelier issue transition <id> --options` for transition gate inspection, and
+`atelier doctor`, `atelier mission status`, or `atelier mission audit` for
+runtime health and closeout. A separate `workflow check` command is not needed
+for normal operator work; if raw workflow diagnostics exist for development,
+they are advanced debug surfaces and must not be required for ordinary handoff.
+The previous `atelier workflow validate` diagnostic command is not part of the
+v1 surface.
 
 ## Deferred Features
 

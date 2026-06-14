@@ -8,8 +8,10 @@
 - Atelier: the product and live repository tracker: a local-first, agent-native work tracker for
   complex software missions.
 - Beads: the predecessor tracker replaced by Atelier. Beads data was imported
-  and the repository archive was purged; only the external `import-beads`
-  input format remains supported.
+  and the repository archive was purged; external Beads data is migration input,
+  not ongoing Atelier state.
+- Beads migration input: repo-local `.beads/issues.manual.jsonl` data that
+  `atelier init --import-beads` may import when explicitly requested.
 - Canonical record tree: deterministic tracked Markdown files under `.atelier/`
   that can rebuild the local SQLite projection/runtime database.
 - RecordStore: the target component that owns canonical Markdown record reads,
@@ -52,6 +54,8 @@
   to explain the next operator move. Guidance informs; validators decide.
 - Issue: a durable accountability unit. It does not have to map one-to-one to an
   agent run.
+- Blocking relationship: an issue-owned relationship where one issue prevents
+  another issue from being ready.
 - Milestone: a validated intermediate checkpoint state with scope boundaries,
   validation criteria, accepted evidence, and completion state. It is not a
   work container or super-epic.
@@ -63,6 +67,8 @@
 - Plan: durable execution intent that matters beyond ephemeral context.
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
+- Graph: the cross-record relationship shape among missions, issues, blockers,
+  plans, evidence, and other first-class records.
 - Active work: the local runtime association between an agent, an issue, and
   the current branch/worktree for in-progress execution. It is coordination
   state, not the durable workflow status of the issue.
@@ -70,6 +76,8 @@
   completion or changing issue workflow status.
 - SQLite state: fast local projection and runtime state, currently inherited
   from Chainlink and currently living at ignored `.atelier/state.db`.
+- Doctor: an operator health surface that reports whether the repository and
+  local runtime are usable and may perform safe repair when explicitly asked.
 
 ## Ambiguities
 
@@ -79,15 +87,29 @@
   product design.
 - Export/import in the inherited code is backup-oriented. The target
   architecture needs canonical projection and rebuild semantics instead.
+- Export and rebuild are low-level diagnostic mechanics, not normal operator
+  workflow. Cache and projection state should be transparent and repaired by
+  ordinary commands or by an explicit doctor repair path.
+- Beads migration is explicit during setup. `atelier init` may detect the
+  standard repo-local Beads migration input, but import requires an explicit
+  setup option rather than a silent automatic conversion.
+- Doctor repair may change ignored runtime/cache/projection state but must not
+  edit tracked `.atelier/` canonical records.
+- Graph commands should inspect cross-record relationships, including missions
+  and issues. If a view is issue-only, its help should say so explicitly.
 - The canonical-state target is Markdown-first in a single `.atelier/` tree:
   successful durable mutations should write record files through RecordStore,
   then refresh ProjectionIndex. SQLite is not the destination source of truth
   for canonical records.
-- Dependencies should represent actual sequencing. Canonical state groups
-  record relationships under `relationships`: use `blocks` for readiness,
-  `children` for hierarchy and mission work, `attachments` for plans/evidence,
-  and `relates` for peer semantic relationships.
+- Blocking relationships represent issue readiness, not a separate dependency
+  domain. Canonical state groups record relationships under `relationships`:
+  use `blocks` for issue-owned blockers, `children` for hierarchy and mission
+  work, `attachments` for plans/evidence, and `relates` for peer semantic
+  relationships.
 - Missions, milestone checkpoint records, plans, evidence, and runs are target
   first-class concepts, not just labels on issues.
 - Validators belong to workflow policy, not to milestone records. Milestones
   own validation criteria; validators enforce transitions.
+- Durable claim/assignment and active local work are easy to confuse. Until a
+  distinct assignment policy is justified, normal work should use active work
+  rather than a parallel claim system.
