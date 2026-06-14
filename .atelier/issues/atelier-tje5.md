@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:06:56.338067925+00:00"
+status: "done"
 title: "Add Agent Factory safe shell recipes"
-updated_at: "2026-06-14T07:05:38.205033505+00:00"
+updated_at: "2026-06-14T07:06:56.338067925+00:00"
 ---
 
 ## Description
