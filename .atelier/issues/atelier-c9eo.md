@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T16:52:51.052493207+00:00"
+status: "done"
 title: "Define shell-mission proof contract before implementation"
-updated_at: "2026-06-14T16:52:16.460203097+00:00"
+updated_at: "2026-06-14T16:52:51.052493207+00:00"
 ---
 
 ## Description
