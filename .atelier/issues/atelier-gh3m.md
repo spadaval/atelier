@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Fold normal workflow checks into lint and visible status surfaces"
-updated_at: "2026-06-14T03:51:28.546933765+00:00"
+updated_at: "2026-06-14T07:07:14.896694062+00:00"
 ---
 
 ## Description
