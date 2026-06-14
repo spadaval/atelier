@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:06:01.985266447+00:00"
+status: "done"
 title: "Require validation checkout ownership in handoffs"
-updated_at: "2026-06-14T07:05:06.343351426+00:00"
+updated_at: "2026-06-14T07:06:01.985266447+00:00"
 ---
 
 ## Description
