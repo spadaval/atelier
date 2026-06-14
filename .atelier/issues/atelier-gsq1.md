@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add record-specific note commands"
-updated_at: "2026-06-14T05:58:17.150379875+00:00"
+updated_at: "2026-06-14T07:08:22.092293236+00:00"
 ---
 
 ## Description
