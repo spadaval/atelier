@@ -30,7 +30,7 @@ use record_store::RecordStore;
 
 #[derive(Parser)]
 #[command(name = "atelier")]
-#[command(about = "A simple, lean issue tracker CLI")]
+#[command(about = "Mission and proof oriented work coordination for agents")]
 #[command(help_template = "{about-section}\nUsage: {usage}\n\n{after-help}\nOptions:\n{options}")]
 #[command(after_help = "Setup:
   init          Initialize Atelier in the current repository
@@ -60,7 +60,6 @@ Advanced work:
 
 Maintenance:
   maintenance   Run explicit destructive maintenance commands
-  diagnostics   Inspect advanced local-only command diagnostics
   lint          Validate tracker records
   doctor        Check runtime and derived-state health; use --fix for local repair
 
@@ -260,6 +259,7 @@ enum Commands {
     },
 
     /// Advanced local command diagnostics; JSON is local-only telemetry, not workflow state
+    #[command(hide = true)]
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,

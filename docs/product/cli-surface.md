@@ -100,9 +100,13 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
-| `diagnostics` | Inspect local command telemetry for Atelier itself. | Stable local-only diagnostic output for the named probe, currently `slow`; advanced only, never a normal mission or issue next action and never the source of ready-work, blocker, validation, evidence-coverage, or closeout decisions. | Same diagnostic result trimmed to essential rows or counts. | `doctor`, performance follow-up issues, or the owning architecture docs. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
+
+Hidden advanced diagnostics such as `atelier diagnostics slow` may remain
+callable for local performance analysis, but they are not visible root-help
+surfaces and must not appear as normal mission, issue, blocker, evidence, or
+closeout next actions.
 
 ## Operator Jobs
 

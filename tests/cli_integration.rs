@@ -1223,7 +1223,12 @@ fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "root help failed: {stderr}");
-    assert!(stdout.contains("diagnostics   Inspect advanced local-only command diagnostics"));
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("diagnostics ")),
+        "root help should not expose diagnostics:\n{stdout}"
+    );
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["diagnostics", "--help"]);
     assert!(success, "diagnostics help failed: {stderr}");
@@ -1244,6 +1249,7 @@ fn test_top_level_help_only_shows_core_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
     assert!(success, "help failed: {stderr}");
+    assert!(stdout.contains("Mission and proof oriented work coordination for agents"));
 
     for heading in [
         "Setup:",
@@ -1306,6 +1312,12 @@ fn test_top_level_help_only_shows_core_commands() {
             .lines()
             .any(|line| line.trim_start().starts_with("rebuild ")),
         "root help should not present rebuild as a normal operator command:\n{stdout}"
+    );
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("diagnostics ")),
+        "root help should not present diagnostics as a normal operator command:\n{stdout}"
     );
 
     for common in [
