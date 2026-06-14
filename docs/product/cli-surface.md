@@ -105,9 +105,9 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 
 Hidden advanced diagnostics probes may remain callable for local performance
 analysis, but they are not visible root-help surfaces and must not appear as
-normal mission, issue, blocker, evidence, or closeout next actions. For
-example, `atelier diagnostics slow` remains a hidden diagnostic for local
-command-performance analysis rather than a normal operator workflow step.
+normal mission, issue, blocker, evidence, or closeout next actions. Slow-command
+diagnostics remain hidden local performance analysis rather than a normal
+operator workflow step.
 
 ## Operator Jobs
 
