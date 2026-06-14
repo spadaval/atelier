@@ -38,9 +38,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:24:05.578265724+00:00"
+status: "done"
 title: "Epic: Make tracker state and worktree recovery unambiguous"
-updated_at: "2026-06-14T08:22:37.134036568+00:00"
+updated_at: "2026-06-14T08:24:05.578265724+00:00"
 ---
 
 ## Description
