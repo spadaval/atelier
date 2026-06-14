@@ -109,6 +109,16 @@ Next Commands
   atelier issue close atelier-1234 --reason "..."
 ```
 
+## Setup And Health Views
+
+Setup and health commands should name only the next command that can succeed in
+the current state. A fresh `atelier init` checkout has tracker directories and a
+runtime database, but it does not yet have an issue workflow policy. Its default
+next steps therefore point to `atelier workflow init`, then `atelier workflow
+check`, before issue creation. Health commands may name low-level repair
+commands only when the checked state is actually stale, invalid, missing, or
+otherwise degraded.
+
 ## Queue Views
 
 Use a queue view when the command returns many independent records, such as
@@ -270,6 +280,30 @@ Human-output changes need focused tests at the behavior boundary they affect:
 
 Tests should assert durable signals and structure, not incidental whitespace
 unless the test is specifically for a formatter primitive.
+
+## Operator Output Audit
+
+The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
+stabilization mission: `status`, `mission status`, `mission show`,
+`mission list`, `issue show`, `issue list --ready`, `evidence record`,
+`evidence show/list`, dependency and link list output, `graph impact`,
+`worktree status`, `lint`, `doctor`, `export --check`, and `rebuild`.
+
+Classification:
+
+- Healthy orientation, mission, issue, evidence, relationship, worktree, and
+  health-check views have concise default answers and explicit drill-down
+  commands in existing focused tests.
+- Degraded orientation and mission status output keeps ordinary reads usable
+  while routing repair to `atelier lint`, `atelier doctor`, `atelier rebuild`,
+  or `atelier export --check` only when the tracker or projection is degraded.
+- Fresh `atelier init` previously suggested `atelier issue create "Task"` before
+  workflow setup, which produced an immediate workflow-policy error. The default
+  setup output now routes through `atelier workflow init` and
+  `atelier workflow check` first.
+- No additional failed output classifications were found in the sampled common
+  operator workflows; future failures should become follow-up implementation
+  issues linked to the owning CLI-surface epic.
 
 ## Downstream Work
 

@@ -36,7 +36,10 @@ expected in normal Agent Factory workflows:
 
 `atelier init` is core tracker setup only. It creates `.atelier/` records,
 `.atelier/config.toml`, local runtime storage, and root ignore rules; it does
-not install editor or assistant hooks.
+not install editor or assistant hooks. Its default next steps must not route a
+fresh checkout directly to issue creation before `atelier workflow init` and
+`atelier workflow check`, because issue creation requires an installed workflow
+policy.
 
 `atelier prime` is the recovery and onboarding signpost. It explains how an
 agent should operate in this repository, where durable tracker state lives, what
@@ -67,7 +70,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
-| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus the next orientation command. | Created path(s) and a success token. | `prime`, `status`, inspect `.atelier/config.toml`. |
+| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup and verification commands before issue creation. | Created path(s) and a success token. | `workflow init`, `workflow check`, `prime`, `status`, inspect `.atelier/config.toml`. |
 | `prime` | Recovery and onboarding signpost for this checkout. | Small dynamic repo header plus concise workflow guidance and named commands. | Repo path, active mission/work IDs, ready count, freshness token. | `status`, `mission status`, `issue list --ready`. |
 | `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Claim local work on one issue. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree for <id>`, `status`. |

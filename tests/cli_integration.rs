@@ -571,6 +571,15 @@ fn test_init_creates_atelier_directory() {
 
     assert!(success);
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
+    assert!(stdout.contains("atelier workflow init"));
+    assert!(stdout.contains("atelier workflow check"));
+    assert!(stdout.contains("atelier issue create \"Task\""));
+    let workflow_pos = stdout.find("atelier workflow init").unwrap();
+    let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
+    assert!(
+        workflow_pos < issue_pos,
+        "fresh init must not suggest issue creation before workflow setup:\n{stdout}"
+    );
     assert!(dir.path().join(".atelier").exists());
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
