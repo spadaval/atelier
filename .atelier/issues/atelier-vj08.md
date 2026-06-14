@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:54:39.058621345+00:00"
+status: "done"
 title: "Add init import-beads migration flag"
-updated_at: "2026-06-14T07:49:17.930858215+00:00"
+updated_at: "2026-06-14T07:54:39.058621345+00:00"
 ---
 
 ## Description
