@@ -18,18 +18,18 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .into_iter()
         .filter(|mission| mission.status != "closed")
         .collect::<Vec<_>>();
-    let workflow_policy = commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let ready = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| Some(issue.id.as_str()) != active_issue_id)
         .filter_map(|issue| {
-            match commands::agent_factory::issue_start_readiness(
+            match commands::issue_workflow::issue_start_readiness(
                 db,
                 workflow_policy.as_ref(),
                 &issue,
             ) {
-                Ok(commands::agent_factory::IssueStartReadiness::Ready) => Some(Ok(issue)),
+                Ok(commands::issue_workflow::IssueStartReadiness::Ready) => Some(Ok(issue)),
                 Ok(_) => None,
                 Err(error) => Some(Err(error)),
             }
@@ -289,7 +289,7 @@ fn mission_snapshot(
     mission: &DomainRecord,
     active_issue_id: Option<&str>,
 ) -> Result<MissionSnapshot> {
-    let workflow_policy = commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut snapshot = MissionSnapshot::default();
     snapshot.issue_ids = mission_issue_ids(db, &mission.id)?;
 
@@ -304,7 +304,9 @@ fn mission_snapshot(
     snapshot.open_blockers = blocker_ids
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| commands::agent_factory::issue_blocks_work(workflow_policy.as_ref(), issue))
+        .filter(|issue| {
+            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
+        })
         .map(|issue| issue.id)
         .collect();
     snapshot.open_blockers.sort();
@@ -352,16 +354,16 @@ fn issue_bucket(
     if Some(issue.id.as_str()) == active_issue_id {
         return Ok(IssueBucket::Active);
     }
-    if commands::agent_factory::issue_is_done(workflow_policy, issue) {
+    if commands::issue_workflow::issue_is_done(workflow_policy, issue) {
         return Ok(IssueBucket::Done);
     }
     if !open_issue_blockers(db, &issue.id, workflow_policy)?.is_empty() {
         return Ok(IssueBucket::Blocked);
     }
-    match commands::agent_factory::issue_start_readiness(db, workflow_policy, issue)? {
-        commands::agent_factory::IssueStartReadiness::Ready => Ok(IssueBucket::Ready),
-        commands::agent_factory::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
-        commands::agent_factory::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
+    match commands::issue_workflow::issue_start_readiness(db, workflow_policy, issue)? {
+        commands::issue_workflow::IssueStartReadiness::Ready => Ok(IssueBucket::Ready),
+        commands::issue_workflow::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
+        commands::issue_workflow::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
     }
 }
 
@@ -372,7 +374,7 @@ fn open_issue_blockers(
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
     for blocker_id in db.get_blockers(issue_id)? {
-        if commands::agent_factory::issue_blocks_work(
+        if commands::issue_workflow::issue_blocks_work(
             workflow_policy,
             &db.require_issue(&blocker_id)?,
         ) {

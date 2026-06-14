@@ -1193,7 +1193,7 @@ fn mission_contract_audit(
     let mission_work = mission_issue_ids(db, &mission.id)?;
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
 
     for item in contract_items_from_text(&sections.validation) {
         let (passed, reason) = if mission_work.is_empty() {
@@ -1240,7 +1240,7 @@ fn mission_contract_audit(
             Ok(record) => {
                 let evidence = validating_evidence_ids(db, "issue", &epic.id)?;
                 for item in contract_items_from_text(&record.sections.outcome) {
-                    let (passed, reason) = if !crate::commands::agent_factory::issue_is_done(
+                    let (passed, reason) = if !crate::commands::issue_workflow::issue_is_done(
                         workflow_policy.as_ref(),
                         &epic,
                     ) {
@@ -1248,7 +1248,7 @@ fn mission_contract_audit(
                             false,
                             format!(
                                 "Linked epic is still {}.",
-                                crate::commands::agent_factory::issue_status_label(
+                                crate::commands::issue_workflow::issue_status_label(
                                     workflow_policy.as_ref(),
                                     &epic.status,
                                 )
@@ -1449,12 +1449,12 @@ fn mission_closeout_status(
 }
 
 fn open_mission_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut open = mission_issue_ids(db, mission_id)?
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
         .filter(|issue| {
-            crate::commands::agent_factory::issue_blocks_work(workflow_policy.as_ref(), issue)
+            crate::commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
         })
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
@@ -1463,7 +1463,7 @@ fn open_mission_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
 }
 
 fn open_mission_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut blocker_ids = BTreeSet::new();
     for blocker in mission_direct_blocker_ids(db, mission_id)? {
         blocker_ids.insert(blocker);
@@ -1477,7 +1477,7 @@ fn open_mission_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>>
         .into_iter()
         .filter_map(|id| db.get_issue(&id).ok().flatten())
         .filter(|issue| {
-            crate::commands::agent_factory::issue_blocks_work(workflow_policy.as_ref(), issue)
+            crate::commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
         })
         .map(|issue| issue.id)
         .collect::<Vec<_>>();
@@ -1581,8 +1581,8 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
                 if seen_blockers.insert(linked_id.to_string()) {
                     let issue = db.require_issue(linked_id)?;
                     let workflow_policy =
-                        crate::commands::agent_factory::load_issue_workflow_policy()?;
-                    if crate::commands::agent_factory::issue_blocks_work(
+                        crate::commands::issue_workflow::load_issue_workflow_policy()?;
+                    if crate::commands::issue_workflow::issue_blocks_work(
                         workflow_policy.as_ref(),
                         &issue,
                     ) {
@@ -1622,7 +1622,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         }
     }
 
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     for issue_id in mission_issue_ids(db, mission_id)? {
         let issue = db.require_issue(&issue_id)?;
         if !is_selectable_work(db, &issue)? {
@@ -1636,12 +1636,12 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
             continue;
         }
         if matches!(
-            crate::commands::agent_factory::issue_start_readiness(
+            crate::commands::issue_workflow::issue_start_readiness(
                 db,
                 workflow_policy.as_ref(),
                 &issue
             )?,
-            crate::commands::agent_factory::IssueStartReadiness::Ready
+            crate::commands::issue_workflow::IssueStartReadiness::Ready
         ) {
             summary.selectable_work.push(issue);
         }
@@ -2357,12 +2357,12 @@ fn linked_record_summary(
 }
 
 fn issue_json_with_relation(db: &Database, issue: &Issue, relation_type: &str) -> Result<Value> {
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     Ok(json!({
         "id": issue.id,
         "title": issue.title,
         "status": issue.status,
-        "status_category": crate::commands::agent_factory::issue_status_category(
+        "status_category": crate::commands::issue_workflow::issue_status_category(
             workflow_policy.as_ref(),
             &issue.status,
         ),
@@ -2374,30 +2374,30 @@ fn issue_json_with_relation(db: &Database, issue: &Issue, relation_type: &str) -
 }
 
 fn issue_bucket(db: &Database, issue: &Issue) -> Result<&'static str> {
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
-    if crate::commands::agent_factory::issue_is_done(workflow_policy.as_ref(), issue) {
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    if crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), issue) {
         return Ok("done");
     }
     if !open_blockers(db, &issue.id)?.is_empty() {
         return Ok("blocked");
     }
-    match crate::commands::agent_factory::issue_start_readiness(
+    match crate::commands::issue_workflow::issue_start_readiness(
         db,
         workflow_policy.as_ref(),
         issue,
     )? {
-        crate::commands::agent_factory::IssueStartReadiness::Ready => return Ok("ready"),
-        crate::commands::agent_factory::IssueStartReadiness::Blocked => return Ok("blocked"),
-        crate::commands::agent_factory::IssueStartReadiness::NotReady => {}
+        crate::commands::issue_workflow::IssueStartReadiness::Ready => return Ok("ready"),
+        crate::commands::issue_workflow::IssueStartReadiness::Blocked => return Ok("blocked"),
+        crate::commands::issue_workflow::IssueStartReadiness::NotReady => {}
     }
     Ok("backlog")
 }
 
 fn open_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::agent_factory::load_issue_workflow_policy()?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut blockers = Vec::new();
     for blocker_id in db.get_blockers(issue_id)? {
-        if crate::commands::agent_factory::issue_blocks_work(
+        if crate::commands::issue_workflow::issue_blocks_work(
             workflow_policy.as_ref(),
             &db.require_issue(&blocker_id)?,
         ) {

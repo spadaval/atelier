@@ -5,6 +5,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::activity::{list_issue_activities, ActivityEventType};
+use crate::commands::issue_workflow::{
+    format_status_with_category, issue_blocks_work, issue_start_readiness, issue_status_category,
+    issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
+    IssueStartReadiness,
+};
 use crate::db::Database;
 use crate::models::{Comment, DomainRecord, Issue};
 use crate::record_store::{
@@ -58,13 +63,6 @@ struct DependencyListRow {
     blocker_priority: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum IssueStartReadiness {
-    Ready,
-    Blocked,
-    NotReady,
-}
-
 #[derive(Debug, Clone)]
 enum IssueStatusFilter {
     All,
@@ -76,15 +74,6 @@ enum IssueStatusFilter {
 struct WorkflowReadContext {
     missing_policy: bool,
     unmigrated_filter: bool,
-}
-
-pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
-    let repo_root = crate::storage_layout::find_repo_root()?;
-    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
-    if !policy_path.exists() {
-        return Ok(None);
-    }
-    crate::workflow_policy::load(&repo_root).map(Some)
 }
 
 impl IssueStatusFilter {
@@ -151,7 +140,7 @@ impl IssueStatusFilter {
                 issue.status == *status
             }
             Self::Category(category) => {
-                let issue_category = workflow_category(policy, &issue.status);
+                let issue_category = issue_status_category(policy, &issue.status);
                 if policy.is_some()
                     && issue_category.is_some()
                     && !policy_status_known(policy, &issue.status)
@@ -165,87 +154,7 @@ impl IssueStatusFilter {
 }
 
 fn policy_status_known(policy: Option<&WorkflowPolicy>, status: &str) -> bool {
-    policy
-        .and_then(|policy| policy.status_category(status))
-        .is_some()
-}
-
-pub(crate) fn issue_status_category(
-    policy: Option<&WorkflowPolicy>,
-    status: &str,
-) -> Option<String> {
-    policy
-        .and_then(|policy| policy.status_category(status))
-        .map(str::to_string)
-}
-
-fn workflow_category(policy: Option<&WorkflowPolicy>, status: &str) -> Option<String> {
-    policy
-        .and_then(|policy| policy.status_category(status))
-        .map(str::to_string)
-}
-
-pub(crate) fn issue_status_label(policy: Option<&WorkflowPolicy>, status: &str) -> String {
-    format_status_with_category(issue_status_category(policy, status).as_deref(), status)
-}
-
-fn format_status_with_category(category: Option<&str>, status: &str) -> String {
-    match category {
-        Some(category) => format!("{category}/{status}"),
-        None => format!("unknown/{status}"),
-    }
-}
-
-pub(crate) fn issue_is_done(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    workflow_category(policy, &issue.status).as_deref() == Some("done")
-}
-
-pub(crate) fn issue_blocks_work(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
-    !issue_is_done(policy, issue)
-}
-
-pub(crate) fn issue_start_readiness(
-    db: &Database,
-    policy: Option<&WorkflowPolicy>,
-    issue: &Issue,
-) -> Result<IssueStartReadiness> {
-    if policy.is_none() {
-        return if workflow_category(None, &issue.status).as_deref() == Some("todo") {
-            if open_blocker_ids_with_policy(db, None, &issue.id)?.is_empty() {
-                Ok(IssueStartReadiness::Ready)
-            } else {
-                Ok(IssueStartReadiness::Blocked)
-            }
-        } else {
-            Ok(IssueStartReadiness::NotReady)
-        };
-    }
-    let Some(policy) = policy else {
-        unreachable!("handled missing policy above")
-    };
-    let options = match crate::commands::workflow::issue_transition_options(db, &issue.id) {
-        Ok(options) => options,
-        Err(_) => return Ok(IssueStartReadiness::NotReady),
-    };
-    let mut has_start_target = false;
-    let mut blocked = false;
-    for option in options {
-        if workflow_category(Some(policy), &option.to).as_deref() != Some("active") {
-            continue;
-        }
-        has_start_target = true;
-        if option.allowed {
-            return Ok(IssueStartReadiness::Ready);
-        }
-        blocked = true;
-    }
-    if blocked {
-        Ok(IssueStartReadiness::Blocked)
-    } else if has_start_target {
-        Ok(IssueStartReadiness::NotReady)
-    } else {
-        Ok(IssueStartReadiness::NotReady)
-    }
+    issue_status_category(policy, status).is_some()
 }
 
 fn print_workflow_read_guidance(context: WorkflowReadContext) {
@@ -1211,22 +1120,6 @@ fn queue_row(
         open_blockers,
         depth,
     })
-}
-
-fn open_blocker_ids_with_policy(
-    db: &Database,
-    workflow_policy: Option<&WorkflowPolicy>,
-    issue_id: &str,
-) -> Result<Vec<String>> {
-    let mut blockers = db
-        .get_blockers(issue_id)?
-        .into_iter()
-        .filter_map(|id| db.require_issue(&id).ok())
-        .filter(|issue| issue_blocks_work(workflow_policy, issue))
-        .map(|issue| format_issue_id(&issue.id))
-        .collect::<Vec<_>>();
-    blockers.sort();
-    Ok(blockers)
 }
 
 fn filter_ready_rows(
