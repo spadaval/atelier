@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T17:30:27.355649715+00:00"
+status: "done"
 title: "Validate postmortem cleanup mission closeout"
-updated_at: "2026-06-14T16:44:54.478878994+00:00"
+updated_at: "2026-06-14T17:30:27.355649715+00:00"
 ---
 
 ## Description
