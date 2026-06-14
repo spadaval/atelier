@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:20:34.291853675+00:00"
+status: "done"
 title: "Consolidate RecordStore-aware integration test fixtures"
-updated_at: "2026-06-14T00:20:09.986683075+00:00"
+updated_at: "2026-06-14T00:20:34.291853675+00:00"
 ---
 
 ## Description
