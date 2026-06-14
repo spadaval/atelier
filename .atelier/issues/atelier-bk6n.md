@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:27:07.997105384+00:00"
+status: "done"
 title: "Close out stabilization and simplification mission"
-updated_at: "2026-06-14T00:27:04.332635140+00:00"
+updated_at: "2026-06-14T00:27:07.997105384+00:00"
 ---
 
 ## Description
