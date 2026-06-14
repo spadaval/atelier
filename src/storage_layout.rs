@@ -87,12 +87,6 @@ pub fn find_canonical_dir_from_cwd() -> Result<Option<PathBuf>> {
     }
 }
 
-pub fn has_canonical_records(atelier_dir: &Path) -> bool {
-    ["issues", "missions", "milestones", "plans", "evidence"]
-        .iter()
-        .any(|dir| atelier_dir.join(dir).is_dir())
-}
-
 pub fn is_local_atelier_path(relative_path: &Path) -> bool {
     if is_runtime_rebuild_temp_path(relative_path) {
         return true;

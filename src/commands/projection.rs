@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use crate::db::Database;
-
 /// Refresh the SQLite projection after a successful canonical RecordStore write.
 ///
 /// Callers must drop any open `Database` handle for `db_path` before invoking
@@ -21,12 +19,4 @@ pub fn refresh_after_canonical_write(state_dir: &Path, db_path: &Path) -> Result
             state_dir.display()
         )
     })
-}
-
-pub fn refresh_open_database_after_canonical_write(
-    state_dir: &Path,
-    db_path: &Path,
-) -> Result<Database> {
-    refresh_after_canonical_write(state_dir, db_path)?;
-    Database::open(db_path).context("Failed to reopen refreshed projection database")
 }

@@ -8,6 +8,7 @@ use crate::record_id;
 use crate::record_store;
 
 impl Database {
+    #[cfg(test)]
     pub fn create_record(
         &self,
         kind: &str,
@@ -48,54 +49,6 @@ impl Database {
         Ok(())
     }
 
-    pub fn update_record(
-        &self,
-        kind: &str,
-        id: &str,
-        title: Option<&str>,
-        status: Option<&str>,
-        body: Option<&str>,
-        data_json: Option<&str>,
-    ) -> Result<bool> {
-        record_store::validate_canonical_record_kind(kind)?;
-        if let Some(data_json) = data_json {
-            let _: serde_json::Value = serde_json::from_str(data_json)?;
-        }
-
-        let now = Utc::now().to_rfc3339();
-        let mut updates = vec!["updated_at = ?1".to_string()];
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(now)];
-
-        if let Some(title) = title {
-            updates.push(format!("title = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(title.to_string()));
-        }
-        if let Some(status) = status {
-            updates.push(format!("status = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(status.to_string()));
-        }
-        if let Some(body) = body {
-            updates.push(format!("body = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(body.to_string()));
-        }
-        if let Some(data_json) = data_json {
-            updates.push(format!("data_json = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(data_json.to_string()));
-        }
-
-        params_vec.push(Box::new(kind.to_string()));
-        params_vec.push(Box::new(id.to_string()));
-        let sql = format!(
-            "UPDATE records SET {} WHERE kind = ?{} AND id = ?{}",
-            updates.join(", "),
-            params_vec.len() - 1,
-            params_vec.len()
-        );
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
-        Ok(self.conn.execute(&sql, params_refs.as_slice())? > 0)
-    }
-
     pub fn get_record(&self, kind: &str, id: &str) -> Result<Option<DomainRecord>> {
         validate_record_kind(kind)?;
         let mut stmt = self.conn.prepare(
@@ -106,6 +59,7 @@ impl Database {
         Ok(record)
     }
 
+    #[cfg(test)]
     pub fn record_exists(&self, id: &str) -> Result<bool> {
         if self.get_issue(id)?.is_some() {
             return Ok(true);
@@ -191,30 +145,6 @@ impl Database {
                 target_id,
                 relation_type,
                 now
-            ],
-        )?;
-        Ok(rows > 0)
-    }
-
-    pub fn remove_record_link(
-        &self,
-        source_kind: &str,
-        source_id: &str,
-        target_kind: &str,
-        target_id: &str,
-        relation_type: &str,
-    ) -> Result<bool> {
-        validate_link_type(relation_type)?;
-        let rows = self.conn.execute(
-            "DELETE FROM record_links
-             WHERE source_kind = ?1 AND source_id = ?2
-               AND target_kind = ?3 AND target_id = ?4 AND relation_type = ?5",
-            params![
-                source_kind,
-                source_id,
-                target_kind,
-                target_id,
-                relation_type
             ],
         )?;
         Ok(rows > 0)

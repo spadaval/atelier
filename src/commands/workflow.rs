@@ -12,8 +12,6 @@ use crate::db::Database;
 use crate::models::{EvidenceRecordData, Issue};
 use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
 
-const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
-
 pub fn init(repo_root: &Path, force: bool) -> Result<()> {
     let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
     let existed = policy_path.exists();
@@ -385,26 +383,6 @@ pub fn close_issue(
     Ok(())
 }
 
-pub fn validate(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-    transition: &str,
-    validators: Vec<String>,
-) -> Result<()> {
-    let results = evaluate(db, target_kind, target_id, transition, validators)?;
-    print_validation_results(&results);
-    let failures = results
-        .iter()
-        .filter(|result| !result.passed)
-        .map(|result| result.validator.as_str())
-        .collect::<Vec<_>>();
-    if !failures.is_empty() {
-        bail!("workflow validation failed: {}", failures.join(", "));
-    }
-    Ok(())
-}
-
 pub fn print_issue_transition_options(issue: &Issue, options: &[IssueTransitionOption]) {
     println!("Issue Transitions {} - {}", issue.id, issue.title);
     println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
@@ -556,48 +534,6 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
         _ => &["durable_state_current"],
     };
     names.iter().map(|name| (*name).to_string()).collect()
-}
-
-pub fn print_validation_results(results: &[ValidatorResult]) {
-    if let Some(first) = results.first() {
-        println!(
-            "Workflow Validation: {} {}",
-            first.target_kind, first.target_id
-        );
-        println!(
-            "{}",
-            "=".repeat(first.target_kind.len() + first.target_id.len() + 21)
-        );
-        println!("Transition: {}", first.transition);
-        println!("Validators: {}", results.len());
-    } else {
-        print_heading("Workflow Validation");
-        println!("Validators: 0");
-    }
-    print_heading("Results");
-    if results.is_empty() {
-        println!("(none)");
-        return;
-    }
-    for result in results {
-        let status = if result.passed { "pass" } else { "fail" };
-        println!("  {}  {}", status, result.validator);
-        println!("      Reason: {}", result.reason);
-        if let Some(warning) = slow_validator_warning(result) {
-            println!("      Warning: {warning}");
-        }
-    }
-}
-
-fn slow_validator_warning(result: &ValidatorResult) -> Option<String> {
-    if result.elapsed_ms > SLOW_VALIDATOR_WARNING_MS {
-        Some(format!(
-            "validator took {}ms; validators should stay under {}ms",
-            result.elapsed_ms, SLOW_VALIDATOR_WARNING_MS
-        ))
-    } else {
-        None
-    }
 }
 
 fn print_heading(title: &str) {
@@ -1213,27 +1149,6 @@ fn repo_root() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn validator_result(elapsed_ms: u128) -> ValidatorResult {
-        ValidatorResult {
-            target_kind: "issue".to_string(),
-            target_id: "atelier-test".to_string(),
-            transition: "close".to_string(),
-            validator: "durable_state_current".to_string(),
-            passed: true,
-            reason: "canonical export is current".to_string(),
-            elapsed_ms,
-        }
-    }
-
-    #[test]
-    fn slow_validator_warning_starts_after_threshold() {
-        assert!(slow_validator_warning(&validator_result(100)).is_none());
-
-        let warning = slow_validator_warning(&validator_result(101)).unwrap();
-        assert!(warning.contains("validator took 101ms"));
-        assert!(warning.contains("under 100ms"));
-    }
 
     #[test]
     fn default_validators_are_target_and_transition_aware() {

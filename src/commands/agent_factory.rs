@@ -1529,15 +1529,6 @@ fn human_activity_body(body: &str) -> String {
     body.to_string()
 }
 
-pub struct CreateInput<'a> {
-    pub title: &'a str,
-    pub description: Option<&'a str>,
-    pub priority: &'a str,
-    pub issue_type: Option<&'a str>,
-    pub labels: &'a [String],
-    pub parent: Option<&'a str>,
-}
-
 pub struct LifecycleCreateInput<'a> {
     pub title: &'a str,
     pub description: Option<&'a str>,
@@ -1647,43 +1638,6 @@ pub fn create_lifecycle(
     Ok(())
 }
 
-pub fn create(db: &Database, input: CreateInput<'_>) -> Result<()> {
-    validate_priority(input.priority)?;
-    let issue_type = input.issue_type.unwrap_or("task");
-    crate::db::validate_issue_type(issue_type)?;
-    let parent_id = input
-        .parent
-        .map(|parent| resolve_id(db, parent))
-        .transpose()?;
-    let id = match parent_id {
-        Some(parent_id) => db.create_subissue_with_type(
-            &parent_id,
-            input.title,
-            input.description,
-            input.priority,
-            issue_type,
-        )?,
-        None => {
-            db.create_issue_with_type(input.title, input.description, input.priority, issue_type)?
-        }
-    };
-    apply_workflow_initial_status(db, &id, issue_type)?;
-    for label in input.labels {
-        db.add_label(&id, label)?;
-    }
-    let issue = db.require_issue(&id)?;
-    let object = issue_object(db, issue)?;
-    println!("Created issue {}: {}", object.id, object.title);
-    println!("Type:     {}", object.issue_type);
-    println!("Priority: {}", object.priority);
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {}", object.id);
-    println!("  atelier start {}", object.id);
-    Ok(())
-}
-
 fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
@@ -1699,19 +1653,6 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
     })
 }
 
-fn apply_workflow_initial_status(db: &Database, id: &str, issue_type: &str) -> Result<()> {
-    let repo_root = crate::storage_layout::find_repo_root()?;
-    let status = crate::workflow_policy::configured_initial_status(&repo_root, issue_type)?
-        .ok_or_else(|| {
-            anyhow!(
-                "workflow policy file is required at {}; run `atelier workflow init` before creating issues",
-                crate::workflow_policy::WORKFLOW_POLICY_PATH
-            )
-        })?;
-    db.update_issue_status(id, &status)?;
-    Ok(())
-}
-
 pub struct UpdateInput<'a> {
     pub issue_ref: &'a str,
     pub title: Option<&'a str>,
@@ -1722,126 +1663,6 @@ pub struct UpdateInput<'a> {
     pub parent: Option<Option<&'a str>>,
     pub claim: bool,
     pub append_notes: Option<&'a str>,
-}
-
-pub fn update(db: &Database, input: UpdateInput<'_>) -> Result<()> {
-    let id = resolve_id(db, input.issue_ref)?;
-    let previous = db.require_issue(&id)?;
-    let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
-    let mut changed_fields = Vec::new();
-
-    if input.title.is_some() || input.priority.is_some() {
-        if let Some(priority) = input.priority {
-            validate_priority(priority)?;
-        }
-        if db.update_issue(&id, input.title, None, input.priority)? {
-            if input.title.is_some() {
-                changed_fields.push("title");
-                crate::commands::activity_log::record_field_changed(
-                    &id,
-                    "title",
-                    Some(&previous.title),
-                    input.title,
-                )?;
-            }
-            if input.priority.is_some() {
-                changed_fields.push("priority");
-                crate::commands::activity_log::record_field_changed(
-                    &id,
-                    "priority",
-                    Some(&previous.priority),
-                    input.priority,
-                )?;
-            }
-        }
-    }
-
-    if let Some(issue_type) = input.issue_type {
-        crate::db::validate_issue_type(issue_type)?;
-        if db.update_issue_type(&id, issue_type)? {
-            changed_fields.push("issue_type");
-            crate::commands::activity_log::record_field_changed(
-                &id,
-                "issue_type",
-                Some(&previous.issue_type),
-                Some(issue_type),
-            )?;
-        }
-    }
-
-    for label in input.labels {
-        db.add_label(&id, label)?;
-        changed_fields.push("labels");
-        crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
-    }
-    for label in input.remove_labels {
-        db.remove_label(&id, label)?;
-        changed_fields.push("labels");
-        crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
-    }
-
-    if let Some(parent) = input.parent {
-        let parent_id = parent.map(|parent| resolve_id(db, parent)).transpose()?;
-        db.update_parent(&id, parent_id.as_deref())?;
-        changed_fields.push("parent");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "parent",
-            previous.parent_id.as_deref(),
-            parent_id.as_deref(),
-        )?;
-    }
-
-    if input.claim {
-        let assignee = current_actor();
-        if let Some(previous_assignee) = &previous_assignee {
-            db.remove_label(&id, &format!("assignee:{previous_assignee}"))?;
-        }
-        db.add_label(&id, &format!("assignee:{assignee}"))?;
-        db.add_comment(&id, &format!("Claimed by {assignee}"), "handoff")?;
-        changed_fields.push("assignee");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "assignee",
-            previous_assignee.as_deref(),
-            Some(&assignee),
-        )?;
-    }
-
-    if let Some(note) = input.append_notes {
-        db.add_comment(&id, note, "handoff")?;
-        changed_fields.push("notes");
-        crate::commands::activity_log::record_note(&id, note)?;
-    }
-
-    if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
-    }
-    changed_fields.sort_unstable();
-    changed_fields.dedup();
-
-    let issue = db.require_issue(&id)?;
-    let object = issue_object(db, issue)?;
-    println!(
-        "Updated issue {} ({})",
-        object.id,
-        changed_fields.join(", ")
-    );
-    println!("Status:   {}", object.status);
-    println!("Priority: {}", object.priority);
-    println!("Type:     {}", object.issue_type);
-    if let Some(assignee) = &object.assignee {
-        println!("Assignee: {assignee}");
-    }
-    if let Some(parent) = &object.parent {
-        println!("Parent:   {parent}");
-    }
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier issue show {}", object.id);
-    println!("  atelier issue transition {} --options", object.id);
-    Ok(())
 }
 
 pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>) -> Result<()> {
@@ -2088,13 +1909,6 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
-pub fn dep_add(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
-    let blocked_id = resolve_id(db, blocked_ref)?;
-    let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = db.add_dependency(&blocked_id, &blocker_id)?;
-    dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
-}
-
 pub fn dep_add_canonical(
     db: &Database,
     store: &RecordStore,
@@ -2105,20 +1919,6 @@ pub fn dep_add_canonical(
     let blocker_id = resolve_id(db, blocker_ref)?;
     let changed = store.add_issue_block(&blocked_id, &blocker_id)?;
     dep_result(db, "dep.add", "add", &blocked_id, &blocker_id, changed)
-}
-
-pub fn dep_remove(db: &Database, blocked_ref: &str, blocker_ref: &str) -> Result<()> {
-    let blocked_id = resolve_id(db, blocked_ref)?;
-    let blocker_id = resolve_id(db, blocker_ref)?;
-    let changed = db.remove_dependency(&blocked_id, &blocker_id)?;
-    dep_result(
-        db,
-        "dep.remove",
-        "remove",
-        &blocked_id,
-        &blocker_id,
-        changed,
-    )
 }
 
 pub fn dep_remove_canonical(

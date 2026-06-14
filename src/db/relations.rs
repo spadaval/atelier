@@ -35,6 +35,7 @@ impl Database {
     }
 
     /// Backward-compatible: add a "related" relation.
+    #[cfg(test)]
     pub fn add_relation(
         &self,
         issue_id_1: impl ToString,
@@ -44,6 +45,7 @@ impl Database {
     }
 
     /// Remove a typed relation between two issues.
+    #[cfg(test)]
     pub fn remove_typed_relation(
         &self,
         issue_id_1: impl ToString,
@@ -65,6 +67,7 @@ impl Database {
     }
 
     /// Get all related issues (any relation type).
+    #[cfg(test)]
     pub fn get_related_issues(&self, issue_id: impl ToString) -> Result<Vec<Issue>> {
         let issue_id = issue_id.to_string();
         let mut stmt = self.conn.prepare(

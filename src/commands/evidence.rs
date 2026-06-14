@@ -47,31 +47,6 @@ impl<'a> EvidenceMetadata<'a> {
     }
 }
 
-pub fn add(
-    state_dir: &Path,
-    db_path: &Path,
-    evidence_kind: &str,
-    result: &str,
-    summary: &str,
-    path: Option<&str>,
-    uri: Option<&str>,
-    producer: Option<&str>,
-) -> Result<()> {
-    let id = add_returning_id(
-        state_dir,
-        db_path,
-        evidence_kind,
-        result,
-        summary,
-        path,
-        uri,
-        producer,
-    )?;
-    let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, &id)?;
-    print_record(&db, &record)
-}
-
 pub fn add_returning_id(
     state_dir: &Path,
     db_path: &Path,

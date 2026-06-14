@@ -18,6 +18,7 @@ pub fn validate_comment_kind(kind: &str) -> bool {
     KNOWN_COMMENT_KINDS.contains(&kind)
 }
 
+#[cfg(test)]
 pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
     db.require_issue(issue_id)?;
     reject_invalid_comment_kind(kind)?;
