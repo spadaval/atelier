@@ -4,6 +4,8 @@ use std::path::Path;
 
 use crate::db::Database;
 
+const STANDARD_BEADS_IMPORT_PATH: &str = ".beads/issues.manual.jsonl";
+
 pub(crate) const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier"
@@ -58,7 +60,7 @@ pub(crate) fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn run(path: &Path, force: bool) -> Result<()> {
+pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
     let layout = crate::storage_layout::StorageLayout::new(path);
     let atelier_dir = layout.atelier_dir();
 
@@ -84,7 +86,7 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
         .context("Failed to create .atelier/runtime directory")?;
     let db_path = layout.runtime_db_path();
     let db_existed = db_path.exists();
-    Database::open(&db_path)?;
+    let db = Database::open(&db_path)?;
     if !db_existed {
         println!("Created {}", db_path.display());
     }
@@ -98,6 +100,22 @@ pub fn run(path: &Path, force: bool) -> Result<()> {
     }
 
     ensure_root_gitignore(path, force)?;
+
+    let beads_import_path = path.join(STANDARD_BEADS_IMPORT_PATH);
+    if import_beads {
+        if !beads_import_path.exists() {
+            anyhow::bail!(
+                "Beads migration input not found at {}",
+                beads_import_path.display()
+            );
+        }
+        crate::commands::import::run_beads_jsonl(&db, &beads_import_path, &atelier_dir)?;
+    } else if beads_import_path.exists() {
+        println!(
+            "Detected Beads migration input at {}. Re-run with `atelier init --import-beads` to import it.",
+            beads_import_path.display()
+        );
+    }
 
     println!("Atelier initialized successfully!");
     println!("\nNext steps:");
@@ -116,7 +134,7 @@ mod tests {
     #[test]
     fn test_run_fresh_init() {
         let dir = tempdir().unwrap();
-        let result = run(dir.path(), false);
+        let result = run(dir.path(), false, false);
         assert!(result.is_ok());
 
         // Verify directories created
@@ -159,7 +177,7 @@ mod tests {
     #[test]
     fn test_run_preserves_existing_config_even_with_force() {
         let dir = tempdir().unwrap();
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         let config_path = dir.path().join(".atelier/config.toml");
         let custom_config = r#"schema = "atelier.project_config"
@@ -168,7 +186,7 @@ project_slug = "custom"
 "#;
         fs::write(&config_path, custom_config).unwrap();
 
-        run(dir.path(), true).unwrap();
+        run(dir.path(), true, false).unwrap();
 
         assert_eq!(fs::read_to_string(config_path).unwrap(), custom_config);
     }
@@ -178,10 +196,10 @@ project_slug = "custom"
         let dir = tempdir().unwrap();
 
         // First init
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         // Second init without force - should succeed but not recreate
-        let result = run(dir.path(), false);
+        let result = run(dir.path(), false, false);
         assert!(result.is_ok());
     }
 
@@ -190,10 +208,10 @@ project_slug = "custom"
         let dir = tempdir().unwrap();
 
         // First init
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         // Force update
-        run(dir.path(), true).unwrap();
+        run(dir.path(), true, false).unwrap();
 
         assert!(dir.path().join(".atelier/config.toml").exists());
         assert!(dir.path().join(".atelier/runtime/state.db").exists());
@@ -209,7 +227,7 @@ project_slug = "custom"
         // Create only .atelier directory
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();
 
-        let result = run(dir.path(), false);
+        let result = run(dir.path(), false, false);
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier/config.toml").exists());
@@ -224,7 +242,7 @@ project_slug = "custom"
         // Create only .claude directory
         fs::create_dir_all(dir.path().join(".claude")).unwrap();
 
-        let result = run(dir.path(), false);
+        let result = run(dir.path(), false, false);
         assert!(result.is_ok());
 
         assert!(dir.path().join(".atelier").exists());
@@ -235,7 +253,7 @@ project_slug = "custom"
     #[test]
     fn test_run_database_usable() {
         let dir = tempdir().unwrap();
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         // Open the created database and verify it works
         let db_path = dir.path().join(".atelier/runtime/state.db");
@@ -249,12 +267,12 @@ project_slug = "custom"
     #[test]
     fn test_run_recreates_missing_database() {
         let dir = tempdir().unwrap();
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::remove_file(&db_path).unwrap();
 
-        run(dir.path(), false).unwrap();
+        run(dir.path(), false, false).unwrap();
 
         assert!(db_path.exists());
     }
@@ -265,7 +283,7 @@ project_slug = "custom"
 
         // Multiple force runs should all succeed
         for _ in 0..3 {
-            let result = run(dir.path(), true);
+            let result = run(dir.path(), true, false);
             assert!(result.is_ok());
         }
 

@@ -57,9 +57,6 @@ Records:
 Advanced work:
   worktree      Create, inspect, merge, and remove issue worktrees
 
-State management:
-  import-beads  Import an external Beads JSONL backup
-
 Integrations:
   integrations  Install optional integrations such as Claude hooks
 
@@ -123,6 +120,9 @@ enum Commands {
         /// Reconcile core tracker state even if already initialized
         #[arg(short, long)]
         force: bool,
+        /// Import the repo-local Beads migration file at .beads/issues.manual.jsonl
+        #[arg(long)]
+        import_beads: bool,
     },
 
     /// Show repository operating guidance for recovery and onboarding
@@ -186,6 +186,7 @@ enum Commands {
     },
 
     /// Import Beads JSONL backup into Atelier runtime and canonical state
+    #[command(hide = true)]
     ImportBeads {
         /// Beads JSONL backup path from an external source
         input: String,
@@ -1409,9 +1410,12 @@ fn run() -> Result<()> {
     let started = Instant::now();
 
     let result = match cli.command {
-        Commands::Init { force } => {
+        Commands::Init {
+            force,
+            import_beads,
+        } => {
             let cwd = env::current_dir()?;
-            commands::init::run(&cwd, force)
+            commands::init::run(&cwd, force, import_beads)
         }
 
         Commands::Prime => {

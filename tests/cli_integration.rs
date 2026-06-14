@@ -312,7 +312,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier worktree for/status/merge/remove`
 - `atelier export`
 - `atelier rebuild`
-- `atelier import-beads`
 - `atelier integrations claude install`
 - `atelier maintenance delete`
 - `atelier diagnostics slow`
@@ -700,6 +699,42 @@ fn test_init_twice_is_idempotent() {
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
     assert!(!dir.path().join(".atelier").join("rules").exists());
     assert!(!dir.path().join(".claude").exists());
+}
+
+#[test]
+fn test_init_help_documents_import_beads_flag() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["init", "--help"]);
+    assert!(success, "init help failed: {stderr}");
+
+    assert!(stdout.contains("--import-beads"));
+    assert!(stdout.contains(".beads/issues.manual.jsonl"));
+}
+
+#[test]
+fn test_init_import_beads_requires_explicit_flag() {
+    let dir = tempdir().unwrap();
+    let beads_dir = dir.path().join(".beads");
+    std::fs::create_dir_all(&beads_dir).unwrap();
+    std::fs::write(
+        beads_dir.join("issues.manual.jsonl"),
+        include_str!("fixtures/beads/issues.manual.jsonl"),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["init"]);
+    assert!(success, "init without import flag failed: {stderr}");
+    assert!(stdout.contains("Detected Beads migration input"));
+    assert!(stdout.contains("atelier init --import-beads"));
+    assert!(!dir.path().join(".atelier/issues/atelier-0001.md").exists());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["init", "--import-beads"]);
+    assert!(success, "init import-beads failed: {stderr}");
+    assert!(stdout.contains("Imported Beads backup from"));
+    assert!(stdout.contains(".beads/issues.manual.jsonl"));
+    assert!(stdout.contains("source records: 3"));
+    assert!(stdout.contains("imported issues: 3"));
+    assert!(dir.path().join(".atelier/issues/atelier-0001.md").exists());
 }
 
 #[test]
@@ -1201,7 +1236,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "Missions and planning:",
         "Records:",
         "Advanced work:",
-        "State management:",
         "Maintenance:",
         "Common commands:",
         "Options:",
@@ -1210,21 +1244,17 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init",
-        "prime",
-        "status",
-        "issue",
-        "mission",
-        "plan",
-        "evidence",
-        "history",
-        "worktree",
-        "import-beads",
-        "lint",
-        "doctor",
+        "init", "prime", "status", "issue", "mission", "plan", "evidence", "history", "worktree",
+        "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("import-beads ")),
+        "root help should not expose import-beads:\n{stdout}"
+    );
     assert!(
         !stdout
             .lines()

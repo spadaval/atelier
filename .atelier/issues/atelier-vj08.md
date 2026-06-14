@@ -3,6 +3,7 @@ created_at: "2026-06-14T05:59:03.571673734+00:00"
 id: "atelier-vj08"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -16,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add init import-beads migration flag"
-updated_at: "2026-06-14T05:59:03.571673734+00:00"
+updated_at: "2026-06-14T07:49:17.930858215+00:00"
 ---
 
 ## Description

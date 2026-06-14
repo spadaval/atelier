@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn install_claude_preserves_existing_files_without_force() {
         let dir = tempdir().unwrap();
-        crate::commands::init::run(dir.path(), false).unwrap();
+        crate::commands::init::run(dir.path(), false, false).unwrap();
         fs::create_dir_all(dir.path().join(".claude/hooks")).unwrap();
         let hook_path = dir.path().join(".claude/hooks/prompt-guard.py");
         fs::write(&hook_path, "# custom\n").unwrap();
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn install_claude_force_updates_files_and_preserves_custom_mcp_servers() {
         let dir = tempdir().unwrap();
-        crate::commands::init::run(dir.path(), false).unwrap();
+        crate::commands::init::run(dir.path(), false, false).unwrap();
         fs::write(
             dir.path().join(".mcp.json"),
             r#"{"mcpServers":{"custom":{"command":"node","args":["server.js"]}}}"#,
