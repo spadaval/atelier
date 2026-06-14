@@ -4,6 +4,7 @@ id: "atelier-4u5h"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "stabilization"
 - "workflow"
 priority: "P2"
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Extract issue workflow orientation from Agent Factory commands"
-updated_at: "2026-06-13T21:58:03.421531467+00:00"
+updated_at: "2026-06-14T00:13:47.079854575+00:00"
 ---
 
 ## Description
