@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Replace generic DomainRecord data_json plumbing with typed records"
-updated_at: "2026-06-13T23:50:34.383513364+00:00"
+updated_at: "2026-06-14T00:03:52.137825088+00:00"
 ---
 
 ## Description

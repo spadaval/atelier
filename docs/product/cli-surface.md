@@ -261,10 +261,10 @@ target, such as an explicit closeout mirror or another accountable issue. New
 help, next-action text, and Agent Factory guidance should teach
 `atelier evidence record`; they should mention `evidence attach` only when the
 operator is reusing existing proof instead of capturing it.
-`atelier evidence add` and `atelier evidence capture` are predecessor shapes
-that split one operator job into two verbs. New help and Agent Factory guidance
-should teach `evidence record`; implementation may keep old entrypoints only as
-internal migration scaffolding until the unified surface is shipped.
+The predecessor evidence add/capture shapes split one operator job into two
+verbs. New help and Agent Factory guidance should teach `evidence record`;
+implementation may keep old entrypoints only as internal migration scaffolding
+until the unified surface is shipped.
 `atelier history` is the canonical project-history view. Repo-wide history and
 scoped forms such as `atelier history --mission <id>`, `atelier history --issue
 <id>`, and `atelier history --epic <id>` read canonical activity sidecars,
@@ -328,8 +328,8 @@ surface is `delete` unless it is in the core list above.
 
 | Shape | Disposition | Reason | Replacement or boundary |
 | --- | --- | --- | --- |
-| `atelier evidence add` | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
-| `atelier evidence capture` | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
+| Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
+| Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
 | `atelier export --check` | Keep with distinct purpose | Explicit handoff and transition freshness gate. | Health and closeout contracts may require it, but routine read/write commands should not. |
 | `atelier export` | Keep with distinct purpose | Explicit repair and deterministic render surface for committed state. | Not a default next action from issue or mission workflow surfaces. |
