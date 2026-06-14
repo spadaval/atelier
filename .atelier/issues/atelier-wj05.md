@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T00:16:50.020146279+00:00"
+status: "done"
 title: "Split workflow policy parser and validation hotspots"
-updated_at: "2026-06-14T00:15:35.572559814+00:00"
+updated_at: "2026-06-14T00:16:50.020146279+00:00"
 ---
 
 ## Description
