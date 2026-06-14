@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:07:40.828367413+00:00"
+status: "done"
 title: "Prevent mission status from double-counting nested work"
-updated_at: "2026-06-14T07:07:20.091690115+00:00"
+updated_at: "2026-06-14T07:07:40.828367413+00:00"
 ---
 
 ## Description
