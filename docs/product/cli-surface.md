@@ -339,6 +339,10 @@ plus execution is specifically useful. When canonical Markdown is malformed,
 the repair path remains `atelier lint`, editing the named record, and
 rerunning `atelier lint`/`atelier doctor`; ordinary record syntax errors are
 not stale-binary drift.
+Stale projection and invalid canonical-record diagnostics should present one
+ordered recovery path, preserve the original blocked command, and keep the
+specific record path or parser detail visible so operators do not cycle through
+export, rebuild, lint, and read commands blindly.
 
 ## Removed Behavior
 

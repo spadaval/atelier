@@ -78,7 +78,7 @@ impl FreshnessReport {
         );
         if !messages.is_empty() {
             messages.push(
-                "repair: run `atelier rebuild` after canonical tracker records validate; run `atelier lint` to inspect record errors"
+                "recovery: 1. run `atelier lint`; 2. fix any named canonical Markdown records; 3. run `atelier doctor --fix` to repair local runtime/projection state; 4. rerun the blocked command"
                     .to_string(),
             );
         }
@@ -413,7 +413,8 @@ mod tests {
         assert!(messages[0].contains("showing first 5"));
         assert!(messages[0].contains("issues/atelier-0004.md"));
         assert!(!messages[0].contains("issues/atelier-0005.md"));
-        assert!(messages[1].contains("atelier rebuild"));
         assert!(messages[1].contains("atelier lint"));
+        assert!(messages[1].contains("atelier doctor --fix"));
+        assert!(messages[1].contains("rerun the blocked command"));
     }
 }

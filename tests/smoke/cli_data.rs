@@ -123,6 +123,13 @@ fn test_canonical_export_check_cli() {
         "expected stale projection metadata, got stderr: {}",
         result.stderr
     );
+    assert!(
+        result.stderr.contains("recovery: 1. run `atelier lint`;")
+            && result.stderr.contains("3. run `atelier doctor --fix`")
+            && result.stderr.contains("4. rerun the blocked command"),
+        "expected ordered stale projection recovery, got stderr: {}",
+        result.stderr
+    );
 }
 
 #[test]
