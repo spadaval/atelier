@@ -5,7 +5,9 @@ issue_type: "task"
 labels: []
 priority: "P2"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-4yrt"
   children: []
   attachments: []
   relates: []

@@ -6,15 +6,17 @@ labels:
 - "evidence"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-bqau"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Unify evidence record and attach flow"
-updated_at: "2026-06-14T02:52:55.566206957+00:00"
+updated_at: "2026-06-14T06:44:44.964437812+00:00"
 ---
 
 ## Description

@@ -221,6 +221,32 @@ fn edit_canonical_issue(dir: &Path, issue_id: &str, edit: impl FnOnce(String) ->
     edit_canonical_record(dir, "issues", issue_id, edit);
 }
 
+fn write_ignored_canonical_artifacts(dir: &Path, issue_id: &str) {
+    let runtime_dir = dir.join(".atelier/runtime");
+    std::fs::create_dir_all(&runtime_dir).unwrap();
+    std::fs::write(
+        runtime_dir.join(".state.db.123.456.rebuild-tmp"),
+        "partial sqlite rebuild",
+    )
+    .unwrap();
+    std::fs::write(
+        runtime_dir.join(".state.db.123.456.rebuild-tmp-journal"),
+        "partial sqlite rebuild journal",
+    )
+    .unwrap();
+    let cache_dir = dir.join(".atelier/cache");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::write(cache_dir.join("projection.lock"), "cache lock").unwrap();
+    let issue_dir = dir.join(".atelier/issues");
+    std::fs::write(issue_dir.join(format!("{issue_id}.md.lock")), "lock").unwrap();
+    std::fs::write(issue_dir.join(format!("{issue_id}.md-journal")), "journal").unwrap();
+    std::fs::write(
+        issue_dir.join(format!(".{issue_id}.md.123.456.tmp")),
+        "partial canonical write",
+    )
+    .unwrap();
+}
+
 fn corrupt_issue_title_yaml(dir: &Path, issue_id: &str, title: &str) {
     edit_canonical_issue(dir, issue_id, |markdown| {
         markdown.replace(&format!("title: {title:?}"), &format!("title: [{title}"))
@@ -266,7 +292,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier start`
 - `atelier abandon`
 - `atelier issue ...`
-- `atelier dep add/remove/list`
 - `atelier search <query>`
 - `atelier link add/remove/list`
 - `atelier graph impact/tree`
@@ -582,6 +607,7 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
         ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
             index == offset + 2
         }
+        ["issue", "blocked", ..] => index == offset + 2,
         ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
         ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
             index == offset + 2 || index == offset + 3
@@ -597,8 +623,6 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
         ["maintenance", "delete", target_kind, ..] => {
             *target_kind == "issue" && index == offset + 3
         }
-        ["dep", "list", ..] => index == offset + 2,
-        ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
         _ => false,
     }
 }
@@ -1055,7 +1079,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "prime",
         "status",
         "issue",
-        "dep",
         "mission",
         "plan",
         "evidence",
@@ -1069,6 +1092,12 @@ fn test_top_level_help_only_shows_core_commands() {
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("dep ")),
+        "root help should not expose dep:\n{stdout}"
+    );
 
     for common in [
         "atelier prime",
@@ -1141,6 +1170,21 @@ fn test_evidence_help_hides_predecessor_subcommands() {
     assert!(stdout.contains("attach"));
     assert!(!stdout.contains("\n  add "));
     assert!(!stdout.contains("\n  capture "));
+}
+
+#[test]
+fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "record", "--help"]);
+    assert!(success, "evidence record help failed: {stderr}");
+    assert!(stdout.contains("issue/<id>"));
+    assert!(stdout.contains(
+        "atelier evidence record --target issue/<id> --kind validation --result pass \"summary\""
+    ));
+    assert!(stdout.contains(
+        "atelier evidence record --target issue/<id> --kind test --result pass -- <command>"
+    ));
+    assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
 }
 
 #[test]
@@ -2087,7 +2131,17 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "--help"]);
     assert!(success, "issue help failed: {stderr}");
-    for command in ["create", "list", "show", "transition", "update", "close"] {
+    for command in [
+        "create",
+        "list",
+        "show",
+        "transition",
+        "update",
+        "close",
+        "block",
+        "unblock",
+        "blocked",
+    ] {
         assert!(
             stdout
                 .lines()
@@ -2101,9 +2155,6 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
         "reopen",
         "label",
         "unlabel",
-        "blocked",
-        "block",
-        "unblock",
         "close-all",
         "delete",
         "next",
@@ -2574,8 +2625,8 @@ fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
     assert!(stdout.contains("Bulk plan applied."));
 
     let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &dependent_id]);
-    assert!(success, "dep list failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &dependent_id]);
+    assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&issue_id));
 }
 
@@ -3824,8 +3875,9 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
     run_atelier(dir.path(), &["issue", "create", "Blocker issue"]);
     let blocked_id = issue_ref(dir.path(), 1);
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &blocked_id, &blocker_id]);
-    assert!(success, "dep add failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    assert!(success, "issue block failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
     assert!(success, "issue list --blocked failed: {stderr}");
@@ -3850,7 +3902,7 @@ fn test_unblock_issue() {
 }
 
 #[test]
-fn test_dep_alias_mutations_are_durable_without_manual_export() {
+fn test_issue_blocker_mutations_are_durable_without_manual_export() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -3861,29 +3913,33 @@ fn test_dep_alias_mutations_are_durable_without_manual_export() {
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &blocked_id, &blocker_id]);
-    assert!(success, "dep add failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    assert!(success, "issue block failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after dep add: {stderr}");
+    assert!(success, "export check failed after issue block: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after dep add failed: {stderr}");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
-    assert!(success, "dep list after dep add failed: {stderr}");
+    assert!(success, "rebuild after issue block failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &blocked_id]);
+    assert!(success, "issue blocked after issue block failed: {stderr}");
     assert!(stdout.contains(&blocker_id), "{stdout}");
 
     let (success, _, stderr) =
-        run_atelier(dir.path(), &["dep", "remove", &blocked_id, &blocker_id]);
-    assert!(success, "dep remove failed: {stderr}");
+        run_atelier(dir.path(), &["issue", "unblock", &blocked_id, &blocker_id]);
+    assert!(success, "issue unblock failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check failed after dep remove: {stderr}");
+    assert!(success, "export check failed after issue unblock: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after dep remove failed: {stderr}");
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", &blocked_id]);
-    assert!(success, "dep list after dep remove failed: {stderr}");
+    assert!(success, "rebuild after issue unblock failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &blocked_id]);
+    assert!(
+        success,
+        "issue blocked after issue unblock failed: {stderr}"
+    );
     assert!(
         stdout.contains("No dependencies found."),
         "dependency should be removed after rebuild: {stdout}"
@@ -6551,17 +6607,17 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     );
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "add", "1", "2"]);
-    assert!(success, "dep add failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "2"]);
+    assert!(success, "issue block failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", "1"]);
-    assert!(success, "dep list failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", "1"]);
+    assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "remove", "1", "2"]);
-    assert!(success, "dep remove failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "unblock", "1", "2"]);
+    assert!(success, "issue unblock failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
@@ -7218,6 +7274,12 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(success, "unified manual record failed: {stderr}");
     assert!(manual_record_out.contains("[evidence] pass - unified manual issue proof"));
     assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    let manual_issue_evidence_id = record_id_by_title(dir.path(), "evidence", manual_issue_summary);
+    let manual_issue_front_matter =
+        canonical_evidence_front_matter(dir.path(), &manual_issue_evidence_id);
+    assert_eq!(manual_issue_front_matter["target"]["kind"], "issue");
+    assert_eq!(manual_issue_front_matter["target"]["id"], issue_id);
+    assert_eq!(manual_issue_front_matter["target"]["role"], "validates");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -7342,6 +7404,64 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
 }
 
 #[test]
+fn test_issue_closeout_requires_claim_specific_evidence() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let issue_body = "## Description\n\nClaim-specific proof item.\n\n## Outcome\n\nThe issue closes only after claim-specific proof is attached.\n\n## Evidence\n\n- Evidence record attached to this issue validates focused command proof.";
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Claim-specific proof",
+            "--description",
+            issue_body,
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Claim-specific proof");
+
+    move_issue_to_validation(dir.path(), &issue_id);
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &issue_id,
+        "broad default nextest suite passes",
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &issue_id, "--reason", "too broad"],
+    );
+    assert!(!success, "issue closeout must reject unrelated broad proof");
+    assert!(stderr.contains("missing Evidence requirement 1"));
+    assert!(stderr.contains("focused command proof"));
+
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &issue_id,
+        "focused command proof for claim-specific closeout",
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &issue_id,
+            "--reason",
+            "claim-specific proof",
+        ],
+    );
+    assert!(
+        success,
+        "issue closeout should pass after claim-specific evidence: {stderr}"
+    );
+}
+
+#[test]
 fn test_validation_issue_closeout_requires_contract_audit_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -7364,7 +7484,7 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         dir.path(),
         "issue",
         &task_id,
-        "broad default nextest suite passes",
+        "focused command proof for the ordinary task",
     );
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -7406,9 +7526,8 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
     );
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
-    assert!(transitions.contains(
-        "linked passing evidence does not demonstrate line-by-line or contract-audit proof"
-    ));
+    assert!(transitions.contains("missing Evidence requirement 1"));
+    assert!(transitions.contains("contract-audit proof"));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -7418,7 +7537,8 @@ fn test_validation_issue_closeout_requires_contract_audit_evidence() {
         !success,
         "validation issue closeout must reject broad proof alone"
     );
-    assert!(stderr.contains("line-by-line or contract-audit proof"));
+    assert!(stderr.contains("missing Evidence requirement 1"));
+    assert!(stderr.contains("contract-audit proof"));
 
     attach_pass_evidence(
         dir.path(),
@@ -9745,7 +9865,7 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
-    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier dep list` output shows the linked root.";
+    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier issue blocked <id>` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
@@ -9773,8 +9893,8 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     assert!(success, "second create failed: {stderr}");
     assert!(second_out.contains("Created issue atelier-"));
     let second_id = issue_ref(dir.path(), 2);
-    let (success, _, stderr) = run_atelier(dir.path(), &["dep", "add", &second_id, &first_id]);
-    assert!(success, "dep add failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &second_id, &first_id]);
+    assert!(success, "issue block failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
     ensure_issue_closeout_sections(dir.path(), &first_id);
@@ -9794,10 +9914,10 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
         markdown.replace("Projection root", "Projection root changed")
     });
 
-    let (success, dep_out, stderr) = run_atelier(dir.path(), &["dep", "list"]);
+    let (success, dep_out, stderr) = run_atelier(dir.path(), &["issue", "blocked", &second_id]);
     assert!(
         success,
-        "stale dep list should transparently rebuild: {stderr}"
+        "stale issue blocked should transparently rebuild: {stderr}"
     );
     assert!(dep_out.contains("Projection root changed"));
     assert!(
@@ -9835,15 +9955,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
     ensure_issue_closeout_sections(dir.path(), &issue_id);
-
-    let temp_path = dir
-        .path()
-        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp");
-    std::fs::write(&temp_path, "partial sqlite rebuild").unwrap();
-    let temp_journal_path = dir
-        .path()
-        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp-journal");
-    std::fs::write(&temp_journal_path, "partial sqlite rebuild journal").unwrap();
+    write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
         markdown.replace("Temp rebuild filter", "Temp rebuild filter changed")
@@ -9866,8 +9978,11 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
         );
         let combined = format!("{stdout}\n{stderr}");
         assert!(
-            !combined.contains("rebuild-tmp"),
-            "{args:?} diagnostics must not report rebuild tmp path: {combined}"
+            !combined.contains("rebuild-tmp")
+                && !combined.contains(".md.lock")
+                && !combined.contains(".md-journal")
+                && !combined.contains("projection.lock"),
+            "{args:?} diagnostics must not report ignored local artifacts: {combined}"
         );
     }
 }
@@ -9952,6 +10067,7 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
         "title: [Lint canonical source",
     );
     write_canonical_record(dir.path(), "issues", &issue_id, invalid_markdown.clone());
+    write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     let metadata = std::fs::metadata(&issue_path).unwrap();
     let mut hasher = Sha256::new();
@@ -9979,6 +10095,14 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
         stdout.contains("Invalid YAML front matter")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected lint output: {stdout}\nstderr: {stderr}"
+    );
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        !transcript.contains("rebuild-tmp")
+            && !transcript.contains(".md.lock")
+            && !transcript.contains(".md-journal")
+            && !transcript.contains("projection.lock"),
+        "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
     assert!(stderr.contains("Lint failed"));
     assert!(
@@ -10701,8 +10825,8 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     assert!(stdout.contains("atelier-0002"));
     assert!(!stdout.contains("beads:"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["dep", "list", "3"]);
-    assert!(success, "mapped dep list failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", "3"]);
+    assert!(success, "mapped issue blocked failed: {stderr}");
     assert!(stdout.contains("atelier-0003"));
     assert!(stdout.contains("atelier-0002"));
 }

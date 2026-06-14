@@ -6,7 +6,9 @@ labels:
 - "cli"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-4yrt"
   children: []
   attachments: []
   relates: []

@@ -1,6 +1,10 @@
 # Agent Factory Binding
 
-This file binds Agent Factory to this repository.
+This file binds Agent Factory to this repository. Per
+`docs/adr/0006-agent-guidance-ownership-boundary.md`, it is a thin repository
+binding: Agent Factory owns portable orchestration discipline, while
+Atelier-owned commands, workflow policy, and product docs own this
+repository's tactical operator guidance.
 
 ## Sources
 
@@ -36,6 +40,9 @@ This file binds Agent Factory to this repository.
 
 ## Orchestration Guidance
 
+- Keep this binding small. When a rule is repository-specific and executable,
+  route to an Atelier-owned surface instead of restating the full command or
+  workflow contract here.
 - Missions are durable active-focus records. Link executable issues to missions
   and use `atelier status` or `atelier mission status <mission-id>` to select
   worker issues from the active mission or epic graph.
@@ -88,8 +95,9 @@ This file binds Agent Factory to this repository.
 
 ## Atelier-Owned Surfaces
 
-Use this binding to route recurring tracker behavior to Atelier-owned product
-surfaces rather than restating the full command or policy contract here.
+Use this binding to enforce the ADR 0006 ownership boundary by routing
+recurring tracker behavior to Atelier-owned product surfaces rather than
+restating the full command or policy contract here.
 
 | Recurring behavior | Primary Atelier-owned destination |
 | --- | --- |

@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add safe validation command recipes"
-updated_at: "2026-06-14T02:51:59.862223035+00:00"
+updated_at: "2026-06-14T06:32:16.835836914+00:00"
 ---
 
 ## Description

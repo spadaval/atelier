@@ -19,7 +19,10 @@ updated_at: "2026-06-14T02:52:08.979051706+00:00"
 
 ## Description
 
-Update Agent Factory guidance so tracker lint/export/read failures caused by canonical or projection invalidity stop workflow mutation until state is repaired.
+After the Agent Factory/Atelier guidance boundary is reconciled, update
+portable guidance so tracker lint/export/read failures caused by canonical or
+projection invalidity stop workflow mutation until state is repaired through
+the bound tracker's owned surfaces.
 
 ## Outcome
 
@@ -27,4 +30,9 @@ Orchestrators and workers repair stale state before continuing mission mutation 
 
 ## Evidence
 
-Agent Factory guidance names the preflight and repair behavior; a transcript or docs validation shows the rule is present.
+- File diff in Agent Factory guidance names the stale-state preflight and stop
+  condition.
+- The repair steps are routed to Atelier-owned status/lint/doctor/help surfaces
+  rather than duplicated as a static command cookbook.
+- A transcript or docs validation shows the rule is present and points at
+  implemented commands.

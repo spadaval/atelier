@@ -596,13 +596,17 @@ pub(crate) struct EvidenceGateStatus {
 pub(crate) fn issue_evidence_gate_status(
     db: &Database,
     issue: &Issue,
+    sections: Option<&IssueSections>,
 ) -> Result<EvidenceGateStatus> {
     let evidence = linked_validating_evidence(db, &issue.id)?;
-    Ok(issue_evidence_gate_status_from_records(issue, &evidence))
+    Ok(issue_evidence_gate_status_from_records(
+        issue, sections, &evidence,
+    ))
 }
 
 fn issue_evidence_gate_status_from_records(
     issue: &Issue,
+    sections: Option<&IssueSections>,
     evidence: &[DomainRecord],
 ) -> EvidenceGateStatus {
     if evidence.is_empty() {
@@ -623,6 +627,27 @@ fn issue_evidence_gate_status_from_records(
             false,
             format!("linked validating evidence is not passing: {statuses}"),
         );
+    }
+
+    let requirements = issue_evidence_requirements(issue, sections);
+    if !requirements.is_empty() {
+        if let Some((index, requirement)) =
+            requirements.iter().enumerate().find(|(_, requirement)| {
+                !passing
+                    .iter()
+                    .any(|record| evidence_record_matches_requirement(record, requirement))
+            })
+        {
+            return evidence_gate(
+                false,
+                format!(
+                    "missing Evidence requirement {}: {}",
+                    index + 1,
+                    requirement
+                ),
+            );
+        }
+        return evidence_gate(true, "passing evidence matches issue Evidence requirements");
     }
 
     if issue_requires_line_by_line_proof(issue) {
@@ -655,7 +680,58 @@ fn issue_requires_line_by_line_proof(issue: &Issue) -> bool {
     )
 }
 
-fn evidence_record_demonstrates_closeout_proof(record: &DomainRecord) -> bool {
+fn issue_evidence_requirements(issue: &Issue, sections: Option<&IssueSections>) -> Vec<String> {
+    let owned_sections;
+    let sections = if let Some(sections) = sections {
+        sections
+    } else {
+        owned_sections = IssueSections::unchecked_from_body(issue.description.as_deref());
+        &owned_sections
+    };
+    let evidence = sections.evidence.trim();
+    if evidence.is_empty() || evidence == "Evidence was not specified." {
+        return Vec::new();
+    }
+    evidence_entries(evidence)
+}
+
+fn evidence_record_matches_requirement(record: &DomainRecord, requirement: &str) -> bool {
+    let requirement_tokens = evidence_requirement_tokens(requirement);
+    if requirement_tokens.is_empty() {
+        return false;
+    }
+
+    let evidence_tokens = evidence_record_tokens(record);
+    let matched = requirement_tokens
+        .iter()
+        .filter(|token| evidence_tokens.contains(*token))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    let minimum_matches = if requirement_tokens.len() == 1 { 1 } else { 2 };
+    if matched.len() < minimum_matches {
+        return false;
+    }
+
+    matched
+        .iter()
+        .any(|token| requirement_token_is_meaningful(token))
+        || requirement_tokens
+            .iter()
+            .all(|token| !requirement_token_is_meaningful(token))
+}
+
+fn evidence_requirement_tokens(text: &str) -> BTreeSet<String> {
+    normalized_tokens(text)
+        .filter(|token| !EVIDENCE_REQUIREMENT_STOPWORDS.contains(&token.as_str()))
+        .collect()
+}
+
+fn evidence_record_tokens(record: &DomainRecord) -> BTreeSet<String> {
+    normalized_tokens(&evidence_record_text(record)).collect()
+}
+
+fn evidence_record_text(record: &DomainRecord) -> String {
     let mut text = String::new();
     text.push_str(&record.title);
     text.push('\n');
@@ -664,7 +740,79 @@ fn evidence_record_demonstrates_closeout_proof(record: &DomainRecord) -> bool {
         text.push('\n');
     }
     text.push_str(&record.data_json);
-    let text = text.to_ascii_lowercase();
+    text
+}
+
+fn normalized_tokens(text: &str) -> impl Iterator<Item = String> + '_ {
+    text.split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .map(|token| normalize_token(token))
+        .filter(|token| !token.is_empty())
+}
+
+fn normalize_token(token: &str) -> String {
+    let token = token.to_ascii_lowercase();
+    if token.starts_with("classif") {
+        return "classif".to_string();
+    }
+    if token.starts_with("validat") {
+        return "validat".to_string();
+    }
+    if token.starts_with("close") {
+        return "close".to_string();
+    }
+    if token.starts_with("attach") {
+        return "attach".to_string();
+    }
+    if token.starts_with("review") {
+        return "review".to_string();
+    }
+    if token.starts_with("audit") {
+        return "audit".to_string();
+    }
+    if token.starts_with("map") {
+        return "map".to_string();
+    }
+    token
+}
+
+fn requirement_token_is_meaningful(token: &str) -> bool {
+    token != "atelier" && !token.chars().any(|ch| ch.is_ascii_digit())
+}
+
+const EVIDENCE_REQUIREMENT_STOPWORDS: &[&str] = &[
+    "a",
+    "an",
+    "and",
+    "are",
+    "attach",
+    "as",
+    "attached",
+    "by",
+    "demonstrates",
+    "evidence",
+    "for",
+    "issue",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "proof",
+    "record",
+    "records",
+    "target",
+    "that",
+    "the",
+    "this",
+    "to",
+    "validat",
+    "validates",
+    "with",
+];
+
+fn evidence_record_demonstrates_closeout_proof(record: &DomainRecord) -> bool {
+    let text = evidence_record_text(record).to_ascii_lowercase();
 
     let closeout_terms = [
         "line-by-line",

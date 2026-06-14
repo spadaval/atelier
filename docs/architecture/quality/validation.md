@@ -67,9 +67,11 @@ public behavior, or workflow gate can be reproduced before the fix.
 ## Agent Factory Boundary
 
 `AGENTFACTORY.md` is the repository binding and delegation bridge, not the full
-Atelier command or workflow contract. When a rule is durable product behavior,
-Atelier must own the operator-facing surface and Agent Factory should route to
-it instead of restating it as private process lore.
+Atelier command or workflow contract. Per
+[ADR 0006](../../adr/0006-agent-guidance-ownership-boundary.md), when a rule is
+durable product behavior, Atelier must own the operator-facing surface and
+Agent Factory should route to it instead of restating it as private process
+lore.
 
 | AGENTFACTORY topic | Classification | Durable owner or destination | Notes |
 | --- | --- | --- | --- |
@@ -261,6 +263,26 @@ For a canonical write or projection-refresh issue:
 
 Install `cargo-nextest` before running the default Rust test command:
 `cargo install cargo-nextest --locked`.
+
+### Validation Command Recipes
+
+Use these forms when reproducing common validation steps:
+
+| Purpose | Known-good form |
+| --- | --- |
+| Cargo test, one focused filter | `cargo test --test cli_integration` |
+| Cargo test, one test name filter | `cargo test test_name -- --exact` |
+| Cargo nextest expression | `cargo nextest run -E 'test(test_ready_issues) or test(test_mission_status_cli_reports_control_state)'` |
+| Search with literal shell metacharacters | `rg -n 'cargo test|cargo nextest run -E|python3' docs/architecture/quality/validation.md` |
+| Formatting check | `cargo fmt -- --check` |
+| Tracker lint | `atelier lint` |
+| Tracker export check | `atelier export --check` |
+| Tracker health check | `atelier doctor` |
+| Python invocation | `python3 -c 'print("validation ok")'` |
+
+When a Rust test needs more than one target, run separate `cargo test`
+invocations or switch to a `cargo nextest run -E` expression. Do not combine
+multiple bare positional filters in one `cargo test` command.
 
 | Command | Owns |
 | --- | --- |

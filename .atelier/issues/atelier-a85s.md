@@ -6,7 +6,9 @@ labels:
 - "cli"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-4yrt"
   children: []
   attachments: []
   relates: []
@@ -19,14 +21,16 @@ updated_at: "2026-06-14T05:58:17.170336917+00:00"
 
 ## Description
 
-Root init creates workflow policy and supports explicit repo-local Beads migration; workflow init is removed from normal and hidden operator paths.
+Root init creates workflow policy and uses the repo-local Beads migration flag
+owned by `atelier-vj08`; workflow init is removed from normal and hidden
+operator paths.
 
 ## Outcome
 
 Root `atelier init` creates the starter workflow policy as part of normal
 tracker setup. `workflow init` is removed from normal and hidden operator
-paths. `atelier init --import-beads` explicitly imports the standard
-repo-local `.beads/issues.manual.jsonl` migration input when requested.
+paths. The `atelier init --import-beads` behavior provided by `atelier-vj08`
+is integrated into the setup flow without duplicating the migration surface.
 
 ## Evidence
 

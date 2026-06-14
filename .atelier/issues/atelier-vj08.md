@@ -6,7 +6,11 @@ labels:
 - "cli"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-4yrt"
+  - kind: "issue"
+    id: "atelier-a85s"
   children: []
   attachments: []
   relates: []
@@ -19,7 +23,9 @@ updated_at: "2026-06-14T05:59:03.571673734+00:00"
 
 ## Description
 
-Add atelier init --import-beads to import repo-local .beads/issues.manual.jsonl explicitly during setup while leaving import-beads available until the init path is implemented.
+Add `atelier init --import-beads` to import repo-local
+`.beads/issues.manual.jsonl` explicitly during setup while leaving
+`import-beads` callable only until the init path is implemented.
 
 ## Outcome
 
@@ -38,3 +44,8 @@ but it is not shown in general root help.
 - Existing `import-beads` tests still pass while the transitional command
   remains available.
 - `git diff --check`, `atelier lint`, and focused import/init tests pass.
+
+## Notes
+
+This issue owns the Beads import flag. Broader init/workflow setup work should
+depend on this issue instead of reimplementing the same migration flag.

@@ -19,7 +19,10 @@ updated_at: "2026-06-14T02:52:12.214253216+00:00"
 
 ## Description
 
-Teach agents to stop after the first clear unrecognized command or wrong command-family error and consult the command map/help instead of probing neighboring names.
+After the Agent Factory/Atelier guidance boundary is reconciled, teach agents
+to stop after the first clear unrecognized command or wrong command-family
+error and consult the bound repository's command map/help instead of probing
+neighboring names.
 
 ## Outcome
 
@@ -27,4 +30,7 @@ Long retry loops around removed commands are explicitly discouraged by guidance.
 
 ## Evidence
 
-Agent Factory docs or prompt template includes the stop rule and a current command-map reference.
+- File diff in Agent Factory docs or prompt template includes the stop rule.
+- File diff or review artifact shows the command-map reference points to
+  Atelier-owned docs/help for this repository rather than embedding a stale
+  command list in Agent Factory.

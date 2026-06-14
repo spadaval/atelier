@@ -8,6 +8,10 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-72ct"
+  - kind: "issue"
+    id: "atelier-isd5"
+  - kind: "issue"
     id: "atelier-zah8"
   children:
   - kind: "issue"

@@ -7,15 +7,27 @@ labels:
 - "docs"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-1tv8"
+  - kind: "issue"
+    id: "atelier-5625"
+  - kind: "issue"
+    id: "atelier-8vyo"
+  - kind: "issue"
+    id: "atelier-jqcb"
+  - kind: "issue"
+    id: "atelier-tje5"
+  - kind: "issue"
+    id: "atelier-zkw6"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Reconcile Agent Factory and Atelier guidance boundary"
-updated_at: "2026-06-14T06:08:32.387587058+00:00"
+updated_at: "2026-06-14T06:26:04.082144704+00:00"
 ---
 
 ## Description
@@ -41,3 +53,6 @@ Out of scope: implementing every possible role-scoped CLI surface unless needed 
 ## Notes
 
 Created from the 2026-06-14 decision to make Atelier the primary repo-owned operational entry point while keeping Agent Factory as portable orchestration discipline.
+Sibling Agent Factory guidance tasks should follow this boundary: keep portable
+coordination rules in Agent Factory, and route repository-specific tactical
+commands, recovery steps, and closeout diagnostics to Atelier-owned surfaces.

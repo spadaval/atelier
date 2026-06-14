@@ -42,8 +42,7 @@ Orientation:
   abandon       Clear active local work without changing issue status
 
 Issues:
-  issue         Create, list, show, update, and close issues
-  dep           Manage issue blockers with add, remove, and list
+  issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
   link          Manage typed issue links
   graph         Inspect issue hierarchy and impact
@@ -79,7 +78,11 @@ Common commands:
   atelier status
   atelier issue list
   atelier issue list --ready
+  atelier issue list --blocked
   atelier issue show <id>
+  atelier issue block <blocked-id> <blocker-id>
+  atelier issue unblock <blocked-id> <blocker-id>
+  atelier issue blocked [<id>]
   atelier mission list
   atelier mission show <id>
   atelier mission status
@@ -202,12 +205,6 @@ enum Commands {
     Integrations {
         #[command(subcommand)]
         action: IntegrationCommands,
-    },
-
-    /// Dependency aliases for Agent Factory (`dep add/remove/list`)
-    Dep {
-        #[command(subcommand)]
-        action: DepCommands,
     },
 
     /// First-class mission records
@@ -529,7 +526,6 @@ enum IssueCommands {
     },
 
     /// Mark an issue as blocked by another
-    #[command(hide = true)]
     Block {
         /// Issue ID that is blocked
         id: String,
@@ -538,7 +534,6 @@ enum IssueCommands {
     },
 
     /// Remove a blocking relationship
-    #[command(hide = true)]
     Unblock {
         /// Issue ID that was blocked
         id: String,
@@ -546,9 +541,11 @@ enum IssueCommands {
         blocker: String,
     },
 
-    /// List blocked issues
-    #[command(hide = true)]
-    Blocked,
+    /// List blocked issues, or show blockers for one issue
+    Blocked {
+        /// Issue ID to inspect instead of the blocked-work queue
+        id: Option<String>,
+    },
 
     /// Link two related issues
     #[command(hide = true)]
@@ -606,16 +603,6 @@ enum IssueCommands {
     /// Mark tests as run (resets test reminder)
     #[command(hide = true)]
     Tested,
-}
-
-#[derive(Subcommand)]
-enum DepCommands {
-    /// Add a blocking dependency: <blocked> is blocked by <blocker>
-    Add { blocked: String, blocker: String },
-    /// Remove a blocking dependency
-    Remove { blocked: String, blocker: String },
-    /// List blocking dependencies
-    List { issue: Option<String> },
 }
 
 #[derive(Subcommand)]
@@ -798,11 +785,18 @@ enum PlanCommands {
 #[derive(Subcommand)]
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
+    #[command(after_help = "Examples:
+  atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"
+  atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+
+Use `evidence attach` only when you need to reuse an existing evidence record on
+another target.")]
     Record {
         #[arg(long = "kind")]
         evidence_kind: String,
         #[arg(long)]
         result: String,
+        /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
         #[arg(long, default_value = "validates")]
@@ -822,7 +816,7 @@ enum EvidenceCommands {
     },
     /// Show an evidence record
     Show { id: String },
-    /// Attach evidence to a target record
+    /// Reuse an existing evidence record on another target
     Attach {
         id: String,
         target_kind: String,
@@ -1316,9 +1310,13 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
-        IssueCommands::Blocked => {
+        IssueCommands::Blocked { id } => {
             let db = projection_query_db()?;
-            commands::deps::list_blocked(&db)
+            if let Some(id) = id {
+                commands::agent_factory::dep_list(&db, Some(&id))
+            } else {
+                commands::deps::list_blocked(&db)
+            }
         }
 
         IssueCommands::Relate {
@@ -1576,29 +1574,6 @@ fn run() -> Result<()> {
             },
         },
 
-        Commands::Dep { action } => match action {
-            DepCommands::Add { blocked, blocker } => {
-                let db = canonical_mutation_db()?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let store = RecordStore::new(&state_dir);
-                commands::agent_factory::dep_add_canonical(&db, &store, &blocked, &blocker)?;
-                drop(db);
-                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-            }
-            DepCommands::Remove { blocked, blocker } => {
-                let db = canonical_mutation_db()?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let store = RecordStore::new(&state_dir);
-                commands::agent_factory::dep_remove_canonical(&db, &store, &blocked, &blocker)?;
-                drop(db);
-                commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-            }
-            DepCommands::List { issue } => {
-                let db = projection_query_db()?;
-                commands::agent_factory::dep_list(&db, issue.as_deref())
-            }
-        },
-
         Commands::Mission { action } => match action {
             MissionCommands::Create {
                 title,
@@ -1805,6 +1780,13 @@ fn run() -> Result<()> {
                         path.as_deref(),
                         uri.as_deref(),
                         producer.as_deref(),
+                        parsed_target.as_ref().map(|(kind, id)| {
+                            commands::evidence::TargetMetadata {
+                                kind,
+                                id,
+                                role: &role,
+                            }
+                        }),
                     )?;
                     if let Some((kind, id)) = parsed_target {
                         commands::evidence::attach(
@@ -2020,7 +2002,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Unlabel { .. } => "issue unlabel",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
-            IssueCommands::Blocked => "issue blocked",
+            IssueCommands::Blocked { .. } => "issue blocked",
             IssueCommands::Relate { .. } => "issue relate",
             IssueCommands::Unrelate { .. } => "issue unrelate",
             IssueCommands::Related { .. } => "issue related",
@@ -2055,11 +2037,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IntegrationCommands::Claude { action } => match action {
                 ClaudeIntegrationCommands::Install { .. } => "integrations claude install",
             },
-        },
-        Commands::Dep { action } => match action {
-            DepCommands::Add { .. } => "dep add",
-            DepCommands::Remove { .. } => "dep remove",
-            DepCommands::List { .. } => "dep list",
         },
         Commands::Mission { action } => match action {
             MissionCommands::Create { .. } => "mission create",

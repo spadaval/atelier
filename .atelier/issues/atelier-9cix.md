@@ -6,15 +6,17 @@ labels:
 - "evidence"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-bqau"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Qualify closeout evidence against issue Evidence requirements"
-updated_at: "2026-06-14T02:52:52.372068506+00:00"
+updated_at: "2026-06-14T06:44:43.080303607+00:00"
 ---
 
 ## Description

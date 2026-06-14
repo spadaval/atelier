@@ -6,15 +6,17 @@ labels:
 - "cli"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-4yrt"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Move blocker commands under issue"
-updated_at: "2026-06-14T05:58:14.483925218+00:00"
+updated_at: "2026-06-14T06:39:23.552707550+00:00"
 ---
 
 ## Description

@@ -27,4 +27,10 @@ Commands such as workflow check, finish, current-work, issue new, archive, sessi
 
 ## Evidence
 
-Focused CLI tests assert suggestions for representative removed command names.
+- Focused CLI tests or transcripts assert suggestions for representative
+  removed command names including at least `workflow check`, `finish`,
+  `current-work`, `issue new`, and `work start`.
+- The suggestions name supported commands or help surfaces and do not execute
+  compatibility aliases or old-command shims.
+- `git diff --check`, `atelier lint`, and the focused command-suggestion tests
+  pass.

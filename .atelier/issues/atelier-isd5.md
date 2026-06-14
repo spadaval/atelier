@@ -21,8 +21,9 @@ updated_at: "2026-06-14T02:50:18.340424688+00:00"
 
 Create or update product docs with the supported normal command paths for
 mission, issue, worktree, evidence, health, recovery, setup, and cross-record
-graph flows. Include removed or intentionally absent commands only as
-corrective notes when the logs show repeated confusion.
+graph flows after the linked CLI and proof-gate contracts are stable. Include
+removed or intentionally absent commands only as corrective notes when the logs
+show repeated confusion.
 
 ## Outcome
 
@@ -33,4 +34,9 @@ rebuild, or integrations.
 
 ## Evidence
 
-Docs update is linked from the product or docs index; examples use current help; git diff --check passes.
+- File diff shows the docs update linked from the product or docs index.
+- Examples are checked against current CLI help after the relevant command
+  surface tasks land.
+- Search transcript shows the docs do not recommend removed or intentionally
+  absent command names except as corrective "use this instead" notes.
+- `git diff --check` and `atelier lint` pass.

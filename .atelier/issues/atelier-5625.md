@@ -19,7 +19,10 @@ updated_at: "2026-06-14T02:52:24.362402133+00:00"
 
 ## Description
 
-Update orchestration guidance to delegate bounded docs drift, command inventory, transcript capture, fixture repair, stale-test inventory, and focused validation to Mini models earlier.
+After the Agent Factory/Atelier guidance boundary is reconciled, update
+portable orchestration guidance to delegate bounded docs drift, command
+inventory, transcript capture, fixture repair, stale-test inventory, and focused
+validation to Mini models earlier.
 
 ## Outcome
 
@@ -28,4 +31,6 @@ Main orchestrator threads do less bounded search and validation work directly wh
 ## Evidence
 
 - File diff in Agent Factory orchestration guidance includes model-routing examples and proof expectations for these bounded slices.
+- Examples keep model-routing judgment in Agent Factory and route
+  repository-specific command recipes to Atelier-owned docs/help.
 - `git diff --check` passes for the documentation change.

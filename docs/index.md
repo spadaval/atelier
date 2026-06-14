@@ -1,6 +1,8 @@
 # Documentation Map
 
-- `AGENTFACTORY.md`: agent-factory bindings for this repository.
+- `AGENTFACTORY.md`: thin Agent Factory binding for this repository; per
+  [ADR 0006](adr/0006-agent-guidance-ownership-boundary.md), it routes
+  repo-specific tactical guidance to Atelier-owned surfaces.
 - `AGENTS.md`: concise entry point for agents working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.

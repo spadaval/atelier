@@ -6,7 +6,9 @@ labels:
 - "evidence"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-bqau"
   children: []
   attachments: []
   relates: []

@@ -27,5 +27,10 @@ Mission status and closeout rollups count each unique issue once, regardless of 
 
 ## Evidence
 
-Focused CLI test or transcript creates a mission with an epic and child also directly linked, then shows mission status counting the child once; Lint passed., Canonical export is current
-State: /root/atelier/.atelier, and  pass.
+- Focused CLI test or transcript creates a mission with an epic and a child
+  issue also directly linked to the mission, then shows mission status counting
+  the child once.
+- Focused CLI test or transcript output reports duplicate reachability as a
+  graph hygiene warning or equivalent operator-facing diagnostic rather than
+  inflating totals.
+- `git diff --check`, `atelier lint`, and the focused mission-status test pass.

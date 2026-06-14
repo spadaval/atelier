@@ -9,10 +9,16 @@ usually harmful. Do not add staged deprecations, aliases, fallback readers, or
 old-output shims unless a human explicitly asks for them for a specific
 transition.
 
+Per [ADR 0006](../adr/0006-agent-guidance-ownership-boundary.md), this file
+and Atelier help own the repository's tactical operator guidance. Agent Factory
+coordinates agents, but it should route repo-specific command choice,
+workflow-recovery, readiness, and closeout detail to Atelier-owned command and
+doc surfaces instead of duplicating that contract.
+
 ## Workflow-First Core
 
 Workflow-first commands are stable enough to appear in `atelier --help` and are
-expected in normal Agent Factory workflows:
+the normal repo-owned operational path that Agent Factory should reference:
 
 - `atelier init`
 - `atelier prime`
@@ -76,7 +82,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Establish active local work on one issue. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree for <id>`, `status`. |
 | `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |
-| `issue` | Create, list, show, update, transition, close, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue transition <id> --options`, `issue list --blocked`, edit the Markdown record, `history --issue <id>`. |
+| `issue` | Create, list, show, update, transition, close, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, and blocker inspection stays under `issue blocked`. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
 | `mission` | Create, focus, inspect, update, close, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; `close` runs closeout gates. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
@@ -343,7 +349,7 @@ surface is `delete` unless it is in the core list above.
 | `atelier export --check` | Low-level diagnostic | Cache/projection state should be transparent; normal health and closeout routes use `lint`, `doctor`, mission status/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
 | `atelier export` | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
 | `atelier rebuild` | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
-| Hidden `issue quick/subissue/search/block/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use `issue create/list/show/update/transition/close`, issue-owned blocker commands, root `search`, cross-record `graph`, record-specific notes, `evidence`, and `status`. |
+| Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use `issue create/list/show/update/transition/close/block/unblock/blocked`, root `search`, cross-record `graph`, record-specific notes, `evidence`, and `status`. |
 | Hidden work-status helper and any legacy work-start path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and work-start under that removed group is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle and blockers; `graph` owns cross-record impact/tree inspection. |

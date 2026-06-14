@@ -15,7 +15,6 @@ const GUIDANCE_FILES: &[&str] = &[
 const CLI_SURFACE_DOC: &str = "docs/product/cli-surface.md";
 
 const COMMAND_GROUP_ROOTS: &[&str] = &[
-    "dep",
     "diagnostics",
     "evidence",
     "graph",

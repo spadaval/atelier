@@ -341,7 +341,7 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
                 .strip_prefix(root)
                 .context("Failed to relativize canonical issue path")?
                 .to_path_buf();
-            if is_transient_record_path(&relative) {
+            if crate::storage_layout::is_local_atelier_path(&relative) {
                 continue;
             }
             if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
@@ -426,9 +426,6 @@ fn ensure_no_unsupported_canonical_files(
         let in_canonical_dir = record_store::canonical_record_dirs()
             .iter()
             .any(|dir| relative.starts_with(dir));
-        if in_canonical_dir && is_transient_record_path(&relative) {
-            continue;
-        }
         if in_canonical_dir && expected.contains(&relative) {
             continue;
         }
@@ -460,10 +457,7 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
         let relative = path
             .strip_prefix(root)
             .context("Failed to relativize canonical projection path")?;
-        if root.file_name().and_then(|name| name.to_str())
-            == Some(crate::storage_layout::ATELIER_DIR)
-            && crate::storage_layout::is_local_atelier_path(relative)
-        {
+        if crate::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
         if path.is_dir() {
@@ -554,13 +548,6 @@ fn write_rebuilt_database(
         )
     })?;
     Ok(())
-}
-
-fn is_transient_record_path(relative: &Path) -> bool {
-    relative
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with('.') && name.ends_with(".tmp"))
 }
 
 fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {

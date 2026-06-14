@@ -8,8 +8,8 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
-    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, Issue, MilestoneRecordData,
-    PlanRecordData,
+    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue,
+    MilestoneRecordData, PlanRecordData,
 };
 use crate::record_id;
 
@@ -1089,6 +1089,7 @@ fn render_evidence_record(
         "independence_level",
         data.independence_level.as_deref(),
     )?;
+    write_evidence_target(&mut output, data.target.as_ref())?;
     write_yaml_array(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array(&mut output, "residual_risks", &data.residual_risks)?;
     write_evidence_output_summary(&mut output, data.output.as_ref())?;
@@ -1136,6 +1137,7 @@ fn parse_evidence_domain_record(
             proof_scope: optional_scalar(&front_matter, "proof_scope")?,
             agent_identity: optional_scalar(&front_matter, "agent_identity")?,
             independence_level: optional_scalar(&front_matter, "independence_level")?,
+            target: optional_yaml_value::<EvidenceTarget>(&front_matter, "target", relative)?,
             residual_risks: optional_string_array(&front_matter, "residual_risks", relative)?
                 .unwrap_or_default(),
             follow_up_ids: optional_string_array(&front_matter, "follow_up_ids", relative)?
@@ -1149,7 +1151,6 @@ fn parse_evidence_domain_record(
                 "output",
                 relative,
             )?,
-            target: None,
         };
         serde_json::to_string(&data)?
     };
@@ -1870,7 +1871,7 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
                 .strip_prefix(root)
                 .context("Failed to relativize canonical issue path")?
                 .to_path_buf();
-            if is_transient_record_path(&relative) {
+            if crate::storage_layout::is_local_atelier_path(&relative) {
                 continue;
             }
             if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
@@ -1883,13 +1884,6 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
         }
     }
     Ok(())
-}
-
-fn is_transient_record_path(relative: &Path) -> bool {
-    relative
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with('.') && name.ends_with(".tmp"))
 }
 
 fn split_front_matter<'a>(
@@ -2659,6 +2653,24 @@ fn write_evidence_stream_summary(
     output.push_str(&serde_json::to_string(&stream.summary)?);
     output.push('\n');
     output.push_str(&format!("    truncated: {}\n", stream.truncated));
+    Ok(())
+}
+
+fn write_evidence_target(output: &mut String, target: Option<&EvidenceTarget>) -> Result<()> {
+    let Some(target) = target else {
+        output.push_str("target: null\n");
+        return Ok(());
+    };
+    output.push_str("target:\n");
+    output.push_str("  kind: ");
+    output.push_str(&serde_json::to_string(&target.kind)?);
+    output.push('\n');
+    output.push_str("  id: ");
+    output.push_str(&serde_json::to_string(&target.id)?);
+    output.push('\n');
+    output.push_str("  role: ");
+    output.push_str(&serde_json::to_string(&target.role)?);
+    output.push('\n');
     Ok(())
 }
 

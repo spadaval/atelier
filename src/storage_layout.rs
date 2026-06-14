@@ -88,7 +88,7 @@ pub fn find_canonical_dir_from_cwd() -> Result<Option<PathBuf>> {
 }
 
 pub fn is_local_atelier_path(relative_path: &Path) -> bool {
-    if is_runtime_rebuild_temp_path(relative_path) {
+    if is_local_artifact_path(relative_path) {
         return true;
     }
 
@@ -108,18 +108,22 @@ pub fn is_local_atelier_path(relative_path: &Path) -> bool {
         || relative_path == Path::new("hook-config.local.json")
 }
 
-fn is_runtime_rebuild_temp_path(relative_path: &Path) -> bool {
-    if relative_path.components().count() != 1 {
-        return false;
-    }
+fn is_local_artifact_path(relative_path: &Path) -> bool {
     let Some(file_name) = relative_path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
+
     file_name.starts_with(&format!(".{RUNTIME_DB_FILE}."))
         && (file_name.ends_with(".rebuild-tmp")
             || file_name.ends_with(".rebuild-tmp-shm")
             || file_name.ends_with(".rebuild-tmp-wal")
             || file_name.ends_with(".rebuild-tmp-journal"))
+        || file_name.ends_with(".tmp")
+        || file_name.ends_with(".lock")
+        || file_name.ends_with(".journal")
+        || file_name.ends_with("-journal")
+        || file_name.ends_with("-wal")
+        || file_name.ends_with("-shm")
 }
 
 #[cfg(test)]
@@ -149,9 +153,16 @@ mod tests {
         assert!(is_local_atelier_path(Path::new(
             "runtime/.state.db.123.456.rebuild-tmp-journal"
         )));
-        assert!(!is_local_atelier_path(Path::new(
-            "issues/.state.db.123.456.rebuild-tmp"
+        assert!(is_local_atelier_path(Path::new(
+            "issues/atelier-123.md.lock"
         )));
+        assert!(is_local_atelier_path(Path::new(
+            "issues/atelier-123.md-journal"
+        )));
+        assert!(is_local_atelier_path(Path::new(
+            "issues/.atelier-123.md.456.789.tmp"
+        )));
+        assert!(!is_local_atelier_path(Path::new("issues/atelier-123.md")));
         assert!(is_local_atelier_path(Path::new("state.db")));
     }
 }

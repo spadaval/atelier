@@ -19,7 +19,9 @@ updated_at: "2026-06-14T02:52:21.445933576+00:00"
 
 ## Description
 
-Update guidance so closeout workers name the specific Outcome or Evidence line proved by their evidence, especially for broad or parent-level claims.
+After the Agent Factory/Atelier guidance boundary is reconciled, update
+portable closeout guidance so workers name the specific Outcome or Evidence
+line proved by their evidence, especially for broad or parent-level claims.
 
 ## Outcome
 
@@ -28,4 +30,7 @@ Proof summaries are claim-specific rather than broad green-test statements.
 ## Evidence
 
 - File diff in Agent Factory closeout guidance includes the claim-specific proof requirement and examples.
+- File diff or review artifact shows examples routing repository-specific
+  closeout diagnostics to Atelier-owned mission status/audit and evidence
+  surfaces.
 - `git diff --check` passes for the documentation change.

@@ -27,4 +27,9 @@ Agents can correct invalid evidence relation attempts without guessing role name
 
 ## Evidence
 
-Focused CLI tests cover invalid evidence relation output and the accepted replacement path.
+- Focused CLI tests or transcripts cover an invalid evidence relation such as
+  `validation`, show the accepted relation vocabulary, and name the normal
+  target-and-attach evidence flow.
+- Focused CLI test or transcript records or attaches evidence using the
+  accepted positive path.
+- `git diff --check`, `atelier lint`, and focused evidence CLI tests pass.

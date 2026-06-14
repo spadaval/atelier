@@ -20,8 +20,9 @@ updated_at: "2026-06-14T02:51:53.262125535+00:00"
 ## Description
 
 Add a compact matrix that explains which commands accept mission, issue,
-evidence, plan, and milestone IDs, including the normal blocker, mission work
-link, evidence attachment, plan relationship, graph, and note boundaries.
+evidence, plan, and milestone IDs after the record-specific command surfaces
+are stable. Include the normal blocker, mission work link, evidence attachment,
+plan relationship, graph, and note boundaries.
 
 ## Outcome
 
@@ -31,4 +32,8 @@ Wrong-kind examples point to the correct surface without recommending generic
 
 ## Evidence
 
-Docs include the matrix and at least one mission-vs-issue example; git diff --check passes.
+- File diff shows docs include the matrix and at least one mission-vs-issue
+  example.
+- Examples use current help for record-specific blocker, mission link, evidence
+  attachment, graph, and note commands.
+- `git diff --check` and `atelier lint` pass.

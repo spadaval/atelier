@@ -27,4 +27,10 @@ Wrong-kind ID mistakes become corrective one-step errors instead of generic not-
 
 ## Evidence
 
-Focused CLI tests cover mission ID to issue command and another representative wrong-kind lookup.
+- Focused CLI tests cover passing a mission ID to an issue read command and to
+  one mutation-oriented issue command.
+- At least one additional wrong-kind lookup is covered, such as evidence ID to
+  an issue command or issue ID to a mission command.
+- Failure output names the actual record kind and the likely correct command
+  family.
+- `git diff --check`, `atelier lint`, and the focused wrong-kind tests pass.

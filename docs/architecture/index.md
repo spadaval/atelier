@@ -1,19 +1,19 @@
 # Architecture
 
-This map covers implementation architecture: code ownership, persistence
-boundaries, local runtime state, and inherited Chainlink structure. Product
-behavior lives in [Product](../product/index.md), product intent lives in
-[SPEC.md](../../SPEC.md), domain language lives in [CONTEXT.md](../../CONTEXT.md),
-and fork provenance is documented in [Chainlink Provenance](provenance.md).
+This map covers implementation architecture for the single Rust crate rooted at
+`src/`: code ownership, persistence boundaries, local runtime state, and
+inherited Chainlink structure. Product behavior lives in
+[Product](../product/index.md), product intent lives in [SPEC.md](../../SPEC.md),
+domain language lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is
+documented in [Chainlink Provenance](provenance.md).
 
 ## Current Implementation
 
-Atelier currently starts from the Chainlink Rust CLI:
+Atelier is currently a single Rust crate:
 
-- `src/main.rs`: Clap command routing and global CLI options.
-- `src/commands/`: command handlers for the documented CLI surface: issues,
-  missions, plans, evidence, graph, workflow validation, work/worktrees,
-  predecessor import, low-level export/rebuild diagnostics, lint, and doctor.
+- [Source Layout](source-layout.md): the current module map for command
+  dispatch, projection, `RecordStore`, workflow policy, evidence, and worktree
+  behavior.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
 - `resources/atelier/` and `resources/claude/`: bundled rule and integration

@@ -19,7 +19,10 @@ updated_at: "2026-06-14T02:52:02.984801054+00:00"
 
 ## Description
 
-Document the difference between canonical Markdown writes and projection refresh, plus the normal repair order for stale projections, invalid canonical Markdown, and runtime/cache artifacts.
+Document the difference between canonical Markdown writes and projection refresh
+after the stale-state and recovery behavior is stable, plus the normal repair
+order for stale projections, invalid canonical Markdown, and runtime/cache
+artifacts.
 
 ## Outcome
 
@@ -27,4 +30,8 @@ Agents can tell whether a durable write landed and what to do when projection fr
 
 ## Evidence
 
-Docs include the recovery sequence and point to lint/export/doctor responsibilities; git diff --check passes.
+- Docs include the recovery sequence and point to the implemented lint, doctor,
+  and any remaining advanced rebuild/export responsibilities.
+- File diff or review artifact shows examples distinguishing durable canonical
+  writes from rebuildable local projection/runtime state.
+- `git diff --check` and `atelier lint` pass.

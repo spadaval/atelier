@@ -27,6 +27,13 @@ pub struct CaptureOptions<'a> {
 }
 
 #[derive(Debug, Clone)]
+pub struct TargetMetadata<'a> {
+    pub kind: &'a str,
+    pub id: &'a str,
+    pub role: &'a str,
+}
+
+#[derive(Debug, Clone)]
 struct EvidenceMetadata<'a> {
     proof_scope: &'a str,
     agent_identity: Option<&'a str>,
@@ -56,6 +63,7 @@ pub fn add_returning_id(
     path: Option<&str>,
     uri: Option<&str>,
     producer: Option<&str>,
+    target: Option<TargetMetadata<'_>>,
 ) -> Result<String> {
     let metadata = EvidenceMetadata::from_producer(producer);
     let data = EvidenceRecordData {
@@ -75,7 +83,11 @@ pub fn add_returning_id(
         success: None,
         spawn_error: None,
         output: None,
-        target: None,
+        target: target.as_ref().map(|target| EvidenceTarget {
+            kind: target.kind.to_string(),
+            id: target.id.to_string(),
+            role: target.role.to_string(),
+        }),
     };
     let store = RecordStore::new(state_dir);
     let created = store.create_domain_record(

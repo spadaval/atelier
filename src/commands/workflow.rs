@@ -784,7 +784,11 @@ fn evaluate_builtin_with_params(
         "evidence_attached" => {
             if target_kind == "issue" {
                 let issue = db.require_issue(target_id)?;
-                let gate = issue_evidence_gate_status(db, &issue)?;
+                let state_dir =
+                    crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+                let store = RecordStore::new(&state_dir);
+                let record = store.load_issue_by_id(target_id)?;
+                let gate = issue_evidence_gate_status(db, &issue, Some(&record.sections))?;
                 if let Some(crate::workflow_policy::ValidatorParams::EvidenceAttached {
                     min_count,
                     kind,

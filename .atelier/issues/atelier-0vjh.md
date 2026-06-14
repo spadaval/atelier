@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Update architecture source-layout map"
-updated_at: "2026-06-14T02:51:56.372163784+00:00"
+updated_at: "2026-06-14T06:25:47.326117837+00:00"
 ---
 
 ## Description
