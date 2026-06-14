@@ -59,8 +59,6 @@ Advanced work:
   worktree      Create, inspect, merge, and remove issue worktrees
 
 State management:
-  export        Write or check canonical tracker records
-  rebuild       Rebuild local SQLite state from canonical tracker records
   import-beads  Import an external Beads JSONL backup
 
 Integrations:
@@ -68,9 +66,9 @@ Integrations:
 
 Maintenance:
   maintenance   Run explicit destructive maintenance commands
-  diagnostics   Inspect local command diagnostics
+  diagnostics   Inspect advanced local-only command diagnostics
   lint          Validate tracker records
-  doctor        Check runtime and exported-state health
+  doctor        Check runtime and derived-state health; use --fix for local repair
 
 Common commands:
   atelier prime
@@ -92,6 +90,7 @@ Common commands:
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
   atelier doctor
+  atelier doctor --fix
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -266,7 +265,7 @@ enum Commands {
         action: WorktreeCommands,
     },
 
-    /// Local command diagnostics
+    /// Advanced local command diagnostics; JSON is local-only telemetry, not workflow state
     Diagnostics {
         #[command(subcommand)]
         action: DiagnosticsCommands,
@@ -284,8 +283,12 @@ enum Commands {
         id: Option<String>,
     },
 
-    /// Check tracker runtime and exported-state health
-    Doctor,
+    /// Check tracker runtime and derived-state health
+    Doctor {
+        /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
+        #[arg(long)]
+        fix: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -888,7 +891,7 @@ enum WorktreeCommands {
 
 #[derive(Subcommand)]
 enum DiagnosticsCommands {
-    /// Summarize slow command telemetry as stable JSON
+    /// Summarize slow command telemetry as stable local-only JSON for performance analysis
     Slow {
         /// Time window in UTC days, where 0 means today only
         #[arg(long, default_value_t = 7)]
@@ -2002,13 +2005,15 @@ fn run() -> Result<()> {
             commands::agent_factory::lint(&db, id.as_deref())
         }
 
-        Commands::Doctor => {
+        Commands::Doctor { fix } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
             commands::agent_factory::doctor(
                 storage.db(),
                 storage.repo_root(),
                 &storage.state_dir(),
+                &storage.db_path(),
                 storage.runtime_db_existed,
+                fix,
             )
         }
     };
@@ -2211,6 +2216,6 @@ fn command_identity(command: &Commands) -> &'static str {
             MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
         Commands::Lint { .. } => "lint",
-        Commands::Doctor => "doctor",
+        Commands::Doctor { .. } => "doctor",
     }
 }

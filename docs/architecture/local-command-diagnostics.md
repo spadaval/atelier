@@ -205,6 +205,12 @@ and `atelier evidence record`. Agents and scripts must not parse diagnostics
 JSON to choose ready work, decide blockers, prove validation, infer evidence
 coverage, or close work.
 
+This boundary applies even though diagnostics query commands intentionally emit
+stable JSON. That JSON is stable for local diagnostic tooling, telemetry review,
+and performance follow-up work. It must not appear in ordinary Agent Factory or
+operator recipes for mission selection, issue readiness, blocker triage,
+validation proof, evidence coverage, or closeout readiness.
+
 ## Slow Command Query Defaults
 
 The slow-command query surface owned by follow-up work should read local event

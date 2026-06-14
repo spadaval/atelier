@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -2480,18 +2480,45 @@ pub fn doctor(
     db: &Database,
     repo_root: &Path,
     state_dir: &Path,
+    db_path: &Path,
     runtime_db_existed: bool,
+    fix: bool,
 ) -> Result<()> {
     let layout = crate::storage_layout::StorageLayout::new(repo_root);
     let atelier_dir = layout.atelier_dir();
     let config_path = layout.config_path();
     let cache_dir = layout.cache_dir();
-    let db_path = layout.runtime_db_path();
+
+    let repaired_db;
+    let active_db = if fix {
+        super::rebuild::validate_canonical_state(state_dir).with_context(|| {
+            "doctor --fix refused to edit tracked `.atelier/` canonical records; \
+             run `atelier lint`, fix the named canonical Markdown record, then rerun `atelier doctor --fix`"
+        })?;
+        super::rebuild::refresh_projection_preserving_runtime(state_dir, db_path).with_context(
+            || {
+                format!(
+                    "doctor --fix failed while repairing ignored local projection state at {}",
+                    db_path.display()
+                )
+            },
+        )?;
+        repaired_db = Database::open(db_path).context("Failed to reopen repaired database")?;
+        &repaired_db
+    } else {
+        db
+    };
+
     let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
-    let projection_fresh = crate::projection_index::check(db, state_dir)
+    let projection_fresh = crate::projection_index::check(active_db, state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
-    let runtime_tables_available = db.runtime_state_tables_available().unwrap_or(false);
+    let runtime_tables_available = active_db.runtime_state_tables_available().unwrap_or(false);
+    let runtime_db_available = if fix {
+        db_path.exists()
+    } else {
+        runtime_db_existed
+    };
     let ignore_rules_current = runtime_gitignore_entries_present(repo_root);
     let diagnostics = if crate::telemetry::diagnostics_enabled() {
         "enabled"
@@ -2500,7 +2527,7 @@ pub fn doctor(
     };
     let mut health = BTreeMap::new();
     health.insert("config", config_path.exists());
-    health.insert("database", runtime_db_existed);
+    health.insert("database", runtime_db_available);
     health.insert("ignore_rules", ignore_rules_current);
     health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
@@ -2508,6 +2535,11 @@ pub fn doctor(
     health.insert("runtime_tables", runtime_tables_available);
     println!("Database: {}", db_path.display());
     println!("State: {}", state_dir.display());
+    if fix {
+        println!("Repair:");
+        println!("  local_projection: repaired");
+        println!("  canonical_records: unchanged");
+    }
     println!("Install health:");
     println!(
         "  config: {}",
@@ -2547,7 +2579,7 @@ pub fn doctor(
     );
     println!(
         "  database: {}",
-        if runtime_db_existed {
+        if runtime_db_available {
             "ok"
         } else {
             "missing (runtime projection artifact)"

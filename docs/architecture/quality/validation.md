@@ -368,6 +368,10 @@ Factory prose alone.
   validate durable state with tracked `.atelier/` records, `atelier lint`,
   `atelier doctor`, focused `show` commands, `issue transition --options`, and
   mission status or audit output.
+- Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
+  only for local Atelier performance and telemetry analysis. It is not proof of
+  ready work, blockers, validation results, evidence coverage, or closeout
+  readiness.
 - Migration work should classify expected breakage and name reconnect or
   closeout ownership.
 

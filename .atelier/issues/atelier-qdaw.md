@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add doctor fix for local derived-state repair"
-updated_at: "2026-06-14T05:58:41.157619088+00:00"
+updated_at: "2026-06-14T07:40:54.055790595+00:00"
 ---
 
 ## Description

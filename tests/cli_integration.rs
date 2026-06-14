@@ -783,6 +783,90 @@ fn test_doctor_distinguishes_missing_runtime_projection_database() {
 }
 
 #[test]
+fn test_doctor_help_documents_fix_boundary() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["doctor", "--help"]);
+    assert!(success, "doctor help failed: {stderr}");
+    assert!(stdout.contains("--fix"));
+    assert!(stdout.contains("Repair ignored local runtime/cache/projection state"));
+    assert!(stdout.contains("never edits tracked canonical records"));
+}
+
+#[test]
+fn test_doctor_fix_repairs_missing_and_stale_local_projection_state() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Doctor fix projection"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(success, "doctor --fix failed for missing db: {stderr}");
+    assert!(stdout.contains("Repair:"));
+    assert!(stdout.contains("local_projection: repaired"));
+    assert!(stdout.contains("canonical_records: unchanged"));
+    assert!(stdout.contains("projection_fresh: ok"));
+    assert!(stdout.contains("database: ok"));
+
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("Doctor fix projection", "Doctor fix projection repaired")
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(
+        success,
+        "doctor --fix failed for stale projection: {stderr}"
+    );
+    assert!(stdout.contains("local_projection: repaired"));
+    assert!(stdout.contains("projection_fresh: ok"));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed after doctor --fix: {stderr}");
+    assert!(stdout.contains("Doctor fix projection repaired"));
+}
+
+#[test]
+fn test_doctor_fix_refuses_to_modify_malformed_canonical_records() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Doctor fix boundary"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
+    assert!(success, "export failed: {stderr}");
+
+    corrupt_issue_title_yaml(dir.path(), &issue_id, "Doctor fix boundary");
+    let malformed = read_canonical_record(dir.path(), "issues", &issue_id);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(
+        !success,
+        "doctor --fix must fail on malformed canonical Markdown"
+    );
+    assert!(
+        stdout.is_empty(),
+        "doctor --fix should not print repair success"
+    );
+    assert!(
+        stderr.contains("doctor --fix refused to edit tracked `.atelier/` canonical records")
+            && stderr.contains("atelier lint")
+            && stderr.contains("Invalid YAML front matter")
+            && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "unexpected doctor --fix refusal: {stderr}"
+    );
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &issue_id),
+        malformed,
+        "doctor --fix must not rewrite malformed tracked canonical Markdown"
+    );
+}
+
+#[test]
 fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1089,6 +1173,28 @@ fn test_diagnostics_slow_summarizes_fixture_events() {
 }
 
 #[test]
+fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
+    assert!(success, "root help failed: {stderr}");
+    assert!(stdout.contains("diagnostics   Inspect advanced local-only command diagnostics"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["diagnostics", "--help"]);
+    assert!(success, "diagnostics help failed: {stderr}");
+    assert!(stdout.contains(
+        "Advanced local command diagnostics; JSON is local-only telemetry, not workflow state"
+    ));
+    assert!(stdout.contains("slow"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["diagnostics", "slow", "--help"]);
+    assert!(success, "diagnostics slow help failed: {stderr}");
+    assert!(stdout.contains(
+        "Summarize slow command telemetry as stable local-only JSON for performance analysis"
+    ));
+}
+
+#[test]
 fn test_top_level_help_only_shows_core_commands() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["--help"]);
@@ -1119,8 +1225,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "evidence",
         "history",
         "worktree",
-        "export",
-        "rebuild",
         "import-beads",
         "lint",
         "doctor",
@@ -1139,6 +1243,18 @@ fn test_top_level_help_only_shows_core_commands() {
             .any(|line| line.trim_start().starts_with("note ")),
         "root help should not expose generic note:\n{stdout}"
     );
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("export ")),
+        "root help should not present export as a normal operator command:\n{stdout}"
+    );
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("rebuild ")),
+        "root help should not present rebuild as a normal operator command:\n{stdout}"
+    );
 
     for common in [
         "atelier prime",
@@ -1154,6 +1270,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue transition <issue-id> --options",
         "atelier issue close <issue-id> --reason",
         "atelier doctor",
+        "atelier doctor --fix",
     ] {
         assert!(
             stdout.contains(common),
@@ -1501,6 +1618,30 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
     );
     assert!(docs.contains("atelier lint"));
     assert!(docs.contains("atelier doctor"));
+}
+
+#[test]
+fn test_diagnostics_json_docs_define_local_operator_boundary() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let diagnostics =
+        std::fs::read_to_string(manifest.join("docs/architecture/local-command-diagnostics.md"))
+            .unwrap();
+    let cli_surface =
+        std::fs::read_to_string(manifest.join("docs/product/cli-surface.md")).unwrap();
+    let validation =
+        std::fs::read_to_string(manifest.join("docs/architecture/quality/validation.md")).unwrap();
+
+    assert!(diagnostics.contains("Diagnostics JSON is for inspecting Atelier itself."));
+    assert!(diagnostics.contains("stable for local diagnostic tooling"));
+    assert!(diagnostics.contains("must not appear in ordinary Agent Factory or"));
+    assert!(diagnostics.contains("operator recipes for mission selection"));
+    assert!(cli_surface.contains("Stable local-only diagnostic output"));
+    assert!(cli_surface.contains("not an automation contract for selecting work"));
+    assert!(
+        validation.contains("Diagnostics JSON from commands such as `atelier diagnostics slow`")
+    );
+    assert!(validation.contains("not proof of"));
+    assert!(validation.contains("ready work, blockers, validation results"));
 }
 
 #[test]
