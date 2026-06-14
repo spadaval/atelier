@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Delegate bounded transcript and validation slices earlier"
-updated_at: "2026-06-14T02:52:24.362402133+00:00"
+updated_at: "2026-06-14T07:05:14.611804211+00:00"
 ---
 
 ## Description

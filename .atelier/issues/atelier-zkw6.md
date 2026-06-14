@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add Agent Factory command-surface stop rule"
-updated_at: "2026-06-14T02:52:12.214253216+00:00"
+updated_at: "2026-06-14T07:05:46.186986822+00:00"
 ---
 
 ## Description

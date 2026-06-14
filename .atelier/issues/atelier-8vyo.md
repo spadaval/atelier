@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Add Agent Factory stale-state preflight"
-updated_at: "2026-06-14T02:52:08.979051706+00:00"
+updated_at: "2026-06-14T07:05:22.400265487+00:00"
 ---
 
 ## Description
