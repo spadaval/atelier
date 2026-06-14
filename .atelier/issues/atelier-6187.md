@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Reconcile Agent Factory and Atelier guidance boundary"
-updated_at: "2026-06-14T06:26:04.082144704+00:00"
+updated_at: "2026-06-14T06:48:43.232602854+00:00"
 ---
 
 ## Description
