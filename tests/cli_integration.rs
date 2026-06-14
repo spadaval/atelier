@@ -1989,7 +1989,8 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         "--options should leave the git worktree unchanged:\nbefore:\n{git_before}\nafter:\n{git_after}"
     );
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(
@@ -9994,6 +9995,127 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     assert!(stdout.contains("worktree: dirty"));
     assert!(stdout.contains("commit or remove untracked worktree changes"));
     assert!(stdout.contains("untracked-closeout.txt"));
+    assert!(stderr.contains("mission closeout blocked"));
+}
+
+#[test]
+fn test_mission_close_ignores_tracker_generated_issue_closeout_bookkeeping() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "create", "Tracker bookkeeping closeout"],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Tracker bookkeeping closeout");
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Closeout bookkeeping work"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Closeout bookkeeping work");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    attach_pass_evidence(
+        dir.path(),
+        "mission",
+        &mission_id,
+        "mission bookkeeping proof",
+    );
+    close_issue_with_evidence(dir.path(), &issue_id, Some("done"));
+
+    let dirty = git_status_short(dir.path());
+    assert!(
+        dirty.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "issue close should leave canonical bookkeeping dirty before commit:\n{dirty}"
+    );
+    assert!(
+        dirty.contains(&format!(".atelier/issues/{issue_id}.activity/")),
+        "issue close should leave canonical activity dirty before commit:\n{dirty}"
+    );
+
+    let (success, status_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+    assert!(
+        success,
+        "mission status should tolerate tracker bookkeeping: {stderr}"
+    );
+    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Worktree: clean - ignored"));
+    assert!(status_out.contains(&format!(".atelier/issues/{issue_id}.md")));
+    assert!(status_out.contains(&format!(".atelier/issues/{issue_id}.activity/")));
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "close", &mission_id, "--reason", "done"],
+    );
+    assert!(
+        success,
+        "mission close should ignore tracker-generated closeout bookkeeping: {stderr}"
+    );
+    assert!(close_out.contains("Status: closed"));
+    assert!(close_out.contains("Closeout Notes"));
+}
+
+#[test]
+fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "create", "Dirty canonical tracker closeout"],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("Mission atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Dirty canonical tracker closeout");
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Hand edited canonical work"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Hand edited canonical work");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    attach_pass_evidence(
+        dir.path(),
+        "mission",
+        &mission_id,
+        "dirty canonical mission proof",
+    );
+    close_issue_with_evidence(dir.path(), &issue_id, Some("done"));
+    commit_all(dir.path(), "clean baseline before manual canonical edit");
+
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace(
+            "The issue outcome is complete and ready for closeout.",
+            "The issue outcome was hand-edited after closeout.",
+        )
+    });
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "close", &mission_id, "--reason", "done"],
+    );
+    assert!(
+        !success,
+        "hand-edited canonical issue markdown must block closeout"
+    );
+    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("worktree: dirty"));
+    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
     assert!(stderr.contains("mission closeout blocked"));
 }
 

@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
@@ -1149,14 +1150,33 @@ fn git_worktree_clean() -> Result<(bool, String)> {
     let dirty = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(ToOwned::to_owned)
+        .filter_map(parse_git_dirty_entry)
         .collect::<Vec<_>>();
     if dirty.is_empty() {
         Ok((true, "git worktree is clean".to_string()))
     } else {
-        let sample = dirty.iter().take(8).cloned().collect::<Vec<_>>().join("; ");
-        let suffix = if dirty.len() > 8 {
-            format!("; ... and {} more", dirty.len() - 8)
+        let classified = classify_git_dirty_entries(&root, &dirty)?;
+        if classified.blocking_entries.is_empty() {
+            if classified.tracker_generated_entries.is_empty() {
+                return Ok((true, "git worktree is clean".to_string()));
+            }
+            return Ok((
+                true,
+                format!(
+                    "ignored {} tracker-generated canonical {}: {}",
+                    classified.tracker_generated_entries.len(),
+                    if classified.tracker_generated_entries.len() == 1 {
+                        "entry"
+                    } else {
+                        "entries"
+                    },
+                    summarize_git_dirty_entries(&classified.tracker_generated_entries)
+                ),
+            ));
+        }
+        let sample = summarize_git_dirty_entries(&classified.blocking_entries);
+        let suffix = if classified.blocking_entries.len() > 8 {
+            format!("; ... and {} more", classified.blocking_entries.len() - 8)
         } else {
             String::new()
         };
@@ -1164,11 +1184,256 @@ fn git_worktree_clean() -> Result<(bool, String)> {
             false,
             format!(
                 "git worktree has {} dirty {}: {sample}{suffix}",
-                dirty.len(),
-                if dirty.len() == 1 { "entry" } else { "entries" }
+                classified.blocking_entries.len(),
+                if classified.blocking_entries.len() == 1 {
+                    "entry"
+                } else {
+                    "entries"
+                }
             ),
         ))
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GitDirtyEntry {
+    raw: String,
+    repo_path: String,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct ClassifiedGitDirtyEntries {
+    blocking_entries: Vec<String>,
+    tracker_generated_entries: Vec<String>,
+}
+
+fn parse_git_dirty_entry(line: &str) -> Option<GitDirtyEntry> {
+    let raw = line.trim_end();
+    if raw.trim().is_empty() || raw.len() < 4 {
+        return None;
+    }
+    let repo_path = raw
+        .get(3..)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let repo_path = repo_path
+        .rsplit_once(" -> ")
+        .map(|(_, target)| target)
+        .unwrap_or(repo_path)
+        .to_string();
+    Some(GitDirtyEntry {
+        raw: raw.to_string(),
+        repo_path,
+    })
+}
+
+fn summarize_git_dirty_entries(entries: &[String]) -> String {
+    entries
+        .iter()
+        .take(8)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn classify_git_dirty_entries(
+    repo_root: &Path,
+    entries: &[GitDirtyEntry],
+) -> Result<ClassifiedGitDirtyEntries> {
+    let tracker_activity_issue_ids = entries
+        .iter()
+        .filter_map(|entry| atelier_relative_path(&entry.repo_path))
+        .filter(|relative| is_tracker_generated_activity_path(relative))
+        .filter_map(issue_id_from_activity_path)
+        .collect::<BTreeSet<_>>();
+
+    let mut blocking_entries = Vec::new();
+    let mut tracker_generated_entries = Vec::new();
+    for entry in entries {
+        let Some(relative) = atelier_relative_path(&entry.repo_path) else {
+            blocking_entries.push(entry.raw.clone());
+            continue;
+        };
+        if crate::storage_layout::is_local_atelier_path(relative) {
+            continue;
+        }
+        if is_tracker_generated_activity_path(relative) {
+            tracker_generated_entries.push(entry.raw.clone());
+            continue;
+        }
+        if is_tracker_generated_issue_bookkeeping(
+            repo_root,
+            relative,
+            &entry.repo_path,
+            &tracker_activity_issue_ids,
+        )? {
+            tracker_generated_entries.push(entry.raw.clone());
+            continue;
+        }
+        blocking_entries.push(entry.raw.clone());
+    }
+    Ok(ClassifiedGitDirtyEntries {
+        blocking_entries,
+        tracker_generated_entries,
+    })
+}
+
+fn atelier_relative_path(repo_path: &str) -> Option<&Path> {
+    repo_path
+        .strip_prefix(".atelier/")
+        .map(|relative| Path::new(relative))
+}
+
+fn is_tracker_generated_activity_path(relative: &Path) -> bool {
+    let mut components = relative.components();
+    let Some(std::path::Component::Normal(root)) = components.next() else {
+        return false;
+    };
+    if root != "issues" && root != "missions" {
+        return false;
+    }
+    let Some(std::path::Component::Normal(dir)) = components.next() else {
+        return false;
+    };
+    if !dir.to_string_lossy().ends_with(".activity") {
+        return false;
+    }
+    let Some(std::path::Component::Normal(file)) = components.next() else {
+        return false;
+    };
+    components.next().is_none() && file.to_string_lossy().ends_with(".md")
+}
+
+fn issue_id_from_activity_path(relative: &Path) -> Option<String> {
+    let mut components = relative.components();
+    let root = components.next()?.as_os_str();
+    if root != "issues" {
+        return None;
+    }
+    let dir = components.next()?.as_os_str().to_string_lossy();
+    dir.strip_suffix(".activity").map(ToOwned::to_owned)
+}
+
+fn is_tracker_generated_issue_bookkeeping(
+    repo_root: &Path,
+    relative: &Path,
+    repo_path: &str,
+    tracker_activity_issue_ids: &BTreeSet<String>,
+) -> Result<bool> {
+    let Some(issue_id) = issue_id_from_canonical_issue_path(relative) else {
+        return Ok(false);
+    };
+    if !tracker_activity_issue_ids.contains(&issue_id) {
+        return Ok(false);
+    }
+    let current_text = fs::read_to_string(repo_root.join(repo_path))?;
+    let Some(front_matter_end_line) = front_matter_end_line(&current_text) else {
+        return Ok(false);
+    };
+    let diff = git_diff_against_head(repo_root, repo_path)?;
+    if diff.trim().is_empty() {
+        return Ok(false);
+    }
+    let mut saw_allowed_change = false;
+    let mut current_line = None;
+    for line in diff.lines() {
+        if line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+        {
+            continue;
+        }
+        if line.starts_with("@@ ") {
+            current_line = parse_new_hunk_start(line);
+            continue;
+        }
+        let Some(line_no) = current_line.as_mut() else {
+            continue;
+        };
+        match line.chars().next() {
+            Some('+') => {
+                saw_allowed_change = true;
+                if *line_no > front_matter_end_line
+                    || !is_allowed_issue_bookkeeping_line(&line[1..])
+                {
+                    return Ok(false);
+                }
+                *line_no += 1;
+            }
+            Some('-') => {
+                saw_allowed_change = true;
+                if *line_no > front_matter_end_line
+                    || !is_allowed_issue_bookkeeping_line(&line[1..])
+                {
+                    return Ok(false);
+                }
+            }
+            Some(' ') => *line_no += 1,
+            _ => {}
+        }
+    }
+    Ok(saw_allowed_change)
+}
+
+fn issue_id_from_canonical_issue_path(relative: &Path) -> Option<String> {
+    let mut components = relative.components();
+    let root = components.next()?.as_os_str();
+    if root != "issues" {
+        return None;
+    }
+    let file = components.next()?.as_os_str().to_string_lossy();
+    if components.next().is_some() || !file.ends_with(".md") || file.ends_with(".activity") {
+        return None;
+    }
+    file.strip_suffix(".md").map(ToOwned::to_owned)
+}
+
+fn front_matter_end_line(text: &str) -> Option<usize> {
+    let mut fence_count = 0;
+    for (index, line) in text.lines().enumerate() {
+        if line == "---" {
+            fence_count += 1;
+            if fence_count == 2 {
+                return Some(index + 1);
+            }
+        }
+    }
+    None
+}
+
+fn parse_new_hunk_start(line: &str) -> Option<usize> {
+    let (_, rest) = line.split_once('+')?;
+    let digits = rest
+        .chars()
+        .take_while(|char| char.is_ascii_digit())
+        .collect::<String>();
+    digits.parse().ok()
+}
+
+fn is_allowed_issue_bookkeeping_line(line: &str) -> bool {
+    line.starts_with("status: ")
+        || line.starts_with("updated_at: ")
+        || line.starts_with("closed_at: ")
+}
+
+fn git_diff_against_head(repo_root: &Path, repo_path: &str) -> Result<String> {
+    let output = Command::new("git")
+        .args([
+            "diff",
+            "--no-ext-diff",
+            "--unified=0",
+            "HEAD",
+            "--",
+            repo_path,
+        ])
+        .current_dir(repo_root)
+        .output()?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    bail!("git diff HEAD -- {repo_path} failed: {}", stderr.trim())
 }
 
 fn ignored_tests_reviewed() -> Result<(bool, String)> {

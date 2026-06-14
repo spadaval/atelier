@@ -935,6 +935,13 @@ impl MissionCloseoutStatus {
     fn print_human(&self) {
         if self.ready() {
             println!("All required closeout gates pass.");
+            for result in &self.validator_results {
+                if let Some(line) = closeout_validator_status_line(result, &self.mission_id) {
+                    if line.summary.contains(" - ") {
+                        println!("{}", line.summary);
+                    }
+                }
+            }
             return;
         }
         if self.open_work.is_empty() {
@@ -1205,8 +1212,15 @@ fn closeout_validator_status_line(
 ) -> Option<CloseoutStatusLine> {
     let (label, pass_text, fail_text, next) = closeout_validator_user_text(&result.validator)?;
     if result.passed {
+        let summary = if result.validator == "git_worktree_clean"
+            && result.reason != "git worktree is clean"
+        {
+            format!("{label}: {pass_text} - {}", result.reason)
+        } else {
+            format!("{label}: {pass_text}")
+        };
         Some(CloseoutStatusLine {
-            summary: format!("{label}: {pass_text}"),
+            summary,
             next: None,
         })
     } else {
