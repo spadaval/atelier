@@ -22,9 +22,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Simplify closeout and tracker workflow after postmortem"
-updated_at: "2026-06-14T16:45:29.180711919+00:00"
+updated_at: "2026-06-14T17:31:00.652106266+00:00"
 ---
 
 ## Intent
@@ -48,3 +48,7 @@ Turn the postmortem decisions into a simpler Atelier workflow: missions act as c
 - Focused tests or transcripts prove mission close no longer depends on token matching, transition options are read-only, tracker files do not self-block closeout, and docs/help drift handles hidden commands.
 - Product, workflow, validation, and Agent Factory docs describe the simplified model without red-tape heuristics.
 - atelier lint, git diff --check, and relevant focused workflow and command-surface checks pass.
+
+## Closeout Notes
+
+- Close reason: All linked work, parent epics, and independent validation issue atelier-jxs8 are closed with passing evidence; mission closeout gates are green.
