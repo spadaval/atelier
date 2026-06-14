@@ -54,9 +54,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Make CLI errors corrective for common agent mistakes"
-updated_at: "2026-06-14T05:59:03.571673734+00:00"
+updated_at: "2026-06-14T08:22:28.562197929+00:00"
 ---
 
 ## Description

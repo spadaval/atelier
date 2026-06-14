@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Update Agent Factory with transcript-derived safeguards"
-updated_at: "2026-06-14T06:08:32.387587058+00:00"
+updated_at: "2026-06-14T08:22:53.697663996+00:00"
 ---
 
 ## Description
