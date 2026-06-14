@@ -119,7 +119,7 @@ JSON result from the command itself.
 | --- | --- | --- | --- | --- | --- | --- |
 | Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
 | Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Quiet acknowledgement with changed ID/fields; canonical issue record records durable owner/assignee state. | Yes | `atelier-z1p.3` |
-| Append durable handoff notes | `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` or `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier/issues/<id>.activity/` or the canonical note field, depending on the notes model in use. | Yes | `atelier-z1p.3` |
+| Append durable handoff notes | Beads update notes flag | `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier/issues/<id>.activity/`. | Yes | `atelier-z1p.3` |
 | Update title/priority/labels/parent | `bd update <id> --title ... --priority ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags; edit rich body sections in `.atelier/issues/<id>.md` | Print changed fields and the ID. Invalid values are rejected with actionable text. | Quiet acknowledgement and canonical issue record; invalid values fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
 | Move issue workflow status | `bd update <id> --status ...` | `atelier issue transition <id> <transition>` | Print the applied transition and resulting status, or rejected workflow gates with actionable text. | Canonical issue record plus transition activity sidecar. | Yes | `atelier-z1p.3` |
 | Close work with reason | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` | Print closed ID and reason. Refuse closure when required blockers or workflow validators remain, unless an explicit force flag is supported and logged. | Quiet acknowledgement and canonical close metadata; `atelier lint` or workflow validation owns machine-checkable closure defects. | Yes | `atelier-z1p.3` |
@@ -174,7 +174,7 @@ used by workers and orchestrators:
 | --- | --- |
 | `bd show <id>` | `atelier issue show <id>` |
 | `bd update <id> --claim` | `atelier issue update <id> --claim` |
-| `bd update <id> --append-notes "..."` | `atelier issue update <id> --append-notes "..."` |
+| Beads update notes flag | `atelier issue note <id> "..."` |
 | `bd update <id> --title ... --priority ...` | `atelier issue update <id> --title ... --priority ...`; edit body sections in `.atelier/issues/<id>.md` |
 | `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |
 | `bd close <id> --reason "..."` | `atelier issue close <id> --reason "..."` |

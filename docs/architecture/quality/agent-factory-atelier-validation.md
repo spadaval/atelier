@@ -12,7 +12,7 @@ and skill bindings were updated.
 - Start gate: `atelier issue show atelier-z1p.6` and `atelier issue show
   atelier-z1p` showed the assigned validation item and parent mission.
 - Planning/docs workflow: `atelier issue create` created issue `#43` under
-  `atelier-z1p.6`; `atelier issue update 43 --append-notes ...` annotated it;
+  `atelier-z1p.6`; `atelier issue note 43 ...` annotated it;
   `atelier start 43` established active local work; `atelier issue close 43
   --reason ...` closed it after this note was added.
 - Ready discovery: `atelier issue list --ready` listed `atelier-z1p.6` as ready after

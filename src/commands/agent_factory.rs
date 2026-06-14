@@ -1129,7 +1129,7 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         println!("  Edit issue Markdown: {}", path.display());
     }
     println!("  Validate this issue: atelier lint {}", object.id);
-    println!("  Add a note: atelier note add issue {} \"...\"", object.id);
+    println!("  Add a note: atelier issue note {} \"...\"", object.id);
     println!(
         "  Show full activity: atelier history --issue {}",
         object.id
@@ -1928,7 +1928,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_note(&id, note)?;
     }
     if changed_fields.is_empty() {
-        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, --parent, --claim, or --append-notes. Use `atelier issue transition <id> <transition>` for status changes");
+        bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;

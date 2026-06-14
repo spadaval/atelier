@@ -50,6 +50,22 @@ pub fn run_canonical(db: &Database, issue_id: &str, content: &str, kind: &str) -
     Ok(())
 }
 
+pub fn run_issue_note(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
+    db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
+    println!("Added note to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
+pub fn run_mission_note(db: &Database, mission_id: &str, content: &str, kind: &str) -> Result<()> {
+    let mission = db.require_record("mission", mission_id)?;
+    reject_invalid_comment_kind(kind)?;
+    crate::commands::activity_log::record_mission_comment(&mission.id, kind, content)?;
+    println!("Added note to mission {}", mission.id);
+    Ok(())
+}
+
 fn reject_invalid_comment_kind(kind: &str) -> Result<()> {
     if kind == "decision" {
         anyhow::bail!(

@@ -3,7 +3,10 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use crate::activity::{list_all_issue_activities, list_issue_activities, IssueActivity};
+use crate::activity::{
+    list_all_issue_activities, list_all_mission_activities, list_issue_activities,
+    list_mission_activities, IssueActivity,
+};
 use crate::db::Database;
 use crate::models::{DomainRecord, Issue, RecordLink};
 
@@ -229,6 +232,24 @@ fn collect_rows(db: &Database, state_dir: &Path, scope: &HistoryScope) -> Result
         );
     }
 
+    if let Some(record_ids) = scope.record_ids.as_ref() {
+        for (kind, id) in record_ids {
+            if kind == "mission" {
+                rows.extend(
+                    list_mission_activities(state_dir, id)?
+                        .into_iter()
+                        .map(|activity| activity_row(activity, &lookup)),
+                );
+            }
+        }
+    } else {
+        rows.extend(
+            list_all_mission_activities(state_dir)?
+                .into_iter()
+                .map(|activity| activity_row(activity, &lookup)),
+        );
+    }
+
     for issue in lookup
         .issues
         .values()
@@ -323,16 +344,33 @@ impl Lookup {
 }
 
 fn activity_row(activity: IssueActivity, lookup: &Lookup) -> HistoryRow {
-    let title = lookup.target_title("issue", &activity.subject_id);
+    let title = lookup.target_title(&activity.subject_kind, &activity.subject_id);
+    let sort_key = format!(
+        "{}/{}/activity/{}",
+        activity.subject_kind, activity.subject_id, activity.id
+    );
+    let summary = if matches!(
+        activity.event_type.as_str(),
+        "comment" | "note" | "handoff" | "plan"
+    ) {
+        let preview = activity.body.lines().next().unwrap_or("").trim();
+        if preview.is_empty() {
+            activity.summary
+        } else {
+            format!("{}: {}", activity.summary, preview)
+        }
+    } else {
+        activity.summary
+    };
     HistoryRow {
         timestamp: activity.created_at,
         event_kind: activity.event_type.to_string(),
         actor: Some(activity.actor),
-        target_kind: "issue".to_string(),
+        target_kind: activity.subject_kind.clone(),
         target_id: activity.subject_id.clone(),
         title,
-        summary: activity.summary,
-        sort_key: format!("issue/{}/activity/{}", activity.subject_id, activity.id),
+        summary,
+        sort_key,
     }
 }
 

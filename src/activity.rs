@@ -13,6 +13,7 @@ const ACTIVITY_SCHEMA_VERSION: i64 = 1;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IssueActivity {
     pub id: String,
+    pub subject_kind: String,
     pub subject_id: String,
     pub event_type: ActivityEventType,
     pub actor: String,
@@ -101,16 +102,33 @@ struct ActivityFrontMatter {
     summary: String,
 }
 
-pub fn issue_activity_dir(issue_id: &str) -> PathBuf {
-    PathBuf::from("issues").join(format!("{issue_id}.activity"))
+#[cfg(test)]
+pub fn issue_activity_path(issue_id: &str, activity_id: &str) -> PathBuf {
+    record_activity_path("issue", issue_id, activity_id)
 }
 
-pub fn issue_activity_path(issue_id: &str, activity_id: &str) -> PathBuf {
-    issue_activity_dir(issue_id).join(format!("{activity_id}.md"))
+pub fn record_activity_dir(subject_kind: &str, subject_id: &str) -> PathBuf {
+    PathBuf::from(record_root(subject_kind)).join(format!("{subject_id}.activity"))
+}
+
+pub fn record_activity_path(subject_kind: &str, subject_id: &str, activity_id: &str) -> PathBuf {
+    record_activity_dir(subject_kind, subject_id).join(format!("{activity_id}.md"))
 }
 
 pub fn list_issue_activities(state_dir: &Path, issue_id: &str) -> Result<Vec<IssueActivity>> {
-    let dir = state_dir.join(issue_activity_dir(issue_id));
+    list_record_activities(state_dir, "issue", issue_id)
+}
+
+pub fn list_mission_activities(state_dir: &Path, mission_id: &str) -> Result<Vec<IssueActivity>> {
+    list_record_activities(state_dir, "mission", mission_id)
+}
+
+pub fn list_record_activities(
+    state_dir: &Path,
+    subject_kind: &str,
+    subject_id: &str,
+) -> Result<Vec<IssueActivity>> {
+    let dir = state_dir.join(record_activity_dir(subject_kind, subject_id));
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -124,7 +142,7 @@ pub fn list_issue_activities(state_dir: &Path, issue_id: &str) -> Result<Vec<Iss
         let file_name = path
             .file_name()
             .ok_or_else(|| anyhow!("Invalid activity path {}", path.display()))?;
-        let relative = issue_activity_dir(issue_id).join(file_name);
+        let relative = record_activity_dir(subject_kind, subject_id).join(file_name);
         activities.push(IssueActivity::load(state_dir, &relative)?);
     }
     activities.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
@@ -132,13 +150,24 @@ pub fn list_issue_activities(state_dir: &Path, issue_id: &str) -> Result<Vec<Iss
 }
 
 pub fn list_all_issue_activities(state_dir: &Path) -> Result<Vec<IssueActivity>> {
-    let issue_dir = state_dir.join("issues");
-    if !issue_dir.exists() {
+    list_all_record_activities(state_dir, "issue")
+}
+
+pub fn list_all_mission_activities(state_dir: &Path) -> Result<Vec<IssueActivity>> {
+    list_all_record_activities(state_dir, "mission")
+}
+
+pub fn list_all_record_activities(
+    state_dir: &Path,
+    subject_kind: &str,
+) -> Result<Vec<IssueActivity>> {
+    let record_dir = state_dir.join(record_root(subject_kind));
+    if !record_dir.exists() {
         return Ok(Vec::new());
     }
     let mut activities = Vec::new();
-    for entry in fs::read_dir(&issue_dir)
-        .with_context(|| format!("Failed to read {}", issue_dir.display()))?
+    for entry in fs::read_dir(&record_dir)
+        .with_context(|| format!("Failed to read {}", record_dir.display()))?
     {
         let entry = entry?;
         let path = entry.path();
@@ -148,10 +177,10 @@ pub fn list_all_issue_activities(state_dir: &Path) -> Result<Vec<IssueActivity>>
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(issue_id) = name.strip_suffix(".activity") else {
+        let Some(subject_id) = name.strip_suffix(".activity") else {
             continue;
         };
-        activities.extend(list_issue_activities(state_dir, issue_id)?);
+        activities.extend(list_record_activities(state_dir, subject_kind, subject_id)?);
     }
     activities.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
     Ok(activities)
@@ -167,6 +196,7 @@ pub fn timestamp_activity_id(created_at: DateTime<Utc>) -> String {
 
 pub fn allocate_activity_id(
     state_dir: &Path,
+    subject_kind: &str,
     subject_id: &str,
     created_at: DateTime<Utc>,
 ) -> Result<String> {
@@ -178,17 +208,22 @@ pub fn allocate_activity_id(
             format!("{base}-{suffix:02}")
         };
         if !state_dir
-            .join(issue_activity_path(subject_id, &candidate))
+            .join(record_activity_path(subject_kind, subject_id, &candidate))
             .exists()
         {
             return Ok(candidate);
         }
     }
-    bail!("No available activity id for issue {subject_id} at {base}")
+    bail!("No available activity id for {subject_kind} {subject_id} at {base}")
 }
 
+#[cfg(test)]
 pub fn write_issue_activity(state_dir: &Path, activity: &IssueActivity) -> Result<PathBuf> {
-    let relative = issue_activity_path(&activity.subject_id, &activity.id);
+    write_record_activity(state_dir, activity)
+}
+
+pub fn write_record_activity(state_dir: &Path, activity: &IssueActivity) -> Result<PathBuf> {
+    let relative = record_activity_path(&activity.subject_kind, &activity.subject_id, &activity.id);
     let path = state_dir.join(&relative);
     let parent = path.parent().ok_or_else(|| {
         anyhow!(
@@ -216,9 +251,39 @@ pub fn create_issue_activity(
     summary: &str,
     body: &str,
 ) -> Result<IssueActivity> {
-    let id = allocate_activity_id(state_dir, subject_id, created_at)?;
+    create_record_activity(
+        state_dir, "issue", subject_id, event_type, actor, created_at, summary, body,
+    )
+}
+
+pub fn create_mission_activity(
+    state_dir: &Path,
+    subject_id: &str,
+    event_type: ActivityEventType,
+    actor: &str,
+    created_at: DateTime<Utc>,
+    summary: &str,
+    body: &str,
+) -> Result<IssueActivity> {
+    create_record_activity(
+        state_dir, "mission", subject_id, event_type, actor, created_at, summary, body,
+    )
+}
+
+pub fn create_record_activity(
+    state_dir: &Path,
+    subject_kind: &str,
+    subject_id: &str,
+    event_type: ActivityEventType,
+    actor: &str,
+    created_at: DateTime<Utc>,
+    summary: &str,
+    body: &str,
+) -> Result<IssueActivity> {
+    let id = allocate_activity_id(state_dir, subject_kind, subject_id, created_at)?;
     let activity = IssueActivity {
         id,
+        subject_kind: subject_kind.to_string(),
         subject_id: subject_id.to_string(),
         event_type,
         actor: actor.to_string(),
@@ -226,7 +291,7 @@ pub fn create_issue_activity(
         summary: summary.to_string(),
         body: normalize_body(body),
     };
-    write_issue_activity(state_dir, &activity)?;
+    write_record_activity(state_dir, &activity)?;
     Ok(activity)
 }
 
@@ -256,18 +321,13 @@ impl IssueActivity {
                 ACTIVITY_SCHEMA_VERSION
             );
         }
-        if front.subject_kind != "issue" {
-            bail!(
-                "Unsupported subject_kind '{}' in {}; expected issue",
-                front.subject_kind,
-                display_state_path(relative)
-            );
-        }
-        let expected = issue_activity_path(&front.subject_id, &front.id);
+        validate_subject_kind(&front.subject_kind, relative)?;
+        let expected = record_activity_path(&front.subject_kind, &front.subject_id, &front.id);
         if relative != expected {
             bail!(
-                "Activity id {} for issue {} in {} does not match canonical path {}",
+                "Activity id {} for {} {} in {} does not match canonical path {}",
                 front.id,
+                front.subject_kind,
                 front.subject_id,
                 display_state_path(relative),
                 display_state_path(&expected)
@@ -283,6 +343,7 @@ impl IssueActivity {
 
         Ok(Self {
             id: front.id,
+            subject_kind: front.subject_kind,
             subject_id: front.subject_id,
             event_type,
             actor: front.actor,
@@ -310,7 +371,8 @@ impl IssueActivity {
         write_yaml_scalar(&mut output, "schema", ACTIVITY_SCHEMA)?;
         output.push_str("schema_version: 1\n");
         write_yaml_scalar(&mut output, "id", &self.id)?;
-        write_yaml_scalar(&mut output, "subject_kind", "issue")?;
+        validate_subject_kind(&self.subject_kind, Path::new("<generated>"))?;
+        write_yaml_scalar(&mut output, "subject_kind", &self.subject_kind)?;
         write_yaml_scalar(&mut output, "subject_id", &self.subject_id)?;
         write_yaml_scalar(&mut output, "event_type", self.event_type.as_str())?;
         write_yaml_scalar(&mut output, "actor", &self.actor)?;
@@ -357,6 +419,25 @@ fn normalize_body(body: &str) -> String {
     body.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+fn record_root(subject_kind: &str) -> &'static str {
+    match subject_kind {
+        "issue" => "issues",
+        "mission" => "missions",
+        _ => "records",
+    }
+}
+
+fn validate_subject_kind(subject_kind: &str, relative: &Path) -> Result<()> {
+    if !matches!(subject_kind, "issue" | "mission") {
+        bail!(
+            "Unsupported subject_kind '{}' in {}; expected issue or mission",
+            subject_kind,
+            display_state_path(relative)
+        );
+    }
+    Ok(())
+}
+
 fn display_state_path(relative_path: &Path) -> String {
     format!(
         ".atelier/{}",
@@ -380,6 +461,7 @@ mod tests {
     fn activity() -> IssueActivity {
         IssueActivity {
             id: "20260610T181920123456Z".to_string(),
+            subject_kind: "issue".to_string(),
             subject_id: "atelier-qxvj".to_string(),
             event_type: ActivityEventType::Handoff,
             actor: "agent@example.com".to_string(),
@@ -483,7 +565,7 @@ mod tests {
         fs::write(&first_path, "existing").unwrap();
 
         assert_eq!(
-            allocate_activity_id(state_dir, issue_id, at()).unwrap(),
+            allocate_activity_id(state_dir, "issue", issue_id, at()).unwrap(),
             format!("{base}-01")
         );
         fs::write(
@@ -492,7 +574,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            allocate_activity_id(state_dir, issue_id, at()).unwrap(),
+            allocate_activity_id(state_dir, "issue", issue_id, at()).unwrap(),
             format!("{base}-02")
         );
     }

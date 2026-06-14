@@ -66,7 +66,8 @@ struct ProjectionLoader<'a> {
     global_ids: BTreeSet<String>,
     record_refs: BTreeSet<(String, String)>,
     canonical_paths: BTreeSet<PathBuf>,
-    activity_subject_ids: BTreeSet<String>,
+    activity_issue_subject_ids: BTreeSet<String>,
+    activity_record_refs: BTreeSet<(String, String)>,
 }
 
 impl<'a> ProjectionLoader<'a> {
@@ -80,7 +81,8 @@ impl<'a> ProjectionLoader<'a> {
             global_ids: BTreeSet::new(),
             record_refs: BTreeSet::new(),
             canonical_paths: BTreeSet::new(),
-            activity_subject_ids: BTreeSet::new(),
+            activity_issue_subject_ids: BTreeSet::new(),
+            activity_record_refs: BTreeSet::new(),
         }
     }
 
@@ -135,10 +137,15 @@ impl<'a> ProjectionLoader<'a> {
     }
 
     fn load_issue_activities(&mut self) -> Result<()> {
-        for relative in discover_issue_activity_paths(self.state_dir)? {
+        for relative in discover_activity_paths(self.state_dir)? {
             let activity = IssueActivity::load(self.state_dir, &relative)?;
             self.canonical_paths.insert(relative);
-            self.activity_subject_ids.insert(activity.subject_id);
+            if activity.subject_kind == "issue" {
+                self.activity_issue_subject_ids
+                    .insert(activity.subject_id.clone());
+            }
+            self.activity_record_refs
+                .insert((activity.subject_kind, activity.subject_id));
         }
         Ok(())
     }
@@ -183,8 +190,13 @@ impl<'a> ProjectionLoader<'a> {
         Vec<(String, String, String)>,
     )> {
         let mut graph = IssueRelationshipProjection::default();
-        for subject_id in &self.activity_subject_ids {
+        for subject_id in &self.activity_issue_subject_ids {
             ensure_issue_exists(subject_id, &self.issue_ids, "activity", subject_id)?;
+        }
+        for (kind, id) in &self.activity_record_refs {
+            if kind != "issue" && !self.record_refs.contains(&(kind.clone(), id.clone())) {
+                bail!("Activity references missing {kind} record: {id}");
+            }
         }
         for issue in &self.issues {
             graph.collect_issue(issue, &self.issue_ids, &self.record_refs)?;
@@ -376,19 +388,19 @@ fn discover_record_paths(
     Ok(records)
 }
 
-fn discover_issue_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
-    let issue_dir = state_dir.join("issues");
-    if !issue_dir.exists() {
-        return Ok(Vec::new());
-    }
-
+fn discover_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut records = Vec::new();
-    collect_issue_activity_paths(state_dir, &issue_dir, &mut records)?;
+    for root_name in ["issues", "missions"] {
+        let root_dir = state_dir.join(root_name);
+        if root_dir.exists() {
+            collect_activity_paths(state_dir, &root_dir, &mut records)?;
+        }
+    }
     records.sort();
     Ok(records)
 }
 
-fn collect_issue_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
+fn collect_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
@@ -400,7 +412,7 @@ fn collect_issue_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathB
             {
                 collect_canonical_files(root, &path, records)?;
             } else {
-                collect_issue_activity_paths(root, &path, records)?;
+                collect_activity_paths(root, &path, records)?;
             }
         }
     }

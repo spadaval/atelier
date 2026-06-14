@@ -26,12 +26,12 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
-- `atelier mission create/show/list/status/update`
+- `atelier mission create/show/list/status/update/note`
 - `atelier mission add-work/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier history`
-- `atelier note add issue <id> "..."`
+- `atelier issue note <id> "..."`
 - `atelier start`
 - `atelier abandon`
 - `atelier worktree for/status/merge/remove`
@@ -86,14 +86,13 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Establish active local work on one issue. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree for <id>`, `status`. |
 | `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |
-| `issue` | Create, list, show, update, transition, close, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, and blocker inspection stays under `issue blocked`. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
+| `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
-| `mission` | Create, focus, inspect, update, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; lifecycle changes stay on `update`. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
+| `mission` | Create, focus, inspect, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; lifecycle changes stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
 | `plan` | Author, inspect, revise, link, and apply durable plans. | `show` and `list` are readable plan views; `apply` prints preview or created-record summaries rather than raw JSON internals. | Plan IDs, affected-record counts, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
-| `note` | Append durable issue activity notes without mutating issue fields. | Confirmation of the note target and stored activity text. | Issue ID and success token. | `issue show <id>`, `history --issue <id>`. |
 | `worktree` | Create, inspect, merge, repair, and remove issue worktrees. | `for`, `merge`, `repair`, and `remove` acknowledge the affected issue/path; `status` stays scan-friendly and bounded. | Issue IDs, paths, and worktree-state tokens. | `worktree status`, `status`, `issue show <id>`. |
 
 ### Specialized But Visible Surfaces

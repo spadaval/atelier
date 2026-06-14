@@ -80,7 +80,7 @@ fn preserve_existing_activity_files(
         return Ok(());
     }
     for relative in canonical_files_under(state_dir)? {
-        if !is_issue_activity_path(&relative) {
+        if !is_activity_path(&relative) {
             continue;
         }
         files.push(ProjectionFile {
@@ -96,12 +96,12 @@ fn preserve_existing_activity_files(
     Ok(())
 }
 
-fn is_issue_activity_path(relative: &Path) -> bool {
+fn is_activity_path(relative: &Path) -> bool {
     let mut components = relative.components();
     let Some(std::path::Component::Normal(root)) = components.next() else {
         return false;
     };
-    if root != "issues" {
+    if root != "issues" && root != "missions" {
         return false;
     }
     let Some(std::path::Component::Normal(dir)) = components.next() else {

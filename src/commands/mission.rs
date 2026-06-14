@@ -2366,6 +2366,7 @@ fn print_mission_next_commands(mission: &DomainRecord) {
     print_mission_heading("Next Commands");
     println!("  atelier mission status {}", mission.id);
     println!("  atelier mission show {}", mission.id);
+    println!("  atelier mission note {} \"...\"", mission.id);
     println!("  atelier history --mission {}", mission.id);
     if mission_lifecycle_status(mission) == "closed" {
         println!("  atelier mission update {} --status ready", mission.id);

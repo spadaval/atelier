@@ -1232,7 +1232,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             parent,
             no_parent,
             claim,
-            append_notes,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::agent_factory::update_lifecycle(
@@ -1251,9 +1250,15 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                         parent.as_deref().map(Some)
                     },
                     claim,
-                    append_notes: append_notes.as_deref(),
+                    append_notes: None,
                 },
             )
+        }
+
+        IssueCommands::Note { id, text, kind } => {
+            let db = canonical_mutation_db()?;
+            let id = resolve_issue_arg(&db, &id)?;
+            commands::comment::run_issue_note(&db, &id, &text, &kind)
         }
 
         IssueCommands::Close { id, to, reason } => {
@@ -1546,10 +1551,18 @@ fn run() -> Result<()> {
                 text,
                 kind,
             } => {
-                require_issue_kind(&target_kind, "atelier note add")?;
-                let db = canonical_mutation_db()?;
-                let target_id = resolve_issue_arg(&db, &target_id)?;
-                commands::comment::run_canonical(&db, &target_id, &text, &kind)
+                let replacement = match target_kind.as_str() {
+                    "issue" => format!("atelier issue note {target_id} {text:?} --kind {kind}"),
+                    "mission" => {
+                        format!("atelier mission note {target_id} {text:?} --kind {kind}")
+                    }
+                    _ => "atelier issue note <id> \"...\" or atelier mission note <id> \"...\""
+                        .to_string(),
+                };
+                bail!(
+                    "`atelier note add <kind> <id>` was removed. Use `{}` instead.",
+                    replacement
+                )
             }
         },
 
@@ -1673,6 +1686,10 @@ fn run() -> Result<()> {
                     risk,
                     validation,
                 )
+            }
+            MissionCommands::Note { id, text, kind } => {
+                let db = canonical_mutation_db()?;
+                commands::comment::run_mission_note(&db, &id, &text, &kind)
             }
             MissionCommands::AddWork { id, issue } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
@@ -2014,6 +2031,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
+            IssueCommands::Note { .. } => "issue note",
             IssueCommands::Close { .. } => "issue close",
             IssueCommands::CloseAll { .. } => "issue close-all",
             IssueCommands::Delete { .. } => "issue delete",
@@ -2066,6 +2084,7 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Audit { .. } => "mission audit",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
+            MissionCommands::Note { .. } => "mission note",
             MissionCommands::AddWork { .. } => "mission add-work",
             MissionCommands::AddBlocker { .. } => "mission add-blocker",
         },

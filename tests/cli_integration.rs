@@ -302,7 +302,8 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier search <query>`
 - `atelier link add/remove/list`
 - `atelier graph impact/tree`
-- `atelier note add`
+- `atelier issue note`
+- `atelier mission note`
 - `atelier mission create/show/list/status/update`
 - `atelier mission audit`
 - `atelier mission add-work/add-blocker`
@@ -1132,6 +1133,12 @@ fn test_top_level_help_only_shows_core_commands() {
             .any(|line| line.trim_start().starts_with("dep ")),
         "root help should not expose dep:\n{stdout}"
     );
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("note ")),
+        "root help should not expose generic note:\n{stdout}"
+    );
 
     for common in [
         "atelier prime",
@@ -1182,6 +1189,20 @@ fn test_top_level_help_only_shows_core_commands() {
             "removed command {removed} is still visible in help:\n{stdout}"
         );
     }
+}
+
+#[test]
+fn test_generic_note_command_rejects_with_record_specific_guidance() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["note", "add", "issue", "atelier-missing", "legacy note"],
+    );
+
+    assert!(!success, "generic note command should be removed");
+    assert!(stderr.contains("was removed"));
+    assert!(stderr.contains("atelier issue note atelier-missing"));
 }
 
 #[test]
@@ -1345,9 +1366,9 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(success, "block issue failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["note", "add", "issue", ready_id, "Recent focus note"],
+        &["issue", "note", ready_id, "Recent focus note"],
     );
-    assert!(success, "note add failed: {stderr}");
+    assert!(success, "issue note failed: {stderr}");
     commit_all(dir.path(), "status focus baseline");
     std::fs::write(dir.path().join("status-dirty.txt"), "dirty").unwrap();
 
@@ -2267,17 +2288,16 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     let (success, note_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "note",
-            "add",
             "issue",
+            "note",
             &source_id,
             "Explicit note body",
             "--kind",
             "observation",
         ],
     );
-    assert!(success, "note add failed: {stderr}");
-    assert!(note_out.contains("Added comment"));
+    assert!(success, "issue note failed: {stderr}");
+    assert!(note_out.contains("Added note to issue"));
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &source_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Explicit note body"));
@@ -2707,7 +2727,7 @@ fn test_show_issue_rich_human_output() {
     );
     run_atelier(dir.path(), &["issue", "block", "2", "4"]);
     run_atelier(dir.path(), &["issue", "block", "5", "2"]);
-    run_atelier(dir.path(), &["note", "add", "issue", "2", "Recent note"]);
+    run_atelier(dir.path(), &["issue", "note", "2", "Recent note"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "2"]);
 
@@ -2726,7 +2746,7 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Recent Activity"));
     assert!(stdout.contains("Recent note"));
     assert!(stdout.contains("Next Commands"));
-    assert!(stdout.contains("atelier note add issue"));
+    assert!(stdout.contains("atelier issue note"));
     assert!(!stdout.contains("atelier issue comment"));
     assert!(stdout.contains("atelier issue transition"));
 }
@@ -3159,6 +3179,12 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
     assert!(success, "mission add-work failed: {stderr}");
+    let (success, note_out, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "note", &mission_id, "Mission note body"],
+    );
+    assert!(success, "mission note failed: {stderr}");
+    assert!(note_out.contains("Added note to mission"));
     write_activity_fixture(
         dir.path(),
         &child_id,
@@ -3222,6 +3248,8 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
         ],
     );
     assert!(success, "mission note history failed: {stderr}");
+    assert!(stdout.contains("Mission note body"));
+    assert!(stdout.contains(&mission_id));
     assert!(stdout.contains("Child note"));
     assert!(stdout.contains(&child_id));
 }
@@ -3666,16 +3694,11 @@ fn test_issue_mutations_create_activity_sidecars() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "update",
-            &issue_id,
-            "--append-notes",
-            "Append note body",
-            "--claim",
-        ],
+        &["issue", "note", &issue_id, "Append note body"],
     );
-    assert!(success, "issue update notes/claim failed: {stderr}");
+    assert!(success, "issue note failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &issue_id, "--claim"]);
+    assert!(success, "issue claim failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -3764,16 +3787,9 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     assert!(success, "comment failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "update",
-            &issue_id,
-            "--append-notes",
-            "Canonical handoff",
-            "--claim",
-        ],
+        &["issue", "note", &issue_id, "Canonical handoff"],
     );
-    assert!(success, "append-notes/claim failed: {stderr}");
+    assert!(success, "issue note failed: {stderr}");
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
@@ -6620,21 +6636,15 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "update",
-            "1",
-            "--claim",
-            "--append-notes",
-            "handoff note",
-            "--priority",
-            "high",
-        ],
+        &["issue", "update", "1", "--claim", "--priority", "high"],
     );
     assert!(success, "update failed: {stderr}");
     assert!(stdout.contains(&format!("Updated issue {task_id}")));
     assert!(stdout.contains("Priority: high"));
     assert!(stdout.contains("Assignee:"));
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", "1", "handoff note"]);
+    assert!(success, "issue note failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "#1"]);
     assert!(success, "show failed: {stderr}");

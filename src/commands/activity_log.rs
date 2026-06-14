@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use std::path::PathBuf;
 
-use crate::activity::{create_issue_activity, ActivityEventType};
+use crate::activity::{create_issue_activity, create_mission_activity, ActivityEventType};
 
 pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
     let (event_type, summary) = match kind {
@@ -12,6 +12,16 @@ pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
         _ => (ActivityEventType::Comment, "Added comment"),
     };
     record(issue_id, event_type, summary, body)
+}
+
+pub fn record_mission_comment(mission_id: &str, kind: &str, body: &str) -> Result<()> {
+    let (event_type, summary) = match kind {
+        "note" => (ActivityEventType::Note, "Added note"),
+        "handoff" => (ActivityEventType::Handoff, "Added handoff"),
+        "plan" => (ActivityEventType::Plan, "Added plan"),
+        _ => (ActivityEventType::Comment, "Added comment"),
+    };
+    record_mission(mission_id, event_type, summary, body)
 }
 
 pub fn record_note(issue_id: &str, body: &str) -> Result<()> {
@@ -137,10 +147,37 @@ fn record(issue_id: &str, event_type: ActivityEventType, summary: &str, body: &s
     Ok(())
 }
 
+fn record_mission(
+    mission_id: &str,
+    event_type: ActivityEventType,
+    summary: &str,
+    body: &str,
+) -> Result<()> {
+    let Some(state_dir) = current_state_dir_for_mission(mission_id) else {
+        return Ok(());
+    };
+    create_mission_activity(
+        &state_dir,
+        mission_id,
+        event_type,
+        &current_actor(),
+        Utc::now(),
+        summary,
+        body,
+    )?;
+    Ok(())
+}
+
 fn current_state_dir_for_issue(issue_id: &str) -> Option<PathBuf> {
     let state_dir = crate::storage_layout::find_canonical_dir_from_cwd().ok()??;
     let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
     issue_file.is_file().then_some(state_dir)
+}
+
+fn current_state_dir_for_mission(mission_id: &str) -> Option<PathBuf> {
+    let state_dir = crate::storage_layout::find_canonical_dir_from_cwd().ok()??;
+    let mission_file = state_dir.join("missions").join(format!("{mission_id}.md"));
+    mission_file.is_file().then_some(state_dir)
 }
 
 fn current_actor() -> String {
