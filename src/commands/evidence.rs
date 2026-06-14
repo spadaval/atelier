@@ -12,6 +12,7 @@ use crate::record_store::RecordStore;
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
+const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
     pub evidence_kind: &'a str,
@@ -65,6 +66,9 @@ pub fn add_returning_id(
     producer: Option<&str>,
     target: Option<TargetMetadata<'_>>,
 ) -> Result<String> {
+    if let Some(target) = target.as_ref() {
+        validate_evidence_relation_role(target.role)?;
+    }
     let metadata = EvidenceMetadata::from_producer(producer);
     let data = EvidenceRecordData {
         evidence_type: evidence_kind.to_string(),
@@ -218,6 +222,7 @@ pub fn attach(
     target_id: &str,
     role: &str,
 ) -> Result<()> {
+    validate_evidence_relation_role(role)?;
     let db = Database::open(db_path)?;
     db.require_record(KIND, id)?;
     let target = validate_record_ref(&db, target_kind, target_id, role)?;
@@ -251,6 +256,7 @@ fn validate_record_ref<'a>(
     id: &'a str,
     role: &'a str,
 ) -> Result<TargetRef<'a>> {
+    validate_evidence_relation_role(role)?;
     if kind == "epic" {
         let issue = db.require_issue(id)?;
         if issue.issue_type != "epic" {
@@ -276,6 +282,16 @@ fn validate_record_ref<'a>(
         id,
         role,
     })
+}
+
+pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
+    if ACCEPTED_EVIDENCE_RELATION_ROLES.contains(&role) {
+        return Ok(());
+    }
+    bail!(
+        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"`; reuse existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`.",
+        ACCEPTED_EVIDENCE_RELATION_ROLES.join(", ")
+    )
 }
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
