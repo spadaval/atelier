@@ -185,19 +185,63 @@ fn issue_id_by_title(dir: &Path, title: &str) -> String {
     record_id_by_title(dir, "issues", title)
 }
 
-fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
+fn canonical_record_path(dir: &Path, directory: &str, record_id: &str) -> PathBuf {
     dir.join(".atelier")
-        .join("issues")
-        .join(format!("{issue_id}.md"))
+        .join(directory)
+        .join(format!("{record_id}.md"))
+}
+
+fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
+    canonical_record_path(dir, "issues", issue_id)
+}
+
+fn read_canonical_record(dir: &Path, directory: &str, record_id: &str) -> String {
+    let path = canonical_record_path(dir, directory, record_id);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
+}
+
+fn write_canonical_record(dir: &Path, directory: &str, record_id: &str, markdown: String) {
+    let path = canonical_record_path(dir, directory, record_id);
+    std::fs::write(&path, markdown)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
+fn edit_canonical_record(
+    dir: &Path,
+    directory: &str,
+    record_id: &str,
+    edit: impl FnOnce(String) -> String,
+) {
+    let markdown = read_canonical_record(dir, directory, record_id);
+    write_canonical_record(dir, directory, record_id, edit(markdown));
+}
+
+fn edit_canonical_issue(dir: &Path, issue_id: &str, edit: impl FnOnce(String) -> String) {
+    edit_canonical_record(dir, "issues", issue_id, edit);
+}
+
+fn corrupt_issue_title_yaml(dir: &Path, issue_id: &str, title: &str) {
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        markdown.replace(&format!("title: {title:?}"), &format!("title: [{title}"))
+    });
+}
+
+fn remove_projection_state(dir: &Path) {
+    std::fs::remove_file(dir.join(".atelier/runtime/state.db")).unwrap();
 }
 
 fn canonical_evidence_front_matter(dir: &Path, evidence_id: &str) -> serde_json::Value {
-    let path = dir
-        .join(".atelier")
-        .join("evidence")
-        .join(format!("{evidence_id}.md"));
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+    canonical_record_front_matter(dir, "evidence", evidence_id)
+}
+
+fn canonical_record_front_matter(
+    dir: &Path,
+    directory: &str,
+    record_id: &str,
+) -> serde_json::Value {
+    let text = read_canonical_record(dir, directory, record_id);
+    let path = canonical_record_path(dir, directory, record_id);
     let front = text
         .strip_prefix("---\n")
         .and_then(|rest| rest.split_once("\n---\n"))
@@ -281,10 +325,10 @@ fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
         if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
             continue;
         }
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let record_id = path.file_stem().unwrap().to_string_lossy().to_string();
+        let text = read_canonical_record(dir, directory, &record_id);
         if text.contains(&format!("title: {title:?}")) {
-            return path.file_stem().unwrap().to_string_lossy().to_string();
+            return record_id;
         }
     }
     panic!(
@@ -335,19 +379,16 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
 }
 
 fn ensure_issue_closeout_sections(dir: &Path, issue_id: &str) {
-    let path = canonical_issue_path(dir, issue_id);
-    let mut markdown = std::fs::read_to_string(&path)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
-    markdown = markdown.replace(
-        "Outcome was not specified.",
-        "The issue outcome is complete and ready for closeout.",
-    );
-    markdown = markdown.replace(
-        "Evidence was not specified.",
-        &format!("- Evidence record attached to issue/{issue_id} validates closeout."),
-    );
-    std::fs::write(&path, markdown)
-        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+    edit_canonical_issue(dir, issue_id, |mut markdown| {
+        markdown = markdown.replace(
+            "Outcome was not specified.",
+            "The issue outcome is complete and ready for closeout.",
+        );
+        markdown.replace(
+            "Evidence was not specified.",
+            &format!("- Evidence record attached to issue/{issue_id} validates closeout."),
+        )
+    });
 }
 
 fn ensure_all_issue_closeout_sections(dir: &Path) {
@@ -702,19 +743,7 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace(
-            "title: \"Doctor runtime boundary\"",
-            "title: [Doctor runtime boundary",
-        ),
-    )
-    .unwrap();
+    corrupt_issue_title_yaml(dir.path(), &issue_id, "Doctor runtime boundary");
 
     let (lint_success, lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(
@@ -9474,19 +9503,10 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("Mission atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Guard schema");
-    let mission_path = dir
-        .path()
-        .join(".atelier")
-        .join("missions")
-        .join(format!("{mission_id}.md"));
-
-    let mission_markdown = std::fs::read_to_string(&mission_path).unwrap();
-    std::fs::write(
-        &mission_path,
-        mission_markdown.replace("schema: \"atelier.mission\"", "schema: \"atelier.issue\""),
-    )
-    .unwrap();
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    edit_canonical_record(dir.path(), "missions", &mission_id, |markdown| {
+        markdown.replace("schema: \"atelier.mission\"", "schema: \"atelier.issue\"")
+    });
+    remove_projection_state(dir.path());
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(!success, "rebuild should reject mission schema drift");
@@ -9505,14 +9525,10 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "create", "Schema drift"]);
     assert!(success, "issue create failed: {stderr}");
     let schema_issue_id = issue_id_by_title(schema_dir.path(), "Schema drift");
-    let schema_issue_path = canonical_issue_path(schema_dir.path(), &schema_issue_id);
-    let markdown = std::fs::read_to_string(&schema_issue_path).unwrap();
-    std::fs::write(
-        &schema_issue_path,
-        markdown.replace("schema_version: 1", "schema_version: 99"),
-    )
-    .unwrap();
-    std::fs::remove_file(schema_dir.path().join(".atelier/runtime/state.db")).unwrap();
+    edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
+        markdown.replace("schema_version: 1", "schema_version: 99")
+    });
+    remove_projection_state(schema_dir.path());
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
     assert!(!success, "schema drift should block projection query");
@@ -9536,14 +9552,12 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     );
     assert!(success, "issue create failed: {stderr}");
     let malformed_issue_id = issue_id_by_title(malformed_dir.path(), "Malformed source");
-    let malformed_issue_path = canonical_issue_path(malformed_dir.path(), &malformed_issue_id);
-    let markdown = std::fs::read_to_string(&malformed_issue_path).unwrap();
-    std::fs::write(
-        &malformed_issue_path,
-        markdown.replace("title: \"Malformed source\"", "title: [Malformed source"),
-    )
-    .unwrap();
-    std::fs::remove_file(malformed_dir.path().join(".atelier/runtime/state.db")).unwrap();
+    corrupt_issue_title_yaml(
+        malformed_dir.path(),
+        &malformed_issue_id,
+        "Malformed source",
+    );
+    remove_projection_state(malformed_dir.path());
 
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["issue", "list"]);
     assert!(!success, "malformed records should block projection query");
@@ -9577,16 +9591,9 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     assert!(success, "fresh list failed: {stderr}");
     assert!(list_out.contains("Indexed title"));
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace("Indexed title", "Markdown title"),
-    )
-    .unwrap();
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("Indexed title", "Markdown title")
+    });
 
     let (success, list_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
@@ -9615,19 +9622,12 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
     assert!(success, "export failed: {stderr}");
 
     for (index, issue_id) in issue_ids.iter().enumerate() {
-        let issue_path = dir
-            .path()
-            .join(".atelier/issues")
-            .join(format!("{issue_id}.md"));
-        let markdown = std::fs::read_to_string(&issue_path).unwrap();
-        std::fs::write(
-            &issue_path,
+        edit_canonical_issue(dir.path(), issue_id, |markdown| {
             markdown.replace(
                 &format!("title: \"Bulk indexed {index}\""),
                 &format!("title: \"Bulk markdown {index}\""),
-            ),
-        )
-        .unwrap();
+            )
+        });
     }
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
@@ -9674,11 +9674,8 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let first_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{first_id}.md"));
-    let first_markdown = std::fs::read_to_string(&first_path).unwrap();
+    let first_path = canonical_issue_path(dir.path(), &first_id);
+    let first_markdown = read_canonical_record(dir.path(), "issues", &first_id);
     std::fs::remove_file(&first_path).unwrap();
 
     let (success, list_out, stderr) =
@@ -9747,8 +9744,8 @@ The unindexed issue is discoverable after rebuild.
 fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- `atelier lint` passes after automatic rebuild.";
-    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- `atelier dep list` shows the linked root.";
+    let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.` after automatic rebuild.";
+    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- manual check: `atelier dep list` output shows the linked root.";
 
     let (success, first_out, stderr) = run_atelier(
         dir.path(),
@@ -9780,6 +9777,8 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     assert!(success, "dep add failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
+    ensure_issue_closeout_sections(dir.path(), &first_id);
+    ensure_issue_closeout_sections(dir.path(), &second_id);
 
     std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
     std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
@@ -9791,16 +9790,9 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     );
     assert!(ready_out.contains("Projection root"));
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{first_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace("Projection root", "Projection root changed"),
-    )
-    .unwrap();
+    edit_canonical_issue(dir.path(), &first_id, |markdown| {
+        markdown.replace("Projection root", "Projection root changed")
+    });
 
     let (success, dep_out, stderr) = run_atelier(dir.path(), &["dep", "list"]);
     assert!(
@@ -9826,7 +9818,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, export, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- Manual check: `test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor` confirms `atelier lint`, `atelier export --check`, and `atelier doctor` ignore rebuild temp files.";
+    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, export, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.`, `atelier export --check` exits 0, and `atelier doctor` exits 0 while rebuild temp files exist.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -9842,6 +9834,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let issue_id = issue_ref(dir.path(), 1);
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
+    ensure_issue_closeout_sections(dir.path(), &issue_id);
 
     let temp_path = dir
         .path()
@@ -9852,16 +9845,9 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
         .join(".atelier/runtime/.state.db.123.456.rebuild-tmp-journal");
     std::fs::write(&temp_journal_path, "partial sqlite rebuild journal").unwrap();
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace("Temp rebuild filter", "Temp rebuild filter changed"),
-    )
-    .unwrap();
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        markdown.replace("Temp rebuild filter", "Temp rebuild filter changed")
+    });
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "query should ignore rebuild tmp file: {stderr}");
@@ -9874,7 +9860,10 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let commands: &[&[&str]] = &[&["lint"], &["export", "--check"], &["doctor"]];
     for args in commands {
         let (success, stdout, stderr) = run_atelier(dir.path(), args);
-        assert!(success, "{args:?} should ignore rebuild tmp file: {stderr}");
+        assert!(
+            success,
+            "{args:?} should ignore rebuild tmp file:\nstdout: {stdout}\nstderr: {stderr}"
+        );
         let combined = format!("{stdout}\n{stderr}");
         assert!(
             !combined.contains("rebuild-tmp"),
@@ -9896,19 +9885,8 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace(
-            "title: \"Invalid Markdown source\"",
-            "title: [Invalid Markdown source",
-        ),
-    )
-    .unwrap();
+    let markdown = read_canonical_record(dir.path(), "issues", &issue_id);
+    corrupt_issue_title_yaml(dir.path(), &issue_id, "Invalid Markdown source");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["export", "--check"]);
     assert!(
@@ -9947,7 +9925,7 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
         "invalid Markdown must not be silently repaired: {stderr}"
     );
 
-    std::fs::write(&issue_path, markdown).unwrap();
+    write_canonical_record(dir.path(), "issues", &issue_id, markdown);
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(
         success,
@@ -9967,16 +9945,13 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = read_canonical_record(dir.path(), "issues", &issue_id);
     let invalid_markdown = markdown.replace(
         "title: \"Lint canonical source\"",
         "title: [Lint canonical source",
     );
-    std::fs::write(&issue_path, invalid_markdown.as_bytes()).unwrap();
+    write_canonical_record(dir.path(), "issues", &issue_id, invalid_markdown.clone());
 
     let metadata = std::fs::metadata(&issue_path).unwrap();
     let mut hasher = Sha256::new();
@@ -10030,7 +10005,7 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    remove_projection_state(dir.path());
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(success, "lint should rebuild missing state.db: {stderr}");
@@ -10061,19 +10036,12 @@ fn test_focused_lint_validates_missing_relationship_targets() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
 
-    let issue_path = dir
-        .path()
-        .join(".atelier/issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
         markdown.replace(
             "  blocks: []",
             "  blocks:\n  - kind: \"issue\"\n    id: \"atelier-missing\"",
-        ),
-    )
-    .unwrap();
+        )
+    });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
     assert!(
@@ -10124,19 +10092,12 @@ fn test_focused_lint_validates_dependency_cycles() {
     let second_id = issue_ref(dir.path(), 2);
 
     for (issue_id, blocked_id) in [(&first_id, &second_id), (&second_id, &first_id)] {
-        let issue_path = dir
-            .path()
-            .join(".atelier/issues")
-            .join(format!("{issue_id}.md"));
-        let markdown = std::fs::read_to_string(&issue_path).unwrap();
-        std::fs::write(
-            &issue_path,
+        edit_canonical_issue(dir.path(), issue_id, |markdown| {
             markdown.replace(
                 "  blocks: []",
                 &format!("  blocks:\n  - kind: \"issue\"\n    id: \"{blocked_id}\""),
-            ),
-        )
-        .unwrap();
+            )
+        });
     }
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &first_id]);
@@ -10250,9 +10211,7 @@ fn assert_lint_rejects_issue_edit(
     assert_lint_rejects_canonical_mutation(
         title,
         |dir, issue_id| {
-            let issue_path = dir.join(".atelier/issues").join(format!("{issue_id}.md"));
-            let markdown = std::fs::read_to_string(&issue_path).unwrap();
-            std::fs::write(&issue_path, edit(&markdown, issue_id)).unwrap();
+            edit_canonical_issue(dir, issue_id, |markdown| edit(&markdown, issue_id));
         },
         expected,
     );

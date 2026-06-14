@@ -148,6 +148,69 @@ impl SmokeHarness {
         self.temp_dir.path().join(".atelier")
     }
 
+    pub fn canonical_record_path(&self, directory: &str, record_id: &str) -> PathBuf {
+        self.atelier_dir()
+            .join(directory)
+            .join(format!("{record_id}.md"))
+    }
+
+    pub fn canonical_issue_path(&self, issue_ref: &str) -> PathBuf {
+        let issue_id = self.translate_issue_ref(issue_ref);
+        self.canonical_record_path("issues", &issue_id)
+    }
+
+    pub fn canonical_record_id_by_title(&self, directory: &str, title: &str) -> String {
+        let record_dir = self.atelier_dir().join(directory);
+        let entries = std::fs::read_dir(&record_dir)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()));
+        for entry in entries {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+                continue;
+            }
+            let record_id = path.file_stem().unwrap().to_string_lossy().to_string();
+            let text = self.read_canonical_record(directory, &record_id);
+            if text.contains(&format!("title: {title:?}")) {
+                return record_id;
+            }
+        }
+        panic!(
+            "record with title {title:?} not found in {}",
+            record_dir.display()
+        );
+    }
+
+    pub fn issue_id_by_title(&self, title: &str) -> String {
+        self.canonical_record_id_by_title("issues", title)
+    }
+
+    pub fn read_canonical_record(&self, directory: &str, record_id: &str) -> String {
+        let path = self.canonical_record_path(directory, record_id);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()))
+    }
+
+    pub fn write_canonical_record(&self, directory: &str, record_id: &str, markdown: String) {
+        let path = self.canonical_record_path(directory, record_id);
+        std::fs::write(&path, markdown)
+            .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+    }
+
+    pub fn edit_canonical_record(
+        &self,
+        directory: &str,
+        record_id: &str,
+        edit: impl FnOnce(String) -> String,
+    ) {
+        let markdown = self.read_canonical_record(directory, record_id);
+        self.write_canonical_record(directory, record_id, edit(markdown));
+    }
+
+    pub fn edit_canonical_issue(&self, issue_ref: &str, edit: impl FnOnce(String) -> String) {
+        let issue_id = self.translate_issue_ref(issue_ref);
+        self.edit_canonical_record("issues", &issue_id, edit);
+    }
+
     /// Path to the SQLite database.
     pub fn db_path(&self) -> PathBuf {
         self.atelier_dir().join("runtime/state.db")

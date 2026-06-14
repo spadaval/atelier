@@ -107,19 +107,10 @@ fn test_canonical_export_check_cli() {
     h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
     h.run_ok(&["export", "--check"]);
 
-    let issue_id = h.issue_id(1);
-    let issue_path = h
-        .temp_dir
-        .path()
-        .join(".atelier")
-        .join("issues")
-        .join(format!("{issue_id}.md"));
-    let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(
-        &issue_path,
-        markdown.replace("Changed canonical issue", "Markdown canonical issue"),
-    )
-    .unwrap();
+    let issue_id = h.issue_id_by_title("Changed canonical issue");
+    h.edit_canonical_issue(&issue_id, |markdown| {
+        markdown.replace("Changed canonical issue", "Markdown canonical issue")
+    });
 
     let result = h.run_err(&["export", "--check"]);
     assert!(
