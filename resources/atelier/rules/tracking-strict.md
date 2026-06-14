@@ -5,7 +5,7 @@
 **YOU MUST CREATE A ATELIER ISSUE BEFORE WRITING ANY CODE. NO EXCEPTIONS.**
 
 Before your FIRST Write, Edit, or Bash tool call that modifies code:
-1. Run `atelier quick "title" -p <priority> -l <label>` to create an issue AND start working on it
+1. Run `atelier issue create "title" -p <priority> --label <label> --work` to create an issue AND start working on it
 2. The PreToolUse hook WILL BLOCK your tool calls if no issue is active
 3. NEVER skip this step. NEVER proceed without an issue. NEVER treat this as optional.
 
@@ -42,35 +42,32 @@ Add labels to control CHANGELOG.md section:
 
 ### Task Breakdown Rules
 ```bash
-# Single task — use quick for create + label + work in one step
-atelier quick "Fix login validation error on empty email" -p medium -l bug
+# Single task - create, label, and start work in one step
+atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
 
 # Or use create with flags
-atelier create "Fix login validation error on empty email" -p medium --label bug --work
+atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
 
 # Multi-part feature → Epic with subissues
-atelier create "Add user authentication system" -p high --label feature
-atelier subissue 1 "Add user registration endpoint"
-atelier subissue 1 "Add login endpoint with JWT tokens"
-atelier subissue 1 "Add session middleware for protected routes"
+atelier issue create "Add user authentication system" -p high --label feature
+atelier issue create "Add user registration endpoint" --parent 1
+atelier issue create "Add login endpoint with JWT tokens" --parent 1
+atelier issue create "Add session middleware for protected routes" --parent 1
 
 # Mark what you're working on
-atelier session work 1
+atelier start 1
 
 # Add context as you discover things
-atelier comment 1 "Found existing auth helper in utils/auth.ts"
+atelier issue note 1 "Found existing auth helper in utils/auth.ts"
 
 # Close when done — auto-updates CHANGELOG.md
-atelier close 1
+atelier issue close 1 --reason "completed"
 
 # Skip changelog for internal/refactor work
-atelier close 1 --no-changelog
-
-# Batch close
-atelier close-all --no-changelog
+atelier issue close 1 --reason "completed"
 
 # Quiet mode for scripting
-atelier -q create "Fix bug" -p high  # Outputs just the ID number
+atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
 ```
 
 ### Memory-Driven Planning (CRITICAL)
@@ -78,20 +75,20 @@ atelier -q create "Fix bug" -p high  # Outputs just the ID number
 Your auto-memory directory (`~/.claude/projects/.../memory/`) contains plans, architecture notes, and context from prior sessions. **You MUST consult memory before creating issues.**
 
 1. **Read memory first**: At session start, read `MEMORY.md` and any linked topic files. These contain the current plan of record.
-2. **Translate plans to issues**: Break memory plans into small, concrete atelier issues/epics/subissues. Each subissue should be completable in a single focused session.
+2. **Translate plans to issues**: Break memory plans into small, concrete atelier issues/epics/subissues. Each child issue should be completable in a single focused session.
 3. **Verbose comments are mandatory**: When creating issues from a memory plan, add comments that quote or reference the specific plan section, rationale, and acceptance criteria so any new agent instance can pick up the work without re-reading memory.
 4. **Stay on track**: Before starting new work, check if it aligns with the plan in memory. If the user's request diverges from the plan, update memory AND issues together — never let them drift apart.
 5. **Close the loop**: When closing an issue, update memory to reflect what was completed and what changed from the original plan.
 
 ```bash
 # Example: translating a memory plan into tracked work
-atelier create "Implement webhook retry system" -p high --label feature
-atelier comment 1 "Per memory/architecture.md: retry with exponential backoff, max 5 attempts, dead-letter queue after exhaustion. See 'Webhook Reliability' section."
-atelier subissue 1 "Add retry queue with exponential backoff (max 5 attempts)"
-atelier comment 2 "Backoff schedule: 1s, 5s, 25s, 125s, 625s. Store attempt count in webhook_deliveries table."
-atelier subissue 1 "Add dead-letter queue for exhausted retries"
-atelier comment 3 "Failed webhooks go to dead_letter_webhooks table with full payload + error history for manual inspection."
-atelier subissue 1 "Add webhook delivery dashboard endpoint"
+atelier issue create "Implement webhook retry system" -p high --label feature
+atelier issue note 1 "Per memory/architecture.md: retry with exponential backoff, max 5 attempts, dead-letter queue after exhaustion. See 'Webhook Reliability' section."
+atelier issue create "Add retry queue with exponential backoff (max 5 attempts)" --parent 1
+atelier issue note 2 "Backoff schedule: 1s, 5s, 25s, 125s, 625s. Store attempt count in webhook_deliveries table."
+atelier issue create "Add dead-letter queue for exhausted retries" --parent 1
+atelier issue note 3 "Failed webhooks go to dead_letter_webhooks table with full payload + error history for manual inspection."
+atelier issue create "Add webhook delivery dashboard endpoint" --parent 1
 ```
 
 ### When to Create Issues
@@ -109,11 +106,11 @@ atelier subissue 1 "Add webhook delivery dashboard endpoint"
 Sessions are auto-started by the SessionStart hook. **You MUST end sessions properly.**
 
 ```bash
-atelier session work <id>          # Mark current focus — ALWAYS
-atelier session end --notes "..."  # REQUIRED before stopping — ALWAYS
+atelier start <id>          # Mark current focus — ALWAYS
+atelier issue note <id> "handoff: ..." --kind handoff  # REQUIRED before stopping — ALWAYS
 ```
 
-**You MUST run `atelier session end --notes "..."` when:**
+**You MUST run `atelier issue note <id> "handoff: ..." --kind handoff` when:**
 - Context is getting long (conversation > 30-40 messages)
 - User says goodbye, done, thanks, or indicates stopping
 - Before any natural stopping point
@@ -132,16 +129,16 @@ atelier session end --notes "..."  # REQUIRED before stopping — ALWAYS
 
 ### Dependencies
 ```bash
-atelier block 2 1     # Issue 2 blocked by issue 1
-atelier ready         # Show unblocked work
+atelier issue block 2 1     # Issue 2 blocked by issue 1
+atelier issue list --ready         # Show unblocked work
 ```
 
 ### Large Implementations (500+ lines)
-1. Create parent issue: `atelier create "<feature>" -p high`
-2. Break into subissues: `atelier subissue <id> "<component>"`
-3. Work one subissue at a time, close each when done
+1. Create parent issue: `atelier issue create "<feature>" -p high`
+2. Break into child issues: `atelier issue create "<component>" --parent <id>`
+3. Work one child issue at a time, close each when done
 
 ### Context Window Management
 When conversation is long or task needs many steps:
-1. Create tracking issue: `atelier create "Continue: <summary>" -p high`
-2. Add notes: `atelier comment <id> "<what's done, what's next>"`
+1. Create tracking issue: `atelier issue create "Continue: <summary>" -p high`
+2. Add notes: `atelier issue note <id> "<what's done, what's next>"`

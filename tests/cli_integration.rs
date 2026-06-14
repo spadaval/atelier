@@ -79,14 +79,15 @@ fn init_atelier_without_workflow(dir: &Path) {
 }
 
 fn migrate_default_issue_workflow(dir: &Path) {
-    if dir.join(".atelier").join("workflow.yaml").exists() {
+    let workflow_path = dir.join(".atelier").join("workflow.yaml");
+    if workflow_path.exists() {
         return;
     }
-    let (success, _, stderr) = run_atelier(dir, &["workflow", "init"]);
-    assert!(
-        success || stderr.contains("workflow.yaml already exists"),
-        "workflow init failed: {stderr}"
-    );
+    fs::write(
+        &workflow_path,
+        atelier::workflow_policy::STARTER_POLICY_YAML,
+    )
+    .expect("failed to write starter workflow policy");
 }
 
 fn init_git_repo(dir: &Path) {
@@ -202,6 +203,16 @@ fn canonical_issue_path(dir: &Path, issue_id: &str) -> PathBuf {
     canonical_record_path(dir, "issues", issue_id)
 }
 
+fn active_work_association_count(dir: &Path, issue_id: &str) -> i64 {
+    let conn = rusqlite::Connection::open(dir.join(".atelier/runtime/state.db")).unwrap();
+    conn.query_row(
+        "SELECT COUNT(*) FROM work_associations WHERE issue_id = ?1 AND status = 'active'",
+        rusqlite::params![issue_id],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
 fn read_canonical_record(dir: &Path, directory: &str, record_id: &str) -> String {
     let path = canonical_record_path(dir, directory, record_id);
     std::fs::read_to_string(&path)
@@ -298,6 +309,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier status`
 - `atelier start`
 - `atelier abandon`
+- `atelier repair`
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
@@ -309,7 +321,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier history`
-- `atelier worktree for/status/merge/remove`
+- `atelier worktree for/status/merge/repair/remove`
 - `atelier export`
 - `atelier rebuild`
 - `atelier maintenance delete`
@@ -1248,8 +1260,8 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "prime", "status", "issue", "mission", "plan", "evidence", "history", "worktree",
-        "lint", "doctor",
+        "init", "prime", "status", "start", "abandon", "repair", "issue", "mission", "plan",
+        "evidence", "history", "worktree", "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -1307,6 +1319,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier history --issue <id>",
         "atelier start <issue-id>",
         "atelier abandon [issue-id] --reason",
+        "atelier repair [issue-id]",
         "atelier issue transition <issue-id> --options",
         "atelier issue close <issue-id> --reason",
         "atelier doctor",
@@ -1350,6 +1363,15 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
+fn test_repair_help_names_active_work_recovery() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["repair", "--help"]);
+    assert!(success, "repair help failed: {stderr}");
+    assert!(stdout.contains("Clear stale active local work after interrupted worktree cleanup"));
+    assert!(stdout.contains("Usage: atelier repair [OPTIONS] [ID]"));
+}
+
+#[test]
 fn test_generic_note_command_rejects_with_record_specific_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1387,8 +1409,8 @@ fn test_workflow_help_is_scoped_as_advanced_internal_diagnostic() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["workflow", "--help"]);
     assert!(success, "workflow help failed: {stderr}");
-    assert!(stdout.contains("Advanced/debug workflow policy setup and diagnostics"));
-    assert!(stdout.contains("init"));
+    assert!(stdout.contains("Advanced/debug workflow policy diagnostics"));
+    assert!(!stdout.contains("\n  init"));
     assert!(stdout.contains("check"));
     assert!(stdout.contains("normal operator checks use lint and status surfaces"));
     assert!(!stdout.contains("validate"));
@@ -1958,6 +1980,170 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
 }
 
 #[test]
+fn test_root_start_rejects_different_active_issue_in_same_worktree() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Active item"]);
+    assert!(success, "active issue create failed: {stderr}");
+    let active_id = issue_id_by_title(dir.path(), "Active item");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Next item"]);
+    assert!(success, "next issue create failed: {stderr}");
+    let next_id = issue_id_by_title(dir.path(), "Next item");
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "two startable items");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    assert!(success, "initial start failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
+    assert!(!success, "switching active issue should fail");
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        transcript.contains(&format!("Worktree already has active issue {active_id}")),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains(&format!("atelier abandon {active_id} --reason \"...\"")),
+        "{transcript}"
+    );
+
+    let next_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &next_id)).unwrap();
+    assert!(
+        next_text.contains("status: \"todo\""),
+        "rejected start must not transition the second issue:\n{next_text}"
+    );
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains(&format!("Active work:   {active_id} - Active item")));
+    assert!(!status_out.contains(&format!("Active work:   {next_id} - Next item")));
+}
+
+#[test]
+fn test_root_start_same_issue_refreshes_single_active_association() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Restarted item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Restarted item");
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "restartable item");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "first start failed: {stderr}");
+    let (success, restart_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "second start should refresh active work: {stderr}");
+    assert!(
+        restart_out.contains(&format!("Started work on {issue_id}")),
+        "{restart_out}"
+    );
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 1);
+}
+
+#[test]
+fn test_abandon_clears_scoped_active_issue_and_allows_switching() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "First item"]);
+    assert!(success, "first issue create failed: {stderr}");
+    let first_id = issue_id_by_title(dir.path(), "First item");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Second item"]);
+    assert!(success, "second issue create failed: {stderr}");
+    let second_id = issue_id_by_title(dir.path(), "Second item");
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "switchable items");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    assert!(success, "first start failed: {stderr}");
+    let (success, abandon_out, stderr) =
+        run_atelier(dir.path(), &["abandon", &first_id, "--reason", "switching"]);
+    assert!(success, "abandon failed: {stderr}");
+    assert!(abandon_out.contains(&format!("Abandoned work on {first_id}")));
+
+    let (success, second_out, stderr) = run_atelier(dir.path(), &["start", &second_id]);
+    assert!(success, "second start after abandon failed: {stderr}");
+    assert!(
+        second_out.contains(&format!("Started work on {second_id}")),
+        "{second_out}"
+    );
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains(&format!("Active work:   {second_id} - Second item")));
+    assert!(!status_out.contains(&format!("Active work:   {first_id} - First item")));
+}
+
+#[test]
+fn test_separate_worktrees_can_have_different_active_issues() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Parallel focus"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Parallel focus");
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id.as_str()]);
+    assert!(success, "mission start failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Root work"]);
+    assert!(success, "root issue create failed: {stderr}");
+    let root_id = issue_id_by_title(dir.path(), "Root work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Worktree work"]);
+    assert!(success, "worktree issue create failed: {stderr}");
+    let worktree_id = issue_id_by_title(dir.path(), "Worktree work");
+    for issue_id in [&root_id, &worktree_id] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["mission", "add-work", mission_id.as_str(), issue_id],
+        );
+        assert!(success, "mission add work failed for {issue_id}: {stderr}");
+    }
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "parallel worktree items");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &root_id]);
+    assert!(success, "root start failed: {stderr}");
+    let worktree_path = dir.path().join(".atelier-worktrees").join(&worktree_id);
+    let worktree_arg = worktree_path.to_string_lossy().to_string();
+    let (success, worktree_out, stderr) = run_atelier(
+        dir.path(),
+        &["worktree", "for", &worktree_id, "--path", &worktree_arg],
+    );
+    assert!(success, "worktree for failed: {stderr}");
+    assert!(worktree_out.contains(&worktree_arg));
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(status_out.contains(&format!("Active work:   {root_id} - Root work")));
+    assert!(!status_out.contains(&format!("Active work:   {worktree_id} - Worktree work")));
+
+    let (success, mission_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
+    assert!(success, "mission status failed: {stderr}");
+    let active_work_section = mission_out
+        .split("Active Work")
+        .nth(1)
+        .expect("active work section missing")
+        .split("Next Commands")
+        .next()
+        .expect("next commands section missing");
+    assert!(active_work_section.contains(&root_id), "{mission_out}");
+    assert!(!active_work_section.contains(&worktree_id), "{mission_out}");
+
+    let (success, worktree_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(success, "worktree status failed: {stderr}");
+    assert!(worktree_status.contains(&worktree_arg), "{worktree_status}");
+    assert!(
+        worktree_status.contains(&format!("{worktree_id} [active]")),
+        "{worktree_status}"
+    );
+}
+
+#[test]
 fn test_root_start_reports_workflow_validator_failure() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
@@ -2468,29 +2654,23 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Source graph item"]);
-    run_atelier(dir.path(), &["issue", "create", "Target graph item"]);
-    run_atelier(dir.path(), &["issue", "create", "Disposable item"]);
     let source_id = issue_ref(dir.path(), 1);
-    let target_id = issue_ref(dir.path(), 2);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Target graph item",
+            "--parent",
+            &source_id,
+        ],
+    );
+    run_atelier(dir.path(), &["issue", "create", "Disposable item"]);
     let disposable_id = issue_ref(dir.path(), 3);
 
     let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "Source"]);
     assert!(success, "search failed: {stderr}");
     assert!(search_out.contains("Source graph item"));
-
-    let (success, link_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue", "relate", &source_id, &target_id, "--type", "derived",
-        ],
-    );
-    assert!(success, "issue relate failed: {stderr}");
-    assert!(link_out.contains("Linked"));
-
-    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "related", &source_id]);
-    assert!(success, "issue related failed: {stderr}");
-    assert!(list_out.contains("derived"));
-    assert!(list_out.contains("Target graph item"));
 
     let (success, impact_out, stderr) = run_atelier(dir.path(), &["graph", "impact", &source_id]);
     assert!(success, "graph impact failed: {stderr}");
@@ -2518,15 +2698,6 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Explicit note body"));
 
-    let (success, unlink_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue", "unrelate", &source_id, &target_id, "--type", "derived",
-        ],
-    );
-    assert!(success, "issue unrelate failed: {stderr}");
-    assert!(unlink_out.contains("Unlinked"));
-
     let (success, delete_out, stderr) = run_atelier(
         dir.path(),
         &["maintenance", "delete", "issue", &disposable_id, "--force"],
@@ -2544,17 +2715,31 @@ fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
     run_atelier(dir.path(), &["issue", "create", "Old surface target"]);
 
     for args in [
+        vec!["issue", "quick", "Old quick"],
+        vec!["issue", "subissue", "1", "Old child"],
         vec!["issue", "search", "Old"],
         vec!["issue", "comment", "1", "compat note"],
-        vec!["issue", "block", "1", "2"],
+        vec!["issue", "label", "1", "old-label"],
+        vec!["issue", "unlabel", "1", "old-label"],
         vec!["issue", "relate", "1", "2"],
+        vec!["issue", "unrelate", "1", "2"],
+        vec!["issue", "related", "1"],
         vec!["issue", "impact", "1"],
+        vec!["issue", "next"],
+        vec!["issue", "tree"],
+        vec!["issue", "tested"],
+        vec!["issue", "delete", "1", "--force"],
+        vec!["issue", "close-all"],
     ] {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "{args:?} failed: {stderr}");
+        assert!(!success, "{args:?} unexpectedly succeeded");
         assert!(
-            !stderr.contains("Compatibility"),
-            "{args:?} leaked compatibility guidance:\n{stderr}"
+            stderr.contains("unrecognized subcommand"),
+            "{args:?} should be removed, got:\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("was removed"),
+            "{args:?} should not emit compatibility guidance:\n{stderr}"
         );
     }
 }
@@ -8763,56 +8948,34 @@ fn test_mission_closeout_uses_contract_audit() {
 }
 
 #[test]
-fn test_workflow_init_writes_starter_policy_in_fresh_repo() {
+fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     let dir = tempdir().unwrap();
-    init_atelier_without_workflow(dir.path());
 
-    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
-    assert!(
-        !policy_path.exists(),
-        "starter policy should not exist before init"
-    );
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
-    assert!(success, "workflow init failed: {stderr}");
-    assert!(stdout.contains("Created .atelier/workflow.yaml"));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["init"]);
+    assert!(success, "root init failed: {stderr}");
+    assert!(stdout.contains(".atelier/workflow.yaml"));
     assert!(stdout.contains("atelier lint"));
 
-    let policy = std::fs::read_to_string(policy_path).unwrap();
+    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
+    let policy = std::fs::read_to_string(&policy_path).unwrap();
     assert!(policy.contains("  todo:\n    category: todo"));
     assert!(policy.contains("  archived:\n    category: done"));
     assert!(policy.contains("    initial_status: todo"));
     assert!(policy.contains("    done_statuses: [done, archived]"));
     assert!(policy.contains("  lightweight_spike:"));
-}
 
-#[test]
-fn test_workflow_init_refuses_existing_policy_without_force_and_overwrites_with_force() {
-    let dir = tempdir().unwrap();
-    init_atelier_without_workflow(dir.path());
-
-    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
-    std::fs::write(&policy_path, "schema: custom\n").unwrap();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
+    assert!(!success, "workflow init should be removed");
+    assert!(stdout.is_empty(), "{stdout}");
     assert!(
-        !success,
-        "workflow init should refuse overwrite without --force"
+        stderr.contains("unrecognized subcommand 'init'"),
+        "{stderr}"
     );
-    assert!(stderr.contains("workflow init --force"), "stderr: {stderr}");
-    assert_eq!(
-        std::fs::read_to_string(&policy_path).unwrap(),
-        "schema: custom\n"
+    assert!(
+        stderr.contains("`atelier workflow init` was removed"),
+        "{stderr}"
     );
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init", "--force"]);
-    assert!(success, "workflow init --force failed: {stderr}");
-    assert!(stdout.contains("Replaced .atelier/workflow.yaml"));
-
-    let policy = std::fs::read_to_string(&policy_path).unwrap();
-    assert!(policy.contains("schema: atelier.workflow"));
-    assert!(policy.contains("standard_review_proof"));
-    assert!(policy.contains("lightweight_spike"));
+    assert!(stderr.contains("atelier init"), "{stderr}");
 }
 
 #[test]
@@ -10838,12 +11001,12 @@ The unindexed issue is discoverable after rebuild.
 
 ## Evidence
 
-- `atelier issue search Unindexed` shows the record.
+- `atelier search Unindexed` shows the record.
 "#,
     )
     .unwrap();
 
-    let (success, search_out, stderr) = run_atelier(dir.path(), &["issue", "search", "Unindexed"]);
+    let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "Unindexed"]);
     assert!(
         success,
         "unindexed search should transparently rebuild: {stderr}"
@@ -11622,6 +11785,12 @@ hooks:
         !worktree_path.join(".atelier/setup-marker").exists(),
         "root atelier.workflow.yaml hooks should not run during worktree setup"
     );
+    let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
+    assert!(success, "worktree-local status failed: {stderr}");
+    assert!(
+        child_status_out.contains(&format!("Active work:   {issue_id} - Work item")),
+        "worktree-local runtime should be associated with active work: {child_status_out}"
+    );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
@@ -11698,6 +11867,117 @@ hooks:
         "worktree status after failed setup failed: {stderr}"
     );
     assert!(failed_status.contains(&format!("{failed_issue_id} [active]")));
+}
+
+#[test]
+fn test_repair_clears_stale_active_work_association() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Stale active work"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(stdout.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Stale active work");
+    commit_all(dir.path(), "stale active work baseline");
+
+    let stale_path = dir.path().join(".atelier-worktrees").join(&issue_id);
+    let stale_path_arg = stale_path.to_string_lossy().to_string();
+    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
+    conn.execute(
+        "INSERT INTO work_associations (issue_id, status, branch, worktree_path, started_at)
+         VALUES (?1, 'active', ?2, ?3, ?4)",
+        rusqlite::params![
+            &issue_id,
+            format!("codex/{issue_id}"),
+            &stale_path_arg,
+            "2026-06-14T12:00:00Z"
+        ],
+    )
+    .unwrap();
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 1);
+    drop(conn);
+    assert!(!stale_path.exists());
+
+    let (success, repair_out, stderr) = run_atelier(dir.path(), &["repair", &issue_id]);
+    assert!(success, "active-work repair failed: {stderr}");
+    assert!(
+        repair_out.contains(&format!(
+            "Cleared stale active work association for {issue_id}: {stale_path_arg}"
+        )),
+        "unexpected repair output:\nstdout:\n{repair_out}\nstderr:\n{stderr}"
+    );
+    assert!(repair_out.contains("atelier status"));
+
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 0);
+    let (success, second_repair_out, stderr) = run_atelier(dir.path(), &["repair", &issue_id]);
+    assert!(success, "second active-work repair failed: {stderr}");
+    assert!(second_repair_out.contains(&format!("No active work association for {issue_id}")));
+}
+
+#[test]
+fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Retriable setup worktree"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Retriable setup worktree");
+    migrate_default_issue_workflow(dir.path());
+    commit_all(dir.path(), "valid tracker state");
+
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let valid_markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let malformed_markdown =
+        valid_markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
+    std::fs::write(&issue_path, malformed_markdown).unwrap();
+    commit_all(dir.path(), "malformed tracker state");
+
+    let worktree_path = dir.path().join(".atelier-worktrees").join(&issue_id);
+    let worktree_arg = worktree_path.to_string_lossy().to_string();
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["worktree", "for", &issue_id, "--path", &worktree_arg],
+    );
+    assert!(!success, "malformed setup unexpectedly succeeded: {stdout}");
+    assert!(
+        stderr.contains("active work association was not changed"),
+        "failure should say association was not changed: {stderr}"
+    );
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(
+        success,
+        "worktree status after failed setup failed: {stderr}"
+    );
+    assert!(
+        !status_out.contains(&format!("{issue_id} [active]")),
+        "failed setup should not record parent association: {status_out}"
+    );
+
+    std::fs::write(&issue_path, valid_markdown).unwrap();
+    commit_all(dir.path(), "fix tracker state");
+
+    let (success, retry_out, stderr) = run_atelier(
+        dir.path(),
+        &["worktree", "for", &issue_id, "--path", &worktree_arg],
+    );
+    assert!(success, "retrying worktree setup failed: {stderr}");
+    assert!(retry_out.contains(&worktree_arg));
+
+    let (success, root_status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(success, "root worktree status after retry failed: {stderr}");
+    assert!(root_status_out.contains(&format!("{issue_id} [active]")));
+
+    let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
+    assert!(success, "child status after retry failed: {stderr}");
+    assert!(child_status_out.contains(&format!(
+        "Active work:   {issue_id} - Retriable setup worktree"
+    )));
 }
 
 #[test]

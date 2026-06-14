@@ -22,8 +22,8 @@ use std::env;
 use std::time::Instant;
 
 use command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, find_atelier_dir,
-    lint_db, projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, command_storage, degraded_projection_query_db, lint_db,
+    projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
 };
 use db::Database;
 use record_store::RecordStore;
@@ -40,6 +40,7 @@ Orientation:
   status        Show checkout, mission, work, and tracker signposts
   start         Start tracked work on an issue
   abandon       Clear active local work without changing issue status
+  repair        Clear stale active local work after interrupted worktree cleanup
 
 Issues:
   issue         Create, list, show, update, close, and manage blockers
@@ -81,6 +82,7 @@ Common commands:
   atelier history --issue <id>
   atelier start <issue-id>
   atelier abandon [issue-id] --reason \"...\"
+  atelier repair [issue-id]
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
   atelier doctor
@@ -138,6 +140,12 @@ enum Commands {
         /// Reason for abandoning the local work association
         #[arg(long)]
         reason: String,
+    },
+
+    /// Clear stale active local work after interrupted worktree cleanup
+    Repair {
+        /// Issue ID; defaults to the active work association
+        id: Option<String>,
     },
 
     /// Issue lifecycle commands (create, show, list, close, ...)
@@ -238,7 +246,7 @@ enum Commands {
         limit: usize,
     },
 
-    /// Advanced/debug workflow policy setup and diagnostics
+    /// Advanced/debug workflow policy diagnostics
     #[command(hide = true)]
     Workflow {
         #[command(subcommand)]
@@ -310,46 +318,6 @@ enum IssueCommands {
         work: bool,
     },
 
-    /// Quick-create an issue and start working on it (create + label + session work)
-    #[command(hide = true)]
-    Quick {
-        /// Issue title
-        title: String,
-        /// Issue description
-        #[arg(short, long)]
-        description: Option<String>,
-        /// Priority (low, medium, high, critical)
-        #[arg(short, long, default_value = "medium")]
-        priority: String,
-        /// Template (bug, feature, refactor, research)
-        #[arg(short, long)]
-        template: Option<String>,
-        /// Add labels to the issue
-        #[arg(short, long)]
-        label: Vec<String>,
-    },
-
-    /// Create a subissue under a parent issue
-    #[command(hide = true)]
-    Subissue {
-        /// Parent issue ID
-        parent: String,
-        /// Subissue title
-        title: String,
-        /// Subissue description
-        #[arg(short, long)]
-        description: Option<String>,
-        /// Priority (low, medium, high, critical)
-        #[arg(short, long, default_value = "medium")]
-        priority: String,
-        /// Add labels to the subissue
-        #[arg(short, long)]
-        label: Vec<String>,
-        /// Set as current session work item
-        #[arg(short, long)]
-        work: bool,
-    },
-
     /// List issues
     List {
         /// Filter by exact workflow status, or all
@@ -370,13 +338,6 @@ enum IssueCommands {
         /// Show only blocked work
         #[arg(long)]
         blocked: bool,
-    },
-
-    /// Search issues by text
-    #[command(hide = true)]
-    Search {
-        /// Search query
-        query: String,
     },
 
     /// Show issue details
@@ -452,57 +413,6 @@ enum IssueCommands {
         reason: String,
     },
 
-    /// Close all issues matching filters
-    #[command(hide = true)]
-    CloseAll {
-        /// Filter by label
-        #[arg(short, long)]
-        label: Option<String>,
-        /// Filter by priority
-        #[arg(short, long)]
-        priority: Option<String>,
-    },
-
-    /// Delete an issue
-    #[command(hide = true)]
-    Delete {
-        /// Issue ID
-        id: String,
-        /// Skip confirmation
-        #[arg(short, long)]
-        force: bool,
-    },
-
-    /// Add a comment to an issue
-    #[command(hide = true)]
-    Comment {
-        /// Issue ID
-        id: String,
-        /// Comment text
-        text: String,
-        /// Comment kind (note, plan, observation, blocker, resolution, result, handoff, human)
-        #[arg(long, default_value = "note")]
-        kind: String,
-    },
-
-    /// Add a label to an issue
-    #[command(hide = true)]
-    Label {
-        /// Issue ID
-        id: String,
-        /// Label name
-        label: String,
-    },
-
-    /// Remove a label from an issue
-    #[command(hide = true)]
-    Unlabel {
-        /// Issue ID
-        id: String,
-        /// Label name
-        label: String,
-    },
-
     /// Mark an issue as blocked by another
     Block {
         /// Issue ID that is blocked
@@ -524,63 +434,6 @@ enum IssueCommands {
         /// Issue ID to inspect instead of the blocked-work queue
         id: Option<String>,
     },
-
-    /// Link two related issues
-    #[command(hide = true)]
-    Relate {
-        /// First issue ID
-        id: String,
-        /// Second issue ID
-        related: String,
-        /// Relation type (any string, e.g. related, assumption, falsifies, derived, caused-by)
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-
-    /// Remove a relation between issues
-    #[command(hide = true)]
-    Unrelate {
-        /// First issue ID
-        id: String,
-        /// Second issue ID
-        related: String,
-        /// Relation type to remove
-        #[arg(short = 't', long = "type", default_value = "related")]
-        relation_type: String,
-    },
-
-    /// List related issues
-    #[command(hide = true)]
-    Related {
-        /// Issue ID
-        id: String,
-    },
-
-    /// Show downstream issue impact from hierarchy and impact-bearing links
-    #[command(hide = true)]
-    Impact {
-        /// Issue ID to check impact from
-        id: String,
-    },
-
-    /// Suggest the next issue to work on
-    #[command(hide = true)]
-    Next,
-
-    /// Show issues as a tree hierarchy
-    #[command(hide = true)]
-    Tree {
-        /// Filter by status (todo, done, all)
-        #[arg(short, long, default_value = "all")]
-        status: String,
-        /// Show a bounded, scan-friendly hierarchy instead of the full tree
-        #[arg(long)]
-        compact: bool,
-    },
-
-    /// Mark tests as run (resets test reminder)
-    #[command(hide = true)]
-    Tested,
 }
 
 #[derive(Subcommand)]
@@ -803,11 +656,6 @@ another target.")]
 
 #[derive(Subcommand)]
 enum WorkflowCommands {
-    /// Write or replace the starter .atelier/workflow.yaml policy for debug or recovery work
-    Init {
-        #[arg(long)]
-        force: bool,
-    },
     /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
     Check,
 }
@@ -1052,62 +900,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             )
         }
 
-        IssueCommands::Quick {
-            title,
-            description,
-            priority,
-            template,
-            label,
-        } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
-                &priority,
-                description.as_deref(),
-                template.as_deref(),
-                &label,
-                None,
-            )?;
-            commands::agent_factory::create_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::agent_factory::LifecycleCreateInput {
-                    title: &title,
-                    description: final_description.as_deref(),
-                    priority: &final_priority,
-                    issue_type: &issue_type,
-                    labels: &labels,
-                    parent: None,
-                    work: true,
-                    quiet,
-                },
-            )
-        }
-
-        IssueCommands::Subissue {
-            parent,
-            title,
-            description,
-            priority,
-            label,
-            work,
-        } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::agent_factory::create_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::agent_factory::LifecycleCreateInput {
-                    title: &title,
-                    description: description.as_deref(),
-                    priority: &priority,
-                    issue_type: "task",
-                    labels: &label,
-                    parent: Some(&parent),
-                    work,
-                    quiet,
-                },
-            )
-        }
-
         IssueCommands::List {
             status,
             category,
@@ -1136,11 +928,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     quiet,
                 )
             }
-        }
-
-        IssueCommands::Search { query } => {
-            let db = degraded_projection_query_db()?;
-            commands::agent_factory::search(&db, &query, quiet)
         }
 
         IssueCommands::Show { id } => {
@@ -1231,50 +1018,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             )
         }
 
-        IssueCommands::CloseAll { label, priority } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::status::close_all_lifecycle(
-                &state_dir,
-                &db_path,
-                label.as_deref(),
-                priority.as_deref(),
-            )
-        }
-
-        IssueCommands::Delete { id, force } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let db = canonical_mutation_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            drop(db);
-            commands::delete::run_lifecycle(&state_dir, &db_path, &id, force)
-        }
-
-        IssueCommands::Comment { id, text, kind } => {
-            let db = canonical_mutation_db()?;
-            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::comment::run_canonical(&db, &resolved, &text, &kind)
-        }
-
-        IssueCommands::Label { id, label } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::add_canonical(&db, &store, &resolved, &label)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
-        IssueCommands::Unlabel { id, label } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            let resolved = commands::agent_factory::resolve_id(&db, &id)?;
-            commands::label::remove_canonical(&db, &store, &resolved, &label)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
         IssueCommands::Block { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
@@ -1300,67 +1043,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             } else {
                 commands::deps::list_blocked(&db)
             }
-        }
-
-        IssueCommands::Relate {
-            id,
-            related,
-            relation_type,
-        } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            let id = resolve_issue_arg(&db, &id)?;
-            let related = resolve_issue_arg(&db, &related)?;
-            commands::relate::add_typed_canonical(&db, &store, &id, &related, &relation_type)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
-        IssueCommands::Unrelate {
-            id,
-            related,
-            relation_type,
-        } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            let id = resolve_issue_arg(&db, &id)?;
-            let related = resolve_issue_arg(&db, &related)?;
-            commands::relate::remove_typed_canonical(&db, &store, &id, &related, &relation_type)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
-        }
-
-        IssueCommands::Related { id } => {
-            let db = projection_query_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            commands::relate::list(&db, &id)
-        }
-
-        IssueCommands::Impact { id } => {
-            let db = projection_query_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            commands::relate::impact(&db, &id)
-        }
-
-        IssueCommands::Next => {
-            let db = projection_query_db()?;
-            commands::next::run(&db)
-        }
-
-        IssueCommands::Tree { status, compact } => {
-            let db = projection_query_db()?;
-            if compact {
-                commands::tree::run_compact(&db, Some(&status))
-            } else {
-                commands::tree::run(&db, Some(&status))
-            }
-        }
-
-        IssueCommands::Tested => {
-            let atelier_dir = find_atelier_dir()?;
-            commands::tested::run(&atelier_dir)
         }
     }
 }
@@ -1420,6 +1102,15 @@ fn run() -> Result<()> {
                     })?,
             };
             commands::work::abandon(&db, &id, &reason)
+        }
+
+        Commands::Repair { id } => {
+            let db = runtime_db()?;
+            let id = match id {
+                Some(id) => Some(resolve_issue_arg(&db, &id)?),
+                None => None,
+            };
+            commands::work::repair_active(&db, id.as_deref())
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -1845,10 +1536,6 @@ fn run() -> Result<()> {
         }
 
         Commands::Workflow { action } => match action {
-            WorkflowCommands::Init { force } => {
-                let repo_root = storage_layout::find_repo_root()?;
-                commands::workflow::init(&repo_root, force)
-            }
             WorkflowCommands::Check => {
                 let db = projection_query_db()?;
                 commands::workflow::check(&db)
@@ -1955,6 +1642,9 @@ fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
         ["workflow", "check", ..] => Some(
             "`atelier workflow check` is not the normal workflow-readiness path; use `atelier issue transition <id> --options`, `atelier mission status [<id>]`, `atelier lint`, or `atelier doctor`.",
         ),
+        ["workflow", "init", ..] => Some(
+            "`atelier workflow init` was removed; use root `atelier init` to create `.atelier/workflow.yaml` during tracker setup.",
+        ),
         ["finish", ..] => Some(
             "`atelier finish` was removed; use `atelier issue close <id> --reason \"...\"` or inspect `atelier issue transition <id> --options`.",
         ),
@@ -2023,32 +1713,18 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Status => "status",
         Commands::Start { .. } => "start",
         Commands::Abandon { .. } => "abandon",
+        Commands::Repair { .. } => "repair",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
-            IssueCommands::Quick { .. } => "issue quick",
-            IssueCommands::Subissue { .. } => "issue subissue",
             IssueCommands::List { .. } => "issue list",
-            IssueCommands::Search { .. } => "issue search",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
             IssueCommands::Close { .. } => "issue close",
-            IssueCommands::CloseAll { .. } => "issue close-all",
-            IssueCommands::Delete { .. } => "issue delete",
-            IssueCommands::Comment { .. } => "issue comment",
-            IssueCommands::Label { .. } => "issue label",
-            IssueCommands::Unlabel { .. } => "issue unlabel",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",
-            IssueCommands::Relate { .. } => "issue relate",
-            IssueCommands::Unrelate { .. } => "issue unrelate",
-            IssueCommands::Related { .. } => "issue related",
-            IssueCommands::Impact { .. } => "issue impact",
-            IssueCommands::Next => "issue next",
-            IssueCommands::Tree { .. } => "issue tree",
-            IssueCommands::Tested => "issue tested",
         },
         Commands::Search { .. } => "search",
         Commands::Graph { action } => match action {
@@ -2097,7 +1773,6 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
-            WorkflowCommands::Init { .. } => "workflow init",
             WorkflowCommands::Check => "workflow check",
         },
         Commands::Worktree { action } => match action {

@@ -5,7 +5,7 @@
 **YOU MUST CREATE A ATELIER ISSUE BEFORE WRITING ANY CODE. NO EXCEPTIONS.**
 
 Before your FIRST Write, Edit, or Bash tool call that modifies code:
-1. Run `atelier quick "title" -p <priority> -l <label>` to create an issue AND start working on it
+1. Run `atelier issue create "title" -p <priority> --label <label> --work` to create an issue AND start working on it
 2. The PreToolUse hook WILL BLOCK your tool calls if no issue is active
 3. NEVER skip this step. NEVER proceed without an issue. NEVER treat this as optional.
 
@@ -42,35 +42,32 @@ Add labels to control CHANGELOG.md section:
 
 ### Task Breakdown Rules
 ```bash
-# Single task — use quick for create + label + work in one step
-atelier quick "Fix login validation error on empty email" -p medium -l bug
+# Single task - create, label, and start work in one step
+atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
 
 # Or use create with flags
-atelier create "Fix login validation error on empty email" -p medium --label bug --work
+atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
 
 # Multi-part feature → Epic with subissues
-atelier create "Add user authentication system" -p high --label feature
-atelier subissue 1 "Add user registration endpoint"
-atelier subissue 1 "Add login endpoint with JWT tokens"
-atelier subissue 1 "Add session middleware for protected routes"
+atelier issue create "Add user authentication system" -p high --label feature
+atelier issue create "Add user registration endpoint" --parent 1
+atelier issue create "Add login endpoint with JWT tokens" --parent 1
+atelier issue create "Add session middleware for protected routes" --parent 1
 
 # Mark what you're working on
-atelier session work 1
+atelier start 1
 
 # Add context as you discover things
-atelier comment 1 "Found existing auth helper in utils/auth.ts"
+atelier issue note 1 "Found existing auth helper in utils/auth.ts"
 
 # Close when done — auto-updates CHANGELOG.md
-atelier close 1
+atelier issue close 1 --reason "completed"
 
 # Skip changelog for internal/refactor work
-atelier close 1 --no-changelog
-
-# Batch close
-atelier close-all --no-changelog
+atelier issue close 1 --reason "completed"
 
 # Quiet mode for scripting
-atelier -q create "Fix bug" -p high  # Outputs just the ID number
+atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
 ```
 
 ## Priority 1: Security
@@ -118,5 +115,5 @@ These are preferences, not hard rules. They yield to all higher priorities.
 
 - Write code, don't narrate. Skip "Here is the code" / "Let me..." / "I'll now..."
 - Brief explanations only when the code isn't self-explanatory.
-- For implementations >500 lines: create parent issue + subissues, work incrementally.
-- When conversation is long: create a tracking issue with `atelier comment` notes for context preservation.
+- For implementations >500 lines: create parent issue and child issues, work incrementally.
+- When conversation is long: create a tracking issue with `atelier issue note` notes for context preservation.

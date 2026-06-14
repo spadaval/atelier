@@ -3,11 +3,11 @@
 Create issues before starting work to keep things organized and enable context handoff between sessions.
 
 ### Creating Issues
-- Use `atelier quick "title" -p <priority> -l <label>` for one-step create+label+work.
+- Use `atelier issue create "title" -p <priority> --label <label> --work` for one-step create+label+work.
 - Issue titles should be changelog-ready: start with a verb ("Add", "Fix", "Update"), describe the user-visible change.
 - Add labels for changelog categories: `bug`/`fix` → Fixed, `feature`/`enhancement` → Added, `breaking` → Changed, `security` → Security.
-- For multi-part features: create parent issue + subissues. Work one at a time.
-- Add context as you discover things: `atelier comment <id> "..."`
+- For multi-part features: create parent issue and child issues. Work one at a time.
+- Add context as you discover things: `atelier issue note <id> "..."`
 
 ### Labels for Changelog Categories
 - `bug`, `fix` → **Fixed**
@@ -20,35 +20,34 @@ Create issues before starting work to keep things organized and enable context h
 
 ### Quick Reference
 ```bash
-# One-step create + label + start working
-atelier quick "Fix auth timeout" -p high -l bug
+# One-step create, label, and start working
+atelier issue create "Fix auth timeout" -p high --label bug --work
 
 # Or use create with flags
-atelier create "Add dark mode" -p medium --label feature --work
+atelier issue create "Add dark mode" -p medium --label feature --work
 
 # Multi-part feature
-atelier create "Add user auth" -p high --label feature
-atelier subissue 1 "Add registration endpoint"
-atelier subissue 1 "Add login endpoint"
+atelier issue create "Add user auth" -p high --label feature
+atelier issue create "Add registration endpoint" --parent 1
+atelier issue create "Add login endpoint" --parent 1
 
 # Track progress
-atelier session work <id>
-atelier comment <id> "Found existing helper in utils/"
+atelier start <id>
+atelier issue note <id> "Found existing helper in utils/"
 
 # Close (auto-updates CHANGELOG.md)
-atelier close <id>
-atelier close <id> --no-changelog    # Skip changelog for internal work
-atelier close-all --no-changelog     # Batch close
+atelier issue close <id> --reason "completed"
+atelier issue close <id> --reason "completed"    # Skip changelog for internal work
 
 # Quiet mode for scripting
-atelier -q create "Fix bug" -p high  # Outputs just the ID number
+atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
 ```
 
 ### Session Management
 Sessions auto-start. End them properly when you can:
 ```bash
-atelier session work <id>              # Mark current focus
-atelier session end --notes "..."      # Save handoff context
+atelier start <id>              # Mark current focus
+atelier issue note <id> "handoff: ..." --kind handoff      # Save handoff context
 ```
 
 End sessions when: context is getting long, user indicates stopping, or you've completed significant work.
@@ -63,16 +62,16 @@ Handoff notes should include: what was accomplished, what's in progress, what's 
 
 ### Dependencies
 ```bash
-atelier block 2 1     # Issue 2 blocked by issue 1
-atelier ready         # Show unblocked work
+atelier issue block 2 1     # Issue 2 blocked by issue 1
+atelier issue list --ready         # Show unblocked work
 ```
 
 ### Large Implementations (500+ lines)
-1. Create parent issue: `atelier create "<feature>" -p high`
-2. Break into subissues: `atelier subissue <id> "<component>"`
-3. Work one subissue at a time, close each when done
+1. Create parent issue: `atelier issue create "<feature>" -p high`
+2. Break into child issues: `atelier issue create "<component>" --parent <id>`
+3. Work one child issue at a time, close each when done
 
 ### Context Window Management
 When conversation is long or task needs many steps:
-1. Create tracking issue: `atelier create "Continue: <summary>" -p high`
-2. Add notes: `atelier comment <id> "<what's done, what's next>"`
+1. Create tracking issue: `atelier issue create "Continue: <summary>" -p high`
+2. Add notes: `atelier issue note <id> "<what's done, what's next>"`

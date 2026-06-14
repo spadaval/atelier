@@ -2,7 +2,6 @@ use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
@@ -11,38 +10,6 @@ use crate::commands::agent_factory::issue_evidence_gate_status;
 use crate::db::Database;
 use crate::models::{EvidenceRecordData, Issue};
 use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
-
-pub fn init(repo_root: &Path, force: bool) -> Result<()> {
-    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
-    let existed = policy_path.exists();
-    if existed && !force {
-        bail!(
-            "{} already exists; rerun `atelier workflow init --force` to overwrite it",
-            crate::workflow_policy::WORKFLOW_POLICY_PATH
-        );
-    }
-
-    let parent = policy_path.parent().ok_or_else(|| {
-        anyhow::anyhow!(
-            "Cannot determine parent directory for {}",
-            policy_path.display()
-        )
-    })?;
-    fs::create_dir_all(parent)?;
-    fs::write(&policy_path, crate::workflow_policy::STARTER_POLICY_YAML)?;
-    crate::workflow_policy::load(repo_root)?;
-
-    println!(
-        "{} {}",
-        if existed { "Replaced" } else { "Created" },
-        crate::workflow_policy::WORKFLOW_POLICY_PATH
-    );
-    println!("Starter workflows: standard_review_proof, lightweight_spike");
-    println!();
-    print_heading("Next Commands");
-    println!("  atelier lint");
-    Ok(())
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidatorResult {

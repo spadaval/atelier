@@ -3,6 +3,7 @@ created_at: "2026-06-14T02:52:46.207636953+00:00"
 id: "atelier-ovv0"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "reliability"
 priority: "P1"
 relationships:
@@ -12,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Make worktree setup and active-work association atomic"
-updated_at: "2026-06-14T02:52:46.207636953+00:00"
+updated_at: "2026-06-14T08:03:44.066798569+00:00"
 ---
 
 ## Description

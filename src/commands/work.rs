@@ -49,6 +49,17 @@ pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()>
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
     ensure_clean_worktree()?;
+    if let Some(active) = db.get_active_work_association()? {
+        if active.issue_id != id {
+            bail!(
+                "Worktree already has active issue {}. Use `atelier abandon {} --reason \"...\"` before starting {}.",
+                active.issue_id,
+                active.issue_id,
+                id
+            );
+        }
+        return start_work_association(&db, id);
+    }
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
     drop(db);
 
@@ -66,6 +77,52 @@ pub fn abandon(db: &Database, id: &str, reason: &str) -> Result<()> {
     } else {
         println!("No active work association for {}", issue.id);
     }
+    Ok(())
+}
+
+pub fn repair_active(db: &Database, id: Option<&str>) -> Result<()> {
+    let work = match id {
+        Some(id) => db
+            .get_work_association(id)?
+            .filter(|work| work.status == "active"),
+        None => db.get_active_work_association()?,
+    };
+    let Some(work) = work else {
+        if let Some(id) = id {
+            println!("No active work association for {id}");
+        } else {
+            println!("No active work association to repair.");
+        }
+        return Ok(());
+    };
+    db.require_issue(&work.issue_id)?;
+    match work.worktree_path.as_deref() {
+        Some(path) if Path::new(path).exists() => {
+            bail!(
+                "Active work path still exists for {}: {path}. Use `atelier abandon {} --reason \"...\"` to switch away, or inspect with `atelier status`.",
+                work.issue_id,
+                work.issue_id
+            );
+        }
+        Some(path) => {
+            db.remove_work_association(&work.issue_id)?;
+            println!(
+                "Cleared stale active work association for {}: {path}",
+                work.issue_id
+            );
+        }
+        None => {
+            db.remove_work_association(&work.issue_id)?;
+            println!(
+                "Cleared active work association with missing worktree path for {}",
+                work.issue_id
+            );
+        }
+    }
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Inspect checkout status: atelier status");
+    println!("  Inspect worktrees: atelier worktree status");
     Ok(())
 }
 
@@ -214,6 +271,7 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let worktree_path = path
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".atelier-worktrees").join(id));
+    let worktree_path_string = worktree_path.to_string_lossy().to_string();
     if !worktree_path.exists() {
         let output = Command::new("git")
             .current_dir(&root)
@@ -228,13 +286,20 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
                 String::from_utf8_lossy(&output.stderr).trim()
             );
         }
+    } else if db
+        .get_work_association(id)?
+        .and_then(|work| work.worktree_path)
+        .as_deref()
+        != Some(worktree_path_string.as_str())
+    {
+        recover_incomplete_worktree_setup(&root, &worktree_path)?;
     }
-    let state_dir = crate::storage_layout::StorageLayout::new(&worktree_path).canonical_dir();
+    ensure_git_worktree(&worktree_path)?;
+    let layout = crate::storage_layout::StorageLayout::new(&worktree_path);
+    let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
-        std::fs::create_dir_all(
-            crate::storage_layout::StorageLayout::new(&worktree_path).target_runtime_dir(),
-        )
-        .context("worktree setup failed while creating runtime directory")?;
+        std::fs::create_dir_all(layout.target_runtime_dir())
+            .context("worktree setup failed while creating runtime directory")?;
         let exe = env::current_exe().context("failed to locate current atelier executable")?;
         let status = Command::new(exe)
             .current_dir(&worktree_path)
@@ -246,15 +311,89 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
                 "worktree setup failed while rebuilding runtime projection; active work association was not changed"
             );
         }
+    } else {
+        bail!(
+            "worktree setup failed because {} does not contain .atelier; active work association was not changed",
+            worktree_path.display()
+        );
     }
-    db.start_work_association(id, Some(&branch), Some(&worktree_path.to_string_lossy()))?;
+    start_worktree_runtime_association(&layout, id, &branch, &worktree_path_string)?;
+    db.start_work_association(id, Some(&branch), Some(&worktree_path_string))?;
     crate::commands::activity_log::record_work_started(
         id,
         Some(&branch),
-        Some(&worktree_path.to_string_lossy()),
+        Some(&worktree_path_string),
     )?;
     let _ = issue;
     println!("{}", worktree_path.display());
+    Ok(())
+}
+
+fn recover_incomplete_worktree_setup(root: &Path, worktree_path: &Path) -> Result<()> {
+    ensure_clean_path(worktree_path)?;
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .context("failed to read root HEAD for worktree setup retry")?;
+    if !output.status.success() {
+        bail!("failed to read root HEAD for worktree setup retry");
+    }
+    let head = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let status = Command::new("git")
+        .current_dir(worktree_path)
+        .args(["reset", "--hard", &head])
+        .status()
+        .context("failed to reset incomplete worktree setup")?;
+    if !status.success() {
+        bail!("failed to reset incomplete worktree setup");
+    }
+    Ok(())
+}
+
+fn ensure_clean_path(path: &Path) -> Result<()> {
+    let dirty = dirty_paths(path)?;
+    if !dirty.is_empty() {
+        bail!(
+            "worktree setup retry found uncommitted changes in {}; inspect or clean them before retrying:\n{}",
+            path.display(),
+            dirty.join("\n")
+        );
+    }
+    Ok(())
+}
+
+fn ensure_git_worktree(path: &Path) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(path)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .with_context(|| format!("failed to inspect worktree path {}", path.display()))?;
+    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
+        bail!(
+            "worktree setup failed because {} is not a Git worktree; active work association was not changed",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+fn start_worktree_runtime_association(
+    layout: &crate::storage_layout::StorageLayout,
+    id: &str,
+    branch: &str,
+    worktree_path: &str,
+) -> Result<()> {
+    let worktree_db = Database::open(&layout.runtime_db_path())
+        .context("worktree setup failed while opening worktree runtime projection")?;
+    worktree_db.require_issue(id).context(
+        "worktree setup failed because the issue is missing from the worktree runtime projection",
+    )?;
+    ensure_session_work(&worktree_db, id)
+        .context("worktree setup failed while associating the worktree session")?;
+    worktree_db
+        .start_work_association(id, Some(branch), Some(worktree_path))
+        .context("worktree setup failed while recording worktree active work association")?;
     Ok(())
 }
 

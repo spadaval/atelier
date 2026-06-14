@@ -47,6 +47,7 @@ const REMOVED_COMMAND_PATHS: &[&[&str]] = &[
     &["evidence", "add"],
     &["evidence", "capture"],
     &["mission", "view"],
+    &["workflow", "init"],
     &["work", "worktree"],
 ];
 

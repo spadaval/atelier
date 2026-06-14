@@ -274,7 +274,7 @@ During the staged migration, `atelier export` also refreshes this metadata after
 it writes canonical Markdown from SQLite so compatibility workflows remain
 queryable. Ordinary projection-backed read surfaces (`issue list`,
 `issue list --ready`, `issue search`, `issue show`, `issue blocked`,
-`issue related`, `issue impact`, `issue next`, `issue tree`, dependency lists,
+`graph impact`, `graph tree`, dependency lists,
 and tracker lint) check the metadata before reading SQLite whenever
 canonical records exist. If a canonical source changed, disappeared, appeared
 without being indexed, or lacks metadata, the command first validates
@@ -308,7 +308,7 @@ Representative detail paths for this boundary are `atelier issue show`,
 `atelier mission show`, `atelier plan show`, and `atelier evidence show`: the
 commands use SQLite to resolve requested IDs, relationships, and graph/runtime
 metadata, then load the selected Markdown payload from `RecordStore` before
-rendering. `atelier issue search` also matches issue titles and bodies from
+rendering. `atelier search` also matches issue titles and bodies from
 canonical issue files, with comment/note text read from canonical activity
 sidecars instead of legacy SQLite `comments.content`. This allows frequent
 polling surfaces such as Mission Control to use small SQLite rows for candidate

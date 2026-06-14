@@ -34,7 +34,8 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier issue note <id> "..."`
 - `atelier start`
 - `atelier abandon`
-- `atelier worktree for/status/merge/remove`
+- `atelier repair`
+- `atelier worktree for/status/merge/repair/remove`
 - `atelier maintenance ...`
 - `atelier lint`
 - `atelier doctor`
@@ -84,6 +85,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Establish active local work on one issue. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree for <id>`, `status`. |
 | `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |
+| `repair` | Clear stale active local work when the recorded worktree path is missing after interrupted cleanup. | Confirmation of the cleared issue/path plus status and worktree inspection commands; refuses to clear a live path. | Issue ID and cleared token. | `status`, `worktree status`, `abandon`. |
 | `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
@@ -291,8 +293,15 @@ Root `atelier start <issue-id>`, `atelier issue close <issue-id> --reason "..."`
 and `atelier abandon [issue-id] --reason "..."` are the normal work lifecycle
 commands. They store local work association in runtime state and enforce clean
 worktree plus current derived-state health checks where they affect workflow
-transitions. A separate durable claim system is not part of the normal workflow
-unless a later assignment policy justifies it.
+transitions. Root `atelier repair [issue-id]` is the recovery path for stale
+active local work whose recorded worktree path no longer exists; it must not
+replace `abandon` for intentional context switches. A separate durable claim
+system is not part of the normal workflow unless a later assignment policy
+justifies it.
+The local association is scoped to the current checkout: one checkout can have
+one active issue, repeated starts of that same issue are safe, and switching to
+a different issue requires `atelier abandon <active-id> --reason "..."` first.
+Use separate Git worktrees for parallel active issues.
 Root `atelier status`, `atelier mission status`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
 the removed work-status helper or any legacy work-start path for

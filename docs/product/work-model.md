@@ -292,7 +292,16 @@ An agent tasked with a mission should be able to:
 issue close <issue-id> --reason "..."` is the normal completion path for
 tracked work, and `atelier abandon [issue-id] --reason "..."` clears only the
 local active-work association without requiring operators to discover hidden
-work lifecycle helpers.
+work lifecycle helpers. Root `atelier repair [issue-id]` is the explicit
+recovery path for stale active-work associations whose recorded worktree path is
+missing after interrupted cleanup; it refuses to clear an association whose path
+still exists, so intentional context switches still use `abandon`.
+
+Each checkout has at most one active issue association. Running `atelier start
+<issue-id>` again for the same issue refreshes the local branch/path metadata;
+starting a different issue in the same checkout is rejected until the operator
+runs `atelier abandon <active-id> --reason "..."`. Parallel active work uses
+separate Git worktrees, each with its own local runtime state.
 
 `atelier worktree for <issue-id>` creates or locates a Git worktree using the
 configured branch/path policy, rebuilds local SQLite state from

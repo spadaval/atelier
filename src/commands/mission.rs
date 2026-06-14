@@ -2215,11 +2215,14 @@ fn active_work_for_mission(
     mission_id: &str,
 ) -> Result<Vec<crate::models::WorkAssociation>> {
     let issue_ids = mission_issue_ids(db, mission_id)?;
-    Ok(db
-        .list_work_associations()?
-        .into_iter()
-        .filter(|work| work.status == "active" && issue_ids.contains(&work.issue_id))
-        .collect())
+    let Some(active_work) = db.get_active_work_association()? else {
+        return Ok(Vec::new());
+    };
+    if issue_ids.contains(&active_work.issue_id) {
+        Ok(vec![active_work])
+    } else {
+        Ok(Vec::new())
+    }
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {

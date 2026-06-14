@@ -1,6 +1,7 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use chrono::Utc;
 use rusqlite::params;
+use std::env;
 
 use super::{parse_datetime, Database};
 use crate::models::WorkAssociation;
@@ -13,6 +14,16 @@ impl Database {
         worktree_path: Option<&str>,
     ) -> Result<()> {
         self.require_issue(issue_id)?;
+        if let Some(active) = self.active_work_association_for_worktree_path(worktree_path)? {
+            if active.issue_id != issue_id {
+                bail!(
+                    "Worktree already has active issue {}. Use `atelier abandon {} --reason \"...\"` before starting {}.",
+                    active.issue_id,
+                    active.issue_id,
+                    issue_id
+                );
+            }
+        }
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
             "INSERT INTO work_associations (issue_id, status, branch, worktree_path, started_at)
@@ -48,11 +59,25 @@ impl Database {
     }
 
     pub fn get_active_work_association(&self) -> Result<Option<WorkAssociation>> {
+        let path = env::current_dir()?.to_string_lossy().to_string();
+        self.active_work_association_for_worktree_path(Some(&path))
+    }
+
+    pub fn active_work_association_for_worktree_path(
+        &self,
+        worktree_path: Option<&str>,
+    ) -> Result<Option<WorkAssociation>> {
         let mut stmt = self.conn.prepare(
             "SELECT issue_id, status, branch, worktree_path, started_at, finished_at
-             FROM work_associations WHERE status = 'active' ORDER BY started_at DESC LIMIT 1",
+             FROM work_associations
+             WHERE status = 'active'
+               AND (
+                    (?1 IS NULL AND worktree_path IS NULL)
+                    OR worktree_path = ?1
+               )
+             ORDER BY started_at DESC LIMIT 1",
         )?;
-        Ok(stmt.query_row([], work_from_row).ok())
+        Ok(stmt.query_row(params![worktree_path], work_from_row).ok())
     }
 
     pub fn get_work_association(&self, issue_id: &str) -> Result<Option<WorkAssociation>> {

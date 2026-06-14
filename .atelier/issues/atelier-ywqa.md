@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Remove hidden legacy issue command surfaces"
-updated_at: "2026-06-14T04:03:21.700088169+00:00"
+updated_at: "2026-06-14T08:06:12.168320243+00:00"
 ---
 
 ## Description
