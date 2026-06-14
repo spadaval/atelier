@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:28:53.030181638+00:00"
+status: "done"
 title: "Add proof-routing examples for notes evidence and validation"
-updated_at: "2026-06-14T08:27:56.508998308+00:00"
+updated_at: "2026-06-14T08:28:53.030181638+00:00"
 ---
 
 ## Description
