@@ -30,9 +30,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:24:16.769982051+00:00"
+status: "done"
 title: "Epic: Match evidence and closeout gates to proved claims"
-updated_at: "2026-06-14T08:22:45.398230055+00:00"
+updated_at: "2026-06-14T08:24:16.769982051+00:00"
 ---
 
 ## Description
