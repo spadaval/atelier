@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T17:27:01.461763203+00:00"
+status: "done"
 title: "Epic: Make docs/help drift checks visibility-aware"
-updated_at: "2026-06-14T16:31:33.611558920+00:00"
+updated_at: "2026-06-14T17:27:01.461763203+00:00"
 ---
 
 ## Description

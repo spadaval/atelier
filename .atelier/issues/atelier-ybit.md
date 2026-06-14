@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T17:27:28.181310139+00:00"
+status: "done"
 title: "Epic: Make closeout workflow-driven instead of heuristic proof matching"
-updated_at: "2026-06-14T16:31:09.407778079+00:00"
+updated_at: "2026-06-14T17:27:28.181310139+00:00"
 ---
 
 ## Description

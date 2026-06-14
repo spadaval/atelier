@@ -21,9 +21,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T17:27:14.541747979+00:00"
+status: "done"
 title: "Epic: Prevent tracker workflow commands from self-blocking closeout"
-updated_at: "2026-06-14T16:31:28.200345043+00:00"
+updated_at: "2026-06-14T17:27:14.541747979+00:00"
 ---
 
 ## Description
