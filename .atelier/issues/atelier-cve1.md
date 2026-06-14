@@ -29,9 +29,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Improve agent readiness and mechanical guardrails"
-updated_at: "2026-06-13T23:12:00.253045347+00:00"
+updated_at: "2026-06-14T00:24:25.187668391+00:00"
 ---
 
 ## Description
