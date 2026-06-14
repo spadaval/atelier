@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T07:06:13.795876842+00:00"
+status: "done"
 title: "Require claim-specific closeout proof mapping"
-updated_at: "2026-06-14T07:05:30.354943729+00:00"
+updated_at: "2026-06-14T07:06:13.795876842+00:00"
 ---
 
 ## Description
