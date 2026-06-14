@@ -48,7 +48,7 @@ Issues:
   graph         Inspect issue hierarchy and impact
 
 Missions and planning:
-  mission       Create, list, show, status, and update durable missions
+  mission       Create, list, show, status, close, and update durable missions
   plan          Create, apply, revise, list, and link durable plans
 
 Records:
@@ -83,6 +83,7 @@ Common commands:
   atelier mission list
   atelier mission show <id>
   atelier mission status
+  atelier mission close <id> --reason \"...\"
   atelier history --mission <id>
   atelier history --issue <id>
   atelier start <issue-id>
@@ -727,6 +728,13 @@ enum MissionCommands {
     },
     /// Audit mission validation and linked epic outcomes against proof
     Audit { id: String },
+    /// Close a mission after all closeout gates pass
+    Close {
+        id: String,
+        /// Mission closeout reason recorded in the mission closeout notes
+        #[arg(long)]
+        reason: String,
+    },
     /// List missions
     List {
         /// Filter missions by status (default: current; use all to include closed/history)
@@ -1674,6 +1682,13 @@ fn run() -> Result<()> {
                 let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
             }
+            MissionCommands::Close { id, reason } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let db_path = storage.db_path();
+                let state_dir = storage.state_dir();
+                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                commands::mission::close(&state_dir, &db_path, &id, &reason)
+            }
             MissionCommands::List { status } => {
                 let db = degraded_projection_query_db()?;
                 commands::mission::list(&db, status.as_deref())
@@ -2191,6 +2206,7 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Start { .. } => "mission start",
             MissionCommands::Status { .. } => "mission status",
             MissionCommands::Audit { .. } => "mission audit",
+            MissionCommands::Close { .. } => "mission close",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
             MissionCommands::Note { .. } => "mission note",

@@ -403,7 +403,7 @@ fn print_status_next_commands(
     }
     if closeout.ready() {
         println!(
-            "  Close mission (all closeout gates pass): atelier mission update {} --status closed",
+            "  Close mission (all closeout gates pass): atelier mission close {} --reason \"...\"",
             mission.id
         );
     } else {
@@ -650,8 +650,9 @@ pub fn update(
     if let Some(status) = status {
         let status = normalize_mission_status(status)?;
         if status == "closed" && current.record.status != "closed" {
-            let db = Database::open(db_path)?;
-            enforce_closeout(&db, state_dir, id)?;
+            bail!(
+                "Mission closeout uses `atelier mission close {id} --reason \"...\"`; `mission update --status closed` is not the ordinary closeout path."
+            );
         }
         current.record.status = status.to_string();
     }
@@ -666,6 +667,40 @@ pub fn update(
     let db = Database::open(db_path)?;
     let record = db.require_record(KIND, id)?;
     print_record(&record)
+}
+
+pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result<()> {
+    if reason.trim().is_empty() {
+        bail!("mission close requires --reason \"...\"");
+    }
+    let db = Database::open(db_path)?;
+    enforce_closeout(&db, state_dir, id)?;
+    drop(db);
+
+    let store = RecordStore::new(state_dir);
+    let mut current = store.load_domain_record_by_id(KIND, id)?;
+    let mut sections = record_store::mission_sections_from_domain_record(&current.record)?;
+    sections.closeout_notes = Some(append_closeout_reason(
+        sections.closeout_notes.as_deref(),
+        reason.trim(),
+    ));
+    current.record.status = "closed".to_string();
+    current.record.body = Some(record_store::render_mission_sections(&sections));
+    current.record.data_json = MISSION_EMPTY_DATA_JSON.to_string();
+    current.record.updated_at = Utc::now();
+    store.write_domain_record_atomic(&current)?;
+    refresh_projection(state_dir, db_path)?;
+    let db = Database::open(db_path)?;
+    let record = db.require_record(KIND, id)?;
+    print_record(&record)
+}
+
+fn append_closeout_reason(existing: Option<&str>, reason: &str) -> String {
+    let entry = format!("- Close reason: {reason}");
+    match existing.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(existing) => format!("{existing}\n{entry}"),
+        None => entry,
+    }
 }
 
 pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
@@ -827,7 +862,7 @@ impl MissionContractAudit {
         println!("-------------");
         if self.passed() {
             println!(
-                "  Close mission when other gates pass: atelier mission update {} --status closed",
+                "  Close mission when other gates pass: atelier mission close {} --reason \"...\"",
                 mission.id
             );
         } else {

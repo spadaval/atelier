@@ -26,7 +26,7 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
-- `atelier mission create/show/list/status/update/note`
+- `atelier mission create/show/list/status/close/update/note`
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/attach/list`
@@ -89,7 +89,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
-| `mission` | Create, focus, inspect, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; lifecycle changes stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, and closeout-readiness token. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `history --mission <id>`. |
+| `mission` | Create, focus, inspect, close, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; closeout uses `close --reason` after gates pass; other lifecycle edits stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, closeout-readiness token, and close reason. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `mission close <id> --reason "..."`, `history --mission <id>`. |
 | `plan` | Author, inspect, revise, link, and apply durable plans. | `show` and `list` are readable plan views; `apply` prints preview or created-record summaries rather than raw JSON internals. | Plan IDs, affected-record counts, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
@@ -163,10 +163,11 @@ back to `ready` when `--switch` is supplied. Mission commands do not accept
 committed mission records should be migrated directly to the lifecycle status
 they mean.
 
-Mission closeout currently uses `atelier mission update <id> --status closed`,
-which runs the mission closeout gates before it commits the lifecycle change.
-Reopening with `atelier mission update <id> --status ready` does not run
-closeout validators.
+Mission closeout uses `atelier mission close <id> --reason "..."`, which runs
+the mission closeout gates before it commits the lifecycle change and records
+the reason in mission closeout notes. `atelier mission update <id> --status
+closed` is not the ordinary closeout path. Reopening with `atelier mission
+update <id> --status ready` does not run closeout validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
@@ -232,7 +233,8 @@ State-specific next actions are part of the command contract:
   blocker or dependent issue to resolve.
 - `close-ready`: show the closeout command only after linked work is closed,
   required proof is attached to accountable work, the contract audit passes,
-  health gates are current, and the worktree is clean.
+  health gates are current, and the worktree is clean:
+  `atelier mission close <id> --reason "..."`.
 - `closed`: show the close reason, closeout evidence or closeout issue, and
   history/audit drill-down commands without suggesting new implementation work.
 

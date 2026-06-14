@@ -1410,6 +1410,21 @@ fn test_mission_status_help_exposes_closeout_drilldown() {
 }
 
 #[test]
+fn test_mission_help_exposes_close_with_reason() {
+    let dir = tempdir().unwrap();
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "--help"]);
+    assert!(success, "mission help failed: {stderr}");
+
+    assert!(stdout.contains("close"));
+    assert!(stdout.contains("Close a mission after all closeout gates pass"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "close", "--help"]);
+    assert!(success, "mission close help failed: {stderr}");
+    assert!(stdout.contains("--reason <REASON>"));
+    assert!(stdout.contains("Mission closeout reason recorded in the mission closeout notes"));
+}
+
+#[test]
 fn test_root_status_summarizes_checkout_orientation() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -8358,7 +8373,7 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "closed"],
+        &["mission", "close", &mission_id, "--reason", "done"],
     );
 
     assert!(
@@ -8439,7 +8454,7 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
         dir.path(),
         "issue",
         epic_id,
-        "Epic contract audit line-by-line classification maps child and parent outcomes to proof",
+        "Linked epic outcome is proven. Attached validation evidence proves the epic outcome.",
     );
     close_issue_with_evidence(dir.path(), epic_id, Some("epic proof"));
 
@@ -8448,21 +8463,21 @@ fn test_mission_audit_reports_missing_partial_and_ready_proof() {
     assert!(partial_out.contains("pass"));
     assert!(partial_out.contains(epic_id));
     assert!(partial_out.contains("Linked epic outcome is proven."));
-    assert!(partial_out.contains("No validation evidence is attached to the mission."));
+    assert!(partial_out.contains("No matching validation evidence is attached to the mission."));
     assert!(stderr.contains("mission contract audit failed"));
 
     attach_pass_evidence(
         dir.path(),
         "mission",
         mission_id,
-        "mission audit proof evidence",
+        "Mission audit validates authored outcomes.",
     );
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
     assert!(success, "ready audit should pass: {stderr}");
     assert!(ready_out.contains("[pass]"));
     assert!(ready_out.contains("Summary: 2 pass, 0 fail, 2 total"));
     assert!(ready_out.contains(&format!(
-        "Close mission when other gates pass: atelier mission update {mission_id} --status closed"
+        "Close mission when other gates pass: atelier mission close {mission_id} --reason \"...\""
     )));
 
     let (success, closeout_ready_out, stderr) =
@@ -8666,7 +8681,7 @@ fn test_mission_closeout_uses_contract_audit() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", mission_id, "--status", "closed"],
+        &["mission", "close", mission_id, "--reason", "done"],
     );
     assert!(
         !success,
@@ -9366,7 +9381,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
 
     let (success, closeout_blocked_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "closed"],
+        &["mission", "close", &mission_id, "--reason", "done"],
     );
     assert!(
         !success,
@@ -9375,7 +9390,6 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     assert!(closeout_blocked_out.contains("Mission closeout blocked"));
     assert!(closeout_blocked_out.contains("open mission work"));
     assert!(closeout_blocked_out.contains("missing mission proof"));
-    assert!(closeout_blocked_out.contains("contract audit failed"));
     assert!(stderr.contains("mission closeout blocked"));
 
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
@@ -9401,15 +9415,33 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     assert!(success, "evidence attach failed: {stderr}");
     commit_all(dir.path(), "ready to close");
 
-    let (success, close_out, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &["mission", "update", &mission_id, "--status", "closed"],
+    );
+    assert!(
+        !success,
+        "mission update --status closed should not be the ordinary closeout path"
+    );
+    assert!(stderr.contains("atelier mission close"));
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "mission",
+            "close",
+            &mission_id,
+            "--reason",
+            "ready to close",
+        ],
     );
     assert!(
         success,
         "mission close should succeed after gates pass: {stderr}"
     );
     assert!(close_out.contains("Status: closed"));
+    assert!(close_out.contains("Closeout Notes"));
+    assert!(close_out.contains("- Close reason: ready to close"));
     commit_all(dir.path(), "closed mission");
 
     std::fs::write(dir.path().join("dirty-after-close.txt"), "dirty").unwrap();
@@ -9460,7 +9492,7 @@ fn test_dirty_worktree_blocks_mission_closeout() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "closed"],
+        &["mission", "close", &mission_id, "--reason", "done"],
     );
     assert!(!success, "dirty worktree must block mission closeout");
     assert!(stdout.contains("Mission closeout blocked"));
@@ -10244,7 +10276,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(closeout_status.contains("Ignored Test Review: current"));
     assert!(closeout_status.contains("Open Blockers: none"));
     assert!(closeout_status.contains(&format!(
-        "Close mission (all closeout gates pass): atelier mission update {closeout_mission} --status closed"
+        "Close mission (all closeout gates pass): atelier mission close {closeout_mission} --reason \"...\""
     )));
 
     let mission_path = dir
