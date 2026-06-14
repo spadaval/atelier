@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T08:11:01.583957867+00:00"
+status: "done"
 title: "Fold workflow init into root init"
-updated_at: "2026-06-14T08:10:01.625192564+00:00"
+updated_at: "2026-06-14T08:11:01.583957867+00:00"
 ---
 
 ## Description
