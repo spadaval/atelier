@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::db::{validate_relation_type, Database};
+use crate::models::Issue;
 use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
 
@@ -172,7 +173,17 @@ pub fn list(db: &Database, issue_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
+pub fn impact(db: &Database, kind: &str, id: &str) -> Result<()> {
+    match kind {
+        "issue" => issue_impact(db, id),
+        "mission" => mission_impact(db, id),
+        _ => {
+            anyhow::bail!("`atelier graph impact` supports mission and issue records; got '{kind}'")
+        }
+    }
+}
+
+fn issue_impact(db: &Database, issue_id: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
     let affected = db.downstream_impact(issue_id)?;
@@ -192,24 +203,7 @@ pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
     );
 
     for issue in &affected {
-        let status_marker = if matches!(issue.status.as_str(), "done" | "archived") {
-            "✓"
-        } else {
-            " "
-        };
-        let parent_note = if let Some(pid) = &issue.parent_id {
-            format!(" (child of {})", format_issue_id(pid))
-        } else {
-            String::new()
-        };
-        println!(
-            "  {:<5} [{}] {:8} {}{}",
-            format_issue_id(&issue.id),
-            status_marker,
-            issue.priority,
-            issue.title,
-            parent_note
-        );
+        print_impact_issue(issue);
     }
 
     println!(
@@ -219,6 +213,99 @@ pub fn impact(db: &Database, issue_id: &str) -> Result<()> {
     println!("Review each issue before changing, closing, or invalidating the source.");
 
     Ok(())
+}
+
+fn mission_impact(db: &Database, mission_id: &str) -> Result<()> {
+    let mission = db.require_record("mission", mission_id)?;
+    let affected = mission_downstream_issues(db, mission_id)?;
+
+    if affected.is_empty() {
+        println!(
+            "No downstream records found for mission {}",
+            format_issue_id(mission_id)
+        );
+        return Ok(());
+    }
+
+    println!(
+        "Mission {} [{}] {} has downstream impact on {} record(s):\n",
+        format_issue_id(&mission.id),
+        mission.status,
+        mission.title,
+        affected.len()
+    );
+
+    for issue in &affected {
+        print_impact_issue(issue);
+    }
+
+    println!(
+        "\nThese records are linked through mission work, hierarchy, or impact-bearing relations from mission {}.",
+        format_issue_id(mission_id)
+    );
+    println!("Review each issue before changing, closing, or invalidating the mission.");
+
+    Ok(())
+}
+
+fn mission_downstream_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut affected = Vec::new();
+
+    for issue in mission_linked_issues(db, mission_id)? {
+        if seen.insert(issue.id.clone()) {
+            affected.push(issue.clone());
+        }
+        for downstream in db.downstream_impact(&issue.id)? {
+            if seen.insert(downstream.id.clone()) {
+                affected.push(downstream);
+            }
+        }
+    }
+
+    Ok(affected)
+}
+
+fn mission_linked_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
+    let mut issues = Vec::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        if link.relation_type != "advances" {
+            continue;
+        }
+        let issue_id = if link.source_kind == "issue" {
+            Some(link.source_id)
+        } else if link.target_kind == "issue" {
+            Some(link.target_id)
+        } else {
+            None
+        };
+        if let Some(issue_id) = issue_id {
+            issues.push(db.require_issue(&issue_id)?);
+        }
+    }
+    issues.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(issues)
+}
+
+fn print_impact_issue(issue: &Issue) {
+    let status_marker = if matches!(issue.status.as_str(), "done" | "archived") {
+        "✓"
+    } else {
+        " "
+    };
+    let parent_note = if let Some(pid) = &issue.parent_id {
+        format!(" (child of {})", format_issue_id(pid))
+    } else {
+        String::new()
+    };
+    println!(
+        "  {:<5} [{}] {:8} {}{}",
+        format_issue_id(&issue.id),
+        status_marker,
+        issue.priority,
+        issue.title,
+        parent_note
+    );
 }
 
 #[cfg(test)]

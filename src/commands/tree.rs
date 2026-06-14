@@ -1,7 +1,9 @@
+use std::collections::BTreeSet;
+
 use anyhow::Result;
 
 use crate::db::Database;
-use crate::models::Issue;
+use crate::models::{DomainRecord, Issue};
 
 const COMPACT_MAX_DEPTH: usize = 3;
 const COMPACT_MAX_SIBLINGS: usize = 6;
@@ -23,6 +25,14 @@ fn print_issue(issue: &Issue, indent: usize) {
     );
 }
 
+fn print_mission(mission: &DomainRecord, indent: usize) {
+    let prefix = "  ".repeat(indent);
+    println!(
+        "{}[mission {}] #{} - {}",
+        prefix, mission.status, mission.id, mission.title
+    );
+}
+
 fn print_tree_recursive(
     db: &Database,
     parent_id: &str,
@@ -40,6 +50,55 @@ fn print_tree_recursive(
         }
         print_issue(&sub, indent);
         print_tree_recursive(db, &sub.id, indent + 1, status_filter)?;
+    }
+    Ok(())
+}
+
+fn mission_linked_issue_ids(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        if link.relation_type != "advances" {
+            continue;
+        }
+        if link.source_kind == "issue" {
+            issue_ids.insert(link.source_id);
+        } else if link.target_kind == "issue" {
+            issue_ids.insert(link.target_id);
+        }
+    }
+    Ok(issue_ids.into_iter().collect())
+}
+
+fn mission_linked_root_ids(db: &Database) -> Result<BTreeSet<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for mission in db.list_records("mission", None)? {
+        for issue_id in mission_linked_issue_ids(db, &mission.id)? {
+            issue_ids.insert(issue_id);
+        }
+    }
+    Ok(issue_ids)
+}
+
+fn print_mission_trees(
+    db: &Database,
+    status_filter: Option<&str>,
+    linked_issue_ids: &mut BTreeSet<String>,
+) -> Result<()> {
+    for mission in db.list_records("mission", None)? {
+        let issue_ids = mission_linked_issue_ids(db, &mission.id)?;
+        if issue_ids.is_empty() {
+            continue;
+        }
+        print_mission(&mission, 0);
+        for issue_id in issue_ids {
+            let issue = db.require_issue(&issue_id)?;
+            if !status_matches(&issue, status_filter) {
+                continue;
+            }
+            linked_issue_ids.insert(issue.id.clone());
+            print_issue(&issue, 1);
+            print_tree_recursive(db, &issue.id, 2, status_filter)?;
+        }
     }
     Ok(())
 }
@@ -149,6 +208,38 @@ fn compact_issue_line(issue: &Issue, indent: usize, children: &[Issue]) {
     );
 }
 
+fn compact_missions(
+    db: &Database,
+    status_filter: Option<&str>,
+) -> Result<Vec<(DomainRecord, Vec<Issue>)>> {
+    let mut rows = Vec::new();
+    for mission in db.list_records("mission", None)? {
+        let issues = mission_linked_issue_ids(db, &mission.id)?
+            .into_iter()
+            .map(|issue_id| db.require_issue(&issue_id))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|issue| status_matches(issue, status_filter))
+            .collect::<Vec<_>>();
+        if !issues.is_empty() {
+            rows.push((mission, issues));
+        }
+    }
+    Ok(rows)
+}
+
+fn print_compact_mission(mission: &DomainRecord, issues: &[Issue]) {
+    let summary = direct_child_summary(issues);
+    println!(
+        "[mission {}] {} - {} linked={} {}",
+        mission.status,
+        mission.id,
+        mission.title,
+        issues.len(),
+        summary.format()
+    );
+}
+
 fn compact_tree_recursive(
     db: &Database,
     issue: &Issue,
@@ -195,14 +286,17 @@ fn compact_tree_recursive(
 }
 
 pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
+    let mut linked_issue_ids = BTreeSet::new();
+    print_mission_trees(db, status_filter, &mut linked_issue_ids)?;
+
     // Get all top-level issues (no parent)
     let all_issues = db.list_issues(status_filter, None, None)?;
     let top_level: Vec<_> = all_issues
         .into_iter()
-        .filter(|i| i.parent_id.is_none())
+        .filter(|i| i.parent_id.is_none() && !linked_issue_ids.contains(&i.id))
         .collect();
 
-    if top_level.is_empty() {
+    if top_level.is_empty() && linked_issue_ids.is_empty() {
         println!("No issues found.");
         return Ok(());
     }
@@ -220,13 +314,15 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
 }
 
 pub fn run_compact(db: &Database, status_filter: Option<&str>) -> Result<()> {
+    let linked_root_ids = mission_linked_root_ids(db)?;
     let all_issues = db.list_issues(status_filter, None, None)?;
     let top_level: Vec<_> = all_issues
         .into_iter()
-        .filter(|i| i.parent_id.is_none())
+        .filter(|i| i.parent_id.is_none() && !linked_root_ids.contains(&i.id))
         .collect();
+    let missions = compact_missions(db, status_filter)?;
 
-    if top_level.is_empty() {
+    if top_level.is_empty() && missions.is_empty() {
         println!("No issues found.");
         return Ok(());
     }
@@ -238,6 +334,19 @@ pub fn run_compact(db: &Database, status_filter: Option<&str>) -> Result<()> {
         COMPACT_MAX_DEPTH, COMPACT_MAX_SIBLINGS
     );
     println!();
+
+    for (mission, issues) in &missions {
+        print_compact_mission(mission, issues);
+        for issue in issues.iter().take(COMPACT_MAX_SIBLINGS) {
+            compact_tree_recursive(db, issue, 1, status_filter)?;
+        }
+        if issues.len() > COMPACT_MAX_SIBLINGS {
+            println!(
+                "  ... {} more linked issues omitted",
+                issues.len() - COMPACT_MAX_SIBLINGS
+            );
+        }
+    }
 
     for issue in top_level.iter().take(COMPACT_MAX_SIBLINGS) {
         compact_tree_recursive(db, &issue, 0, status_filter)?;

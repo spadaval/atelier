@@ -1480,6 +1480,24 @@ fn test_mission_help_uses_show_not_view() {
 }
 
 #[test]
+fn test_graph_help_describes_mission_issue_graphs() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["graph", "--help"]);
+    assert!(success, "graph help failed: {stderr}");
+    assert!(stdout.contains("Mission and issue graph commands"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["graph", "impact", "--help"]);
+    assert!(success, "graph impact help failed: {stderr}");
+    assert!(stdout.contains("mission work"));
+    assert!(stdout.contains("Mission or issue ID"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["graph", "tree", "--help"]);
+    assert!(success, "graph tree help failed: {stderr}");
+    assert!(stdout.contains("missions and issues"));
+}
+
+#[test]
 fn test_mission_create_help_names_generated_sections() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "create", "--help"]);
@@ -2716,6 +2734,48 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     );
     assert!(success, "maintenance delete failed: {stderr}");
     assert!(delete_out.contains("Deleted issue"));
+}
+
+#[test]
+fn test_graph_commands_include_mission_linked_issue_hierarchy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Graph Mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Graph Mission");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Mission Epic", "--issue-type", "epic"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let epic_id = issue_ref(dir.path(), 1);
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Mission Child", "--parent", &epic_id],
+    );
+    assert!(success, "child issue create failed: {stderr}");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
+    assert!(success, "mission add-work failed: {stderr}");
+
+    let (success, impact_out, stderr) = run_atelier(dir.path(), &["graph", "impact", &mission_id]);
+    assert!(success, "graph impact failed: {stderr}");
+    assert!(impact_out.contains("Mission"));
+    assert!(impact_out.contains("Graph Mission"));
+    assert!(impact_out.contains("Mission Epic"));
+    assert!(impact_out.contains("Mission Child"));
+
+    let (success, tree_out, stderr) = run_atelier(dir.path(), &["graph", "tree", "--compact"]);
+    assert!(success, "graph tree failed: {stderr}");
+    assert!(tree_out.contains("Compact Issue Hierarchy"));
+    assert!(tree_out.contains("[mission ready]"));
+    assert!(tree_out.contains("Graph Mission"));
+    assert!(tree_out.contains("Mission Epic"));
+    assert!(tree_out.contains("Mission Child"));
 }
 
 #[test]

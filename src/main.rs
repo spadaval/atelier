@@ -45,7 +45,7 @@ Orientation:
 Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
-  graph         Inspect issue hierarchy and impact
+  graph         Inspect mission and issue hierarchy and impact
 
 Missions and planning:
   mission       Create, list, show, status, close, and update durable missions
@@ -159,7 +159,7 @@ enum Commands {
         query: String,
     },
 
-    /// Issue graph and hierarchy commands
+    /// Mission and issue graph commands
     Graph {
         #[command(subcommand)]
         action: GraphCommands,
@@ -438,12 +438,12 @@ enum IssueCommands {
 
 #[derive(Subcommand)]
 enum GraphCommands {
-    /// Show downstream impact from hierarchy and impact-bearing links
+    /// Show downstream impact across mission work, hierarchy, and impact-bearing links
     Impact {
-        /// Issue ID
+        /// Mission or issue ID
         id: String,
     },
-    /// Show issues as a tree hierarchy
+    /// Show missions and issues as a tree hierarchy
     Tree {
         /// Filter by status (todo, done, all)
         #[arg(short, long, default_value = "all")]
@@ -802,6 +802,19 @@ fn resolve_optional_record_arg(
     id.map(|id| resolve_record_arg(db, kind, &id)).transpose()
 }
 
+fn resolve_graph_record_arg(db: &Database, id: &str) -> Result<(String, String)> {
+    match commands::agent_factory::resolve_id(db, id) {
+        Ok(issue_id) => Ok(("issue".to_string(), issue_id)),
+        Err(issue_error) => match db.record_kind_for_id(id)? {
+            Some(kind) if kind == "mission" => Ok((kind, id.to_string())),
+            Some(kind) => bail!(
+                "{id} is a {kind} record; `atelier graph impact` supports mission and issue records."
+            ),
+            None => Err(issue_error),
+        },
+    }
+}
+
 fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
     let suggested = show_command_for_kind(actual_kind)
         .map(|command| format!(" Use `{command} {id}`."))
@@ -1123,8 +1136,8 @@ fn run() -> Result<()> {
         Commands::Graph { action } => match action {
             GraphCommands::Impact { id } => {
                 let db = projection_query_db()?;
-                let id = resolve_issue_arg(&db, &id)?;
-                commands::relate::impact(&db, &id)
+                let (kind, id) = resolve_graph_record_arg(&db, &id)?;
+                commands::relate::impact(&db, &kind, &id)
             }
             GraphCommands::Tree { status, compact } => {
                 let db = projection_query_db()?;

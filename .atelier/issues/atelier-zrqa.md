@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Expand graph commands to missions"
-updated_at: "2026-06-14T05:58:54.055426552+00:00"
+updated_at: "2026-06-14T08:19:30.374995234+00:00"
 ---
 
 ## Description
