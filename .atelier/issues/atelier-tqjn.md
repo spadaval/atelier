@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T17:25:21.893704822+00:00"
+status: "done"
 title: "Add regression coverage for transition closeout retry loops"
-updated_at: "2026-06-14T16:31:28.200345043+00:00"
+updated_at: "2026-06-14T17:25:21.893704822+00:00"
 ---
 
 ## Description
