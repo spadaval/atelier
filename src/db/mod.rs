@@ -224,227 +224,12 @@ impl Database {
     }
 
     fn init_schema(&self) -> Result<()> {
-        // Check if we need to initialize
-        let version: i32 = self
-            .conn
-            .query_row(
-                "SELECT COALESCE(MAX(user_version), 0) FROM pragma_user_version",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+        let version = self.current_schema_version();
 
         if version < SCHEMA_VERSION {
-            self.conn.execute_batch(
-                r#"
-                -- Core issues table
-                CREATE TABLE IF NOT EXISTS issues (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    description TEXT,
-                    status TEXT NOT NULL DEFAULT 'todo',
-                    issue_type TEXT NOT NULL DEFAULT 'task',
-                    priority TEXT NOT NULL DEFAULT 'medium',
-                    parent_id TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    closed_at TEXT,
-                    FOREIGN KEY (parent_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
-                -- Labels (many-to-many)
-                CREATE TABLE IF NOT EXISTS labels (
-                    issue_id TEXT NOT NULL,
-                    label TEXT NOT NULL,
-                    PRIMARY KEY (issue_id, label),
-                    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
-                -- Dependencies (blocker blocks blocked)
-                CREATE TABLE IF NOT EXISTS dependencies (
-                    blocker_id TEXT NOT NULL,
-                    blocked_id TEXT NOT NULL,
-                    PRIMARY KEY (blocker_id, blocked_id),
-                    FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
-                    FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
-                -- Comments
-                CREATE TABLE IF NOT EXISTS comments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    issue_id TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
-                -- Sessions (for context preservation)
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    started_at TEXT NOT NULL,
-                    ended_at TEXT,
-                    active_issue_id TEXT,
-                    handoff_notes TEXT,
-                    FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
-                );
-
-                -- Relations (related issues, bidirectional, typed)
-                CREATE TABLE IF NOT EXISTS relations (
-                    issue_id_1 TEXT NOT NULL,
-                    issue_id_2 TEXT NOT NULL,
-                    relation_type TEXT NOT NULL DEFAULT 'related',
-                    created_at TEXT NOT NULL,
-                    PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
-                    FOREIGN KEY (issue_id_1) REFERENCES issues(id) ON DELETE CASCADE,
-                    FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
-                );
-
-                -- Indexes
-                CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
-                CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
-                CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_id);
-                CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
-                CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
-                CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
-                CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
-                CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
-                CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
-                "#,
-            )?;
-
-            // Migration: add parent_id column if upgrading from v1
-            self.migrate(
-                "ALTER TABLE issues ADD COLUMN parent_id INTEGER REFERENCES issues(id) ON DELETE CASCADE",
-            );
-
-            // Migration v7: Recreate sessions table with ON DELETE SET NULL for active_issue_id
-            if version < 7 {
-                self.migrate_batch(
-                    r#"
-                    CREATE TABLE IF NOT EXISTS sessions_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        started_at TEXT NOT NULL,
-                        ended_at TEXT,
-                        active_issue_id INTEGER,
-                        handoff_notes TEXT,
-                        FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
-                    );
-                    INSERT OR IGNORE INTO sessions_new SELECT * FROM sessions;
-                    DROP TABLE IF EXISTS sessions;
-                    ALTER TABLE sessions_new RENAME TO sessions;
-                    "#,
-                );
-            }
-
-            // Migration v8: Add last_action column to sessions table
-            if version < 8 {
-                self.migrate("ALTER TABLE sessions ADD COLUMN last_action TEXT");
-            }
-
-            // Migration v9: Drop leftover sessions_new table from a bug where
-            // user_version was always read as 0 (wrong column name in the query),
-            // causing the v7 migration to re-run on every open and leave behind
-            // a stale sessions_new table.
-            if version < 9 {
-                self.migrate("DROP TABLE IF EXISTS sessions_new");
-            }
-
-            // Migration v10: Add kind column to comments for typed audit trail
-            if version < 10 {
-                self.migrate("ALTER TABLE comments ADD COLUMN kind TEXT DEFAULT 'note'");
-            }
-
-            // Migration v11: Token usage tracking table
-            if version < 11 {
-                // Token usage tracking was removed from the command surface.
-            }
-
-            // Migration v12: Add agent_id column to sessions for multi-agent tracking
-            if version < 12 {
-                self.migrate("ALTER TABLE sessions ADD COLUMN agent_id TEXT");
-            }
-
-            // Migration v13: Add relation_type column to relations for typed links
-            if version < 13 {
-                self.migrate(
-                    "ALTER TABLE relations ADD COLUMN relation_type TEXT NOT NULL DEFAULT 'related'",
-                );
-            }
-
-            // Migration v14: Add explicit canonical issue_type to issues.
-            if version < 14 {
-                self.migrate(
-                    "ALTER TABLE issues ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'task'",
-                );
-            }
-
-            if version < 15 {
-                self.migrate_issue_ids_to_text()?;
-            }
-
-            if version < 16 {
-                self.migrate_batch(
-                    r#"
-                    CREATE TABLE IF NOT EXISTS records (
-                        id TEXT PRIMARY KEY,
-                        kind TEXT NOT NULL,
-                        title TEXT NOT NULL,
-                        status TEXT NOT NULL DEFAULT 'open',
-                        body TEXT,
-                        data_json TEXT NOT NULL DEFAULT '{}',
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
-                    CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
-
-                    CREATE TABLE IF NOT EXISTS record_links (
-                        source_kind TEXT NOT NULL,
-                        source_id TEXT NOT NULL,
-                        target_kind TEXT NOT NULL,
-                        target_id TEXT NOT NULL,
-                        relation_type TEXT NOT NULL,
-                        created_at TEXT NOT NULL,
-                        PRIMARY KEY (source_kind, source_id, target_kind, target_id, relation_type)
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
-                    CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
-
-                    CREATE TABLE IF NOT EXISTS work_associations (
-                        issue_id TEXT PRIMARY KEY,
-                        status TEXT NOT NULL,
-                        branch TEXT,
-                        worktree_path TEXT,
-                        started_at TEXT NOT NULL,
-                        finished_at TEXT,
-                        FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_work_associations_status ON work_associations(status);
-                    "#,
-                );
-            }
-
-            // Migration v17: remove inherited runtime/storage tables whose CLI
-            // surfaces were deleted.
-            if version < 17 {
-                self.migrate_batch(
-                    r#"
-                    DROP INDEX IF EXISTS idx_token_usage_agent;
-                    DROP INDEX IF EXISTS idx_token_usage_session;
-                    DROP INDEX IF EXISTS idx_token_usage_timestamp;
-                    DROP TABLE IF EXISTS token_usage;
-                    DROP INDEX IF EXISTS idx_time_entries_issue;
-                    DROP TABLE IF EXISTS time_entries;
-                    DROP INDEX IF EXISTS idx_milestone_issues_m;
-                    DROP INDEX IF EXISTS idx_milestone_issues_i;
-                    DROP TABLE IF EXISTS milestone_issues;
-                    DROP TABLE IF EXISTS milestones;
-                    "#,
-                );
-            }
-
-            self.conn
-                .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
+            self.install_core_schema()?;
+            self.apply_schema_migrations(version)?;
+            self.set_schema_version()?;
         }
 
         // Enable foreign keys
@@ -454,26 +239,260 @@ impl Database {
         Ok(())
     }
 
+    fn current_schema_version(&self) -> i32 {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(MAX(user_version), 0) FROM pragma_user_version",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    fn install_core_schema(&self) -> Result<()> {
+        self.conn.execute_batch(
+            r#"
+            -- Core issues table
+            CREATE TABLE IF NOT EXISTS issues (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'todo',
+                issue_type TEXT NOT NULL DEFAULT 'task',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                parent_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                closed_at TEXT,
+                FOREIGN KEY (parent_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Labels (many-to-many)
+            CREATE TABLE IF NOT EXISTS labels (
+                issue_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (issue_id, label),
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Dependencies (blocker blocks blocked)
+            CREATE TABLE IF NOT EXISTS dependencies (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                PRIMARY KEY (blocker_id, blocked_id),
+                FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Comments
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                issue_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Sessions (for context preservation)
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                active_issue_id TEXT,
+                handoff_notes TEXT,
+                FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
+            );
+
+            -- Relations (related issues, bidirectional, typed)
+            CREATE TABLE IF NOT EXISTS relations (
+                issue_id_1 TEXT NOT NULL,
+                issue_id_2 TEXT NOT NULL,
+                relation_type TEXT NOT NULL DEFAULT 'related',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
+                FOREIGN KEY (issue_id_1) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Indexes
+            CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+            CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
+            CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_comments_issue ON comments(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
+            CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
+            CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
+            "#,
+        )?;
+        Ok(())
+    }
+
+    fn apply_schema_migrations(&self, version: i32) -> Result<()> {
+        self.migrate(
+            "ALTER TABLE issues ADD COLUMN parent_id INTEGER REFERENCES issues(id) ON DELETE CASCADE",
+        );
+        self.migrate_sessions_on_delete_set_null(version);
+        self.migrate_session_columns(version);
+        self.migrate_comments_kind(version);
+        self.migrate_typed_issue_columns(version)?;
+        self.migrate_first_class_record_tables(version);
+        self.drop_removed_runtime_tables(version);
+        Ok(())
+    }
+
+    fn migrate_sessions_on_delete_set_null(&self, version: i32) {
+        if version < 7 {
+            self.migrate_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS sessions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    active_issue_id INTEGER,
+                    handoff_notes TEXT,
+                    FOREIGN KEY (active_issue_id) REFERENCES issues(id) ON DELETE SET NULL
+                );
+                INSERT OR IGNORE INTO sessions_new SELECT * FROM sessions;
+                DROP TABLE IF EXISTS sessions;
+                ALTER TABLE sessions_new RENAME TO sessions;
+                "#,
+            );
+        }
+        if version < 9 {
+            self.migrate("DROP TABLE IF EXISTS sessions_new");
+        }
+    }
+
+    fn migrate_session_columns(&self, version: i32) {
+        if version < 8 {
+            self.migrate("ALTER TABLE sessions ADD COLUMN last_action TEXT");
+        }
+        if version < 12 {
+            self.migrate("ALTER TABLE sessions ADD COLUMN agent_id TEXT");
+        }
+    }
+
+    fn migrate_comments_kind(&self, version: i32) {
+        if version < 10 {
+            self.migrate("ALTER TABLE comments ADD COLUMN kind TEXT DEFAULT 'note'");
+        }
+    }
+
+    fn migrate_typed_issue_columns(&self, version: i32) -> Result<()> {
+        if version < 13 {
+            self.migrate(
+                "ALTER TABLE relations ADD COLUMN relation_type TEXT NOT NULL DEFAULT 'related'",
+            );
+        }
+        if version < 14 {
+            self.migrate("ALTER TABLE issues ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'task'");
+        }
+        if version < 15 {
+            self.migrate_issue_ids_to_text()?;
+        }
+        Ok(())
+    }
+
+    fn migrate_first_class_record_tables(&self, version: i32) {
+        if version < 16 {
+            self.migrate_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS records (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open',
+                    body TEXT,
+                    data_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
+                CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+
+                CREATE TABLE IF NOT EXISTS record_links (
+                    source_kind TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (source_kind, source_id, target_kind, target_id, relation_type)
+                );
+                CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
+                CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
+
+                CREATE TABLE IF NOT EXISTS work_associations (
+                    issue_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    branch TEXT,
+                    worktree_path TEXT,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_work_associations_status ON work_associations(status);
+                "#,
+            );
+        }
+    }
+
+    fn drop_removed_runtime_tables(&self, version: i32) {
+        if version < 17 {
+            self.migrate_batch(
+                r#"
+                DROP INDEX IF EXISTS idx_token_usage_agent;
+                DROP INDEX IF EXISTS idx_token_usage_session;
+                DROP INDEX IF EXISTS idx_token_usage_timestamp;
+                DROP TABLE IF EXISTS token_usage;
+                DROP INDEX IF EXISTS idx_time_entries_issue;
+                DROP TABLE IF EXISTS time_entries;
+                DROP INDEX IF EXISTS idx_milestone_issues_m;
+                DROP INDEX IF EXISTS idx_milestone_issues_i;
+                DROP TABLE IF EXISTS milestone_issues;
+                DROP TABLE IF EXISTS milestones;
+                "#,
+            );
+        }
+    }
+
+    fn set_schema_version(&self) -> Result<()> {
+        self.conn
+            .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
+        Ok(())
+    }
+
     fn migrate_issue_ids_to_text(&self) -> Result<()> {
-        let id_type: String = self
-            .conn
-            .query_row("PRAGMA table_info(issues)", [], |_| Ok(String::new()))
-            .unwrap_or_default();
+        if self.issue_id_column_is_text()? {
+            return Ok(());
+        }
+
+        let mappings = self.legacy_issue_id_mappings()?;
+        self.create_v15_text_id_tables()?;
+        self.copy_v15_issue_rows(&mappings)?;
+        self.copy_v15_issue_children(&mappings)?;
+        self.copy_v15_issue_scoped_rows(&mappings)?;
+        self.copy_v15_graph_edges(&mappings)?;
+        self.copy_v15_sessions(&mappings)?;
+        self.replace_v15_tables()?;
+        Ok(())
+    }
+
+    fn issue_id_column_is_text(&self) -> Result<bool> {
         let mut stmt = self.conn.prepare("PRAGMA table_info(issues)")?;
         let columns = stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        if columns
+        Ok(columns
             .iter()
-            .any(|(name, column_type)| name == "id" && column_type.eq_ignore_ascii_case("TEXT"))
-        {
-            return Ok(());
-        }
-        drop(id_type);
-        drop(stmt);
+            .any(|(name, column_type)| name == "id" && column_type.eq_ignore_ascii_case("TEXT")))
+    }
 
+    fn legacy_issue_id_mappings(&self) -> Result<Vec<(i64, String)>> {
         let mut mappings = Vec::new();
         let mut stmt = self.conn.prepare("SELECT id FROM issues ORDER BY id")?;
         let ids = stmt
@@ -482,8 +501,10 @@ impl Database {
         for id in ids {
             mappings.push((id, record_id::legacy_issue_id(id)));
         }
-        drop(stmt);
+        Ok(mappings)
+    }
 
+    fn create_v15_text_id_tables(&self) -> Result<()> {
         self.conn.execute_batch(
             r#"
             PRAGMA foreign_keys = OFF;
@@ -558,8 +579,11 @@ impl Database {
             );
             "#,
         )?;
+        Ok(())
+    }
 
-        for (old_id, new_id) in &mappings {
+    fn copy_v15_issue_rows(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
             self.conn.execute(
                 "INSERT INTO issues_v15
                  SELECT ?2, title, description, status, issue_type, priority, NULL, created_at, updated_at, closed_at
@@ -567,7 +591,11 @@ impl Database {
                 rusqlite::params![old_id, new_id],
             )?;
         }
-        for (old_id, new_id) in &mappings {
+        Ok(())
+    }
+
+    fn copy_v15_issue_children(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
             let parent: Option<i64> = self
                 .conn
                 .query_row(
@@ -584,7 +612,11 @@ impl Database {
                 )?;
             }
         }
-        for (old_id, new_id) in &mappings {
+        Ok(())
+    }
+
+    fn copy_v15_issue_scoped_rows(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
             self.conn.execute(
                 "INSERT INTO labels_v15 SELECT ?2, label FROM labels WHERE issue_id = ?1",
                 rusqlite::params![old_id, new_id],
@@ -602,14 +634,18 @@ impl Database {
                 rusqlite::params![old_id, new_id],
             )?;
         }
+        Ok(())
+    }
+
+    fn copy_v15_graph_edges(&self, mappings: &[(i64, String)]) -> Result<()> {
         self.conn.execute(
             "INSERT INTO dependencies_v15
              SELECT printf('atelier-%04s', lower(hex(blocker_id))), printf('atelier-%04s', lower(hex(blocked_id)))
              FROM dependencies WHERE 0",
             [],
         )?;
-        for (old_blocker, new_blocker) in &mappings {
-            for (old_blocked, new_blocked) in &mappings {
+        for (old_blocker, new_blocker) in mappings {
+            for (old_blocked, new_blocked) in mappings {
                 self.conn.execute(
                     "INSERT OR IGNORE INTO dependencies_v15
                      SELECT ?2, ?4 FROM dependencies WHERE blocker_id = ?1 AND blocked_id = ?3",
@@ -622,7 +658,11 @@ impl Database {
                 )?;
             }
         }
-        for (old_id, new_id) in &mappings {
+        Ok(())
+    }
+
+    fn copy_v15_sessions(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
             self.conn.execute(
                 "INSERT INTO sessions_v15
                  SELECT id, started_at, ended_at, ?2, handoff_notes, last_action, agent_id
@@ -636,7 +676,10 @@ impl Database {
              FROM sessions WHERE active_issue_id IS NULL",
             [],
         )?;
+        Ok(())
+    }
 
+    fn replace_v15_tables(&self) -> Result<()> {
         self.conn.execute_batch(
             r#"
             DROP TABLE labels;

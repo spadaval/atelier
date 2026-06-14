@@ -4,6 +4,7 @@ id: "atelier-ggls"
 issue_type: "task"
 labels:
 - "architecture"
+- "assignee:root"
 - "refactor"
 - "stabilization"
 priority: "P2"
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Split runtime database schema and projection migration hotspots"
-updated_at: "2026-06-13T23:10:29.550860996+00:00"
+updated_at: "2026-06-14T00:15:16.618435365+00:00"
 ---
 
 ## Description
