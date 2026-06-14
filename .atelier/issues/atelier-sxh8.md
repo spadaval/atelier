@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Remove generic link command and normalize relationship ownership"
-updated_at: "2026-06-14T07:50:06.469728470+00:00"
+updated_at: "2026-06-14T07:53:20.838061819+00:00"
 ---
 
 ## Description
