@@ -25,9 +25,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Stabilize and simplify Atelier CLI and tracker model"
-updated_at: "2026-06-13T20:44:43.763466209+00:00"
+updated_at: "2026-06-14T00:28:17.702989645+00:00"
 ---
 
 ## Intent
