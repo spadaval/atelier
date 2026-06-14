@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T06:47:28.614511160+00:00"
+status: "done"
 title: "Unify evidence record and attach flow"
-updated_at: "2026-06-14T06:44:44.964437812+00:00"
+updated_at: "2026-06-14T06:47:28.614511160+00:00"
 ---
 
 ## Description
