@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Close out transcript-derived operability mission"
-updated_at: "2026-06-14T08:29:53.415442556+00:00"
+updated_at: "2026-06-14T08:31:11.312665392+00:00"
 ---
 
 ## Description
