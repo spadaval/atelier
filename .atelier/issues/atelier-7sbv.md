@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-14T06:47:00.889035555+00:00"
+status: "done"
 title: "Move blocker commands under issue"
-updated_at: "2026-06-14T06:39:23.552707550+00:00"
+updated_at: "2026-06-14T06:47:00.889035555+00:00"
 ---
 
 ## Description
