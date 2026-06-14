@@ -1,14 +1,17 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+pub type IssueId = String;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Issue {
-    pub id: i64,
+    pub id: IssueId,
     pub title: String,
     pub description: Option<String>,
     pub status: String,
+    pub issue_type: String,
     pub priority: String,
-    pub parent_id: Option<i64>,
+    pub parent_id: Option<IssueId>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
@@ -17,7 +20,7 @@ pub struct Issue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Comment {
     pub id: i64,
-    pub issue_id: i64,
+    pub issue_id: IssueId,
     pub content: String,
     pub created_at: DateTime<Utc>,
     #[serde(default = "default_comment_kind")]
@@ -33,7 +36,7 @@ pub struct Session {
     pub id: i64,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
-    pub active_issue_id: Option<i64>,
+    pub active_issue_id: Option<IssueId>,
     pub handoff_notes: Option<String>,
     pub last_action: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,39 +44,132 @@ pub struct Session {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TokenUsage {
-    pub id: i64,
-    pub agent_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<i64>,
-    pub timestamp: DateTime<Utc>,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_read_tokens: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_creation_tokens: Option<i64>,
-    pub model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cost_estimate: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Relation {
-    pub issue_id_1: i64,
-    pub issue_id_2: i64,
+    pub issue_id_1: IssueId,
+    pub issue_id_2: IssueId,
     pub relation_type: String,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Milestone {
-    pub id: i64,
-    pub name: String,
-    pub description: Option<String>,
+pub struct DomainRecord {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
     pub status: String,
+    pub body: Option<String>,
+    pub data_json: String,
     pub created_at: DateTime<Utc>,
-    pub closed_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlanRevision {
+    pub revision: i64,
+    pub reason: String,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlanRecordData {
+    pub revision: i64,
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub revisions: Vec<PlanRevision>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MilestoneRecordData {
+    #[serde(default)]
+    pub desired_state: String,
+    #[serde(default)]
+    pub scope: Vec<String>,
+    #[serde(default)]
+    pub validation_criteria: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceStreamSummary {
+    pub summary: String,
+    pub bytes: usize,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceOutputSummary {
+    pub limit_bytes_per_stream: usize,
+    pub stdout: EvidenceStreamSummary,
+    pub stderr: EvidenceStreamSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceTarget {
+    pub kind: String,
+    pub id: String,
+    #[serde(default = "default_evidence_target_role")]
+    pub role: String,
+}
+
+fn default_evidence_target_role() -> String {
+    "validates".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceRecordData {
+    #[serde(alias = "kind")]
+    pub evidence_type: String,
+    pub captured_at: DateTime<Utc>,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub uri: Option<String>,
+    #[serde(default)]
+    pub producer: Option<String>,
+    #[serde(default)]
+    pub proof_scope: Option<String>,
+    #[serde(default)]
+    pub agent_identity: Option<String>,
+    #[serde(default)]
+    pub independence_level: Option<String>,
+    #[serde(default)]
+    pub residual_risks: Vec<String>,
+    #[serde(default)]
+    pub follow_up_ids: Vec<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
+    #[serde(default)]
+    pub exit_status: Option<String>,
+    #[serde(default)]
+    pub success: Option<bool>,
+    #[serde(default)]
+    pub spawn_error: Option<String>,
+    #[serde(default)]
+    pub output: Option<EvidenceOutputSummary>,
+    #[serde(default)]
+    pub target: Option<EvidenceTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecordLink {
+    pub source_kind: String,
+    pub source_id: String,
+    pub target_kind: String,
+    pub target_id: String,
+    pub relation_type: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkAssociation {
+    pub issue_id: String,
+    pub status: String,
+    pub branch: Option<String>,
+    pub worktree_path: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]
@@ -86,10 +182,11 @@ mod tests {
     #[test]
     fn test_issue_serialization_json() {
         let issue = Issue {
-            id: 1,
+            id: "atelier-0001".to_string(),
             title: "Test issue".to_string(),
             description: Some("A description".to_string()),
-            status: "open".to_string(),
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
             priority: "high".to_string(),
             parent_id: None,
             created_at: Utc::now(),
@@ -111,12 +208,13 @@ mod tests {
     #[test]
     fn test_issue_with_parent() {
         let issue = Issue {
-            id: 2,
+            id: "atelier-0002".to_string(),
             title: "Child issue".to_string(),
             description: None,
-            status: "open".to_string(),
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
             priority: "medium".to_string(),
-            parent_id: Some(1),
+            parent_id: Some("atelier-0001".to_string()),
             created_at: Utc::now(),
             updated_at: Utc::now(),
             closed_at: None,
@@ -125,17 +223,18 @@ mod tests {
         let json = serde_json::to_string(&issue).unwrap();
         let deserialized: Issue = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.parent_id, Some(1));
+        assert_eq!(deserialized.parent_id, Some("atelier-0001".to_string()));
     }
 
     #[test]
     fn test_issue_closed_at() {
         let now = Utc::now();
         let issue = Issue {
-            id: 1,
+            id: "atelier-0001".to_string(),
             title: "Closed issue".to_string(),
             description: None,
-            status: "closed".to_string(),
+            status: "done".to_string(),
+            issue_type: "task".to_string(),
             priority: "low".to_string(),
             parent_id: None,
             created_at: now,
@@ -152,10 +251,11 @@ mod tests {
     #[test]
     fn test_issue_unicode_fields() {
         let issue = Issue {
-            id: 1,
+            id: "atelier-0001".to_string(),
             title: "测试 🐛 αβγ".to_string(),
             description: Some("Description with émojis 🎉".to_string()),
-            status: "open".to_string(),
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
             priority: "high".to_string(),
             parent_id: None,
             created_at: Utc::now(),
@@ -179,7 +279,7 @@ mod tests {
     fn test_comment_serialization() {
         let comment = Comment {
             id: 1,
-            issue_id: 42,
+            issue_id: "atelier-0016".to_string(),
             content: "A comment".to_string(),
             created_at: Utc::now(),
             kind: "note".to_string(),
@@ -197,7 +297,7 @@ mod tests {
     fn test_comment_empty_content() {
         let comment = Comment {
             id: 1,
-            issue_id: 1,
+            issue_id: "atelier-0001".to_string(),
             content: "".to_string(),
             created_at: Utc::now(),
             kind: "note".to_string(),
@@ -217,7 +317,7 @@ mod tests {
             id: 1,
             started_at: Utc::now(),
             ended_at: None,
-            active_issue_id: Some(5),
+            active_issue_id: Some("atelier-0005".to_string()),
             handoff_notes: Some("Notes here".to_string()),
             last_action: None,
             agent_id: None,
@@ -251,47 +351,6 @@ mod tests {
         assert_eq!(deserialized.handoff_notes, Some("Final notes".to_string()));
     }
 
-    // ==================== Milestone Tests ====================
-
-    #[test]
-    fn test_milestone_serialization() {
-        let milestone = Milestone {
-            id: 1,
-            name: "v1.0".to_string(),
-            description: Some("First release".to_string()),
-            status: "open".to_string(),
-            created_at: Utc::now(),
-            closed_at: None,
-        };
-
-        let json = serde_json::to_string(&milestone).unwrap();
-        let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(milestone.id, deserialized.id);
-        assert_eq!(milestone.name, deserialized.name);
-        assert_eq!(milestone.description, deserialized.description);
-        assert_eq!(milestone.status, deserialized.status);
-    }
-
-    #[test]
-    fn test_milestone_closed() {
-        let now = Utc::now();
-        let milestone = Milestone {
-            id: 1,
-            name: "v1.0".to_string(),
-            description: None,
-            status: "closed".to_string(),
-            created_at: now,
-            closed_at: Some(now),
-        };
-
-        let json = serde_json::to_string(&milestone).unwrap();
-        let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(deserialized.closed_at, Some(now));
-        assert_eq!(deserialized.status, "closed");
-    }
-
     // ==================== Property-Based Tests ====================
 
     proptest! {
@@ -303,10 +362,11 @@ mod tests {
             priority in "low|medium|high|critical"
         ) {
             let issue = Issue {
-                id,
+                id: format!("atelier-{id:04}"),
                 title: title.clone(),
                 description: None,
                 status: status.clone(),
+                issue_type: "task".to_string(),
                 priority: priority.clone(),
                 parent_id: None,
                 created_at: Utc::now(),
@@ -317,7 +377,7 @@ mod tests {
             let json = serde_json::to_string(&issue).unwrap();
             let deserialized: Issue = serde_json::from_str(&json).unwrap();
 
-            prop_assert_eq!(deserialized.id, id);
+            prop_assert_eq!(deserialized.id, format!("atelier-{id:04}"));
             prop_assert_eq!(deserialized.title, title);
             prop_assert_eq!(deserialized.status, status);
             prop_assert_eq!(deserialized.priority, priority);
@@ -331,7 +391,7 @@ mod tests {
         ) {
             let comment = Comment {
                 id,
-                issue_id,
+                issue_id: format!("atelier-{issue_id:04}"),
                 content: content.clone(),
                 created_at: Utc::now(),
                 kind: "note".to_string(),
@@ -341,7 +401,7 @@ mod tests {
             let deserialized: Comment = serde_json::from_str(&json).unwrap();
 
             prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(deserialized.issue_id, issue_id);
+            prop_assert_eq!(deserialized.issue_id, format!("atelier-{issue_id:04}"));
             prop_assert_eq!(deserialized.content, content);
         }
 
@@ -355,7 +415,7 @@ mod tests {
                 id,
                 started_at: Utc::now(),
                 ended_at: None,
-                active_issue_id,
+                active_issue_id: active_issue_id.map(|id| format!("atelier-{id:04}")),
                 handoff_notes: handoff_notes.clone(),
                 last_action: None,
                 agent_id: None,
@@ -365,31 +425,11 @@ mod tests {
             let deserialized: Session = serde_json::from_str(&json).unwrap();
 
             prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(deserialized.active_issue_id, active_issue_id);
+            prop_assert_eq!(
+                deserialized.active_issue_id,
+                active_issue_id.map(|id| format!("atelier-{id:04}"))
+            );
             prop_assert_eq!(deserialized.handoff_notes, handoff_notes);
-        }
-
-        #[test]
-        fn prop_milestone_json_roundtrip(
-            id in 1i64..10000,
-            name in "[a-zA-Z0-9.]{1,50}",
-            status in "open|closed"
-        ) {
-            let milestone = Milestone {
-                id,
-                name: name.clone(),
-                description: None,
-                status: status.clone(),
-                created_at: Utc::now(),
-                closed_at: None,
-            };
-
-            let json = serde_json::to_string(&milestone).unwrap();
-            let deserialized: Milestone = serde_json::from_str(&json).unwrap();
-
-            prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(deserialized.name, name);
-            prop_assert_eq!(deserialized.status, status);
         }
 
         #[test]
@@ -400,12 +440,13 @@ mod tests {
         ) {
             let now = Utc::now();
             let issue = Issue {
-                id: 1,
+                id: "atelier-0001".to_string(),
                 title: "Test".to_string(),
                 description: if has_desc { Some("Desc".to_string()) } else { None },
                 status: if is_closed { "closed".to_string() } else { "open".to_string() },
+                issue_type: "task".to_string(),
                 priority: "medium".to_string(),
-                parent_id: if has_parent { Some(99) } else { None },
+                parent_id: if has_parent { Some("atelier-002r".to_string()) } else { None },
                 created_at: now,
                 updated_at: now,
                 closed_at: if is_closed { Some(now) } else { None },

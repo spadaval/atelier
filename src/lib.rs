@@ -1,12 +1,16 @@
-//! Chainlink issue tracker library
+//! Atelier issue tracker library
 //!
 //! This module exposes the core functionality for use in fuzzing and testing.
 
+pub mod activity;
+pub mod command_surface;
 pub mod db;
 pub mod identity;
-pub mod lock_check;
-pub mod locks;
 pub mod models;
-pub mod sync;
-pub mod token_usage;
+pub mod projection_index;
+pub mod record_id;
+pub mod record_store;
+pub mod storage_layout;
+pub mod test_inventory;
 pub mod utils;
+pub mod workflow_policy;

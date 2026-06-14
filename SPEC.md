@@ -10,17 +10,18 @@ mission-control features needed by agent-factory style orchestration.
 
 Atelier should use:
 
-- SQLite for state in motion.
-- Markdown and structured exports for state at rest.
+- Markdown records for canonical state at rest.
+- SQLite for rebuildable projection indexes and local runtime state.
 - Git for merge, review, and long-term audit.
 - Agent-facing commands as the primary interface.
 - Optional UI surfaces built on top of mechanical projections.
 
-The SQLite database is the fast local runtime store. It supports queries,
-locks, sessions, workflow checks, and Mission Control projections. The exported
-state is the durable, mergeable repo surface. A worktree should be able to
-rebuild its local SQLite database from committed exported state after checkout,
-pull, merge, or clone.
+Markdown records are the durable, mergeable repo surface. The SQLite database is
+the fast local projection and runtime store. It supports queries, locks,
+sessions, workflow checks, and Mission Control projections without making
+Markdown parsing the hot path for every command. A worktree should be able to
+rebuild its local SQLite projection from committed Markdown records after
+checkout, pull, merge, or clone.
 
 ## Starting Point
 
@@ -37,9 +38,9 @@ Chainlink provides useful foundations:
 - Sessions and handoff notes.
 - Agent identity.
 - Lock and sync concepts.
-- Token usage tracking.
+- Agent identity and local runtime concepts.
 - Hooks, rules, and context-provider direction.
-- JSON output.
+- JSON handling in durable files, authored inputs, and diagnostics.
 
 Braid provides important product-shape ideas:
 
@@ -65,8 +66,8 @@ Atelier should not become:
 - A TUI-first product.
 - A system where every issue maps rigidly to one agent session.
 
-Interactive UI can come later. The foundation should be a crisp CLI with stable
-JSON output and durable file projections.
+Interactive UI can come later. The foundation should be a crisp human-first CLI
+with durable file projections.
 
 ## Storage Model
 
@@ -74,37 +75,62 @@ Atelier should implement this storage contract:
 
 ```text
 .atelier/
-  state.db              # live local SQLite state
-  agent.json            # machine-local agent identity
-  cache/                # derived local-only data
-
-.atelier-state/
-  manifest.json
+  config.toml           # tracked project tracker configuration
   issues/
-    ISS-0001.md
+    atelier-z1p8.md
+    atelier-z1p8.activity/
+      20260611T160930000000Z.md
   missions/
-    MIS-0001.md
+    atelier-k7mq.md
   milestones/
-    MS-0001.md
+    atelier-4x9t.md
   plans/
-    PLAN-0001.md
+    atelier-p3v6.md
   evidence/
-    EV-0001.md
-  graph.json
-  mission-control.json
+    atelier-n8da.md
+  runtime/              # ignored local runtime state
+    state.db
+    agent.json
+    locks/
+    diagnostics/
+  cache/                # ignored derived local-only data
 ```
 
 The exact layout can change, but the principles should not:
 
-- Exported state must be deterministic.
-- Exported state must be sufficient to rebuild SQLite.
-- `export --check` must detect stale projections.
-- Mutating commands should update exports automatically by default.
-- Git merges should happen through exported files, not by merging SQLite files.
+- Canonical Markdown records must be deterministic.
+- Canonical Markdown records must be sufficient to rebuild SQLite projections.
+- `export --check` must detect stale canonical records and derived projections
+  during the compatibility window, and the target lint/rebuild checks must
+  validate canonical `.atelier/` Markdown directly.
+- Mutating commands should write canonical Markdown records first, then refresh
+  or mark stale the SQLite projection.
+- Git merges should happen through Markdown record files, not by merging SQLite
+  files.
 - SQLite should be rebuildable after checkout, merge, pull, or clone.
+- Runtime and cache paths under `.atelier/runtime/` and `.atelier/cache/` are
+  ignored local state and are never the durable project record source.
 
 The existing Chainlink export/import system is backup-oriented. Atelier needs a
-canonical projection/rebuild system instead.
+Markdown-first canonical record store with rebuildable projections instead.
+
+## Record Identity
+
+Atelier uses one canonical, human-facing ID for every durable record:
+
+```text
+<project-slug>-<random-base36>
+```
+
+For this repository, examples are `atelier-z1p8`, `atelier-k7mq`, and
+`atelier-4x9t`. Record kind is metadata, not part of identity, so issues,
+missions, milestones, plans, and evidence share the same ID shape. Titles are
+mutable text and must never be identity.
+
+This replaces typed numeric target IDs such as `ISS-0001` or `MIS-0001` and
+separate shorthand IDs such as `#53`. The cutover should migrate existing
+records to the new ID form directly; Atelier should not maintain a legacy
+dual-ID implementation.
 
 ## Domain Model
 
@@ -118,10 +144,17 @@ for orchestrators and Mission Control. It should contain intent, constraints,
 active milestones, linked plans, status, validation expectations, and current
 health.
 
+Missions should be focused on the goal or end state, not on a specific task.
+They are the right shape when the objective is large enough to require at least
+one epic of accountable work beneath it. Smaller work should stay as an issue,
+while mission execution should be split into epics, tasks, validation, review,
+documentation, or closeout issues linked back to the mission.
+
 ### Milestone
 
-A milestone is a validated intermediate target state. It is not merely a vague
-point on a roadmap. A milestone should define:
+A milestone is a validated intermediate checkpoint state. It is not a work
+container or super-epic, and it is not merely a vague point on a roadmap. A
+milestone should define:
 
 - Desired state.
 - Scope boundaries.
@@ -129,6 +162,9 @@ point on a roadmap. A milestone should define:
 - Linked work.
 - Required or accepted evidence.
 - Completion state.
+
+Epics and tasks may contribute to a milestone, and evidence may validate a
+milestone's criteria. The milestone itself should remain a target-state record.
 
 ### Issue
 
@@ -149,25 +185,43 @@ to be revised with reasons as new facts emerge.
 
 ### Evidence
 
-Evidence records prove that validation happened. Evidence may point to test
-results, logs, screenshots, videos, API responses, benchmark output, review
-notes, or generated reports.
+Evidence records prove that accountable work, review, validation, or closeout
+happened. Evidence may point to test results, logs, screenshots, videos, API
+responses, benchmark output, review notes, or generated reports. Normal evidence
+targets issue-shaped work because issues own accountability; mission,
+milestone, and epic readiness is derived from linked implementation,
+validation, review, and closeout work rather than direct parent attachments.
 
 Evidence metadata should include:
 
 - ID.
-- Linked issue, milestone, mission, or gate.
+- Accountable target IDs, normally issue-shaped work such as implementation,
+  review, validation, or closeout issues.
+- Proof scope: the issue Outcome line, parent validation criterion, workflow
+  validator result, milestone criterion, or review/audit claim being proven.
 - Kind.
 - Result.
 - Summary.
-- Path or URI.
+- Commands, command exit status, bounded stdout/stderr summaries, artifacts,
+  paths, or URIs.
+- Agent identity or producer.
+- Independence level, such as implementer-produced, peer validation,
+  independent validation, closeout audit, or adversarial validation.
+- Residual risks.
+- Follow-up issue IDs for defects, deferred proof, or remaining work.
 - Size.
 - Hash when applicable.
 - Created time.
-- Producer or validator.
 
-Small artifacts may live in the repo. Large artifacts should use configurable
-external storage while preserving metadata in repo state.
+Direct mission evidence links are retained only for legacy imports, migration
+notes, or explicit closeout mirroring. New mission proof should be captured on
+the linked closeout or validation issue that performed the audit.
+
+Small artifacts may live in the repo. Large artifacts should use external
+storage while preserving metadata in repo state. The first supported backend is
+metadata-only evidence records with optional repository-relative paths or
+external URIs; payload copying, hashing, upload, retention, and garbage
+collection are deferred until a dedicated artifact-backend contract lands.
 
 ### Run
 
@@ -176,67 +230,90 @@ may touch one issue, part of one issue, or several issues. Runs should record
 what happened mechanically enough for Mission Control without forcing agents
 into rigid accounting.
 
-## Links
+Local command diagnostics are not run records. Command duration, exit status,
+redacted command family, workspace grouping, and phase timing events may be
+recorded in a user-local diagnostics store for performance analysis, but they
+must not be exported into tracked `.atelier/` canonical records or treated as
+Mission Control run projection data until an explicit run/session projection
+contract exists.
 
-Links should be explicit and typed. Do not overload dependencies to represent
-all hierarchy.
+## Relationships
 
-Likely link types:
+Relationships should be explicit without exposing a generic graph-editing
+workflow as the normal product model. Canonical Markdown stores relationships in
+one `relationships` section with four buckets:
 
-- `blocks`
-- `blocked_by`
-- `depends_on`
-- `related`
-- `duplicates`
-- `supersedes`
-- `derived_from`
-- `part_of`
-- `implements`
-- `validates`
-- `evidenced_by`
-- `planned_by`
+- `blocks` for operational issue readiness blockers.
+- `children` for hierarchy, scope, and mission work.
+- `attachments` for owned supporting records such as plans and evidence.
+- `relates` for peer semantic relationships such as related, duplicates,
+  supersedes, derived_from, and implements.
 
-The link model should support custom relation types with validation and linting.
+Domain commands own relationship mutations. For example, issue blocking,
+mission work, evidence attachment, and plan linkage should be surfaced through
+their domain command groups instead of a public generic `link` command.
 
 ## Workflows
 
-Atelier should support configurable workflows. A workflow defines allowed phases,
-transitions, required fields, gates, evidence requirements, and closure rules.
+Atelier should support repository-owned configurable issue workflows. Version 1
+uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
+policy path. The file defines shared statuses with explicit categories, named
+issue workflows, terminal done states, built-in issue-type mappings, transition
+rules, configured built-in validators with params, guidance templates, strict
+configuration errors, and deferred features.
 
 Example workflow:
 
 ```yaml
-types:
-  epic:
-    workflow: epic_delivery
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
+
+statuses:
+  open:
+    category: todo
+  in_progress:
+    category: active
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
 
 workflows:
-  epic_delivery:
-    phases:
-      - research
-      - impact_report
-      - planning
-      - implementation
-      - code_review
-      - validation
-      - done
+  standard_review_proof:
+    initial_status: open
+    done_statuses: [done]
     transitions:
-      research: [impact_report]
-      impact_report: [planning, research]
-      planning: [implementation, research]
-      implementation: [code_review, validation]
-      code_review: [implementation, validation]
-      validation: [done, implementation]
-    done_requires:
-      evidence:
-        min_count: 1
-      gates:
-        - tests_passed
-        - export_fresh
+      start:
+        from: [open]
+        to: in_progress
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - durable_current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
-ceremony unless policy says so.
+ceremony unless policy says so. The starter contract uses a standard
+review/proof workflow for most issue types and a lighter reviewed spike
+workflow that still records an inspectable close reason without requiring
+first-class evidence.
 
 ## Rules, Lint, And Guidance
 
@@ -253,7 +330,7 @@ Examples:
 - Required plan before implementation for large missions.
 - Warning when a summary is too long or too vague.
 - Warning when a milestone lacks validation criteria.
-- Error when exported state is stale.
+- Error when durable records or derived projections are stale.
 - Error when a workflow transition is invalid.
 - Warning when implementation starts on `main`.
 
@@ -268,7 +345,6 @@ Process should be:
 
 - Configurable.
 - Risk-scaled.
-- Overrideable with a recorded reason.
 - Split between start requirements and close requirements.
 - Strict only where strictness protects correctness or coordination.
 
@@ -279,7 +355,8 @@ Rules should have severities:
 - `error`
 - `policy`
 
-Waivers should be explicit and visible in Mission Control.
+Version 1 deliberately avoids workflow waivers. If a future product slice adds
+waivers, they need an explicit contract and visibility model.
 
 ## Branches And Worktrees
 
@@ -289,9 +366,10 @@ Desired commands:
 
 ```text
 atelier agent init <name>
-atelier work start ISS-123
-atelier worktree for ISS-123
-atelier work finish ISS-123
+atelier start atelier-z1p8
+atelier worktree for atelier-z1p8
+atelier issue close atelier-z1p8 --reason "done"
+atelier abandon atelier-z1p8 --reason "handoff"
 atelier worktree merge
 ```
 
@@ -301,10 +379,10 @@ The default branch model should be opinionated but configurable:
 main
   integration branch
 
-work/ISS-123-short-slug
+work/atelier-z1p8-short-slug
   normal issue implementation branch
 
-mission/MIS-001-short-slug
+mission/atelier-k7mq-short-slug
   optional coordinated mission branch
 
 agent/<agent-id>
@@ -316,27 +394,32 @@ Useful enforcement:
 - Warn or fail when implementation starts on `main`.
 - Refuse claim when the worktree is dirty unless overridden.
 - Record branch/worktree association.
-- Refuse `done` when exported state is stale.
+- Refuse `done` when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
-## Validation And Gates
+Normal tracked work uses explicit work association rather than inherited
+Chainlink lock sync. The default workflow is Git branch/worktree state plus
+local Atelier runtime association and canonical export freshness checks.
 
-Evidence should be a first-class condition for closing work. Gates evaluate
-whether a record can advance or close.
+## Validation And Workflow Validators
 
-Example gates:
+Evidence should be a first-class condition for closing work. Workflow validators
+evaluate whether a record can advance or close.
 
-- `export_fresh`
-- `tests_passed`
+Version 1 built-in validators include:
+
+- `durable_state_current`
 - `review_complete`
 - `evidence_attached`
-- `milestone_validated`
+- `validation_criteria_satisfied`
+- `no_open_blockers`
 - `no_blocking_lints`
+- `git_worktree_clean`
 
-Gates should produce machine-readable results for Mission Control.
+Validators should produce machine-readable results for Mission Control.
 
 ## Mission Control
 
@@ -352,12 +435,16 @@ Mission Control should be able to show:
 - Claims and locks.
 - Stale exports.
 - Required evidence.
-- Gate failures.
+- Workflow validator failures.
 - Plan drift.
 - Recent decisions.
 - Items ready for review or validation.
 
-The CLI should expose this through JSON projections before any UI is built.
+The first Mission Control slice should be CLI-native: `atelier mission status
+[<id>]` should summarize mission health, blockers, evidence gaps, validator
+failures, closeout readiness, and next actions for agents and orchestrators.
+Deterministic JSON projections and richer UI surfaces can follow once the CLI
+status contract proves the needed state model.
 
 ## Command Philosophy
 
@@ -367,26 +454,29 @@ Representative commands:
 
 ```text
 atelier init
-atelier next
-atelier ready
-atelier show ISS-123
+atelier prime
+atelier status
+atelier issue list --ready
+atelier issue show atelier-z1p8
 atelier issue create
+atelier issue transition atelier-z1p8 --options
 atelier mission create
+atelier mission status
+atelier mission show atelier-k7mq
+atelier mission add-work atelier-k7mq atelier-z1p8
 atelier milestone create
 atelier plan create
-atelier link add
-atelier work start
-atelier work finish
-atelier evidence add
-atelier gate check
+atelier evidence record --target issue/atelier-z1p8 --kind validation --result pass "summary"
+atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>
 atelier lint
-atelier export
 atelier export --check
-atelier rebuild
 atelier doctor
 ```
 
-Every command that agents call should support stable JSON output.
+Every command that agents call should provide focused human-readable output with
+the actionable identifiers, state, and next commands needed for the immediate
+workflow. Durable Markdown records and explicit projection files are the
+machine-readable source of truth, not command-result JSON.
 
 ## Initial Milestones
 
@@ -399,12 +489,13 @@ Every command that agents call should support stable JSON output.
 
 ### Milestone 2: Canonical Export/Rebuild
 
-- Define `.atelier-state`.
+- Define tracked canonical Markdown under `.atelier/`.
 - Export deterministic per-record files.
 - Add `export --check`.
 - Add `rebuild`.
-- Make SQLite rebuildable from exported state.
-- Decide whether `.atelier/state.db` is gitignored by default.
+- Make SQLite rebuildable from committed Markdown records.
+- Keep `.atelier/state.db` ignored as local runtime state; committed
+  durable state lives under tracked `.atelier/` record directories.
 
 ### Milestone 3: Braid-Style Worktrees
 
@@ -415,31 +506,38 @@ Every command that agents call should support stable JSON output.
 
 ### Milestone 4: Domain Model Upgrade
 
-- Add first-class missions, milestones, plans, evidence, gates, and runs.
-- Add typed links.
+- Add first-class missions, milestone checkpoint records, plans, evidence,
+  workflow validators, and runs.
+- Add canonical relationship buckets and domain-specific relationship commands.
 - Keep compatibility migration paths where reasonable.
 
 ### Milestone 5: Workflows And Rules
 
 - Add configurable types and workflows.
-- Add gate-backed transitions.
+- Add validator-backed transitions.
 - Add linter severities and waivers.
 - Surface action-aware guidance.
 
 ### Milestone 6: Mission Control Projection
 
-- Add JSON projections for active missions, agents, blockers, gates, evidence,
-  branches, and plan drift.
+- Add JSON projections for active missions, agents, blockers, workflow
+  validator failures, evidence, branches, and plan drift.
 - Defer rich UI until projections are useful.
 
 ## Open Questions
 
-- Should the binary be `atelier` or a shorter alias such as `atl`?
-- Should `.atelier/state.db` be ignored or committed for convenience while still
-  treated as rebuildable?
+- Resolved for Milestone 1: the canonical binary is `atelier`; short aliases
+  such as `atl` are deferred until the install story is stable.
+- Resolved for the Markdown-first storage overhaul: `.atelier/` is the single
+  project root. Canonical Markdown records and tracked project config live under
+  `.atelier/`; `.atelier/state.db`, `.atelier/runtime/`, and `.atelier/cache/`
+  contain ignored local projection/runtime/cache files such as SQLite state,
+  identity, locks, diagnostics, and UI caches.
 - Should sessions be exported, partially exported, or treated as local runtime
-  metadata?
-- What artifact storage backends should be supported first?
-- How much Chainlink lock sync should survive the redesign?
+  metadata? Command diagnostics are resolved separately as local-only telemetry
+  and do not answer this broader run/session policy.
+- Which external artifact backend should be implemented after metadata-only
+  path/URI evidence records?
+- What shared or remote lock policy is needed after work association and
+  Mission Control projections stabilize?
 - What should the default workflow be for tiny tasks?
-

@@ -1,6 +1,6 @@
 /// Format a display ID for output.
-pub fn format_issue_id(id: i64) -> String {
-    format!("#{}", id)
+pub fn format_issue_id(id: &str) -> String {
+    id.to_string()
 }
 
 /// Truncate a string to a maximum number of characters, adding "..." if truncated.

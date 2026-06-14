@@ -1,0 +1,25 @@
+nextest-version = { required = "0.9.137" }
+
+[profile.default]
+fail-fast = false
+failure-output = "immediate-final"
+final-status-level = "slow"
+slow-timeout = { period = "10s", terminate-after = 6 }
+
+[profile.extended]
+inherits = "default"
+default-filter = "test(prop_extended_)"
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[[profile.default.overrides]]
+filter = "test(prop_extended_)"
+test-group = "extended-property"
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[[profile.extended.overrides]]
+filter = "test(prop_extended_)"
+test-group = "extended-property"
+slow-timeout = { period = "30s", terminate-after = 4 }
+
+[test-groups.extended-property]
+max-threads = 1

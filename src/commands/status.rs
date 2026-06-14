@@ -1,445 +1,577 @@
-use anyhow::{bail, Context, Result};
-use std::fs;
+use anyhow::Result;
+
+use std::collections::BTreeSet;
 use std::path::Path;
+use std::process::Command;
 
-use crate::db::Database;
+use crate::activity::list_all_issue_activities;
+use crate::models::{DomainRecord, Issue};
 use crate::utils::format_issue_id;
+use crate::{commands, db::Database};
 
-pub fn close(db: &Database, id: i64, update_changelog: bool, chainlink_dir: &Path) -> Result<()> {
-    close_inner(db, id, update_changelog, chainlink_dir, false)
-}
-
-pub fn close_quiet(
-    db: &Database,
-    id: i64,
-    update_changelog: bool,
-    chainlink_dir: &Path,
-) -> Result<()> {
-    close_inner(db, id, update_changelog, chainlink_dir, true)
-}
-
-fn close_inner(
-    db: &Database,
-    id: i64,
-    update_changelog: bool,
-    chainlink_dir: &Path,
-    quiet: bool,
-) -> Result<()> {
-    // Get issue details before closing
-    let issue = db.get_issue(id)?;
-    let issue = match issue {
-        Some(i) => i,
-        None => bail!("Issue {} not found", format_issue_id(id)),
-    };
-    let labels = db.get_labels(id)?;
-
-    if db.close_issue(id)? {
-        if !quiet {
-            println!("Closed issue {}", format_issue_id(id));
-        }
+pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
+    let active_work = db.get_active_work_association()?;
+    let active_issue_id = active_work.as_ref().map(|work| work.issue_id.as_str());
+    let active_mission = commands::mission::active_mission(db)?;
+    let current_missions = db
+        .list_records("mission", None)?
+        .into_iter()
+        .filter(|mission| mission.status != "closed")
+        .collect::<Vec<_>>();
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let ready = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| Some(issue.id.as_str()) != active_issue_id)
+        .filter_map(|issue| {
+            match commands::issue_workflow::issue_start_readiness(
+                db,
+                workflow_policy.as_ref(),
+                &issue,
+            ) {
+                Ok(commands::issue_workflow::IssueStartReadiness::Ready) => Some(Ok(issue)),
+                Ok(_) => None,
+                Err(error) => Some(Err(error)),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mission_snapshot = active_mission
+        .as_ref()
+        .map(|mission| mission_snapshot(db, mission, active_issue_id))
+        .transpose()?;
+    let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
+    let tracker_state = if export_stale.is_empty() {
+        "current"
     } else {
-        bail!("Issue {} not found", format_issue_id(id));
-    }
+        "stale"
+    };
 
-    // Update changelog if requested
-    if update_changelog {
-        let project_root = chainlink_dir.parent().unwrap_or(chainlink_dir);
-        let changelog_path = project_root.join("CHANGELOG.md");
-
-        // Create CHANGELOG.md if it doesn't exist
-        if !changelog_path.exists() {
-            if let Err(e) = create_changelog(&changelog_path) {
-                tracing::warn!("Could not create CHANGELOG.md: {}", e);
+    if quiet {
+        println!(
+            "work={} active_mission={} current_missions={} ready={} tracker={}",
+            if active_work.is_some() {
+                "active"
             } else {
-                println!("Created CHANGELOG.md");
-            }
-        }
-
-        if changelog_path.exists() {
-            let category = determine_changelog_category(&labels);
-            let entry = format!("- {} ({})\n", issue.title, format_issue_id(id));
-
-            if let Err(e) = append_to_changelog(&changelog_path, &category, &entry) {
-                tracing::warn!("Could not update CHANGELOG.md: {}", e);
-            } else if !quiet {
-                println!("Added to CHANGELOG.md under {}", category);
-            }
-        }
+                "none"
+            },
+            active_mission
+                .as_ref()
+                .map(|mission| mission.id.as_str())
+                .unwrap_or("none"),
+            current_missions.len(),
+            ready.len(),
+            tracker_state
+        );
+        return Ok(());
     }
 
-    Ok(())
-}
+    println!("Atelier Status");
+    println!("==============");
+    println!("Tracker:       {tracker_state}");
+    println!("Ready work:    {}", ready.len());
 
-fn create_changelog(path: &Path) -> Result<()> {
-    let template = r#"# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-## [Unreleased]
-
-### Added
-
-### Fixed
-
-### Changed
-"#;
-    fs::write(path, template).context("Failed to create CHANGELOG.md")?;
-    Ok(())
-}
-
-fn determine_changelog_category(labels: &[String]) -> String {
-    for label in labels {
-        match label.to_lowercase().as_str() {
-            "bug" | "fix" | "bugfix" => return "Fixed".to_string(),
-            "feature" | "enhancement" => return "Added".to_string(),
-            "breaking" | "breaking-change" => return "Changed".to_string(),
-            "deprecated" => return "Deprecated".to_string(),
-            "removed" => return "Removed".to_string(),
-            "security" => return "Security".to_string(),
-            _ => continue,
+    match &active_work {
+        Some(work) => {
+            let title = db
+                .get_issue(&work.issue_id)?
+                .map(|issue| issue.title)
+                .unwrap_or_else(|| "(issue missing)".to_string());
+            println!("Active work:   {} - {}", work.issue_id, title);
+            println!(
+                "Work branch:   {}",
+                work.branch.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "Worktree:      {}",
+                work.worktree_path.as_deref().unwrap_or("(none)")
+            );
         }
+        None => println!("Active work:   none"),
     }
-    "Changed".to_string() // Default category
-}
 
-fn append_to_changelog(path: &Path, category: &str, entry: &str) -> Result<()> {
-    let content = fs::read_to_string(path).context("Failed to read CHANGELOG.md")?;
-    let heading = format!("### {}", category);
+    match &active_mission {
+        Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
+        None if current_missions.is_empty() => println!("Active mission: none"),
+        None => println!("Active mission: none ({} current)", current_missions.len()),
+    }
 
-    let new_content = if content.contains(&heading) {
-        // Insert after the heading
-        let mut result = String::new();
-        let mut found = false;
-        for line in content.lines() {
-            result.push_str(line);
-            result.push('\n');
-            if !found && line.trim() == heading {
-                result.push_str(entry);
-                found = true;
+    if !export_stale.is_empty() {
+        println!("Export issues: {}", export_stale.len());
+    }
+
+    println!();
+    println!("Local State");
+    println!("-----------");
+    print_git_state();
+    println!("Tracker:  {tracker_state}");
+
+    if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
+        println!();
+        println!("Active Mission");
+        println!("--------------");
+        println!("{} - {}", mission.id, mission.title);
+        println!("Health:   {}", snapshot.health());
+        if snapshot.active > 0 {
+            println!(
+                "Work:     ready {}, active {}, blocked {}, done {}, backlog {}",
+                snapshot.ready, snapshot.active, snapshot.blocked, snapshot.done, snapshot.backlog
+            );
+        } else {
+            println!(
+                "Work:     ready {}, blocked {}, done {}, backlog {}",
+                snapshot.ready, snapshot.blocked, snapshot.done, snapshot.backlog
+            );
+        }
+
+        println!();
+        println!("Ready In Active Mission");
+        println!("-----------------------");
+        if snapshot.selectable_issues.is_empty() {
+            println!("(none)");
+        } else {
+            for issue in snapshot.selectable_issues.iter().take(5) {
+                println!(
+                    "  {} - {} | ready: no open blockers; {}; {}",
+                    issue.id,
+                    issue.title,
+                    parent_context(issue),
+                    proof_context(db, &issue.id)?
+                );
             }
         }
-        result
+
+        println!();
+        println!("Immediate Blockers");
+        println!("------------------");
+        if snapshot.open_blockers.is_empty() {
+            println!("(none)");
+        } else {
+            for blocker_id in snapshot.open_blockers.iter().take(5) {
+                let title = db
+                    .get_issue(blocker_id)?
+                    .map(|issue| issue.title)
+                    .unwrap_or_else(|| "(issue missing)".to_string());
+                println!("  {blocker_id} - {title}");
+            }
+        }
+
+        println!();
+        println!("Recent Activity");
+        println!("---------------");
+        let recent = recent_mission_activity(state_dir, &snapshot.issue_ids)?;
+        if recent.is_empty() {
+            println!("(none)");
+        } else {
+            for activity in recent {
+                println!("{activity}");
+            }
+        }
     } else {
-        // Add new section after first ## heading (usually ## [Unreleased])
-        let mut result = String::new();
-        let mut added = false;
-        for line in content.lines() {
-            result.push_str(line);
-            result.push('\n');
-            if !added && line.starts_with("## ") {
-                result.push('\n');
-                result.push_str(&format!("{}\n", heading));
-                result.push_str(entry);
-                added = true;
+        println!();
+        println!("Recent Activity");
+        println!("---------------");
+        println!("(no active mission)");
+    }
+
+    println!();
+    println!("Next Actions");
+    println!("------------");
+    match active_mission.as_ref().zip(mission_snapshot.as_ref()) {
+        Some((mission, snapshot)) => {
+            println!(
+                "  Inspect active mission health ({}): atelier mission status {}",
+                mission.id, mission.id
+            );
+            println!(
+                "  Open active mission record ({}): atelier mission show {}",
+                mission.id, mission.id
+            );
+            if let Some(issue) = snapshot.active_issue.as_ref() {
+                println!(
+                    "  Inspect active work transitions ({}): atelier issue transition {} --options",
+                    issue.id, issue.id
+                );
+                println!(
+                    "  Abandon local work ({}) if you are switching away: atelier abandon {} --reason \"...\"",
+                    issue.id, issue.id
+                );
+            } else if let Some(issue) = snapshot.selectable_issues.first() {
+                println!(
+                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
+                    snapshot.selectable_issues.len(),
+                    issue.id
+                );
+            } else if snapshot.blocked > 0 || !snapshot.open_blockers.is_empty() {
+                println!(
+                    "  Inspect blocked active-mission work (no ready work is available): atelier mission status {}",
+                    mission.id
+                );
+            } else {
+                println!(
+                    "  Review active mission closeout (no ready work is available): atelier mission status {}",
+                    mission.id
+                );
             }
         }
-        if !added {
-            // No ## heading found, append at end
-            result.push_str(&format!("\n{}\n", heading));
-            result.push_str(entry);
+        None => {
+            match &active_mission {
+                Some(mission) => println!(
+                    "  Inspect active mission ({} is active): atelier mission status {}",
+                    mission.id, mission.id
+                ),
+                None if current_missions.is_empty() => {
+                    println!("  Inspect mission readiness (no mission is active): atelier mission status")
+                }
+                None => println!(
+            "  Inspect mission choices ({} current mission(s), none active): atelier mission status",
+            current_missions.len()
+        ),
+            }
         }
-        result
-    };
-
-    fs::write(path, new_content).context("Failed to write CHANGELOG.md")?;
+    }
+    if active_mission.is_some() {
+        // Active-mission scoped actions above own work selection in focused runs.
+    } else if ready.is_empty() {
+        println!(
+            "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
+        );
+    } else {
+        println!(
+            "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
+            ready.len()
+        );
+        println!("  Start selected work (ready work exists): atelier start <issue-id>");
+    }
+    if export_stale.is_empty() {
+        println!("  Check runtime health (tracker export is current): atelier doctor");
+    } else {
+        println!(
+            "  Refresh canonical export ({} stale record(s)): atelier export",
+            export_stale.len()
+        );
+        println!("  Check tracker records (export is stale): atelier lint");
+    }
     Ok(())
 }
 
-pub fn close_all(
+#[derive(Default)]
+struct MissionSnapshot {
+    issue_ids: BTreeSet<String>,
+    active_issue: Option<Issue>,
+    ready_issues: Vec<Issue>,
+    selectable_issues: Vec<Issue>,
+    open_blockers: Vec<String>,
+    active: usize,
+    ready: usize,
+    blocked: usize,
+    done: usize,
+    backlog: usize,
+}
+
+impl MissionSnapshot {
+    fn health(&self) -> &'static str {
+        if !self.open_blockers.is_empty() || self.blocked > 0 {
+            "blocked"
+        } else if self.active > 0 {
+            "active"
+        } else if self.ready > 0 {
+            "ready"
+        } else if self.done > 0 {
+            "closeout"
+        } else {
+            "steady"
+        }
+    }
+}
+
+fn mission_snapshot(
     db: &Database,
+    mission: &DomainRecord,
+    active_issue_id: Option<&str>,
+) -> Result<MissionSnapshot> {
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut snapshot = MissionSnapshot::default();
+    snapshot.issue_ids = mission_issue_ids(db, &mission.id)?;
+
+    let mut blocker_ids = mission_direct_blocker_ids(db, &mission.id)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    for issue_id in &snapshot.issue_ids {
+        for blocker_id in db.get_blockers(issue_id)? {
+            blocker_ids.insert(blocker_id);
+        }
+    }
+    snapshot.open_blockers = blocker_ids
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| {
+            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
+        })
+        .map(|issue| issue.id)
+        .collect();
+    snapshot.open_blockers.sort();
+
+    for issue_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(issue_id)? else {
+            continue;
+        };
+        match issue_bucket(db, &issue, active_issue_id, workflow_policy.as_ref())? {
+            IssueBucket::Active => {
+                snapshot.active += 1;
+                snapshot.active_issue = Some(issue);
+            }
+            IssueBucket::Ready => {
+                snapshot.ready += 1;
+                if is_selectable_work(db, &issue)? {
+                    snapshot.selectable_issues.push(issue.clone());
+                }
+                snapshot.ready_issues.push(issue);
+            }
+            IssueBucket::Blocked => snapshot.blocked += 1,
+            IssueBucket::Done => snapshot.done += 1,
+            IssueBucket::Backlog => snapshot.backlog += 1,
+        }
+    }
+    snapshot.ready_issues.sort_by(|a, b| a.id.cmp(&b.id));
+    snapshot.selectable_issues.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(snapshot)
+}
+
+enum IssueBucket {
+    Active,
+    Ready,
+    Blocked,
+    Done,
+    Backlog,
+}
+
+fn issue_bucket(
+    db: &Database,
+    issue: &Issue,
+    active_issue_id: Option<&str>,
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+) -> Result<IssueBucket> {
+    if Some(issue.id.as_str()) == active_issue_id {
+        return Ok(IssueBucket::Active);
+    }
+    if commands::issue_workflow::issue_is_done(workflow_policy, issue) {
+        return Ok(IssueBucket::Done);
+    }
+    if !open_issue_blockers(db, &issue.id, workflow_policy)?.is_empty() {
+        return Ok(IssueBucket::Blocked);
+    }
+    match commands::issue_workflow::issue_start_readiness(db, workflow_policy, issue)? {
+        commands::issue_workflow::IssueStartReadiness::Ready => Ok(IssueBucket::Ready),
+        commands::issue_workflow::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
+        commands::issue_workflow::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
+    }
+}
+
+fn open_issue_blockers(
+    db: &Database,
+    issue_id: &str,
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+) -> Result<Vec<String>> {
+    let mut blockers = Vec::new();
+    for blocker_id in db.get_blockers(issue_id)? {
+        if commands::issue_workflow::issue_blocks_work(
+            workflow_policy,
+            &db.require_issue(&blocker_id)?,
+        ) {
+            blockers.push(blocker_id);
+        }
+    }
+    blockers.sort();
+    Ok(blockers)
+}
+
+fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
+    Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
+}
+
+fn parent_context(issue: &Issue) -> String {
+    match issue.parent_id.as_deref() {
+        Some(parent_id) => format!("parent {parent_id}"),
+        None => "mission-linked root".to_string(),
+    }
+}
+
+fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
+    if has_validating_evidence(db, issue_id)? {
+        Ok("proof attached")
+    } else {
+        Ok("proof missing")
+    }
+}
+
+fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        if link.source_kind == "evidence" || link.target_kind == "evidence" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        let Some((kind, linked_id)) = other_side(&link, "mission", mission_id) else {
+            continue;
+        };
+        if kind == "issue" && link.relation_type == "advances" {
+            collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
+        }
+    }
+    Ok(issue_ids)
+}
+
+fn collect_issue_and_descendants(
+    db: &Database,
+    issue_id: &str,
+    issue_ids: &mut BTreeSet<String>,
+) -> Result<()> {
+    if !issue_ids.insert(issue_id.to_string()) {
+        return Ok(());
+    }
+    for child in db.get_subissues(issue_id)? {
+        collect_issue_and_descendants(db, &child.id, issue_ids)?;
+    }
+    Ok(())
+}
+
+fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<String>> {
+    let mut blockers = Vec::new();
+    for link in db.list_record_links("mission", mission_id)? {
+        if link.relation_type != "blocked_by" {
+            continue;
+        }
+        let Some((kind, linked_id)) = other_side(&link, "mission", mission_id) else {
+            continue;
+        };
+        if kind == "issue" {
+            blockers.push(linked_id.to_string());
+        }
+    }
+    Ok(blockers)
+}
+
+fn other_side<'a>(
+    link: &'a crate::models::RecordLink,
+    kind: &str,
+    id: &str,
+) -> Option<(&'a str, &'a str)> {
+    if link.source_kind == kind && link.source_id == id {
+        Some((&link.target_kind, &link.target_id))
+    } else if link.target_kind == kind && link.target_id == id {
+        Some((&link.source_kind, &link.source_id))
+    } else {
+        None
+    }
+}
+
+fn recent_mission_activity(state_dir: &Path, issue_ids: &BTreeSet<String>) -> Result<Vec<String>> {
+    let mut activities = list_all_issue_activities(state_dir)?
+        .into_iter()
+        .filter(|activity| issue_ids.contains(&activity.subject_id))
+        .collect::<Vec<_>>();
+    activities.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
+    Ok(activities
+        .into_iter()
+        .take(3)
+        .map(|activity| {
+            format!(
+                "  {} {}: {}",
+                activity.subject_id, activity.event_type, activity.summary
+            )
+        })
+        .collect())
+}
+
+fn print_git_state() {
+    match git_state() {
+        Ok(state) => {
+            if let Some(branch) = state.branch {
+                println!("Branch:   {branch}");
+            }
+            if state.dirty_entries.is_empty() {
+                println!("Worktree: clean");
+            } else {
+                println!("Worktree: dirty ({} entries)", state.dirty_entries.len());
+                for entry in state.dirty_entries.iter().take(3) {
+                    println!("  {entry}");
+                }
+            }
+        }
+        Err(error) => println!("Worktree: unavailable - {error}"),
+    }
+}
+
+struct GitState {
+    branch: Option<String>,
+    dirty_entries: Vec<String>,
+}
+
+fn git_state() -> Result<GitState> {
+    let output = Command::new("git")
+        .args(["status", "--short", "--branch", "--untracked-files=all"])
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        anyhow::bail!(if stderr.is_empty() {
+            "git status failed".to_string()
+        } else {
+            stderr
+        });
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut branch = None;
+    let mut dirty_entries = Vec::new();
+    for line in stdout.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            branch = Some(rest.to_string());
+        } else if !line.trim().is_empty() {
+            dirty_entries.push(line.to_string());
+        }
+    }
+    Ok(GitState {
+        branch,
+        dirty_entries,
+    })
+}
+
+pub fn close_all_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
     label_filter: Option<&str>,
     priority_filter: Option<&str>,
-    update_changelog: bool,
-    chainlink_dir: &Path,
 ) -> Result<()> {
-    let issues = db.list_issues(Some("open"), label_filter, priority_filter)?;
+    let db = Database::open(db_path)?;
+    let issues = db.list_issues(Some("todo"), label_filter, priority_filter)?;
+    drop(db);
 
     if issues.is_empty() {
-        println!("No matching open issues found.");
+        println!("No matching todo issues found.");
         return Ok(());
     }
 
     let mut closed_count = 0;
     for issue in &issues {
-        match close(db, issue.id, update_changelog, chainlink_dir) {
+        match commands::agent_factory::close_lifecycle(
+            state_dir,
+            db_path,
+            &issue.id,
+            "bulk close",
+            None,
+        ) {
             Ok(()) => closed_count += 1,
-            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(issue.id), e),
+            Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),
         }
     }
 
     println!("Closed {} issue(s).", closed_count);
     Ok(())
-}
-
-pub fn reopen(db: &Database, id: i64) -> Result<()> {
-    if db.reopen_issue(id)? {
-        println!("Reopened issue {}", format_issue_id(id));
-    } else {
-        bail!("Issue {} not found", format_issue_id(id));
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use proptest::prelude::*;
-    use tempfile::tempdir;
-
-    fn setup_test_db() -> (Database, tempfile::TempDir) {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let db = Database::open(&db_path).unwrap();
-        (db, dir)
-    }
-
-    // ==================== Close Tests ====================
-
-    #[test]
-    fn test_close_existing_issue() {
-        let (db, _dir) = setup_test_db();
-        let chainlink_dir = _dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-
-        let result = close(&db, issue_id, false, &chainlink_dir);
-        assert!(result.is_ok());
-
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "closed");
-        assert!(issue.closed_at.is_some());
-    }
-
-    #[test]
-    fn test_close_nonexistent_issue() {
-        let (db, _dir) = setup_test_db();
-        let chainlink_dir = _dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-        let result = close(&db, 99999, false, &chainlink_dir);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found"));
-    }
-
-    #[test]
-    fn test_close_already_closed_issue() {
-        let (db, _dir) = setup_test_db();
-        let chainlink_dir = _dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
-
-        // Closing again should be fine (idempotent at db level)
-        let result = close(&db, issue_id, false, &chainlink_dir);
-        assert!(result.is_ok());
-    }
-
-    // ==================== Reopen Tests ====================
-
-    #[test]
-    fn test_reopen_closed_issue() {
-        let (db, _dir) = setup_test_db();
-
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
-
-        let result = reopen(&db, issue_id);
-        assert!(result.is_ok());
-
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "open");
-        assert!(issue.closed_at.is_none());
-    }
-
-    #[test]
-    fn test_reopen_nonexistent_issue() {
-        let (db, _dir) = setup_test_db();
-
-        let result = reopen(&db, 99999);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found"));
-    }
-
-    #[test]
-    fn test_reopen_already_open_issue() {
-        let (db, _dir) = setup_test_db();
-
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-
-        // Reopening an open issue - succeeds (idempotent operation)
-        let result = reopen(&db, issue_id);
-        assert!(result.is_ok());
-
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "open");
-    }
-
-    // ==================== Changelog Category Tests ====================
-
-    #[test]
-    fn test_determine_changelog_category_bug() {
-        assert_eq!(determine_changelog_category(&["bug".to_string()]), "Fixed");
-        assert_eq!(determine_changelog_category(&["fix".to_string()]), "Fixed");
-        assert_eq!(
-            determine_changelog_category(&["bugfix".to_string()]),
-            "Fixed"
-        );
-    }
-
-    #[test]
-    fn test_determine_changelog_category_feature() {
-        assert_eq!(
-            determine_changelog_category(&["feature".to_string()]),
-            "Added"
-        );
-        assert_eq!(
-            determine_changelog_category(&["enhancement".to_string()]),
-            "Added"
-        );
-    }
-
-    #[test]
-    fn test_determine_changelog_category_breaking() {
-        assert_eq!(
-            determine_changelog_category(&["breaking".to_string()]),
-            "Changed"
-        );
-        assert_eq!(
-            determine_changelog_category(&["breaking-change".to_string()]),
-            "Changed"
-        );
-    }
-
-    #[test]
-    fn test_determine_changelog_category_other() {
-        assert_eq!(
-            determine_changelog_category(&["deprecated".to_string()]),
-            "Deprecated"
-        );
-        assert_eq!(
-            determine_changelog_category(&["removed".to_string()]),
-            "Removed"
-        );
-        assert_eq!(
-            determine_changelog_category(&["security".to_string()]),
-            "Security"
-        );
-    }
-
-    #[test]
-    fn test_determine_changelog_category_default() {
-        assert_eq!(
-            determine_changelog_category(&["unknown".to_string()]),
-            "Changed"
-        );
-        assert_eq!(determine_changelog_category(&[]), "Changed");
-    }
-
-    #[test]
-    fn test_determine_changelog_category_first_match_wins() {
-        // Bug comes before feature, so Fixed should win
-        assert_eq!(
-            determine_changelog_category(&["bug".to_string(), "feature".to_string()]),
-            "Fixed"
-        );
-    }
-
-    #[test]
-    fn test_determine_changelog_category_case_insensitive() {
-        assert_eq!(determine_changelog_category(&["BUG".to_string()]), "Fixed");
-        assert_eq!(
-            determine_changelog_category(&["Feature".to_string()]),
-            "Added"
-        );
-    }
-
-    // ==================== Close/Reopen Cycle Tests ====================
-
-    #[test]
-    fn test_close_reopen_cycle() {
-        let (db, _dir) = setup_test_db();
-        let chainlink_dir = _dir.path().join(".chainlink");
-        std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-
-        // Close
-        close(&db, issue_id, false, &chainlink_dir).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "closed");
-
-        // Reopen
-        reopen(&db, issue_id).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "open");
-
-        // Close again
-        close(&db, issue_id, false, &chainlink_dir).unwrap();
-        let issue = db.get_issue(issue_id).unwrap().unwrap();
-        assert_eq!(issue.status, "closed");
-    }
-
-    // ==================== Property-Based Tests ====================
-
-    proptest! {
-        #[test]
-        fn prop_close_sets_status_to_closed(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-            let chainlink_dir = _dir.path().join(".chainlink");
-            std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            close(&db, issue_id, false, &chainlink_dir).unwrap();
-
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
-            prop_assert_eq!(issue.status, "closed");
-        }
-
-        #[test]
-        fn prop_reopen_sets_status_to_open(title in "[a-zA-Z0-9 ]{1,50}") {
-            let (db, _dir) = setup_test_db();
-
-            let issue_id = db.create_issue(&title, None, "medium").unwrap();
-            db.close_issue(issue_id).unwrap();
-
-            reopen(&db, issue_id).unwrap();
-
-            let issue = db.get_issue(issue_id).unwrap().unwrap();
-            prop_assert_eq!(issue.status, "open");
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_close_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            let chainlink_dir = _dir.path().join(".chainlink");
-            std::fs::create_dir_all(&chainlink_dir).unwrap();
-
-            let result = close(&db, issue_id, false, &chainlink_dir);
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_reopen_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-
-            let result = reopen(&db, issue_id);
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_changelog_category_returns_known_category(
-            labels in proptest::collection::vec("[a-zA-Z]{1,20}", 0..5)
-        ) {
-            let valid_categories = ["Fixed", "Added", "Changed", "Deprecated", "Removed", "Security"];
-            let category = determine_changelog_category(&labels);
-            prop_assert!(
-                valid_categories.contains(&category.as_str()),
-                "Got unknown category: {}", category
-            );
-        }
-    }
 }

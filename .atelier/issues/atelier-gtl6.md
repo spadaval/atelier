@@ -1,0 +1,33 @@
+---
+created_at: "2026-06-12T00:59:20.769428954+00:00"
+id: "atelier-gtl6"
+issue_type: "task"
+labels:
+- "cli"
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 1
+closed_at: "2026-06-12T03:35:10.220599036+00:00"
+status: "done"
+title: "Define output style rules for empty states and next actions"
+updated_at: "2026-06-12T03:35:10.220599036+00:00"
+---
+
+## Description
+
+Define reusable human-output rules for empty states, headings, separators, spacing, and next-action blocks. Acceptance: rules cover concise empty states like no active work, intent-labeled next actions, avoidance of generic command dumps, and a clear boundary that shared helpers format command-supplied actions but do not invent authoritative advice.
+Outcome was not specified in the legacy issue record.
+Evidence was not specified in the legacy issue record.
+
+## Outcome
+
+Outcome was not specified.
+
+## Evidence
+
+Evidence was not specified.

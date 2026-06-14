@@ -28,10 +28,10 @@ on 2026-06-08.
 - Braid separates workflow storage modes from auto-sync policy:
   issues-with-code, a dedicated issues branch, and an external issues repo are
   distinct choices. Atelier should preserve that explicitness when designing
-  `.atelier-state/` and worktree behavior.
-- `design` issues are a useful precedent for human-in-the-loop decisions.
-  Atelier's decision beads and ADR flow should keep this spirit, but with
-  richer links to decisions, evidence, and validation gates.
+  `.atelier/` and worktree behavior.
+- `design` issues are a useful precedent for human-in-the-loop design work.
+  Atelier should keep the explicit artifact-update workflow, but with richer
+  links to evidence and workflow validation.
 - `meta` issues with rollup counts are useful as a lightweight grouping model.
   Atelier should translate that into first-class missions and milestones rather
   than overloading dependency edges for membership.
@@ -49,26 +49,28 @@ on 2026-06-08.
   pattern is useful, but Atelier needs explicit mission, milestone, plan, and
   typed-link concepts.
 - Do not limit durable issue kinds to regular, design, and meta. Atelier needs
-  configurable issue/work item types plus first-class evidence, gates, plans,
-  runs, and decisions.
+  configurable issue/work item types plus first-class evidence, workflow
+  validators, plans, runs, and artifact-update work.
 - Do not assume Git-only synchronization is enough for all runtime behavior.
   Atelier should use Git for mergeable durable state, while local SQLite indexes
   support fast queries, locks, workflow checks, and Mission Control projection.
 - Do not copy editor-driven mutation as the main agent interface. Agents need
-  stable noninteractive commands and JSON output.
+  stable noninteractive commands with focused human output and durable
+  projection files.
 
 ## Follow-Up Decisions
 
 - `atelier-nxxa`: decide the Atelier CLI binary and alias naming before
   adopting Braid-inspired command names.
 - `atelier-xrzs`: define how Braid-like Markdown records map into
-  `.atelier-state/`.
+  `.atelier/`.
 - `atelier-eqmn` and `atelier-x88e`: adapt Braid's agent/worktree flow for
   Atelier's `work start`, `work finish`, and worktree commands.
 - `atelier-v72a`: decide how Braid's design/meta ideas map to first-class
-  missions, milestones, plans, evidence, gates, and runs.
+  missions, milestone checkpoint records, plans, evidence, workflow validators,
+  and runs.
 - `atelier-kitl`: decide how much of the ready/start/done loop becomes
   configurable workflow behavior.
 - Future ADR: storage mode policy for issues-with-code, dedicated state branch,
   or external state repo if Atelier supports more than the default
-  `.atelier-state/` layout.
+  `.atelier/` layout.

@@ -3,14 +3,21 @@
 ## Rust
 
 - Run `cargo fmt` before handing off code changes.
+- Use [rust-quality-hazard-scans.md](./rust-quality-hazard-scans.md) for the
+  classified debt-marker, dead/unused-code, large-function, and unused-
+  dependency review commands.
 - Prefer `anyhow::Context` on fallible IO, database, and external-command
   boundaries.
 - Keep command output stable when tests or agents depend on it.
+- Follow the human-output grammar in
+  [Human CLI Output](../human-cli-output.md) for non-JSON detail, queue, and
+  hierarchy views.
 - Add or update CLI integration tests for user-visible command behavior.
 - Add focused database tests for schema, migration, transaction, and invariant
   changes.
-- Preserve JSON compatibility unless a migration bead or ADR explicitly changes
-  the contract.
+- Preserve documented authored-input and projection JSON compatibility unless a
+  migration bead or ADR explicitly changes that contract. Do not treat retired
+  command-result JSON as the default automation boundary.
 
 ## Data And State
 
@@ -25,14 +32,16 @@
 ## Documentation
 
 - Update `SPEC.md` when product intent changes.
-- Update `CONTEXT.md` when terminology or ambiguity decisions change.
+- Update `CONTEXT.md` when terminology or model choices change.
 - Add ADRs for costly, surprising, or repeatedly relevant architecture choices.
 - Keep current target-state docs separate from historical rationale.
 
 ## Agent Workflow
 
-- Track work in Beads.
-- Use explicit noninteractive `bd` commands.
-- Record follow-up work as beads once tracker setup is available.
+- Track work in Atelier.
+- Use explicit noninteractive `atelier issue` commands.
+- Record follow-up work as Atelier issues.
+- Commit tracked `.atelier/` record changes with related tracker updates; treat
+  `.atelier/runtime/state.db` as rebuildable local runtime state.
 - Include validation evidence in handoff notes when checks are skipped, fail, or
   only partially cover the change.

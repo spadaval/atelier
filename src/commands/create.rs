@@ -1,11 +1,3 @@
-use anyhow::{bail, Result};
-
-use std::path::Path;
-
-use crate::db::Database;
-use crate::lock_check;
-use crate::utils::format_issue_id;
-
 const VALID_PRIORITIES: [&str; 4] = ["low", "medium", "high", "critical"];
 
 /// Built-in issue templates
@@ -75,164 +67,9 @@ pub fn validate_priority(priority: &str) -> bool {
     VALID_PRIORITIES.contains(&priority)
 }
 
-/// Options shared by create and subissue commands.
-pub struct CreateOpts<'a> {
-    pub labels: &'a [String],
-    pub work: bool,
-    pub quiet: bool,
-    pub chainlink_dir: Option<&'a Path>,
-}
-
-pub fn run(
-    db: &Database,
-    title: &str,
-    description: Option<&str>,
-    priority: &str,
-    template: Option<&str>,
-    opts: &CreateOpts<'_>,
-) -> Result<()> {
-    // Apply template if specified
-    let (final_priority, final_description, template_label) = if let Some(tmpl_name) = template {
-        let tmpl = get_template(tmpl_name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Unknown template '{}'. Available: {}",
-                tmpl_name,
-                list_templates().join(", ")
-            )
-        })?;
-
-        // Template priority is default, user can override
-        let priority = if priority != "medium" {
-            priority
-        } else {
-            tmpl.priority
-        };
-
-        // Combine template description prefix with user description
-        let desc = match (tmpl.description_prefix, description) {
-            (Some(prefix), Some(user_desc)) => Some(format!("{}\n\n{}", prefix, user_desc)),
-            (Some(prefix), None) => Some(prefix.to_string()),
-            (None, user_desc) => user_desc.map(|s| s.to_string()),
-        };
-
-        (priority.to_string(), desc, Some(tmpl.label))
-    } else {
-        (
-            priority.to_string(),
-            description.map(|s| s.to_string()),
-            None,
-        )
-    };
-
-    if !validate_priority(&final_priority) {
-        bail!(
-            "Invalid priority '{}'. Must be one of: {}",
-            final_priority,
-            VALID_PRIORITIES.join(", ")
-        );
-    }
-
-    let id = db.create_issue(title, final_description.as_deref(), &final_priority)?;
-
-    // Auto-add label from template
-    if let Some(lbl) = template_label {
-        db.add_label(id, lbl)?;
-    }
-
-    // Add user-specified labels
-    for lbl in opts.labels {
-        db.add_label(id, lbl)?;
-    }
-
-    if opts.quiet {
-        println!("{}", id);
-    } else {
-        println!("Created issue {}", format_issue_id(id));
-        if let Some(tmpl) = template {
-            println!("  Applied template: {}", tmpl);
-        }
-    }
-
-    // Set as active session work item
-    if opts.work {
-        if let Ok(Some(session)) = db.get_current_session() {
-            // Enforce lock check if chainlink_dir is available
-            if let Some(dir) = opts.chainlink_dir {
-                lock_check::enforce_lock(dir, id, db)?;
-            }
-            db.set_session_issue(session.id, id)?;
-            if !opts.quiet {
-                println!("Now working on: {} {}", format_issue_id(id), title);
-            }
-        } else if !opts.quiet {
-            tracing::warn!("--work specified but no active session");
-        }
-    }
-
-    Ok(())
-}
-
-pub fn run_subissue(
-    db: &Database,
-    parent_id: i64,
-    title: &str,
-    description: Option<&str>,
-    priority: &str,
-    opts: &CreateOpts<'_>,
-) -> Result<()> {
-    if !validate_priority(priority) {
-        bail!(
-            "Invalid priority '{}'. Must be one of: {}",
-            priority,
-            VALID_PRIORITIES.join(", ")
-        );
-    }
-
-    // Verify parent exists
-    let parent = db.get_issue(parent_id)?;
-    if parent.is_none() {
-        bail!("Parent issue {} not found", format_issue_id(parent_id));
-    }
-
-    let id = db.create_subissue(parent_id, title, description, priority)?;
-
-    // Add user-specified labels
-    for lbl in opts.labels {
-        db.add_label(id, lbl)?;
-    }
-
-    if opts.quiet {
-        println!("{}", id);
-    } else {
-        println!(
-            "Created subissue {} under {}",
-            format_issue_id(id),
-            format_issue_id(parent_id)
-        );
-    }
-
-    // Set as active session work item
-    if opts.work {
-        if let Ok(Some(session)) = db.get_current_session() {
-            if let Some(dir) = opts.chainlink_dir {
-                lock_check::enforce_lock(dir, id, db)?;
-            }
-            db.set_session_issue(session.id, id)?;
-            if !opts.quiet {
-                println!("Now working on: {} {}", format_issue_id(id), title);
-            }
-        } else if !opts.quiet {
-            tracing::warn!("--work specified but no active session");
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
 
     // ==================== Unit Tests ====================
 
@@ -325,26 +162,17 @@ mod tests {
         assert!(prefix.contains("Acceptance criteria"));
     }
 
-    // ==================== Property-Based Tests ====================
-
-    proptest! {
-        #[test]
-        fn prop_invalid_priorities_never_validate(
-            priority in "[a-zA-Z]{1,20}"
-                .prop_filter("Exclude valid priorities", |s| {
-                    !["low", "medium", "high", "critical"].contains(&s.as_str())
-                })
-        ) {
-            prop_assert!(!validate_priority(&priority));
+    #[test]
+    fn test_invalid_priorities_never_validate() {
+        for priority in ["urgent", "minor", "blocker", "p0", "mediumish"] {
+            assert!(!validate_priority(priority));
         }
+    }
 
-        #[test]
-        fn prop_unknown_template_returns_none(name in "[a-zA-Z]{5,20}"
-            .prop_filter("Exclude known templates", |s| {
-                !["bug", "feature", "refactor", "research", "audit", "continuation", "investigation"].contains(&s.as_str())
-            })
-        ) {
-            prop_assert!(get_template(&name).is_none());
+    #[test]
+    fn test_unknown_template_returns_none() {
+        for name in ["unknown", "bugs", "Feature", "roadmap"] {
+            assert!(get_template(name).is_none());
         }
     }
 }

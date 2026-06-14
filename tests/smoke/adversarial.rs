@@ -11,10 +11,10 @@ use super::harness::{assert_stdout_contains, SmokeHarness};
 fn test_boundary_title_exact_512() {
     let h = SmokeHarness::new();
     let title = "a".repeat(512);
-    let result = h.run_ok(&["create", &title]);
+    let result = h.run_ok(&["issue", "create", &title]);
     assert!(result.stdout.contains("Created issue"));
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert!(show.stdout.contains(&title));
 }
 
@@ -22,9 +22,9 @@ fn test_boundary_title_exact_512() {
 fn test_boundary_title_over_513() {
     let h = SmokeHarness::new();
     let title = "a".repeat(513);
-    let result = h.run(&["create", &title]);
+    let result = h.run(&["issue", "create", &title]);
     if result.success {
-        let show = h.run_ok(&["show", "1"]);
+        let show = h.run_ok(&["issue", "show", "1"]);
         assert!(show.stdout.contains(&title[..50]));
     } else {
         assert!(
@@ -38,7 +38,7 @@ fn test_boundary_title_over_513() {
 #[test]
 fn test_boundary_title_null_bytes() {
     let h = SmokeHarness::new();
-    let output = Command::new(&h.chainlink_bin)
+    let output = Command::new(&h.atelier_bin)
         .current_dir(h.temp_dir.path())
         .args(["create", "test\x00null"])
         .output();
@@ -46,7 +46,7 @@ fn test_boundary_title_null_bytes() {
     match output {
         Ok(o) => {
             if o.status.success() {
-                let list = h.run_ok(&["list", "-s", "all"]);
+                let list = h.run_ok(&["issue", "list", "-s", "all"]);
                 assert!(list.success);
             }
         }
@@ -63,24 +63,24 @@ fn test_boundary_title_null_bytes() {
 #[test]
 fn test_boundary_label_exact_128() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Label boundary test"]);
+    h.run_ok(&["issue", "create", "Label boundary test"]);
 
     let label = "a".repeat(128);
-    h.run_ok(&["label", "1", &label]);
+    h.run_ok(&["issue", "label", "1", &label]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert!(show.stdout.contains(&label));
 }
 
 #[test]
 fn test_boundary_label_over_129() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Label boundary test"]);
+    h.run_ok(&["issue", "create", "Label boundary test"]);
 
     let label = "a".repeat(129);
-    let result = h.run(&["label", "1", &label]);
+    let result = h.run(&["issue", "label", "1", &label]);
     if result.success {
-        let show = h.run_ok(&["show", "1"]);
+        let show = h.run_ok(&["issue", "show", "1"]);
         assert!(show.stdout.contains(&label[..50]));
     } else {
         assert!(
@@ -98,7 +98,7 @@ fn test_boundary_label_over_129() {
 fn test_boundary_desc_exact_64k() {
     let h = SmokeHarness::new();
     let desc = "b".repeat(65_536);
-    let result = h.run_ok(&["create", "Desc boundary test", "-d", &desc]);
+    let result = h.run_ok(&["issue", "create", "Desc boundary test", "-d", &desc]);
     assert!(result.stdout.contains("Created issue"));
 }
 
@@ -107,9 +107,9 @@ fn test_boundary_desc_exact_64k() {
 fn test_boundary_desc_over_64k() {
     let h = SmokeHarness::new();
     let desc = "b".repeat(65_537);
-    let result = h.run(&["create", "Desc boundary test", "-d", &desc]);
+    let result = h.run(&["issue", "create", "Desc boundary test", "-d", &desc]);
     if result.success {
-        let show = h.run_ok(&["show", "1"]);
+        let show = h.run_ok(&["issue", "show", "1"]);
         assert!(show.stdout.contains("Desc boundary test"));
     } else {
         assert!(
@@ -123,23 +123,23 @@ fn test_boundary_desc_over_64k() {
 #[test]
 fn test_boundary_empty_title() {
     let h = SmokeHarness::new();
-    let _result = h.run(&["create", ""]);
-    let list = h.run_ok(&["list", "-s", "all"]);
+    let _result = h.run(&["issue", "create", ""]);
+    let list = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(list.success);
 }
 
 #[test]
 fn test_boundary_whitespace_title() {
     let h = SmokeHarness::new();
-    let _result = h.run(&["create", "   "]);
-    let list = h.run_ok(&["list", "-s", "all"]);
+    let _result = h.run(&["issue", "create", "   "]);
+    let list = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(list.success);
 }
 
 #[test]
 fn test_boundary_priority_invalid() {
     let h = SmokeHarness::new();
-    let result = h.run_err(&["create", "Priority test", "-p", "hgih"]);
+    let result = h.run_err(&["issue", "create", "Priority test", "-p", "hgih"]);
     assert!(
         result.stderr.contains("Invalid priority")
             || result.stderr.contains("invalid")
@@ -152,7 +152,7 @@ fn test_boundary_priority_invalid() {
 #[test]
 fn test_boundary_priority_case() {
     let h = SmokeHarness::new();
-    let result = h.run_err(&["create", "Priority case test", "-p", "High"]);
+    let result = h.run_err(&["issue", "create", "Priority case test", "-p", "High"]);
     assert!(
         result.stderr.contains("Invalid priority")
             || result.stderr.contains("invalid")
@@ -165,9 +165,9 @@ fn test_boundary_priority_case() {
 #[test]
 fn test_boundary_status_invalid() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Test issue"]);
+    h.run_ok(&["issue", "create", "Test issue"]);
 
-    let result = h.run(&["list", "-s", "bogus"]);
+    let result = h.run(&["issue", "list", "-s", "bogus"]);
     if result.success {
         assert!(
             !result.stdout.contains("Test issue"),
@@ -192,14 +192,14 @@ fn test_boundary_status_invalid() {
 fn test_inject_sql_title() {
     let h = SmokeHarness::new();
     let payload = "'; DROP TABLE issues; --";
-    h.run_ok(&["create", payload]);
+    h.run_ok(&["issue", "create", payload]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, payload);
 
-    h.run_ok(&["create", "Normal issue after injection"]);
+    h.run_ok(&["issue", "create", "Normal issue after injection"]);
 
-    let list = h.run_ok(&["list", "-s", "all"]);
+    let list = h.run_ok(&["issue", "list", "-s", "all"]);
     // Both issues should exist
     assert!(list.stdout.contains("Normal issue after injection"));
     assert!(list.stdout.contains(payload) || list.stdout.contains("DROP TABLE"));
@@ -208,12 +208,12 @@ fn test_inject_sql_title() {
 #[test]
 fn test_inject_sql_search() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Findable issue"]);
-    h.run_ok(&["create", "Another issue"]);
+    h.run_ok(&["issue", "create", "Findable issue"]);
+    h.run_ok(&["issue", "create", "Another issue"]);
 
-    let _result = h.run_ok(&["search", "% OR 1=1 --"]);
+    let _result = h.run_ok(&["issue", "search", "% OR 1=1 --"]);
     // DB should remain intact
-    let list = h.run_ok(&["list", "-s", "all"]);
+    let list = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(list.stdout.contains("Findable issue"));
     assert!(list.stdout.contains("Another issue"));
 }
@@ -221,28 +221,28 @@ fn test_inject_sql_search() {
 #[test]
 fn test_inject_sql_label() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Label injection test"]);
+    h.run_ok(&["issue", "create", "Label injection test"]);
 
     let payload = "'; DELETE FROM labels; --";
-    h.run_ok(&["label", "1", payload]);
+    h.run_ok(&["issue", "label", "1", payload]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, payload);
 
-    h.run_ok(&["label", "1", "safe-label"]);
-    let show2 = h.run_ok(&["show", "1"]);
+    h.run_ok(&["issue", "label", "1", "safe-label"]);
+    let show2 = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show2, "safe-label");
 }
 
 #[test]
 fn test_inject_sql_comment() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Comment injection test"]);
+    h.run_ok(&["issue", "create", "Comment injection test"]);
 
     let payload = "comment'); DELETE FROM comments; --";
-    h.run_ok(&["comment", "1", payload]);
+    h.run_ok(&["issue", "comment", "1", payload]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, payload);
 }
 
@@ -254,9 +254,9 @@ fn test_inject_sql_comment() {
 fn test_inject_shell_title() {
     let h = SmokeHarness::new();
     let payload = "Issue with $(whoami) and `id` and $HOME";
-    h.run_ok(&["create", payload]);
+    h.run_ok(&["issue", "create", payload]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, "$(whoami)");
     assert_stdout_contains(&show, "`id`");
     assert_stdout_contains(&show, "$HOME");
@@ -265,12 +265,12 @@ fn test_inject_shell_title() {
 #[test]
 fn test_inject_shell_comment() {
     let h = SmokeHarness::new();
-    h.run_ok(&["create", "Shell comment test"]);
+    h.run_ok(&["issue", "create", "Shell comment test"]);
 
     let payload = "Running $(rm -rf /) and `cat /etc/shadow` for $USER";
-    h.run_ok(&["comment", "1", payload]);
+    h.run_ok(&["issue", "comment", "1", payload]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, "$(rm -rf /)");
 }
 
@@ -283,9 +283,9 @@ fn test_unicode_emoji_title() {
     let h = SmokeHarness::new();
     let title =
         "Fix rendering of \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} emoji";
-    h.run_ok(&["create", title]);
+    h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(
         &show,
         "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}",
@@ -296,9 +296,9 @@ fn test_unicode_emoji_title() {
 fn test_unicode_rtl_title() {
     let h = SmokeHarness::new();
     let title = "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627} \u{0628}\u{0627}\u{0644}\u{0639}\u{0627}\u{0644}\u{0645}";
-    h.run_ok(&["create", title]);
+    h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, title);
 }
 
@@ -306,9 +306,9 @@ fn test_unicode_rtl_title() {
 fn test_unicode_mixed_scripts() {
     let h = SmokeHarness::new();
     let title = "Hello \u{041F}\u{0440}\u{0438}\u{0432}\u{0435}\u{0442} \u{4F60}\u{597D} \u{0928}\u{092E}\u{0938}\u{094D}\u{0924}\u{0947}";
-    h.run_ok(&["create", title]);
+    h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["show", "1"]);
+    let show = h.run_ok(&["issue", "show", "1"]);
     assert_stdout_contains(&show, title);
 }
 
@@ -325,7 +325,17 @@ fn test_corrupt_db_permissions() {
     let perms = std::fs::Permissions::from_mode(0o444);
     std::fs::set_permissions(h.db_path(), perms).unwrap();
 
-    let result = h.run(&["create", "Should fail"]);
+    if std::fs::OpenOptions::new()
+        .write(true)
+        .open(h.db_path())
+        .is_ok()
+    {
+        let perms = std::fs::Permissions::from_mode(0o644);
+        std::fs::set_permissions(h.db_path(), perms).unwrap();
+        return;
+    }
+
+    let result = h.run(&["issue", "create", "Should fail"]);
     assert!(
         !result.success,
         "Expected failure when DB is read-only, but command succeeded.\nstdout: {}\nstderr: {}",
@@ -341,11 +351,11 @@ fn test_corrupt_missing_db() {
     let h = SmokeHarness::new();
     std::fs::remove_file(h.db_path()).unwrap();
 
-    let result = h.run(&["list"]);
+    let result = h.run(&["issue", "list"]);
     // Whether it succeeds (recreates DB) or fails (reports missing DB),
     // it should not panic.
     if result.success {
-        let list = h.run_ok(&["list", "-s", "all"]);
+        let list = h.run_ok(&["issue", "list", "-s", "all"]);
         assert!(list.success);
     }
 }
@@ -357,7 +367,7 @@ fn test_corrupt_missing_db() {
 #[test]
 fn test_concurrent_creates_5() {
     let h = SmokeHarness::new();
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..5)
@@ -367,9 +377,9 @@ fn test_concurrent_creates_5() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["create", &format!("Concurrent issue {}", i)])
+                    .args(["issue", "create", &format!("Concurrent issue {}", i)])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })
@@ -387,6 +397,6 @@ fn test_concurrent_creates_5() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    let result = h.run_ok(&["list", "-s", "all"]);
+    let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }

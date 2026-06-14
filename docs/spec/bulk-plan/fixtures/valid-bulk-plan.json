@@ -1,0 +1,142 @@
+{
+  "apply": {
+    "atomic": true,
+    "dry_run": true,
+    "export": "check_only",
+    "on_conflict": "fail",
+    "validate_only": false
+  },
+  "description": "Compact fixture for a bulk authored plan with hierarchy, dependencies, typed links, and first-class record references.",
+  "links": [
+    {
+      "metadata": {
+        "reason": "The durable plan coordinates the implementation issue."
+      },
+      "source": {
+        "client_ref": "issue.define-schema"
+      },
+      "target": {
+        "client_ref": "plan.bulk-contract"
+      },
+      "type": "planned_by"
+    },
+    {
+      "metadata": {},
+      "source": {
+        "client_ref": "issue.validate-fixtures"
+      },
+      "target": {
+        "client_ref": "milestone.bulk-ready"
+      },
+      "type": "contributes_to"
+    }
+  ],
+  "metadata": {
+    "authored_by": "agent-factory.docs",
+    "parent_scope": "#59"
+  },
+  "records": {
+    "evidence": [],
+    "issues": [
+      {
+        "acceptance": [
+          "Schema contract is documented.",
+          "Fixtures cover valid input, invalid input, and dry-run preview output."
+        ],
+        "blocks": [
+          {
+            "id": "atelier-z1p8"
+          }
+        ],
+        "client_ref": "issue.define-schema",
+        "depends_on": [],
+        "description": "Define the JSON shape for authored bulk plans.",
+        "evidence_required": [
+          "Diff whitespace checks pass."
+        ],
+        "issue_type": "task",
+        "labels": [
+          "bulk",
+          "json",
+          "plan"
+        ],
+        "notes": [
+          {
+            "author": "agent-factory.docs",
+            "body": "Dry run must produce a deterministic preview before apply mutates state.",
+            "created_at": null
+          }
+        ],
+        "parent": {
+          "id": "atelier-k7mq"
+        },
+        "priority": "medium",
+        "title": "Define bulk plan JSON schema"
+      },
+      {
+        "acceptance": [
+          "Validation errors include JSON paths and client refs."
+        ],
+        "client_ref": "issue.validate-fixtures",
+        "depends_on": [
+          {
+            "client_ref": "issue.define-schema"
+          }
+        ],
+        "description": "Prove diagnostics and preview shape with compact JSON examples.",
+        "issue_type": "validation",
+        "labels": [
+          "bulk",
+          "fixtures"
+        ],
+        "notes": [],
+        "parent": {
+          "client_ref": "issue.define-schema"
+        },
+        "priority": "low",
+        "title": "Validate bulk plan fixtures"
+      }
+    ],
+    "milestones": [
+      {
+        "client_ref": "milestone.bulk-ready",
+        "contributing_work": [
+          {
+            "client_ref": "issue.define-schema"
+          },
+          {
+            "client_ref": "issue.validate-fixtures"
+          }
+        ],
+        "desired_state": "Bulk plan apply has a documented JSON contract.",
+        "missions": [],
+        "scope": [
+          "Covers authored plan input and dry-run output.",
+          "Excludes Rust implementation."
+        ],
+        "title": "Bulk plan contract ready",
+        "validation_criteria": [
+          "Schema docs and fixtures exist."
+        ]
+      }
+    ],
+    "missions": [],
+    "plans": [
+      {
+        "applies_to": [
+          {
+            "id": "atelier-k7mq"
+          }
+        ],
+        "body": "Document a versioned bulk plan format before implementation slices depend on it.",
+        "client_ref": "plan.bulk-contract",
+        "owner": "agent-factory.docs",
+        "supersedes": [],
+        "title": "Bulk plan contract"
+      }
+    ]
+  },
+  "schema": "atelier.bulk-plan",
+  "schema_version": 1,
+  "title": "Bulk plan contract fixture"
+}

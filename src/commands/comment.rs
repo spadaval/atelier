@@ -6,7 +6,6 @@ use crate::utils::format_issue_id;
 const KNOWN_COMMENT_KINDS: &[&str] = &[
     "note",
     "plan",
-    "decision",
     "observation",
     "blocker",
     "resolution",
@@ -19,8 +18,10 @@ pub fn validate_comment_kind(kind: &str) -> bool {
     KNOWN_COMMENT_KINDS.contains(&kind)
 }
 
-pub fn run(db: &Database, issue_id: i64, content: &str, kind: &str) -> Result<()> {
+#[cfg(test)]
+pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
     db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
     if !validate_comment_kind(kind) {
         tracing::warn!(
             "unknown comment kind '{}'. Known kinds: {}",
@@ -29,14 +30,54 @@ pub fn run(db: &Database, issue_id: i64, content: &str, kind: &str) -> Result<()
         );
     }
     db.add_comment(issue_id, content, kind)?;
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
     println!("Added comment to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
+pub fn run_canonical(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
+    db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
+    if !validate_comment_kind(kind) {
+        tracing::warn!(
+            "unknown comment kind '{}'. Known kinds: {}",
+            kind,
+            KNOWN_COMMENT_KINDS.join(", ")
+        );
+    }
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
+    println!("Added comment to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
+pub fn run_issue_note(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<()> {
+    db.require_issue(issue_id)?;
+    reject_invalid_comment_kind(kind)?;
+    crate::commands::activity_log::record_comment(issue_id, kind, content)?;
+    println!("Added note to issue {}", format_issue_id(issue_id));
+    Ok(())
+}
+
+pub fn run_mission_note(db: &Database, mission_id: &str, content: &str, kind: &str) -> Result<()> {
+    let mission = db.require_record("mission", mission_id)?;
+    reject_invalid_comment_kind(kind)?;
+    crate::commands::activity_log::record_mission_comment(&mission.id, kind, content)?;
+    println!("Added note to mission {}", mission.id);
+    Ok(())
+}
+
+fn reject_invalid_comment_kind(kind: &str) -> Result<()> {
+    if kind == "decision" {
+        anyhow::bail!(
+            "Invalid comment kind 'decision'. Valid kinds: note, plan, observation, blocker, resolution, result, handoff, human"
+        );
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
@@ -53,7 +94,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, "This is a comment", "note");
+        let result = run(&db, &issue_id, "This is a comment", "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -66,7 +107,7 @@ mod tests {
     fn test_add_comment_to_nonexistent_issue() {
         let (db, _dir) = setup_test_db();
 
-        let result = run(&db, 99999, "Comment on nothing", "note");
+        let result = run(&db, "atelier-missing", "Comment on nothing", "note");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -76,9 +117,9 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        run(&db, issue_id, "First comment", "note").unwrap();
-        run(&db, issue_id, "Second comment", "note").unwrap();
-        run(&db, issue_id, "Third comment", "note").unwrap();
+        run(&db, &issue_id, "First comment", "note").unwrap();
+        run(&db, &issue_id, "Second comment", "note").unwrap();
+        run(&db, &issue_id, "Third comment", "note").unwrap();
 
         let comments = db.get_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 3);
@@ -92,7 +133,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        let result = run(&db, issue_id, "", "note");
+        let result = run(&db, &issue_id, "", "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -106,7 +147,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let unicode_content = "こんにちは 🎉 مرحبا αβγδ ← → ↑ ↓";
-        let result = run(&db, issue_id, unicode_content, "note");
+        let result = run(&db, &issue_id, unicode_content, "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -119,7 +160,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let long_content = "a".repeat(100000);
-        let result = run(&db, issue_id, &long_content, "note");
+        let result = run(&db, &issue_id, &long_content, "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -132,7 +173,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let multiline = "Line 1\nLine 2\nLine 3\n\nLine 5";
-        let result = run(&db, issue_id, multiline, "note");
+        let result = run(&db, &issue_id, multiline, "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -145,7 +186,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let special = "Quotes: \"test\" 'test' `test` | Symbols: @#$%^&*() | SQL: '; DROP TABLE;--";
-        let result = run(&db, issue_id, special, "note");
+        let result = run(&db, &issue_id, special, "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -158,7 +199,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let malicious = "'); DELETE FROM comments; --";
-        run(&db, issue_id, malicious, "note").unwrap();
+        run(&db, &issue_id, malicious, "note").unwrap();
 
         // Verify comment was stored literally, not executed
         let comments = db.get_comments(issue_id).unwrap();
@@ -174,10 +215,10 @@ mod tests {
     fn test_comment_on_closed_issue() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-        db.close_issue(issue_id).unwrap();
+        db.close_issue(&issue_id).unwrap();
 
         // Should still be able to comment on closed issues
-        let result = run(&db, issue_id, "Comment on closed issue", "note");
+        let result = run(&db, &issue_id, "Comment on closed issue", "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -190,7 +231,7 @@ mod tests {
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
         let with_null = "before\0after";
-        let result = run(&db, issue_id, with_null, "note");
+        let result = run(&db, &issue_id, with_null, "note");
         assert!(result.is_ok());
 
         let comments = db.get_comments(issue_id).unwrap();
@@ -202,17 +243,27 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
 
-        run(&db, issue_id, "A decision was made", "decision").unwrap();
+        run(&db, &issue_id, "A plan was made", "plan").unwrap();
 
         let comments = db.get_comments(issue_id).unwrap();
-        assert_eq!(comments[0].kind, "decision");
+        assert_eq!(comments[0].kind, "plan");
+    }
+
+    #[test]
+    fn test_invalid_comment_kind_is_rejected() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
+
+        let error = run(&db, &issue_id, "Do not store this", "decision").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Invalid comment kind 'decision'"));
     }
 
     #[test]
     fn test_validate_known_kinds() {
         assert!(validate_comment_kind("note"));
         assert!(validate_comment_kind("plan"));
-        assert!(validate_comment_kind("decision"));
         assert!(validate_comment_kind("observation"));
         assert!(validate_comment_kind("blocker"));
         assert!(validate_comment_kind("resolution"));
@@ -229,61 +280,19 @@ mod tests {
         assert!(!validate_comment_kind("Plan"));
     }
 
-    // ==================== Property-Based Tests ====================
+    #[test]
+    fn test_comment_roundtrip_order_and_missing_issue() {
+        let (db, _dir) = setup_test_db();
+        let issue_id = db.create_issue("Test", None, "medium").unwrap();
 
-    proptest! {
-        #[test]
-        fn prop_comment_roundtrip(content in ".*") {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
+        run(&db, &issue_id, "Comment 0", "note").unwrap();
+        run(&db, &issue_id, "Comment 1", "note").unwrap();
 
-            let result = run(&db, issue_id, &content, "note");
-            prop_assert!(result.is_ok());
+        let comments = db.get_comments(issue_id).unwrap();
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].content, "Comment 0");
+        assert_eq!(comments[1].content, "Comment 1");
 
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(comments.len(), 1);
-            prop_assert_eq!(&comments[0].content, &content);
-        }
-
-        #[test]
-        fn prop_nonexistent_issue_fails(issue_id in 1000i64..10000) {
-            let (db, _dir) = setup_test_db();
-            // Don't create any issues
-            let result = run(&db, issue_id, "Comment", "note");
-            prop_assert!(result.is_err());
-        }
-
-        #[test]
-        fn prop_multiple_comments_preserve_order(count in 1usize..10) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            for i in 0..count {
-                run(&db, issue_id, &format!("Comment {}", i), "note").unwrap();
-            }
-
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(comments.len(), count);
-
-            for (i, comment) in comments.iter().enumerate() {
-                prop_assert_eq!(&comment.content, &format!("Comment {}", i));
-            }
-        }
-
-        #[test]
-        fn prop_unicode_comments_roundtrip(
-            prefix in "[a-zA-Z]{0,10}",
-            emoji in "[\u{1F300}-\u{1F9FF}]{0,5}",
-            suffix in "[a-zA-Z]{0,10}"
-        ) {
-            let (db, _dir) = setup_test_db();
-            let issue_id = db.create_issue("Test", None, "medium").unwrap();
-
-            let content = format!("{}{}{}", prefix, emoji, suffix);
-            run(&db, issue_id, &content, "note").unwrap();
-
-            let comments = db.get_comments(issue_id).unwrap();
-            prop_assert_eq!(&comments[0].content, &content);
-        }
+        assert!(run(&db, "atelier-missing-1000", "Comment", "note").is_err());
     }
 }

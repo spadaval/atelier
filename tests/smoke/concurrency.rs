@@ -7,7 +7,7 @@ use super::harness::SmokeHarness;
 #[test]
 fn test_concurrent_creates_10() {
     let h = SmokeHarness::new();
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..10)
@@ -17,9 +17,9 @@ fn test_concurrent_creates_10() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["create", &format!("Concurrent issue {}", i)])
+                    .args(["issue", "create", &format!("Concurrent issue {}", i)])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })
@@ -38,8 +38,9 @@ fn test_concurrent_creates_10() {
         "At least one concurrent create should succeed, got 0",
     );
 
-    // DB should be consistent — listing should work
-    let result = h.run_ok(&["list", "-s", "all"]);
+    // Concurrent writers can leave the projection index stale; ordinary reads
+    // should validate canonical state, rebuild automatically, and continue.
+    let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
 }
 
@@ -50,10 +51,10 @@ fn test_concurrent_reads() {
 
     // Create some issues first
     for i in 0..5 {
-        h.run_ok(&["create", &format!("Issue {}", i)]);
+        h.run_ok(&["issue", "create", &format!("Issue {}", i)]);
     }
 
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let handles: Vec<_> = (0..10)
@@ -63,9 +64,9 @@ fn test_concurrent_reads() {
             thread::spawn(move || {
                 let output = Command::new(&bin)
                     .current_dir(&dir)
-                    .args(["list", "-s", "all"])
+                    .args(["issue", "list", "-s", "all"])
                     .output()
-                    .expect("failed to execute chainlink");
+                    .expect("failed to execute atelier");
                 output.status.success()
             })
         })
@@ -86,10 +87,10 @@ fn test_concurrent_mixed_operations() {
 
     // Seed with some issues
     for i in 0..3 {
-        h.run_ok(&["create", &format!("Seed issue {}", i)]);
+        h.run_ok(&["issue", "create", &format!("Seed issue {}", i)]);
     }
 
-    let bin = h.chainlink_bin.clone();
+    let bin = h.atelier_bin.clone();
     let dir = h.temp_dir.path().to_path_buf();
 
     let mut handles = Vec::new();
@@ -101,9 +102,9 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["create", &format!("Concurrent write {}", i)])
+                .args(["issue", "create", &format!("Concurrent write {}", i)])
                 .output()
-                .expect("failed to execute chainlink");
+                .expect("failed to execute atelier");
             output.status.success()
         }));
     }
@@ -115,9 +116,9 @@ fn test_concurrent_mixed_operations() {
         handles.push(thread::spawn(move || {
             let output = Command::new(&bin)
                 .current_dir(&dir)
-                .args(["list", "-s", "all"])
+                .args(["issue", "list", "-s", "all"])
                 .output()
-                .expect("failed to execute chainlink");
+                .expect("failed to execute atelier");
             output.status.success()
         }));
     }
@@ -143,7 +144,53 @@ fn test_concurrent_mixed_operations() {
         "At least one concurrent read should succeed"
     );
 
-    // DB should still be consistent after all operations
-    let result = h.run_ok(&["list", "-s", "all"]);
+    // Concurrent writers can leave the projection index stale; ordinary reads
+    // should validate canonical state, rebuild automatically, and continue.
+    let result = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(result.success);
+}
+
+#[test]
+fn test_concurrent_rebuilds_and_reads_are_serialized() {
+    let h = SmokeHarness::new();
+    h.run_ok(&["issue", "create", "Serialized rebuild source"]);
+    let issue_id = h.issue_id(1);
+    h.run_ok(&["export"]);
+    h.edit_canonical_issue(&issue_id, |markdown| {
+        markdown.replace("Serialized rebuild source", "Serialized rebuild changed")
+    });
+
+    let bin = h.atelier_bin.clone();
+    let dir = h.temp_dir.path().to_path_buf();
+    let mut handles = Vec::new();
+    for index in 0..16 {
+        let bin = bin.clone();
+        let dir = dir.clone();
+        let args: Vec<&'static str> = if index % 2 == 0 {
+            vec!["rebuild"]
+        } else {
+            vec!["issue", "list", "--status", "all"]
+        };
+        handles.push(thread::spawn(move || {
+            Command::new(&bin)
+                .current_dir(&dir)
+                .args(args)
+                .output()
+                .expect("failed to execute atelier")
+        }));
+    }
+
+    for handle in handles {
+        let output = handle.join().expect("thread panicked");
+        assert!(
+            output.status.success(),
+            "concurrent rebuild/read failed\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let result = h.run_ok(&["issue", "list", "--status", "all"]);
+    assert!(result.stdout.contains("Serialized rebuild changed"));
+    h.run_ok(&["export", "--check"]);
 }

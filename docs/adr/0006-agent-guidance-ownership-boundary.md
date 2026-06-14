@@ -1,0 +1,86 @@
+# ADR 0006: Agent Guidance Ownership Boundary
+
+## Status
+
+Accepted.
+
+## Context
+
+Atelier currently uses Agent Factory as the primary agent entry point, with
+more tactical repository guidance repeated or routed through surfaces such as
+`atelier prime`, `atelier status`, mission status, workflow policy, and product
+docs.
+
+That split has become awkward. Agent Factory is useful because it carries
+portable orchestration discipline: role separation, one-subskill delegation,
+model-routing judgment, independent review and validation posture, and
+coordinated mission execution. Atelier is useful because it is executable and
+repo-owned: it can inspect the current checkout, active mission, active work,
+ready queue, tracker freshness, workflow policy, and local runtime health
+before deciding what guidance to show.
+
+The repository needs one clear authority for tactical operator guidance.
+Duplicating command cookbooks and workflow policy across Agent Factory prompts,
+`AGENTFACTORY.md`, static docs, and executable CLI output creates drift. It also
+makes repo-owned process changes harder to validate because some important
+instructions live outside the repository.
+
+## Decision
+
+Atelier is the primary repo-owned operational entry point for this repository.
+Agent Factory remains the portable orchestration discipline.
+
+1. Atelier owns repository-specific executable guidance.
+   Repo-specific command selection, workflow recovery, tracker state
+   explanation, mission and issue drill-down, evidence routing, health checks,
+   readiness cues, and closeout diagnostics belong in Atelier-owned surfaces:
+   `atelier prime`, `atelier status`, mission and issue commands, workflow
+   policy, product docs, validation docs, and command help.
+
+2. Agent Factory owns portable coordination behavior.
+   Agent Factory keeps guidance for role assignment, one-subskill delegation,
+   subskill selection, model-routing rationale, when to delegate, independent
+   review or validation posture, dissent preservation, and orchestration
+   discipline that should travel across repositories.
+
+3. `AGENTFACTORY.md` is a thin repository binding.
+   The binding identifies authoritative repository sources, tracker identity,
+   durable versus runtime tracker state, preferred binary rules, and the small
+   set of repository-specific constraints needed before invoking Atelier-owned
+   guidance. It should route recurring tactical behavior to Atelier rather than
+   restating a full command or policy contract.
+
+4. Tactical guidance should be executable before it is copied into prompts.
+   When a repo-specific instruction can depend on current tracker state,
+   workflow policy, active mission, active work, or repository health, prefer an
+   Atelier command surface over static Agent Factory text.
+
+5. Role-scoped guidance may be added to Atelier when it helps operators.
+   Additional surfaces such as `atelier prime --role orchestrator`,
+   `atelier prime --role worker`, `atelier prime --role validator`, or an
+   equivalent guide namespace are acceptable if they remain repo-owned,
+   dynamic, and consistent with product command-surface contracts.
+
+## Consequences
+
+- Agent onboarding starts from executable repository state instead of private
+  process lore.
+- Repo-owned process changes can be validated through CLI output, product docs,
+  workflow policy, and tracker evidence.
+- Agent Factory can stay smaller and more portable because it no longer needs
+  to carry this repository's tactical command cookbook.
+- `AGENTFACTORY.md` should shrink over time as Atelier surfaces take over
+  recurring tracker and workflow instructions.
+- Adding new context tools to Atelier is useful only when paired with removing
+  duplicated tactical guidance from Agent Factory or the binding.
+
+## Tradeoffs
+
+- Moving more guidance into Atelier increases responsibility for CLI help,
+  product docs, and command-surface tests.
+- Keeping Agent Factory means there are still two layers, but their ownership
+  is distinct: Agent Factory coordinates agents, while Atelier explains this
+  repository's live operating state.
+- Role-scoped CLI guidance can make Atelier more valuable, but it must stay
+  concise. `atelier prime` should remain an onboarding and recovery signpost,
+  not a full tutorial or hidden process manual.

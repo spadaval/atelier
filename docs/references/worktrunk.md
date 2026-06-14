@@ -34,12 +34,13 @@ These notes are based on the public repository and local clone above as read on
 ## Do Not Copy Blindly
 
 - Do not turn Atelier into a generic worktree manager. Worktree helpers should
-  serve tracked work, exported state freshness, and workflow gates.
+  serve tracked work, durable-state freshness, and workflow validators.
 - Do not launch or supervise direct agent processes as part of the current
   milestone. Worktrunk's `-x` execution pattern is useful inspiration for hooks,
   but direct agent-run management is deferred.
 - Do not make generated commit messages part of the first design. Evidence,
-  export freshness, and validation gates are higher-value primitives for
+  durable-state freshness checks and workflow validators are higher-value
+  primitives for
   Atelier.
 - Do not hide Git. Operators and agents should still be able to understand the
   branch, worktree path, merge base, and cleanup action.

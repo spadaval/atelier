@@ -42,7 +42,7 @@ read on 2026-06-08.
   fixed types are `bug`, `feature`, `task`, `epic`, and `chore`; Atelier needs
   configurable types and first-class non-issue records.
 - Do not make `.beads/` the target state directory. Atelier's storage contract
-  is `.atelier/` for runtime state and `.atelier-state/` for deterministic
+  is `.atelier/` for runtime state and `.atelier/` for deterministic
   exported state.
 - Do not depend on a drop-in Beads compatibility layer as the product
   architecture. Compatibility can help migration, but Atelier's domain model is
@@ -53,15 +53,16 @@ read on 2026-06-08.
 ## Follow-Up Decisions
 
 - `atelier-xrzs`: use Minibeads' front matter plus Markdown body pattern as an
-  input to the `.atelier-state` record format decision.
+  input to the `.atelier` record format artifact.
 - `atelier-ywow` and `atelier-fq9y`: ensure deterministic export/rebuild keeps
   the human-readable benefits of Minibeads without making Markdown the runtime
   source.
 - `atelier-8tf0`: decide how Minibeads' dependency type vocabulary maps to
   Atelier typed links.
 - `atelier-v72a`: decide which issue fields become shared record fields across
-  missions, milestones, plans, evidence, gates, and runs.
+  missions, milestone checkpoint records, plans, evidence, workflow validators,
+  and runs.
 - `atelier-ttp5`: compare Minibeads' coarse-grained file lock approach with
   inherited Chainlink lock/sync behavior before choosing Atelier coordination
   semantics.
-- Future ADR: canonical record format for `.atelier-state` Markdown files.
+- Future ADR: canonical record format for `.atelier` Markdown files.

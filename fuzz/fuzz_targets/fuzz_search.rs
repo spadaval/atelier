@@ -3,14 +3,14 @@
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use chainlink::db::Database;
+use atelier::db::Database;
 
 fuzz_target!(|query: String| {
     let dir = match tempdir() {
         Ok(d) => d,
         Err(_) => return,
     };
-    let db_path = dir.path().join("issues.db");
+    let db_path = dir.path().join("state.db");
 
     let db = match Database::open(&db_path) {
         Ok(d) => d,
