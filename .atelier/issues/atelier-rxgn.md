@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Validate Markdown record round trips after records extraction"
-updated_at: "2026-06-15T05:13:38.313691561+00:00"
+updated_at: "2026-06-15T07:57:39.991693458+00:00"
 ---
 
 ## Description

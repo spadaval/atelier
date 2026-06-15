@@ -4,7 +4,9 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier::db::Database;
+mod support;
+
+use atelier_sqlite::ProjectionIndex;
 
 #[derive(Arbitrary, Debug, Clone)]
 enum DependencyOp {
@@ -27,21 +29,20 @@ fuzz_target!(|input: DependencyGraphInput| {
         Ok(d) => d,
         Err(_) => return,
     };
-    let db_path = dir.path().join("state.db");
-
-    let db = match Database::open(&db_path) {
-        Ok(d) => d,
+    let conn = match support::open_projection(&dir.path().join("state.db")) {
+        Ok(conn) => conn,
         Err(_) => return,
     };
+    let projection = ProjectionIndex::new(&conn);
 
-    // Track created issue IDs
-    let mut issue_ids: Vec<i64> = Vec::new();
+    let mut issue_ids: Vec<String> = Vec::new();
 
     for op in input.ops.iter().take(100) {
-        // Limit operations to prevent timeout
         match op {
             DependencyOp::CreateIssue { title } => {
-                if let Ok(id) = db.create_issue(title, None, "medium") {
+                let id = format!("atelier-f{:04}", issue_ids.len());
+                let title = support::bounded_text(title, 160, "Dependency fuzz issue");
+                if support::insert_issue(&conn, &id, &title, "todo").is_ok() {
                     issue_ids.push(id);
                 }
             }
@@ -50,10 +51,9 @@ fuzz_target!(|input: DependencyGraphInput| {
                 blocker_idx,
             } => {
                 if issue_ids.len() >= 2 {
-                    let blocked = issue_ids[*blocked_idx % issue_ids.len()];
-                    let blocker = issue_ids[*blocker_idx % issue_ids.len()];
-                    // This should never panic, even with cycles or self-blocks
-                    let _ = db.add_dependency(blocked, blocker);
+                    let blocked = &issue_ids[*blocked_idx % issue_ids.len()];
+                    let blocker = &issue_ids[*blocker_idx % issue_ids.len()];
+                    let _ = support::add_dependency(&conn, blocked, blocker);
                 }
             }
             DependencyOp::RemoveDependency {
@@ -61,36 +61,42 @@ fuzz_target!(|input: DependencyGraphInput| {
                 blocker_idx,
             } => {
                 if issue_ids.len() >= 2 {
-                    let blocked = issue_ids[*blocked_idx % issue_ids.len()];
-                    let blocker = issue_ids[*blocker_idx % issue_ids.len()];
-                    let _ = db.remove_dependency(blocked, blocker);
+                    let blocked = &issue_ids[*blocked_idx % issue_ids.len()];
+                    let blocker = &issue_ids[*blocker_idx % issue_ids.len()];
+                    let _ = conn.execute(
+                        "DELETE FROM dependencies WHERE blocked_id = ?1 AND blocker_id = ?2",
+                        rusqlite::params![blocked, blocker],
+                    );
                 }
             }
             DependencyOp::CloseIssue { idx } => {
                 if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.close_issue(id);
+                    let id = &issue_ids[*idx % issue_ids.len()];
+                    let _ = conn.execute(
+                        "UPDATE issues SET status = 'done' WHERE id = ?1",
+                        rusqlite::params![id],
+                    );
                 }
             }
             DependencyOp::ReopenIssue { idx } => {
                 if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.reopen_issue(id);
+                    let id = &issue_ids[*idx % issue_ids.len()];
+                    let _ = conn.execute(
+                        "UPDATE issues SET status = 'todo' WHERE id = ?1",
+                        rusqlite::params![id],
+                    );
                 }
             }
             DependencyOp::CheckReady => {
-                // Should never panic or hang
-                let _ = db.list_ready_issues();
+                let _ = projection.ready_issues();
             }
             DependencyOp::CheckBlocked => {
-                // Should never panic or hang
-                let _ = db.list_blocked_issues();
+                let _ = projection.blocked_issues();
             }
         }
     }
 
-    // Final verification - these should never panic
-    let _ = db.list_ready_issues();
-    let _ = db.list_blocked_issues();
-    let _ = db.list_issues(None, None, None);
+    let _ = projection.ready_issues();
+    let _ = projection.blocked_issues();
+    let _ = projection.list_issues(None, None, None);
 });

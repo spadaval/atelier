@@ -883,6 +883,165 @@ fn init_tracing(log_level: &str, log_format: &str) {
 // ============================================================================
 
 fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
+    let job = issue_job_from_cli(action, quiet);
+    match job {
+        atelier_app::issue::IssueJob::Create(request) => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
+                &request.priority,
+                request.description.as_deref(),
+                request.template.as_deref(),
+                &request.labels,
+                request.issue_type.as_deref(),
+            )?;
+            commands::agent_factory::create_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::agent_factory::LifecycleCreateInput {
+                    title: &request.title,
+                    description: final_description.as_deref(),
+                    priority: &final_priority,
+                    issue_type: &issue_type,
+                    labels: &labels,
+                    parent: request.parent.as_deref(),
+                    quiet: request.quiet,
+                },
+            )
+        }
+
+        atelier_app::issue::IssueJob::List(request) => {
+            let db = degraded_projection_query_db()?;
+            if request.blocked {
+                if request.ready {
+                    bail!("--blocked cannot be combined with --ready");
+                }
+                if request.status != "todo"
+                    || request.category.is_some()
+                    || request.label.is_some()
+                    || request.priority.is_some()
+                {
+                    bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
+                }
+                commands::deps::list_blocked(&db)
+            } else {
+                commands::agent_factory::list(
+                    &db,
+                    Some(&request.status),
+                    request.category.as_deref(),
+                    request.label.as_deref(),
+                    request.priority.as_deref(),
+                    request.ready,
+                    request.quiet,
+                )
+            }
+        }
+
+        atelier_app::issue::IssueJob::Show(request) => {
+            let db = degraded_projection_query_db()?;
+            commands::agent_factory::show(&db, &request.id)
+        }
+
+        atelier_app::issue::IssueJob::Transition(request) => {
+            if request.options {
+                if request.transition.is_some() {
+                    bail!("--options cannot be combined with a transition name");
+                }
+                let db = degraded_projection_query_db()?;
+                commands::agent_factory::transition_options(&db, &request.id)
+            } else {
+                let transition = request.transition.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Specify a transition name or rerun with `atelier issue transition {} --options`",
+                        request.id
+                    )
+                })?;
+                let (state_dir, db_path) = state_and_db_paths()?;
+                let db = canonical_mutation_db()?;
+                commands::workflow::transition_issue(
+                    &db,
+                    &state_dir,
+                    &db_path,
+                    &request.id,
+                    &transition,
+                    request.close_reason.as_deref(),
+                )
+            }
+        }
+
+        atelier_app::issue::IssueJob::Update(request) => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::agent_factory::update_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::agent_factory::UpdateInput {
+                    issue_ref: &request.id,
+                    title: request.title.as_deref(),
+                    priority: request.priority.as_deref(),
+                    issue_type: request.issue_type.as_deref(),
+                    labels: &request.labels,
+                    remove_labels: &request.remove_labels,
+                    parent: if request.no_parent {
+                        Some(None)
+                    } else {
+                        request.parent.as_deref().map(Some)
+                    },
+                    append_notes: None,
+                },
+            )
+        }
+
+        atelier_app::issue::IssueJob::Note(request) => {
+            let db = canonical_mutation_db()?;
+            let id = resolve_issue_arg(&db, &request.id)?;
+            commands::comment::run_issue_note(&db, &id, &request.text, &request.kind)
+        }
+
+        atelier_app::issue::IssueJob::Close(request) => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::agent_factory::close_lifecycle(
+                &state_dir,
+                &db_path,
+                &request.id,
+                &request.reason,
+                request.to.as_deref(),
+            )
+        }
+
+        atelier_app::issue::IssueJob::Block(request) => {
+            let db = canonical_mutation_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
+            commands::agent_factory::dep_add_canonical(&db, &store, &request.id, &request.blocker)?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+        }
+
+        atelier_app::issue::IssueJob::Unblock(request) => {
+            let db = canonical_mutation_db()?;
+            let (state_dir, db_path) = state_and_db_paths()?;
+            let store = RecordStore::new(&state_dir);
+            commands::agent_factory::dep_remove_canonical(
+                &db,
+                &store,
+                &request.id,
+                &request.blocker,
+            )?;
+            drop(db);
+            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+        }
+
+        atelier_app::issue::IssueJob::Blocked(request) => {
+            let db = projection_query_db()?;
+            if let Some(id) = request.id {
+                commands::agent_factory::dep_list(&db, Some(&id))
+            } else {
+                commands::deps::list_blocked(&db)
+            }
+        }
+    }
+}
+
+fn issue_job_from_cli(action: IssueCommands, quiet: bool) -> atelier_app::issue::IssueJob {
     match action {
         IssueCommands::Create {
             title,
@@ -892,30 +1051,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             issue_type,
             parent,
-        } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let (final_priority, final_description, labels, issue_type) = issue_create_parts(
-                &priority,
-                description.as_deref(),
-                template.as_deref(),
-                &label,
-                issue_type.as_deref(),
-            )?;
-            commands::agent_factory::create_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::agent_factory::LifecycleCreateInput {
-                    title: &title,
-                    description: final_description.as_deref(),
-                    priority: &final_priority,
-                    issue_type: &issue_type,
-                    labels: &labels,
-                    parent: parent.as_deref(),
-                    quiet,
-                },
-            )
-        }
-
+        } => atelier_app::issue::IssueJob::Create(atelier_app::issue::CreateIssueRequest {
+            title,
+            description,
+            priority,
+            template,
+            labels: label,
+            issue_type,
+            parent,
+            quiet,
+        }),
         IssueCommands::List {
             status,
             category,
@@ -923,66 +1068,29 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             priority,
             ready,
             blocked,
-        } => {
-            let db = degraded_projection_query_db()?;
-            if blocked {
-                if ready {
-                    bail!("--blocked cannot be combined with --ready");
-                }
-                if status != "todo" || category.is_some() || label.is_some() || priority.is_some() {
-                    bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
-                }
-                commands::deps::list_blocked(&db)
-            } else {
-                commands::agent_factory::list(
-                    &db,
-                    Some(&status),
-                    category.as_deref(),
-                    label.as_deref(),
-                    priority.as_deref(),
-                    ready,
-                    quiet,
-                )
-            }
-        }
-
+        } => atelier_app::issue::IssueJob::List(atelier_app::issue::ListIssuesRequest {
+            status,
+            category,
+            label,
+            priority,
+            ready,
+            blocked,
+            quiet,
+        }),
         IssueCommands::Show { id } => {
-            let db = degraded_projection_query_db()?;
-            commands::agent_factory::show(&db, &id)
+            atelier_app::issue::IssueJob::Show(atelier_app::issue::ShowIssueRequest { id })
         }
-
         IssueCommands::Transition {
             id,
             transition,
             options,
             close_reason,
-        } => {
-            if options {
-                if transition.is_some() {
-                    bail!("--options cannot be combined with a transition name");
-                }
-                let db = degraded_projection_query_db()?;
-                commands::agent_factory::transition_options(&db, &id)
-            } else {
-                let transition = transition.ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Specify a transition name or rerun with `atelier issue transition {} --options`",
-                        id
-                    )
-                })?;
-                let (state_dir, db_path) = state_and_db_paths()?;
-                let db = canonical_mutation_db()?;
-                commands::workflow::transition_issue(
-                    &db,
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    &transition,
-                    close_reason.as_deref(),
-                )
-            }
-        }
-
+        } => atelier_app::issue::IssueJob::Transition(atelier_app::issue::TransitionIssueRequest {
+            id,
+            transition,
+            options,
+            close_reason,
+        }),
         IssueCommands::Update {
             id,
             title,
@@ -992,71 +1100,44 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             remove_label,
             parent,
             no_parent,
-        } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::agent_factory::update_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::agent_factory::UpdateInput {
-                    issue_ref: &id,
-                    title: title.as_deref(),
-                    priority: priority.as_deref(),
-                    issue_type: issue_type.as_deref(),
-                    labels: &label,
-                    remove_labels: &remove_label,
-                    parent: if no_parent {
-                        Some(None)
-                    } else {
-                        parent.as_deref().map(Some)
-                    },
-                    append_notes: None,
-                },
-            )
-        }
-
+        } => atelier_app::issue::IssueJob::Update(atelier_app::issue::UpdateIssueRequest {
+            id,
+            title,
+            priority,
+            issue_type,
+            labels: label,
+            remove_labels: remove_label,
+            parent,
+            no_parent,
+        }),
         IssueCommands::Note { id, text, kind } => {
-            let db = canonical_mutation_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            commands::comment::run_issue_note(&db, &id, &text, &kind)
+            atelier_app::issue::IssueJob::Note(atelier_app::issue::NoteIssueRequest {
+                id,
+                text,
+                kind,
+            })
         }
-
         IssueCommands::Close { id, to, reason } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let _ = quiet;
-            commands::agent_factory::close_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                &reason,
-                to.as_deref(),
-            )
+            atelier_app::issue::IssueJob::Close(atelier_app::issue::CloseIssueRequest {
+                id,
+                to,
+                reason,
+            })
         }
-
         IssueCommands::Block { id, blocker } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            atelier_app::issue::IssueJob::Block(atelier_app::issue::BlockIssueRequest {
+                id,
+                blocker,
+            })
         }
-
         IssueCommands::Unblock { id, blocker } => {
-            let db = canonical_mutation_db()?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
-            drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            atelier_app::issue::IssueJob::Unblock(atelier_app::issue::BlockIssueRequest {
+                id,
+                blocker,
+            })
         }
-
         IssueCommands::Blocked { id } => {
-            let db = projection_query_db()?;
-            if let Some(id) = id {
-                commands::agent_factory::dep_list(&db, Some(&id))
-            } else {
-                commands::deps::list_blocked(&db)
-            }
+            atelier_app::issue::IssueJob::Blocked(atelier_app::issue::BlockedIssuesRequest { id })
         }
     }
 }

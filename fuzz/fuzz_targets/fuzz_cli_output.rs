@@ -7,10 +7,12 @@
 //! improper UTF-8 handling like byte slicing on multi-byte characters.
 
 use arbitrary::Arbitrary;
+use atelier_app::issue::{CreateIssueRequest, IssueJob, ListIssuesRequest};
+use atelier_app::mission::{MissionJob, MissionStatusRequest};
+use atelier_app::status::{
+    GitStatusView, IssueSummary, ResultView, StatusViewModel, TrackerState,
+};
 use libfuzzer_sys::fuzz_target;
-use tempfile::tempdir;
-
-use atelier::db::Database;
 
 #[derive(Arbitrary, Debug)]
 struct CliOutputInput {
@@ -20,74 +22,78 @@ struct CliOutputInput {
     description: Option<String>,
     /// Number of issues to create (for list testing)
     num_issues: u8,
+    status: String,
+    priority: String,
+    quiet: bool,
 }
 
 fuzz_target!(|input: CliOutputInput| {
-    // Limit to reasonable number of issues
     let num_issues = (input.num_issues % 20).max(1);
-
-    let dir = match tempdir() {
-        Ok(d) => d,
-        Err(_) => return,
-    };
-    let db_path = dir.path().join("state.db");
-
-    let db = match Database::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
-    };
-
-    // Create issues with fuzzy titles
-    let mut created_ids = Vec::new();
+    let mut current_work = Vec::new();
     for i in 0..num_issues {
         let title = if i == 0 {
             input.title.clone()
         } else {
             format!("{} #{}", input.title, i)
         };
-
-        if let Ok(id) = db.create_issue(&title, input.description.as_deref(), "medium") {
-            created_ids.push(id);
-        }
+        current_work.push(IssueSummary {
+            id: format!("atelier-f{:04}", i),
+            title,
+            status: "in_progress".to_string(),
+            issue_type: "task".to_string(),
+            parent_id: None,
+        });
     }
 
-    // Test list_issues - this exercises truncation
-    let _ = db.list_issues(None, None, None);
-    let _ = db.list_issues(Some("open"), None, None);
-    let _ = db.list_issues(None, None, Some("medium"));
+    let view = StatusViewModel {
+        tracker_state: if input.quiet {
+            TrackerState::Current
+        } else {
+            TrackerState::Stale {
+                issue_count: current_work.len(),
+            }
+        },
+        ready_work_count: current_work.len().saturating_sub(1),
+        current_work,
+        active_mission: None,
+        current_mission_count: num_issues as usize,
+        git: ResultView::Available(GitStatusView {
+            branch: Some(input.title.chars().take(80).collect()),
+            dirty_entries: input.description.into_iter().collect(),
+        }),
+        active_mission_snapshot: None,
+    };
 
-    // Test get_issue - exercises show output
-    for id in &created_ids {
-        let _ = db.get_issue(*id);
-    }
+    let _ = view.quiet_line();
+    let _ = view.current_work_lines();
+    let _ = view.next_actions();
 
-    // Test search - exercises description display
-    if !input.title.is_empty() {
-        let search_term: String = input.title.chars().take(10).collect();
-        if !search_term.is_empty() {
-            let _ = db.search_issues(&search_term);
-        }
-    }
-
-    // Test blocked/ready lists
-    if created_ids.len() >= 2 {
-        let _ = db.add_dependency(created_ids[0], created_ids[1]);
-        let _ = db.list_blocked_issues();
-        let _ = db.list_ready_issues();
-    }
-
-    // Test comments with Unicode
-    if let Some(id) = created_ids.first() {
-        if let Some(desc) = &input.description {
-            let _ = db.add_comment(*id, desc);
-        }
-        let _ = db.get_comments(*id);
-    }
-
-    // Test labels with Unicode (should be rejected but not panic)
-    if let Some(id) = created_ids.first() {
-        let label: String = input.title.chars().take(20).collect();
-        let _ = db.add_label(*id, &label);
-        let _ = db.get_labels(*id);
-    }
+    let create_job = IssueJob::Create(CreateIssueRequest {
+        title: input.title,
+        description: None,
+        priority: input.priority,
+        template: None,
+        labels: Vec::new(),
+        issue_type: Some("task".to_string()),
+        parent: None,
+        quiet: input.quiet,
+    });
+    let list_job = IssueJob::List(ListIssuesRequest {
+        status: input.status,
+        category: None,
+        label: None,
+        priority: None,
+        ready: input.quiet,
+        blocked: false,
+        quiet: input.quiet,
+    });
+    let mission_job = MissionJob::Status(MissionStatusRequest {
+        id: Some(atelier_cli::app_crate_name().to_string()),
+        quiet: input.quiet,
+        closeout: false,
+        verbose: !input.quiet,
+    });
+    let _ = create_job.command_group();
+    let _ = list_job.command_group();
+    let _ = mission_job.command_group();
 });

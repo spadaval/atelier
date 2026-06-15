@@ -1,32 +1,24 @@
 #![no_main]
 
 use arbitrary::Arbitrary;
+use atelier_records::{CreateIssueRecord, RecordStore};
+use chrono::Utc;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier::db::Database;
+mod support;
 
 #[derive(Arbitrary, Debug, Clone)]
 enum StateOp {
-    // Issue lifecycle
     CreateIssue { title: String, priority: String },
     CloseIssue { idx: usize },
     ReopenIssue { idx: usize },
-    ArchiveIssue { idx: usize },
-    UnarchiveIssue { idx: usize },
-    DeleteIssue { idx: usize },
-    // Session lifecycle
-    StartSession,
-    EndSession { notes: Option<String> },
-    SetSessionIssue { idx: usize },
-    // Timer lifecycle
-    StartTimer { idx: usize },
-    StopTimer { idx: usize },
-    // Queries (should never panic)
-    GetCurrentSession,
-    GetActiveTimer,
+    SetStatus { idx: usize, status: String },
+    CreateMission { title: String },
+    LinkIssueToMission { issue_idx: usize, mission_idx: usize },
+    CheckWorkflow,
     ListIssues,
-    ListArchived,
+    LoadDomainRecord { mission_idx: usize },
 }
 
 #[derive(Arbitrary, Debug)]
@@ -39,105 +31,119 @@ fuzz_target!(|input: StateMachineInput| {
         Ok(d) => d,
         Err(_) => return,
     };
-    let db_path = dir.path().join("state.db");
+    let repo_root = dir.path();
+    let state_dir = repo_root.join(".atelier");
+    if std::fs::create_dir_all(&state_dir).is_err() {
+        return;
+    }
+    if std::fs::write(
+        state_dir.join("workflow.yaml"),
+        atelier_workflow::STARTER_POLICY_YAML,
+    )
+    .is_err()
+    {
+        return;
+    }
 
-    let db = match Database::open(&db_path) {
-        Ok(d) => d,
-        Err(_) => return,
-    };
-
-    let mut issue_ids: Vec<i64> = Vec::new();
-    let mut session_id: Option<i64> = None;
+    let store = RecordStore::new(&state_dir);
+    let policy = atelier_workflow::load(repo_root).ok();
+    let mut issue_ids: Vec<String> = Vec::new();
+    let mut mission_ids: Vec<String> = Vec::new();
 
     for op in input.ops.iter().take(100) {
         match op {
             StateOp::CreateIssue { title, priority } => {
-                if let Ok(id) = db.create_issue(title, None, priority) {
-                    issue_ids.push(id);
+                let title = support::bounded_text(title, 160, "State fuzz issue");
+                if let Ok(record) = store.create_issue_record(CreateIssueRecord {
+                    title: &title,
+                    description: None,
+                    priority: support::priority(priority),
+                    issue_type: "task",
+                    labels: &[],
+                    status: "todo",
+                    parent_id: None,
+                }) {
+                    issue_ids.push(record.issue.id);
                 }
             }
             StateOp::CloseIssue { idx } => {
                 if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.close_issue(id);
+                    let id = &issue_ids[*idx % issue_ids.len()];
+                    let _ = set_issue_status(&store, policy.as_ref(), repo_root, id, "done");
                 }
             }
             StateOp::ReopenIssue { idx } => {
                 if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.reopen_issue(id);
+                    let id = &issue_ids[*idx % issue_ids.len()];
+                    let _ = set_issue_status(&store, policy.as_ref(), repo_root, id, "todo");
                 }
             }
-            StateOp::ArchiveIssue { idx } => {
+            StateOp::SetStatus { idx, status } => {
                 if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.archive_issue(id);
+                    let id = &issue_ids[*idx % issue_ids.len()];
+                    let status = support::issue_status(status);
+                    let _ = set_issue_status(&store, policy.as_ref(), repo_root, id, status);
                 }
             }
-            StateOp::UnarchiveIssue { idx } => {
-                if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.unarchive_issue(id);
+            StateOp::CreateMission { title } => {
+                let title = support::bounded_text(title, 160, "State fuzz mission");
+                if let Ok(record) = store.create_domain_record("mission", &title, "ready", None, "{}")
+                {
+                    mission_ids.push(record.record.id);
                 }
             }
-            StateOp::DeleteIssue { idx } => {
-                if !issue_ids.is_empty() {
-                    let idx_val = *idx % issue_ids.len();
-                    let id = issue_ids[idx_val];
-                    if db.delete_issue(id).is_ok() {
-                        issue_ids.remove(idx_val);
-                    }
+            StateOp::LinkIssueToMission {
+                issue_idx,
+                mission_idx,
+            } => {
+                if !issue_ids.is_empty() && !mission_ids.is_empty() {
+                    let issue_id = &issue_ids[*issue_idx % issue_ids.len()];
+                    let mission_id = &mission_ids[*mission_idx % mission_ids.len()];
+                    let _ = store.add_record_relationship(
+                        "mission", mission_id, "issue", issue_id, "advances",
+                    );
                 }
             }
-            StateOp::StartSession => {
-                if let Ok(id) = db.start_session() {
-                    session_id = Some(id);
+            StateOp::CheckWorkflow => {
+                let issues = store
+                    .load_issues()
+                    .map(|records| records.into_iter().map(|record| record.issue));
+                if let Ok(issues) = issues {
+                    let _ = atelier_workflow::check_issues(repo_root, issues);
                 }
-            }
-            StateOp::EndSession { notes } => {
-                if let Some(sid) = session_id {
-                    let _ = db.end_session(sid, notes.as_deref());
-                    session_id = None;
-                }
-            }
-            StateOp::SetSessionIssue { idx } => {
-                if let Some(sid) = session_id {
-                    if !issue_ids.is_empty() {
-                        let id = issue_ids[*idx % issue_ids.len()];
-                        let _ = db.set_session_issue(sid, id);
-                    }
-                }
-            }
-            StateOp::StartTimer { idx } => {
-                if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.start_timer(id);
-                }
-            }
-            StateOp::StopTimer { idx } => {
-                if !issue_ids.is_empty() {
-                    let id = issue_ids[*idx % issue_ids.len()];
-                    let _ = db.stop_timer(id);
-                }
-            }
-            StateOp::GetCurrentSession => {
-                let _ = db.get_current_session();
-            }
-            StateOp::GetActiveTimer => {
-                let _ = db.get_active_timer();
             }
             StateOp::ListIssues => {
-                let _ = db.list_issues(None, None, None);
+                let _ = store.load_issues();
             }
-            StateOp::ListArchived => {
-                let _ = db.list_archived_issues();
+            StateOp::LoadDomainRecord { mission_idx } => {
+                if !mission_ids.is_empty() {
+                    let mission_id = &mission_ids[*mission_idx % mission_ids.len()];
+                    let _ = store.load_domain_record_by_id("mission", mission_id);
+                }
             }
         }
     }
 
-    // Final consistency checks - should never panic
-    let _ = db.get_current_session();
-    let _ = db.get_active_timer();
-    let _ = db.list_issues(None, None, None);
-    let _ = db.list_archived_issues();
+    let _ = store.load_issues();
 });
+
+fn set_issue_status(
+    store: &RecordStore,
+    policy: Option<&atelier_workflow::WorkflowPolicy>,
+    repo_root: &std::path::Path,
+    id: &str,
+    status: &str,
+) -> anyhow::Result<()> {
+    let mut record = store.load_issue_by_id(id)?;
+    record.issue.status = status.to_string();
+    record.issue.closed_at = (status == "done").then(Utc::now);
+    record.issue.updated_at = Utc::now();
+    if let Some(policy) = policy {
+        atelier_workflow::validate_issue_against_policy(
+            policy,
+            &record.issue,
+            &repo_root.join(atelier_workflow::WORKFLOW_POLICY_PATH),
+        )?;
+    }
+    store.write_issue_atomic(&record)
+}

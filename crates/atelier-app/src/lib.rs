@@ -1,6 +1,12 @@
 //! Application use-case contracts for Atelier.
 
+pub mod evidence;
+pub mod graph;
+pub mod issue;
+pub mod maintenance;
+pub mod mission;
 pub mod status;
+pub mod workflow;
 
 pub const CRATE_NAME: &str = "atelier-app";
 
