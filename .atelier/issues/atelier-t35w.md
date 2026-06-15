@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+closed_at: "2026-06-15T06:58:35.796461651+00:00"
+status: "done"
 title: "Validate active issue and claim removal"
-updated_at: "2026-06-15T06:44:50.621157210+00:00"
+updated_at: "2026-06-15T06:58:35.796461651+00:00"
 ---
 
 ## Description
