@@ -44,9 +44,17 @@ impl Database {
 
     pub fn get_comments(&self, issue_id: impl ToString) -> Result<Vec<Comment>> {
         let issue_id = issue_id.to_string();
-        let Some(state_dir) = self.current_runtime_state_dir()? else {
+        let Some((state_dir, require_issue_file)) = self.current_runtime_state_dir()? else {
             return Ok(Vec::new());
         };
+        if require_issue_file
+            && !state_dir
+                .join("issues")
+                .join(format!("{issue_id}.md"))
+                .is_file()
+        {
+            return Ok(Vec::new());
+        }
         let mut comments = Vec::new();
         for (idx, activity) in list_issue_activities(&state_dir, &issue_id)?
             .into_iter()
@@ -80,11 +88,11 @@ impl Database {
         kind: &str,
         created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<()> {
-        let Some(state_dir) = self.current_runtime_state_dir()? else {
+        let Some((state_dir, require_issue_file)) = self.current_runtime_state_dir()? else {
             return Ok(());
         };
         let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
-        if !issue_file.is_file() {
+        if require_issue_file && !issue_file.is_file() {
             return Ok(());
         }
         let event_type = match kind {
@@ -108,9 +116,12 @@ impl Database {
         .map(|_| ())
     }
 
-    fn current_runtime_state_dir(&self) -> Result<Option<std::path::PathBuf>> {
+    fn current_runtime_state_dir(&self) -> Result<Option<(std::path::PathBuf, bool)>> {
         let Some(state_dir) = crate::storage_layout::find_canonical_dir_from_cwd()? else {
-            return Ok(None);
+            return Ok(self
+                .path
+                .parent()
+                .map(|parent| (parent.join(".atelier"), false)));
         };
         let layout = crate::storage_layout::StorageLayout::new(
             state_dir
@@ -118,9 +129,12 @@ impl Database {
                 .unwrap_or_else(|| std::path::Path::new(".")),
         );
         if self.path == layout.runtime_db_path() {
-            Ok(Some(state_dir))
+            Ok(Some((state_dir, true)))
         } else {
-            Ok(None)
+            Ok(self
+                .path
+                .parent()
+                .map(|parent| (parent.join(".atelier"), false)))
         }
     }
 }
