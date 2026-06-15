@@ -28,9 +28,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-15T17:55:47.936357883+00:00"
+status: "done"
 title: "Epic: Stratify tests and fuzz targets by crate boundary"
-updated_at: "2026-06-15T17:55:15.894504969+00:00"
+updated_at: "2026-06-15T17:55:47.936357883+00:00"
 ---
 
 ## Description
