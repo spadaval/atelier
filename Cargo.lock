@@ -102,6 +102,12 @@ dependencies = [
 [[package]]
 name = "atelier-core"
 version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "atelier-records"
@@ -126,6 +132,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "atelier-core",
  "chrono",
  "clap",
  "fs2",

@@ -1,10 +1,11 @@
 use anyhow::{bail, Context, Result};
+pub use atelier_core::record_id::{
+    base36_padded, legacy_issue_id, validate_record_id, DEFAULT_PROJECT_SLUG, DEFAULT_SUFFIX_LEN,
+};
 use std::fs::File;
 use std::io::Read;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const DEFAULT_PROJECT_SLUG: &str = "atelier";
-const DEFAULT_SUFFIX_LEN: usize = 4;
 const MAX_ALLOC_ATTEMPTS: usize = 128;
 
 pub fn allocate_issue_id<F>(exists: F) -> Result<String>
@@ -27,32 +28,6 @@ where
     )
 }
 
-pub fn validate_record_id(id: &str) -> Result<()> {
-    let (slug, suffix) = id
-        .split_once('-')
-        .ok_or_else(|| anyhow::anyhow!("expected <project-slug>-<random-base36>"))?;
-    if slug.is_empty()
-        || suffix.is_empty()
-        || !slug
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        || !suffix
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-    {
-        bail!("expected <project-slug>-<random-base36>");
-    }
-    Ok(())
-}
-
-pub fn legacy_issue_id(number: i64) -> String {
-    format!(
-        "{}-{}",
-        DEFAULT_PROJECT_SLUG,
-        base36_padded(number as u64, DEFAULT_SUFFIX_LEN)
-    )
-}
-
 fn random_base36_suffix(len: usize) -> Result<String> {
     let mut bytes = [0u8; 8];
     match File::open("/dev/urandom").and_then(|mut file| file.read_exact(&mut bytes)) {
@@ -67,24 +42,6 @@ fn random_base36_suffix(len: usize) -> Result<String> {
     }
     let value = u64::from_le_bytes(bytes);
     Ok(base36_padded(value, len))
-}
-
-fn base36_padded(mut value: u64, len: usize) -> String {
-    const ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let mut chars = Vec::new();
-    loop {
-        chars.push(ALPHABET[(value % 36) as usize] as char);
-        value /= 36;
-        if value == 0 {
-            break;
-        }
-    }
-    while chars.len() < len {
-        chars.push('0');
-    }
-    chars.reverse();
-    let suffix: String = chars.into_iter().collect();
-    suffix[suffix.len().saturating_sub(len)..].to_string()
 }
 
 #[cfg(test)]
