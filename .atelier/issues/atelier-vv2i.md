@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Introduce application use-case layer and storage ports"
-updated_at: "2026-06-15T05:13:45.545560949+00:00"
+updated_at: "2026-06-15T16:48:29.608584296+00:00"
 ---
 
 ## Description

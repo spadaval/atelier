@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split canonical record parsing and rendering into atelier-records"
-updated_at: "2026-06-15T05:13:34.692791811+00:00"
+updated_at: "2026-06-15T16:48:33.426653074+00:00"
 ---
 
 ## Description

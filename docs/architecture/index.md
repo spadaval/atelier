@@ -15,6 +15,8 @@ Atelier is migrating to a virtual-root Cargo workspace:
   `atelier-core`, `atelier-workflow`, `atelier-records`, `atelier-sqlite`,
   `atelier-app`, and `atelier-cli`, plus the migration map from the current
   root package.
+- [SQLite Runtime Schema](sqlite-runtime-schema.md): the target ownership split
+  between rebuildable projection tables and ignored local runtime tables.
 - `crates/atelier-cli`: owns the `atelier` binary, Clap parser, terminal
   rendering, dispatch telemetry, and exit-code mapping.
 - `crates/atelier-app`: owns use-case orchestration through request, outcome,
@@ -24,8 +26,9 @@ Atelier is migrating to a virtual-root Cargo workspace:
 - `crates/atelier-records`, `crates/atelier-workflow`, and
   `crates/atelier-core`: own canonical Markdown storage, workflow policy, and
   pure domain types.
-- `tests/` and `fuzz/`: migrate toward the crate that owns the invariant under
-  test while preserving CLI integration coverage for terminal behavior.
+- `crates/atelier-cli/tests` and `fuzz/`: migrate toward the crate that owns
+  the invariant under test while preserving CLI integration coverage for
+  terminal behavior.
 
 See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.

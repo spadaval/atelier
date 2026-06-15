@@ -19,3 +19,45 @@ impl TransitionName {
         &self.0
     }
 }
+
+/// Minimal workflow status category vocabulary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StatusCategory {
+    Todo,
+    Active,
+    Done,
+    Blocked,
+}
+
+pub fn status_category(status: &str) -> StatusCategory {
+    match status {
+        "done" | "archived" => StatusCategory::Done,
+        "blocked" => StatusCategory::Blocked,
+        "in_progress" | "review" | "validation" => StatusCategory::Active,
+        _ => StatusCategory::Todo,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transition_name_rejects_empty_values() {
+        assert_eq!(TransitionName::new(" "), None);
+    }
+
+    #[test]
+    fn transition_name_keeps_text() {
+        assert_eq!(TransitionName::new("start").unwrap().as_str(), "start");
+    }
+
+    #[test]
+    fn status_categories_match_workflow_groups() {
+        assert_eq!(status_category("todo"), StatusCategory::Todo);
+        assert_eq!(status_category("in_progress"), StatusCategory::Active);
+        assert_eq!(status_category("validation"), StatusCategory::Active);
+        assert_eq!(status_category("blocked"), StatusCategory::Blocked);
+        assert_eq!(status_category("done"), StatusCategory::Done);
+    }
+}

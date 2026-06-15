@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add crate-level tests for domain records workflow and SQLite"
-updated_at: "2026-06-15T05:13:52.866673842+00:00"
+updated_at: "2026-06-15T16:48:31.596281632+00:00"
 ---
 
 ## Description
