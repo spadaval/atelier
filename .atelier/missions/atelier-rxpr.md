@@ -28,9 +28,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Adopt mission worktrees and epic review branches"
-updated_at: "2026-06-15T01:16:24.849052905+00:00"
+updated_at: "2026-06-15T04:35:03.342330031+00:00"
 ---
 
 ## Intent
@@ -58,3 +58,7 @@ Atelier should use missions as background-agent workspaces, epics as branch/revi
 - CLI commands create or locate a mission worktree and create/switch/status/merge epic branches without creating issue worktrees by default.
 - Agent Factory skill and repo binding instruct orchestrators to share mission worktrees, use epic branches for review, and avoid per-issue worktrees unless isolation is justified.
 - Migration evidence classifies existing issue worktrees and branches, removes clean contained worktrees, and preserves or folds unmerged/dirty state into the new model.
+
+## Closeout Notes
+
+- Close reason: Mission complete: all 24 linked work items are closed; mission closeout audit passes; blockers are clear; attached proof is complete; lint, doctor, and export check pass.
