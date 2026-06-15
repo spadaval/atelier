@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T17:04:24.634494212+00:00"
+status: "done"
 title: "Remove runtime active-work and claim source-of-truth from SQLite"
-updated_at: "2026-06-15T05:13:43.698977551+00:00"
+updated_at: "2026-06-15T17:04:24.634494212+00:00"
 ---
 
 ## Description

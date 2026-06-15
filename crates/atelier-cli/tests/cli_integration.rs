@@ -2294,7 +2294,7 @@ fn test_separate_worktrees_can_have_different_active_issues() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains(&format!("  {root_id} - Root work")));
-    assert!(!status_out.contains(&format!("  {worktree_id} - Worktree work")));
+    assert!(status_out.contains(&format!("  {worktree_id} - Worktree work")));
 
     let (success, mission_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
@@ -2307,13 +2307,13 @@ fn test_separate_worktrees_can_have_different_active_issues() {
         .next()
         .expect("next commands section missing");
     assert!(active_work_section.contains(&root_id), "{mission_out}");
-    assert!(!active_work_section.contains(&worktree_id), "{mission_out}");
+    assert!(active_work_section.contains(&worktree_id), "{mission_out}");
 
     let (success, worktree_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
     assert!(worktree_status.contains(&worktree_arg), "{worktree_status}");
     assert!(
-        worktree_status.contains(&format!("{worktree_id} [active]")),
+        worktree_status.contains(&format!("{worktree_id} [in_progress]")),
         "{worktree_status}"
     );
 }
@@ -12019,7 +12019,7 @@ hooks:
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
     assert!(status_out.contains(&worktree_arg));
-    assert!(status_out.contains(&format!("{issue_id} [active]")));
+    assert!(status_out.contains(&format!("{issue_id} [in_progress]")));
 
     let (success, status_human, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "human worktree status failed: {stderr}");
@@ -12028,7 +12028,7 @@ hooks:
     assert!(status_human.contains("Branch:"));
     assert!(status_human.contains("State:"));
     assert!(status_human.contains("Associated Work"));
-    assert!(status_human.contains(&format!("{issue_id} [active]")));
+    assert!(status_human.contains(&format!("{issue_id} [in_progress]")));
     assert!(!status_human.contains("work:"));
     assert!(!status_human.contains("export:"));
 
@@ -12041,10 +12041,10 @@ hooks:
     assert!(!worktree_path.exists());
     let (success, repair_out, stderr) = run_atelier(dir.path(), &["worktree", "repair", &issue_id]);
     assert!(success, "worktree repair failed: {stderr}");
-    assert!(repair_out.contains("Cleared stale worktree association"));
+    assert!(repair_out.contains("Cleared stale worktree path"));
     let (success, repaired_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status after repair failed: {stderr}");
-    assert!(!repaired_status.contains(&format!("{issue_id} [active]")));
+    assert!(!repaired_status.contains(&issue_id));
 
     migrate_default_issue_workflow(dir.path());
     let (success, _, stderr) =
@@ -12090,7 +12090,7 @@ hooks:
         success,
         "worktree status after failed setup failed: {stderr}"
     );
-    assert!(failed_status.contains(&format!("{failed_issue_id} [active]")));
+    assert!(failed_status.contains(&format!("{failed_issue_id} [in_progress]")));
 }
 
 #[test]
@@ -12163,8 +12163,8 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
     );
     assert!(!success, "malformed setup unexpectedly succeeded: {stdout}");
     assert!(
-        stderr.contains("active work association was not changed"),
-        "failure should say association was not changed: {stderr}"
+        stderr.contains("Missing required issue body section 'Outcome'"),
+        "failure should report invalid canonical issue content: {stderr}"
     );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
@@ -12173,7 +12173,7 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
         "worktree status after failed setup failed: {stderr}"
     );
     assert!(
-        !status_out.contains(&format!("{issue_id} [active]")),
+        status_out.contains("Associated Work") && status_out.contains("  (none)"),
         "failed setup should not record parent association: {status_out}"
     );
 
@@ -12189,7 +12189,7 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
 
     let (success, root_status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "root worktree status after retry failed: {stderr}");
-    assert!(root_status_out.contains(&format!("{issue_id} [active]")));
+    assert!(root_status_out.contains(&format!("{issue_id} [in_progress]")));
 
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "child status after retry failed: {stderr}");
