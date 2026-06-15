@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "blocked"
 title: "Validate active issue and claim removal"
-updated_at: "2026-06-15T06:21:19.572662291+00:00"
+updated_at: "2026-06-15T06:44:50.621157210+00:00"
 ---
 
 ## Description
