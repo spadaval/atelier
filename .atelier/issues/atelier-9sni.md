@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-15T04:31:15.002349990+00:00"
+status: "done"
 title: "Epic: Update Agent Factory for mission workspaces and epic review"
-updated_at: "2026-06-15T04:30:45.972515066+00:00"
+updated_at: "2026-06-15T04:31:15.002349990+00:00"
 ---
 
 ## Description
