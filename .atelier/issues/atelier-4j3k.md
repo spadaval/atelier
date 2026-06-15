@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-15T18:55:03.099542299+00:00"
+status: "done"
 title: "Convert root Cargo.toml to virtual workspace"
-updated_at: "2026-06-15T16:40:18.857947611+00:00"
+updated_at: "2026-06-15T18:55:03.099542299+00:00"
 ---
 
 ## Description
