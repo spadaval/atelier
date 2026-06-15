@@ -17,6 +17,38 @@ include = [
     "LICENSE",
 ]
 
+[workspace]
+members = [
+    ".",
+    "crates/atelier-app",
+    "crates/atelier-cli",
+    "crates/atelier-core",
+    "crates/atelier-records",
+    "crates/atelier-sqlite",
+    "crates/atelier-workflow",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/dollspace-gay/atelier"
+homepage = "https://github.com/dollspace-gay/atelier"
+version = "0.2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive", "env"] }
+fs2 = "0.4"
+rusqlite = { version = "0.38", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
 [lib]
 name = "atelier"
 path = "src/lib.rs"

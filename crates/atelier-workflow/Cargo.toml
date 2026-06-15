@@ -1,0 +1,16 @@
+[package]
+name = "atelier-workflow"
+description = "Workflow policy loading and transition semantics for Atelier"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+atelier-core = { path = "../atelier-core" }
+serde.workspace = true
+serde_yaml.workspace = true

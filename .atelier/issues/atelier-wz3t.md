@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Create Cargo workspace and crate skeletons"
-updated_at: "2026-06-15T05:13:29.418889394+00:00"
+updated_at: "2026-06-15T16:34:36.047663414+00:00"
 ---
 
 ## Description

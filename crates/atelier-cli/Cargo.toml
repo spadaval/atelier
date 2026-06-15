@@ -1,0 +1,22 @@
+[package]
+name = "atelier-cli"
+description = "Atelier CLI shell and binary owner"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "atelier"
+path = "src/main.rs"
+
+[dependencies]
+atelier-app = { path = "../atelier-app" }
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

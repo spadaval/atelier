@@ -1,0 +1,14 @@
+[package]
+name = "atelier-core"
+description = "Core Atelier domain vocabulary and pure value types"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde.workspace = true

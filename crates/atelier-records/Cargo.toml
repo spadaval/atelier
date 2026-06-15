@@ -1,0 +1,19 @@
+[package]
+name = "atelier-records"
+description = "Canonical Markdown record storage for Atelier"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+atelier-core = { path = "../atelier-core" }
+atelier-workflow = { path = "../atelier-workflow" }
+anyhow.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
