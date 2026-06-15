@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T17:54:27.946226230+00:00"
+status: "done"
 title: "Split CLI integration tests by workflow surface"
-updated_at: "2026-06-15T05:13:51.032041681+00:00"
+updated_at: "2026-06-15T17:54:27.946226230+00:00"
 ---
 
 ## Description
