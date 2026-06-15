@@ -69,44 +69,6 @@ pub fn finish_active_association(db: &Database, id: &str) -> Result<bool> {
     Ok(finished)
 }
 
-pub fn status(db: &Database) -> Result<()> {
-    let active = db.get_active_work_association()?;
-    match active {
-        Some(work) => {
-            let title = db
-                .get_issue(&work.issue_id)?
-                .map(|issue| issue.title)
-                .unwrap_or_else(|| "(issue missing)".to_string());
-            println!("Work Status");
-            println!("===========");
-            println!("Active:   yes");
-            println!("Issue:    {} - {}", work.issue_id, title);
-            println!("Status:   {}", work.status);
-            println!("Branch:   {}", work.branch.as_deref().unwrap_or("(none)"));
-            println!(
-                "Worktree: {}",
-                work.worktree_path.as_deref().unwrap_or("(none)")
-            );
-            println!("Started:  {}", work.started_at.to_rfc3339());
-            println!(
-                "Finished: {}",
-                work.finished_at
-                    .map(|finished_at| finished_at.to_rfc3339())
-                    .unwrap_or_else(|| "(none)".to_string())
-            );
-        }
-        None => {
-            println!("Work Status");
-            println!("===========");
-            println!("Active: no");
-            print_heading("Next Commands");
-            println!("  atelier issue list --ready");
-            println!("  atelier start <issue-id>");
-        }
-    }
-    Ok(())
-}
-
 pub fn worktree_status(db: &Database) -> Result<()> {
     let statuses = worktree_statuses(db)?;
     if statuses.is_empty() {

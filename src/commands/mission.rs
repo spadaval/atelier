@@ -389,7 +389,7 @@ fn print_status_next_commands(
         }
         if summary.evidence_gap_count() > 0 {
             println!(
-                "  Record validation proof ({} evidence gap(s)): atelier evidence add --kind validation --result pass \"...\"",
+                "  Record validation proof ({} evidence gap(s)): atelier evidence record --target issue/<id> --kind validation --result pass \"...\"",
                 summary.evidence_gap_count()
             );
         }
@@ -839,7 +839,9 @@ impl MissionCloseoutStatus {
         }
         if self.evidence_missing {
             println!("Mission Proof: missing");
-            println!("  Next: atelier evidence add --kind validation --result pass \"...\"");
+            println!(
+                "  Next: atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
+            );
             println!("  Next: atelier evidence attach <evidence-id> mission <mission-id>");
         } else {
             println!("Mission Proof: attached");
@@ -923,7 +925,9 @@ fn print_reliability_summary(
         println!("Attached Proof: complete");
     } else {
         println!("Attached Proof: missing - {}", proof_parts.join("; "));
-        println!("  Next: atelier evidence add --kind validation --result pass \"...\"");
+        println!(
+            "  Next: atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
+        );
         println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
     }
 
