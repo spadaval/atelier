@@ -1171,7 +1171,7 @@ mod tests {
         db.start_work_association(&id, Some("branch"), Some("/tmp/worktree"))
             .unwrap();
         assert!(db.get_current_session().unwrap().is_some());
-        assert!(db.get_active_work_association().unwrap().is_some());
+        assert!(db.get_work_association(&id).unwrap().is_some());
 
         let db_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &db_path).unwrap();
@@ -1180,7 +1180,7 @@ mod tests {
         assert!(rebuilt.require_issue(&id).is_ok());
         assert!(rebuilt.runtime_state_tables_available().unwrap());
         assert!(rebuilt.get_current_session().unwrap().is_none());
-        assert!(rebuilt.get_active_work_association().unwrap().is_none());
+        assert!(rebuilt.get_work_association(&id).unwrap().is_none());
     }
 
     #[test]
