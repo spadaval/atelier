@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::db::Database;
 use crate::models::Issue;
 use crate::utils::format_issue_id;
-use crate::workflow_policy::WorkflowPolicy;
+use atelier_workflow::WorkflowPolicy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IssueStartReadiness {
@@ -14,11 +14,11 @@ pub(crate) enum IssueStartReadiness {
 
 pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
     let repo_root = crate::storage_layout::find_repo_root()?;
-    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    let policy_path = repo_root.join(atelier_workflow::WORKFLOW_POLICY_PATH);
     if !policy_path.exists() {
         return Ok(None);
     }
-    crate::workflow_policy::load(&repo_root).map(Some)
+    atelier_workflow::load(&repo_root).map(Some)
 }
 
 pub(crate) fn issue_status_category(

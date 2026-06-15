@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::params;
 
-use super::{issue_from_row, Database};
+use super::Database;
 use crate::models::Issue;
 
 impl Database {
@@ -66,65 +66,18 @@ impl Database {
     }
 
     pub fn get_blockers(&self, issue_id: impl ToString) -> Result<Vec<String>> {
-        let issue_id = issue_id.to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT blocker_id FROM dependencies WHERE blocked_id = ?1")?;
-        let blockers = stmt
-            .query_map([issue_id], |row| row.get(0))?
-            .collect::<std::result::Result<Vec<String>, _>>()?;
-        Ok(blockers)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).blockers(&issue_id.to_string())
     }
 
     pub fn get_blocking(&self, issue_id: impl ToString) -> Result<Vec<String>> {
-        let issue_id = issue_id.to_string();
-        let mut stmt = self
-            .conn
-            .prepare("SELECT blocked_id FROM dependencies WHERE blocker_id = ?1")?;
-        let blocking = stmt
-            .query_map([issue_id], |row| row.get(0))?
-            .collect::<std::result::Result<Vec<String>, _>>()?;
-        Ok(blocking)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).blocking(&issue_id.to_string())
     }
 
     pub fn list_blocked_issues(&self) -> Result<Vec<Issue>> {
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            JOIN dependencies d ON i.id = d.blocked_id
-            JOIN issues blocker ON d.blocker_id = blocker.id
-            WHERE i.status NOT IN ('done', 'archived') AND blocker.status NOT IN ('done', 'archived')
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).blocked_issues()
     }
 
     pub fn list_ready_issues(&self) -> Result<Vec<Issue>> {
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            WHERE i.status NOT IN ('done', 'archived')
-            AND NOT EXISTS (
-                SELECT 1 FROM dependencies d
-                JOIN issues blocker ON d.blocker_id = blocker.id
-                WHERE d.blocked_id = i.id AND blocker.status NOT IN ('done', 'archived')
-            )
-            ORDER BY i.id
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).ready_issues()
     }
 }

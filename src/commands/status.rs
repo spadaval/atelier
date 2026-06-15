@@ -332,7 +332,7 @@ fn issue_bucket(
     db: &Database,
     issue: &Issue,
     current_work_ids: &BTreeSet<&str>,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_workflow::WorkflowPolicy>,
 ) -> Result<IssueBucket> {
     if current_work_ids.contains(issue.id.as_str()) {
         return Ok(IssueBucket::Active);
@@ -363,7 +363,7 @@ pub(crate) fn current_work_issues(db: &Database) -> Result<Vec<Issue>> {
 
 fn is_current_work_issue(
     issue: &Issue,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_workflow::WorkflowPolicy>,
 ) -> bool {
     commands::issue_workflow::issue_status_category(workflow_policy, &issue.status).as_deref()
         == Some("active")
@@ -393,7 +393,7 @@ fn print_current_work_summary(current_work: &[Issue]) {
 fn open_issue_blockers(
     db: &Database,
     issue_id: &str,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_workflow::WorkflowPolicy>,
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
     for blocker_id in db.get_blockers(issue_id)? {

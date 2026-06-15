@@ -131,14 +131,7 @@ impl Database {
     }
 
     pub fn get_issue(&self, id: impl ToString) -> Result<Option<Issue>> {
-        let id = id.to_string();
-        let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
-        )?;
-
-        let issue = stmt.query_row([id], issue_from_row).ok();
-
-        Ok(issue)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).issue(&id.to_string())
     }
 
     pub fn resolve_issue_ref(&self, issue_ref: &str) -> Result<Option<String>> {
@@ -189,50 +182,24 @@ impl Database {
         label_filter: Option<&str>,
         priority_filter: Option<&str>,
     ) -> Result<Vec<Issue>> {
-        let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
-        );
-        let mut conditions = Vec::new();
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-        if label_filter.is_some() {
-            sql.push_str(" JOIN labels l ON i.id = l.issue_id");
-        }
-
         if let Some(status) = status_filter {
             if status != "all" {
                 validate_status(status)?;
-                conditions.push("i.status = ?".to_string());
-                params_vec.push(Box::new(status.to_string()));
             }
         }
-
         if let Some(label) = label_filter {
-            conditions.push("l.label = ?".to_string());
-            params_vec.push(Box::new(label.to_string()));
+            if label.is_empty() {
+                anyhow::bail!("Label cannot be empty");
+            }
         }
-
         if let Some(priority) = priority_filter {
-            conditions.push("i.priority = ?".to_string());
-            params_vec.push(Box::new(priority.to_string()));
+            validate_priority(priority)?;
         }
-
-        if !conditions.is_empty() {
-            sql.push_str(" WHERE ");
-            sql.push_str(&conditions.join(" AND "));
-        }
-
-        sql.push_str(" ORDER BY i.id DESC");
-
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
-
-        let issues = stmt
-            .query_map(params_refs.as_slice(), issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).list_issues(
+            status_filter,
+            label_filter,
+            priority_filter,
+        )
     }
 
     #[cfg(test)]
@@ -354,25 +321,7 @@ impl Database {
     /// Search issues by query string across titles, descriptions, and comments
     #[cfg(test)]
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
-        let escaped = query.replace('%', "\\%").replace('_', "\\_");
-        let pattern = format!("%{}%", escaped);
-        let mut stmt = self.conn.prepare(
-            r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
-            FROM issues i
-            LEFT JOIN comments c ON i.id = c.issue_id
-            WHERE i.title LIKE ?1 ESCAPE '\' COLLATE NOCASE
-               OR i.description LIKE ?1 ESCAPE '\' COLLATE NOCASE
-               OR c.content LIKE ?1 ESCAPE '\' COLLATE NOCASE
-            ORDER BY i.id DESC
-            "#,
-        )?;
-
-        let issues = stmt
-            .query_map([&pattern], issue_from_row)?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-
-        Ok(issues)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).search_issues(query)
     }
 }
 

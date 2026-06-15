@@ -57,6 +57,9 @@ path = "src/main.rs"
 
 [dependencies]
 atelier-core = { path = "crates/atelier-core" }
+atelier-records = { path = "crates/atelier-records" }
+atelier-sqlite = { path = "crates/atelier-sqlite" }
+atelier-workflow = { path = "crates/atelier-workflow" }
 rusqlite = { version = "0.38", features = ["bundled"] }
 clap = { version = "4", features = ["derive", "env"] }
 chrono = { version = "0.4", features = ["serde"] }

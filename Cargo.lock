@@ -113,17 +113,29 @@ dependencies = [
 name = "atelier-records"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "atelier-core",
  "atelier-workflow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
 name = "atelier-sqlite"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "atelier-core",
  "atelier-records",
  "atelier-workflow",
+ "chrono",
+ "rusqlite",
+ "sha2",
+ "tempfile",
 ]
 
 [[package]]
@@ -133,6 +145,9 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "atelier-core",
+ "atelier-records",
+ "atelier-sqlite",
+ "atelier-workflow",
  "chrono",
  "clap",
  "fs2",
@@ -151,7 +166,10 @@ dependencies = [
 name = "atelier-workflow"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "atelier-core",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]

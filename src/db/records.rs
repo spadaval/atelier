@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use rusqlite::params;
 
-use super::{parse_datetime, validate_link_type, validate_record_kind, Database};
+use super::{validate_link_type, validate_record_kind, Database};
 use crate::models::{DomainRecord, RecordLink};
 use crate::record_id;
 use crate::record_store;
@@ -51,12 +51,7 @@ impl Database {
 
     pub fn get_record(&self, kind: &str, id: &str) -> Result<Option<DomainRecord>> {
         validate_record_kind(kind)?;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, kind, title, status, body, data_json, created_at, updated_at
-             FROM records WHERE kind = ?1 AND id = ?2",
-        )?;
-        let record = stmt.query_row(params![kind, id], record_from_row).ok();
-        Ok(record)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).record(kind, id)
     }
 
     #[cfg(test)]
@@ -76,17 +71,7 @@ impl Database {
         if record_id::validate_record_id(id).is_err() {
             return Ok(None);
         }
-        if self.get_issue(id)?.is_some() {
-            return Ok(Some("issue".to_string()));
-        }
-
-        let mut stmt = self
-            .conn
-            .prepare("SELECT kind FROM records WHERE id = ?1 ORDER BY kind LIMIT 1")?;
-        let kind = stmt
-            .query_row(params![id], |row| row.get::<_, String>(0))
-            .ok();
-        Ok(kind)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).record_kind_for_id(id)
     }
 
     pub fn require_record(&self, kind: &str, id: &str) -> Result<DomainRecord> {
@@ -96,27 +81,7 @@ impl Database {
 
     pub fn list_records(&self, kind: &str, status: Option<&str>) -> Result<Vec<DomainRecord>> {
         validate_record_kind(kind)?;
-        let mut records = Vec::new();
-        if let Some(status) = status {
-            let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, body, data_json, created_at, updated_at
-                 FROM records WHERE kind = ?1 AND status = ?2 ORDER BY id",
-            )?;
-            let rows = stmt.query_map(params![kind, status], record_from_row)?;
-            for row in rows {
-                records.push(row?);
-            }
-        } else {
-            let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, body, data_json, created_at, updated_at
-                 FROM records WHERE kind = ?1 ORDER BY id",
-            )?;
-            let rows = stmt.query_map(params![kind], record_from_row)?;
-            for row in rows {
-                records.push(row?);
-            }
-        }
-        Ok(records)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).list_records(kind, status)
     }
 
     pub fn add_record_link(
@@ -152,26 +117,11 @@ impl Database {
 
     pub fn list_record_links(&self, kind: &str, id: &str) -> Result<Vec<RecordLink>> {
         validate_record_ref(self, kind, id)?;
-        let mut stmt = self.conn.prepare(
-            "SELECT source_kind, source_id, target_kind, target_id, relation_type, created_at
-             FROM record_links
-             WHERE (source_kind = ?1 AND source_id = ?2) OR (target_kind = ?1 AND target_id = ?2)
-             ORDER BY created_at, source_kind, source_id, target_kind, target_id, relation_type",
-        )?;
-        let rows = stmt.query_map(params![kind, id], link_from_row)?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).record_links(kind, id)
     }
 
     pub fn list_all_record_links(&self) -> Result<Vec<RecordLink>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT source_kind, source_id, target_kind, target_id, relation_type, created_at
-             FROM record_links
-             ORDER BY source_kind, source_id, target_kind, target_id, relation_type",
-        )?;
-        let rows = stmt.query_map([], link_from_row)?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        atelier_sqlite::ProjectionIndex::new(&self.conn).all_record_links()
     }
 }
 
@@ -187,28 +137,4 @@ fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn record_from_row(row: &rusqlite::Row) -> rusqlite::Result<DomainRecord> {
-    Ok(DomainRecord {
-        id: row.get(0)?,
-        kind: row.get(1)?,
-        title: row.get(2)?,
-        status: row.get(3)?,
-        body: row.get(4)?,
-        data_json: row.get(5)?,
-        created_at: parse_datetime(row.get::<_, String>(6)?),
-        updated_at: parse_datetime(row.get::<_, String>(7)?),
-    })
-}
-
-fn link_from_row(row: &rusqlite::Row) -> rusqlite::Result<RecordLink> {
-    Ok(RecordLink {
-        source_kind: row.get(0)?,
-        source_id: row.get(1)?,
-        target_kind: row.get(2)?,
-        target_id: row.get(3)?,
-        relation_type: row.get(4)?,
-        created_at: parse_datetime(row.get::<_, String>(5)?),
-    })
 }

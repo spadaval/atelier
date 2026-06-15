@@ -520,7 +520,7 @@ fn ensure_no_unsupported_canonical_files(
             continue;
         }
         if relative == Path::new("workflow.yaml")
-            || relative == Path::new(crate::workflow_policy::WORKFLOW_POLICY_PATH)
+            || relative == Path::new(atelier_workflow::WORKFLOW_POLICY_PATH)
         {
             continue;
         }
@@ -596,8 +596,12 @@ fn write_rebuilt_database(
             for issue in &rebuild.issues {
                 let mut row = issue.issue.clone();
                 row.parent_id = None;
-                row.description = Some(issue.sections.searchable_text());
+                row.description = Some(issue.sections.description.clone());
                 db.insert_issue_rebuild(&row)?;
+                atelier_sqlite::ProjectionIndex::new(&db.conn).replace_issue_search_text(
+                    &issue.issue.id,
+                    &issue.sections.searchable_text(),
+                )?;
             }
             for (child_id, parent_id) in &rebuild.child_edges {
                 let updated_at = rebuild

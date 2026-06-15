@@ -17,7 +17,7 @@ use crate::record_store::{
     IssueSections, RecordStore, RelationshipTarget, Relationships,
 };
 use crate::utils::format_issue_id;
-use crate::workflow_policy::WorkflowPolicy;
+use atelier_workflow::WorkflowPolicy;
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -1492,10 +1492,10 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
             state_dir.display()
         )
     })?;
-    crate::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
+    atelier_workflow::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
         anyhow!(
             "workflow policy file is required at {}; run `atelier lint` to inspect setup and restore the committed policy before creating issues",
-            crate::workflow_policy::WORKFLOW_POLICY_PATH
+            atelier_workflow::WORKFLOW_POLICY_PATH
         )
     })
 }

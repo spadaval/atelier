@@ -91,11 +91,11 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
         println!("Created {}", db_path.display());
     }
 
-    let workflow_path = path.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    let workflow_path = path.join(atelier_workflow::WORKFLOW_POLICY_PATH);
     if !workflow_path.exists() {
-        fs::write(&workflow_path, crate::workflow_policy::STARTER_POLICY_YAML)
+        fs::write(&workflow_path, atelier_workflow::STARTER_POLICY_YAML)
             .context("Failed to write .atelier/workflow.yaml")?;
-        crate::workflow_policy::load(path)?;
+        atelier_workflow::load(path)?;
         println!("Created {}", workflow_path.display());
     }
 

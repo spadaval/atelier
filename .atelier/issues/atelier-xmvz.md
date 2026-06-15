@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T07:38:16.692824227+00:00"
+status: "done"
 title: "Implement atelier-sqlite rebuild freshness and query APIs"
-updated_at: "2026-06-15T05:13:41.925589382+00:00"
+updated_at: "2026-06-15T07:38:16.692824227+00:00"
 ---
 
 ## Description

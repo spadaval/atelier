@@ -51,7 +51,9 @@ pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
     "relations",
     "records",
     "record_links",
-    "projection_index_sources",
+    "projection_sources",
+    "projection_issue_search",
+    "projection_workflow_statuses",
 ];
 
 /// SQLite tables that hold local-only runtime state and may be reset by rebuild.
