@@ -16,3 +16,11 @@ atelier-records = { path = "../atelier-records" }
 atelier-sqlite = { path = "../atelier-sqlite" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
+chrono.workspace = true
+fs2.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

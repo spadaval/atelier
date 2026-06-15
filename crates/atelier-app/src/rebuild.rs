@@ -39,7 +39,7 @@ pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild, None)?;
-    eprintln!("Rebuilt {} from {}", db_path.display(), state_dir.display());
+    tracing::info!("Rebuilt {} from {}", db_path.display(), state_dir.display());
     Ok(())
 }
 
@@ -47,7 +47,7 @@ pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
     write_rebuilt_database(state_dir, db_path, &rebuild, Some(db_path))?;
-    eprintln!(
+    tracing::info!(
         "Refreshed projection in {} from {}",
         db_path.display(),
         state_dir.display()
@@ -139,7 +139,7 @@ fn rebuild_lock_path(db_path: &Path) -> Result<PathBuf> {
     Ok(db_path.with_file_name(format!(".{file_name}.rebuild.lock")))
 }
 
-pub(crate) fn validate_canonical_state(state_dir: &Path) -> Result<()> {
+pub fn validate_canonical_state(state_dir: &Path) -> Result<()> {
     load_projection(state_dir).map(|_| ())
 }
 
@@ -894,7 +894,7 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    use crate::commands::export;
+    use crate::export;
     use atelier_records::issue_record_path;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {

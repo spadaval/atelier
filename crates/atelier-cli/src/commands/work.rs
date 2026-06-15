@@ -217,7 +217,7 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
         recover_incomplete_worktree_setup(&root, &worktree_path)?;
     }
     ensure_git_worktree(&worktree_path)?;
-    let layout = crate::storage_layout::StorageLayout::new(&worktree_path);
+    let layout = atelier_app::storage_layout::StorageLayout::new(&worktree_path);
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
         activate_worktree_issue(&worktree_path, id)?;
@@ -284,7 +284,7 @@ fn ensure_issue_active_for_worktree(db: &Database, id: &str) -> Result<()> {
         return Ok(());
     }
     let root = repo_root()?;
-    let layout = crate::storage_layout::StorageLayout::new(&root);
+    let layout = atelier_app::storage_layout::StorageLayout::new(&root);
     crate::commands::workflow::transition_issue(
         db,
         &layout.canonical_dir(),
@@ -318,7 +318,7 @@ pub fn worktree_for_mission(db: &Database, mission_id: &str, path: Option<&str>)
         }
     }
     ensure_git_worktree(&worktree_path)?;
-    let layout = crate::storage_layout::StorageLayout::new(&worktree_path);
+    let layout = atelier_app::storage_layout::StorageLayout::new(&worktree_path);
     if !layout.canonical_dir().is_dir() {
         bail!(
             "mission worktree setup failed because {} does not contain .atelier",
@@ -477,7 +477,7 @@ fn ensure_git_worktree(path: &Path) -> Result<()> {
 }
 
 fn validate_worktree_projection(
-    layout: &crate::storage_layout::StorageLayout,
+    layout: &atelier_app::storage_layout::StorageLayout,
     id: &str,
 ) -> Result<()> {
     let worktree_db = Database::open(&layout.runtime_db_path())
@@ -564,7 +564,8 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
         } else {
             Vec::new()
         };
-        let state_dir = crate::storage_layout::StorageLayout::new(&worktree.path).canonical_dir();
+        let state_dir =
+            atelier_app::storage_layout::StorageLayout::new(&worktree.path).canonical_dir();
         let export_fresh = if path_exists && state_dir.is_dir() {
             Some(export_errors.is_empty())
         } else {
@@ -827,14 +828,14 @@ fn repo_root() -> Result<std::path::PathBuf> {
     Ok(Path::new(String::from_utf8_lossy(&output.stdout).trim()).to_path_buf())
 }
 
-fn mission_worktree_owner_path(layout: &crate::storage_layout::StorageLayout) -> PathBuf {
+fn mission_worktree_owner_path(layout: &atelier_app::storage_layout::StorageLayout) -> PathBuf {
     layout
         .target_runtime_dir()
         .join(MISSION_WORKTREE_OWNER_FILE)
 }
 
 fn ensure_mission_worktree_owner(
-    layout: &crate::storage_layout::StorageLayout,
+    layout: &atelier_app::storage_layout::StorageLayout,
     mission_id: &str,
 ) -> Result<()> {
     let owner_path = mission_worktree_owner_path(layout);
@@ -858,7 +859,8 @@ fn ensure_mission_worktree_owner(
 }
 
 fn read_mission_worktree_owner(path: &Path) -> Result<Option<String>> {
-    let owner_path = mission_worktree_owner_path(&crate::storage_layout::StorageLayout::new(path));
+    let owner_path =
+        mission_worktree_owner_path(&atelier_app::storage_layout::StorageLayout::new(path));
     if !owner_path.is_file() {
         return Ok(None);
     }

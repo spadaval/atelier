@@ -590,7 +590,7 @@ pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    crate::storage_layout::find_canonical_dir_from_cwd()
+    atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }
 
 pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
@@ -1612,7 +1612,7 @@ pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -
 }
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    super::projection::refresh_after_canonical_write(state_dir, db_path)
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 fn print_record(record: &DomainRecord) -> Result<()> {
@@ -2160,7 +2160,7 @@ impl TrackerHealth {
 }
 
 fn tracker_health(db: &Database, state_dir: &Path) -> TrackerHealth {
-    let stale_entries = super::export::canonical_stale_entries(db, state_dir)
+    let stale_entries = atelier_app::export::canonical_stale_entries(db, state_dir)
         .unwrap_or_else(|error| vec![format!("tracker health check failed: {error:#}")]);
     TrackerHealth { stale_entries }
 }

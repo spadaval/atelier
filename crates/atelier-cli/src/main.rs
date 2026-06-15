@@ -1,9 +1,9 @@
 use anyhow::{bail, Result};
-use atelier::command_storage::{
+use atelier::{commands, telemetry};
+use atelier_app::command_storage::{
     canonical_mutation_db, command_storage, degraded_projection_query_db, lint_db,
     projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
 };
-use atelier::{commands, telemetry};
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -1021,7 +1021,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let store = RecordStore::new(&state_dir);
             commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
             drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Unblock { id, blocker } => {
@@ -1030,7 +1030,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let store = RecordStore::new(&state_dir);
             commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
             drop(db);
-            commands::projection::refresh_after_canonical_write(&state_dir, &db_path)
+            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
 
         IssueCommands::Blocked { id } => {

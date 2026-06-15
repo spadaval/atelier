@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:33:50.254471183+00:00"
+status: "done"
 title: "Return request outcome and view model APIs from atelier-app"
-updated_at: "2026-06-15T15:16:23.282843597+00:00"
+updated_at: "2026-06-15T18:33:50.254471183+00:00"
 ---
 
 ## Description

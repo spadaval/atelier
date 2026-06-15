@@ -2215,6 +2215,10 @@ fn is_local_artifact_path(relative_path: &Path) -> bool {
             || file_name.ends_with(".rebuild-tmp-journal"))
         || file_name.ends_with(".tmp")
         || file_name.ends_with(".lock")
+        || file_name.ends_with(".journal")
+        || file_name.ends_with("-journal")
+        || file_name.ends_with("-wal")
+        || file_name.ends_with("-shm")
 }
 
 fn split_front_matter<'a>(

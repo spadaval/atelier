@@ -153,13 +153,13 @@ fn record_mission(
 }
 
 fn current_state_dir_for_issue(issue_id: &str) -> Option<PathBuf> {
-    let state_dir = crate::storage_layout::find_canonical_dir_from_cwd().ok()??;
+    let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;
     let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
     issue_file.is_file().then_some(state_dir)
 }
 
 fn current_state_dir_for_mission(mission_id: &str) -> Option<PathBuf> {
-    let state_dir = crate::storage_layout::find_canonical_dir_from_cwd().ok()??;
+    let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;
     let mission_file = state_dir.join("missions").join(format!("{mission_id}.md"));
     mission_file.is_file().then_some(state_dir)
 }

@@ -141,7 +141,7 @@ fn write_command_event(
         .as_deref()
         .and_then(|root| stable_workspace_id(root).ok());
     let state_path = workspace_root.as_deref().map(|root| {
-        let layout = crate::storage_layout::StorageLayout::new(root);
+        let layout = atelier_app::storage_layout::StorageLayout::new(root);
         if verbose {
             layout.canonical_dir().display().to_string()
         } else {
@@ -149,7 +149,7 @@ fn write_command_event(
                 .canonical_dir()
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or(crate::storage_layout::ATELIER_DIR)
+                .unwrap_or(atelier_app::storage_layout::ATELIER_DIR)
                 .to_string()
         }
     });
@@ -293,7 +293,10 @@ fn diagnostics_root() -> Option<PathBuf> {
 fn workspace_root() -> Option<PathBuf> {
     let mut current = env::current_dir().ok()?;
     loop {
-        if current.join(crate::storage_layout::ATELIER_DIR).is_dir() {
+        if current
+            .join(atelier_app::storage_layout::ATELIER_DIR)
+            .is_dir()
+        {
             return Some(current);
         }
         if !current.pop() {

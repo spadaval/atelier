@@ -91,6 +91,12 @@ dependencies = [
  "atelier-records",
  "atelier-sqlite",
  "atelier-workflow",
+ "chrono",
+ "fs2",
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]

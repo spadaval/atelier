@@ -37,12 +37,12 @@ pub struct IssueTransitionOption {
 
 pub fn check(db: &Database) -> Result<()> {
     let repo_root = repo_root()?;
-    let report = crate::workflow_policy::check(db, &repo_root)?;
+    let report = atelier_app::workflow_policy::check(db, &repo_root)?;
     println!("Workflow Check");
     println!("==============");
     println!(
         "Path:           {}",
-        crate::workflow_policy::WORKFLOW_POLICY_PATH
+        atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
     );
     println!("Policy:         pass");
     println!("Issue Types:    {}", report.policy.issue_types.len());
@@ -69,11 +69,11 @@ pub fn issue_transition_options(
 ) -> Result<Vec<IssueTransitionOption>> {
     let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
-    let policy = crate::workflow_policy::load(&repo_root)?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
     let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
-    let state_dir = crate::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
+    let state_dir = atelier_app::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
     let store = RecordStore::new(&state_dir);
     let record = store.load_issue_by_id(&issue.id)?;
     let mut options = Vec::new();
@@ -131,7 +131,7 @@ pub fn transition_issue(
 ) -> Result<()> {
     let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
-    let policy = crate::workflow_policy::load(&repo_root)?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let before = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
     let workflow = policy.workflow_for_issue_type(&before.issue_type)?;
@@ -162,7 +162,7 @@ pub fn transition_issue(
     apply_transition_record(&policy, &store, &mut record, transition, close_reason)?;
     record_applied_transition(&before, transition_name, transition)?;
 
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = Database::open(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     println!("Applied transition {} to {}", transition_name, issue.id);
@@ -175,10 +175,10 @@ pub fn transition_issue(
 }
 
 fn resolve_issue_transition<'a>(
-    workflow: &'a crate::workflow_policy::WorkflowDefinition,
+    workflow: &'a atelier_app::workflow_policy::WorkflowDefinition,
     issue: &Issue,
     transition_name: &str,
-) -> Result<&'a crate::workflow_policy::TransitionDefinition> {
+) -> Result<&'a atelier_app::workflow_policy::TransitionDefinition> {
     if let Some(transition) = workflow.transitions.get(transition_name) {
         return Ok(transition);
     }
@@ -208,7 +208,7 @@ fn resolve_issue_transition<'a>(
 fn ensure_transition_available(
     issue: &Issue,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<()> {
     if transition.from.iter().any(|from| from == &issue.status) {
         return Ok(());
@@ -234,10 +234,10 @@ fn ensure_transition_available(
 
 fn transition_blockers(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     record: &CanonicalIssueRecord,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<(Vec<String>, Vec<ValidatorResult>)> {
     let mut blockers = required_field_failures(record, transition, close_reason)?;
@@ -259,10 +259,10 @@ fn transition_blockers(
 }
 
 fn report_blocked_transition(
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     validator_results: &[ValidatorResult],
     blockers: &[String],
 ) -> Result<()> {
@@ -292,10 +292,10 @@ fn report_blocked_transition(
 }
 
 fn apply_transition_record(
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     store: &RecordStore,
     record: &mut CanonicalIssueRecord,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<()> {
     let now = Utc::now();
@@ -316,7 +316,7 @@ fn apply_transition_record(
 fn record_applied_transition(
     issue: &Issue,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<()> {
     crate::commands::activity_log::record_transition_applied(
         &issue.id,
@@ -336,7 +336,7 @@ pub fn close_issue(
 ) -> Result<()> {
     let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
-    let policy = crate::workflow_policy::load(&repo_root)?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
     let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
@@ -465,7 +465,7 @@ pub fn evaluate(
         let started = Instant::now();
         let (passed, reason) = evaluate_builtin_with_params(
             db,
-            &crate::workflow_policy::load(&repo_root()?)?,
+            &atelier_app::workflow_policy::load(&repo_root()?)?,
             target_kind,
             target_id,
             transition,
@@ -582,7 +582,7 @@ fn print_heading(title: &str) {
 }
 
 fn ensure_transitionable_status(
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
 ) -> Result<()> {
     if policy.workflow_allows_status(&issue.issue_type, &issue.status)? {
@@ -598,7 +598,7 @@ fn ensure_transitionable_status(
 
 fn required_field_failures(
     _record: &CanonicalIssueRecord,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<Vec<String>> {
     let mut failures = Vec::new();
@@ -623,7 +623,7 @@ fn required_field_failures(
 fn transition_command(
     issue_id: &str,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> String {
     let mut command = format!("atelier issue transition {issue_id} {transition_name}");
     if transition
@@ -638,7 +638,7 @@ fn transition_command(
 
 fn evaluate_policy_transition(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
     transition: &str,
@@ -677,10 +677,10 @@ fn evaluate_policy_transition(
 }
 
 fn render_transition_guidance(
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
-    transition: &crate::workflow_policy::TransitionDefinition,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<Vec<String>> {
     let mut rendered = Vec::new();
     for guidance_name in &transition.guidance {
@@ -727,17 +727,18 @@ fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
 
 fn evaluate_builtin_with_params(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
     transition: &str,
     validator: &str,
-    params: Option<&crate::workflow_policy::ValidatorParams>,
+    params: Option<&atelier_app::workflow_policy::ValidatorParams>,
 ) -> Result<(bool, String)> {
     match validator {
         "durable_state_current" => {
-            let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-            let stale = crate::commands::export::canonical_stale_entries(db, &state_dir)?;
+            let state_dir =
+                atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+            let stale = atelier_app::export::canonical_stale_entries(db, &state_dir)?;
             if stale.is_empty() {
                 Ok((true, "canonical export is current".to_string()))
             } else {
@@ -751,11 +752,11 @@ fn evaluate_builtin_with_params(
             if target_kind == "issue" {
                 let issue = db.require_issue(target_id)?;
                 let state_dir =
-                    crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+                    atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
                 let store = RecordStore::new(&state_dir);
                 let record = store.load_issue_by_id(target_id)?;
                 let gate = issue_evidence_gate_status(db, &issue, Some(&record.sections))?;
-                if let Some(crate::workflow_policy::ValidatorParams::EvidenceAttached {
+                if let Some(atelier_app::workflow_policy::ValidatorParams::EvidenceAttached {
                     min_count,
                     kind,
                 }) = params
@@ -837,7 +838,7 @@ fn evaluate_builtin_with_params(
 
 fn epic_child_proof_complete(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
 ) -> Result<(bool, String)> {
@@ -873,7 +874,7 @@ fn epic_child_proof_complete(
 
 fn collect_missing_child_proof(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue_id: &str,
     missing: &mut Vec<String>,
 ) -> Result<()> {
@@ -929,7 +930,7 @@ fn issue_sections_parseable(
         return Ok((true, "no linked issues require section checks".to_string()));
     }
 
-    let state_dir = crate::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
+    let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
     let store = RecordStore::new(&state_dir);
     let mut checked = 0;
     for issue_id in issue_ids {
@@ -1024,7 +1025,7 @@ fn linked_evidence_records(
 
 fn review_complete(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
     _transition: &str,
@@ -1055,7 +1056,7 @@ fn review_complete(
 }
 
 fn issue_is_open_for_workflow(
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
 ) -> Result<bool> {
     ensure_transitionable_status(policy, issue)?;
@@ -1064,7 +1065,7 @@ fn issue_is_open_for_workflow(
 
 fn open_blockers(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
 ) -> Result<Vec<String>> {
@@ -1102,7 +1103,7 @@ fn open_blockers(
 
 fn open_work(
     db: &Database,
-    policy: &crate::workflow_policy::WorkflowPolicy,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
 ) -> Result<Vec<String>> {
@@ -1311,7 +1312,7 @@ fn classify_git_dirty_entries(
             blocking_entries.push(entry.raw.clone());
             continue;
         };
-        if crate::storage_layout::is_local_atelier_path(relative) {
+        if atelier_app::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
         if is_tracker_generated_activity_path(relative) {

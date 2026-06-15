@@ -10,7 +10,7 @@ use crate::commands::issue_workflow::{
     IssueStartReadiness,
 };
 use crate::utils::format_issue_id;
-use crate::workflow_policy::WorkflowPolicy;
+use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{
@@ -898,7 +898,7 @@ fn recent_activity_lines(canonical_id: &str, object: &IssueObject) -> Result<Vec
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    crate::storage_layout::find_canonical_dir_from_cwd()
+    atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }
 
 pub fn list(
@@ -1449,7 +1449,7 @@ pub fn create_lifecycle(
         store.add_issue_child(parent_id, &id)?;
     }
 
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = Database::open(db_path)?;
     let issue = refreshed.require_issue(&id)?;
     let object = issue_object(&refreshed, issue)?;
@@ -1493,10 +1493,10 @@ fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String
             state_dir.display()
         )
     })?;
-    crate::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
+    atelier_app::workflow_policy::configured_initial_status(repo_root, issue_type)?.ok_or_else(|| {
         anyhow!(
             "workflow policy file is required at {}; run `atelier lint` to inspect setup and restore the committed policy before creating issues",
-            crate::workflow_policy::WORKFLOW_POLICY_PATH
+            atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
         )
     })
 }
@@ -1598,7 +1598,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     record.issue.updated_at = now;
     store.write_issue_atomic(&record)?;
 
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let db = Database::open(db_path)?;
     changed_fields.sort_unstable();
     changed_fields.dedup();
@@ -1648,7 +1648,7 @@ pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Re
     for issue_id in &descendants {
         store.delete_issue_atomic(issue_id)?;
     }
-    super::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 
@@ -1970,7 +1970,7 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
             }
         }
         if findings.is_empty() {
-            if let Err(error) = super::rebuild::validate_canonical_state(state_dir) {
+            if let Err(error) = atelier_app::rebuild::validate_canonical_state(state_dir) {
                 findings.push(json!({
                     "id": "(canonical)",
                     "code": "invalid_canonical_state",
@@ -2088,32 +2088,31 @@ pub fn doctor(
     runtime_db_existed: bool,
     fix: bool,
 ) -> Result<()> {
-    let layout = crate::storage_layout::StorageLayout::new(repo_root);
+    let layout = atelier_app::storage_layout::StorageLayout::new(repo_root);
     let atelier_dir = layout.atelier_dir();
     let config_path = layout.config_path();
     let cache_dir = layout.cache_dir();
 
     let repaired_db;
     let active_db = if fix {
-        super::rebuild::validate_canonical_state(state_dir).with_context(|| {
+        atelier_app::rebuild::validate_canonical_state(state_dir).with_context(|| {
             "doctor --fix refused to edit tracked `.atelier/` canonical records; \
              run `atelier lint`, fix the named canonical Markdown record, then rerun `atelier doctor --fix`"
         })?;
-        super::rebuild::refresh_projection_preserving_runtime(state_dir, db_path).with_context(
-            || {
+        atelier_app::rebuild::refresh_projection_preserving_runtime(state_dir, db_path)
+            .with_context(|| {
                 format!(
                     "doctor --fix failed while repairing ignored local projection state at {}",
                     db_path.display()
                 )
-            },
-        )?;
+            })?;
         repaired_db = Database::open(db_path).context("Failed to reopen repaired database")?;
         &repaired_db
     } else {
         db
     };
 
-    let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
+    let rebuild_ready = atelier_app::rebuild::validate_canonical_state(state_dir).is_ok();
     let projection_fresh = atelier_sqlite::projection_index::check(active_db, state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
@@ -2228,19 +2227,28 @@ fn optional_dir_status(path: &Path) -> &'static str {
 }
 
 pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
-    if check {
-        let stale = super::export::canonical_stale_entries(db, state_dir)?;
-        if stale.is_empty() {
+    let outcome = atelier_app::export::canonical_export(atelier_app::Request {
+        input: atelier_app::export::CanonicalExportRequest {
+            db,
+            state_dir: state_dir.to_path_buf(),
+            check,
+        },
+    })?;
+    let view = outcome.value.data;
+    if view.check {
+        if view.stale_entries.is_empty() {
             println!("Canonical export is current");
-            println!("State: {}", state_dir.display());
+            println!("State: {}", view.state_dir.display());
             Ok(())
         } else {
-            bail!("Canonical export is stale:\n{}", stale.join("\n"))
+            bail!(
+                "Canonical export is stale:\n{}",
+                view.stale_entries.join("\n")
+            )
         }
     } else {
-        super::export::run_canonical(db, state_dir, false)?;
         println!("Canonical export written");
-        println!("State: {}", state_dir.display());
+        println!("State: {}", view.state_dir.display());
         println!();
         println!("Next Commands");
         println!("-------------");
@@ -2250,7 +2258,7 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
 }
 
 pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
-    super::rebuild::run(state_dir, db_path)?;
+    atelier_app::rebuild::run(state_dir, db_path)?;
     println!("Runtime state rebuilt");
     println!("State:    {}", state_dir.display());
     println!("Database: {}", db_path.display());

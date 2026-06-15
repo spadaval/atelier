@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::utils::format_issue_id;
-use crate::workflow_policy::WorkflowPolicy;
+use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::Issue;
 use atelier_sqlite::Database;
 
@@ -13,12 +13,12 @@ pub(crate) enum IssueStartReadiness {
 }
 
 pub(crate) fn load_issue_workflow_policy() -> Result<Option<WorkflowPolicy>> {
-    let repo_root = crate::storage_layout::find_repo_root()?;
-    let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
     if !policy_path.exists() {
         return Ok(None);
     }
-    crate::workflow_policy::load(&repo_root).map(Some)
+    atelier_app::workflow_policy::load(&repo_root).map(Some)
 }
 
 pub(crate) fn issue_status_category(

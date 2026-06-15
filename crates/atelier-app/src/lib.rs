@@ -3,6 +3,13 @@
 //! Command orchestration moves here as request, outcome, and view-model APIs
 //! that do not write directly to stdout or stderr.
 
+pub mod command_storage;
+pub mod export;
+pub mod projection;
+pub mod rebuild;
+pub mod storage_layout;
+pub mod workflow_policy;
+
 /// Minimal outcome wrapper for early app-layer extraction.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Outcome<T> {

@@ -61,7 +61,7 @@ pub(crate) fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
 }
 
 pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
-    let layout = crate::storage_layout::StorageLayout::new(path);
+    let layout = atelier_app::storage_layout::StorageLayout::new(path);
     let atelier_dir = layout.atelier_dir();
 
     let atelier_exists = atelier_dir.exists();
@@ -91,11 +91,14 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
         println!("Created {}", db_path.display());
     }
 
-    let workflow_path = path.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    let workflow_path = path.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
     if !workflow_path.exists() {
-        fs::write(&workflow_path, crate::workflow_policy::STARTER_POLICY_YAML)
-            .context("Failed to write .atelier/workflow.yaml")?;
-        crate::workflow_policy::load(path)?;
+        fs::write(
+            &workflow_path,
+            atelier_app::workflow_policy::STARTER_POLICY_YAML,
+        )
+        .context("Failed to write .atelier/workflow.yaml")?;
+        atelier_app::workflow_policy::load(path)?;
         println!("Created {}", workflow_path.display());
     }
 

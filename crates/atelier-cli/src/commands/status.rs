@@ -43,7 +43,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .as_ref()
         .map(|mission| mission_snapshot(db, mission, &active_issue_ids))
         .transpose()?;
-    let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
+    let export_stale = atelier_app::export::canonical_stale_entries(db, state_dir)?;
     let tracker_state = if export_stale.is_empty() {
         "current"
     } else {
@@ -351,7 +351,7 @@ fn issue_bucket(
     db: &Database,
     issue: &Issue,
     active_issue_ids: &BTreeSet<&str>,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<IssueBucket> {
     if active_issue_ids.contains(issue.id.as_str()) {
         return Ok(IssueBucket::Active);
@@ -371,7 +371,7 @@ fn issue_bucket(
 
 pub(crate) fn current_work_issues(
     db: &Database,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<Vec<Issue>> {
     let mut issues = db
         .list_issues(Some("all"), None, None)?
@@ -389,7 +389,7 @@ pub(crate) fn current_work_issues(
 fn open_issue_blockers(
     db: &Database,
     issue_id: &str,
-    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
     for blocker_id in db.get_blockers(issue_id)? {

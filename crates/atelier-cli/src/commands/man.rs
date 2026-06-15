@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 
-use crate::command_storage::{command_storage, CommandStorageAccess};
 use crate::commands;
+use atelier_app::command_storage::{command_storage, CommandStorageAccess};
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
@@ -87,7 +87,7 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         .map(|issue| format!("{} - {}", issue.id, issue.title))
         .collect();
     let ready_count = db.list_ready_issues()?.len();
-    let stale_count = commands::export::canonical_stale_entries(db, state_dir)?.len();
+    let stale_count = atelier_app::export::canonical_stale_entries(db, state_dir)?.len();
     let tracker = if stale_count == 0 { "current" } else { "stale" }.to_string();
     Ok(Snapshot {
         tracker,

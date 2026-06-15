@@ -13,17 +13,68 @@ use atelier_records::{
 use atelier_sqlite::projection_index;
 use atelier_sqlite::Database;
 
+use crate::{Outcome, Request, ViewModel};
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {
     path: PathBuf,
     bytes: Vec<u8>,
 }
 
+pub struct CanonicalExportRequest<'a> {
+    pub db: &'a Database,
+    pub state_dir: PathBuf,
+    pub check: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CanonicalExportView {
+    pub state_dir: PathBuf,
+    pub check: bool,
+    pub stale_entries: Vec<String>,
+    pub wrote: bool,
+}
+
+pub fn canonical_export(
+    request: Request<CanonicalExportRequest<'_>>,
+) -> Result<Outcome<ViewModel<CanonicalExportView>>> {
+    let input = request.input;
+    if input.check {
+        let stale_entries = canonical_stale_entries(input.db, &input.state_dir)?;
+        if stale_entries.is_empty() {
+            return Ok(Outcome {
+                value: ViewModel {
+                    data: CanonicalExportView {
+                        state_dir: input.state_dir,
+                        check: true,
+                        stale_entries,
+                        wrote: false,
+                    },
+                },
+            });
+        }
+
+        bail!("Canonical export is stale:\n{}", stale_entries.join("\n"));
+    }
+
+    write_canonical_from_db(input.db, &input.state_dir)?;
+    Ok(Outcome {
+        value: ViewModel {
+            data: CanonicalExportView {
+                state_dir: input.state_dir,
+                check: false,
+                stale_entries: Vec::new(),
+                wrote: true,
+            },
+        },
+    })
+}
+
 pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()> {
     if check {
         let stale = canonical_stale_entries(db, state_dir)?;
         if stale.is_empty() {
-            eprintln!("Canonical export is current");
+            tracing::info!("Canonical export is current");
             return Ok(());
         }
 
@@ -31,7 +82,7 @@ pub fn run_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<()>
     }
 
     write_canonical_from_db(db, state_dir)?;
-    eprintln!(
+    tracing::info!(
         "Exported canonical state to {}",
         state_dir.to_string_lossy()
     );
@@ -145,7 +196,7 @@ fn canonical_check_entries(db: &Database, state_dir: &Path) -> Result<Vec<String
         return Ok(stale);
     }
 
-    if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
+    if let Err(error) = crate::rebuild::validate_canonical_state(state_dir) {
         stale.push(format!(
             "invalid: canonical tracker Markdown is invalid while running `atelier export --check`: {error:#}\nrecovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun `atelier export --check`"
         ));

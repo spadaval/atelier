@@ -74,7 +74,7 @@ struct LossyField {
 
 pub fn run_beads_jsonl(db: &Database, input_path: &Path, state_dir: &Path) -> Result<()> {
     let report = import_beads_jsonl(db, input_path)?;
-    super::export::run_canonical(db, state_dir, false)?;
+    atelier_app::export::run_canonical(db, state_dir, false)?;
 
     println!("Imported Beads backup from {}", input_path.display());
     println!("  source records: {}", report.source_records);

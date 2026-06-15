@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::commands;
 use crate::storage_layout;
 use atelier_sqlite::projection_index;
 use atelier_sqlite::Database;
@@ -102,18 +101,18 @@ fn ensure_fresh_projection_db(
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
         if !runtime_db_existed {
-            commands::rebuild::validate_canonical_state(&state_dir).map_err(|error| {
+            crate::rebuild::validate_canonical_state(&state_dir).map_err(|error| {
                 projection_validation_error(error, "Runtime projection database is missing")
             })?;
             let db_path = layout.runtime_db_path();
             drop(db);
-            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
+            crate::rebuild::run(&state_dir, &db_path).with_context(|| {
                 format!(
                     "Runtime projection database is missing and automatic rebuild failed for {}",
                     state_dir.display()
                 )
             })?;
-            eprintln!(
+            tracing::warn!(
                 "Runtime projection database was missing; rebuilt local SQLite projection from {}",
                 state_dir.display()
             );
@@ -122,17 +121,17 @@ fn ensure_fresh_projection_db(
 
         let report = projection_index::check(&db, &state_dir)?;
         if !report.is_fresh() {
-            if let Err(error) = commands::rebuild::validate_canonical_state(&state_dir) {
+            if let Err(error) = crate::rebuild::validate_canonical_state(&state_dir) {
                 if allow_degraded_projection {
-                    eprintln!(
+                    tracing::warn!(
                         "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
                     );
-                    eprintln!("Recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun the blocked command before closing or mutating work.");
-                    eprintln!(
+                    tracing::warn!("Recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun the blocked command before closing or mutating work.");
+                    tracing::warn!(
                         "Projection freshness: {}",
                         report.problem_messages().join("; ")
                     );
-                    eprintln!("Canonical diagnostic: {error:#}");
+                    tracing::warn!("Canonical diagnostic: {error:#}");
                     return Ok(db);
                 }
                 return Err(projection_validation_error(
@@ -142,14 +141,14 @@ fn ensure_fresh_projection_db(
             }
             let db_path = layout.runtime_db_path();
             drop(db);
-            commands::rebuild::run(&state_dir, &db_path).with_context(|| {
+            crate::rebuild::run(&state_dir, &db_path).with_context(|| {
                 format!(
                     "Projection index is stale and automatic rebuild failed for {}\n{}",
                     state_dir.display(),
                     report.problem_messages().join("\n")
                 )
             })?;
-            eprintln!(
+            tracing::warn!(
                 "Projection index was stale; rebuilt local SQLite projection from {}",
                 state_dir.display()
             );

@@ -123,7 +123,7 @@ fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
 }
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    super::projection::refresh_after_canonical_write(state_dir, db_path)
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 pub fn apply(
@@ -162,7 +162,7 @@ pub fn apply(
     match options.export.as_str() {
         "auto" => refresh_projection(state_dir, db_path)?,
         "check_only" => {
-            super::rebuild::validate_canonical_state(state_dir)?;
+            atelier_app::rebuild::validate_canonical_state(state_dir)?;
             refresh_projection(state_dir, db_path)?;
         }
         "skip" => refresh_projection(state_dir, db_path)?,
@@ -1106,7 +1106,7 @@ fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>>
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    crate::storage_layout::find_canonical_dir_from_cwd()
+    atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }
 
 fn default_on_conflict() -> String {
