@@ -26,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Extract RecordStore into atelier-records"
-updated_at: "2026-06-15T05:13:38.313691561+00:00"
+updated_at: "2026-06-15T18:13:22.809195103+00:00"
 ---
 
 ## Description
