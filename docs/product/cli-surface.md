@@ -33,8 +33,6 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier history`
 - `atelier issue note <id> "..."`
 - `atelier start`
-- `atelier abandon`
-- `atelier repair`
 - `atelier worktree for-mission/for/status/merge/repair/remove`
 - `atelier branch for-epic/status/merge`
 - `atelier maintenance ...`
@@ -61,15 +59,15 @@ require valid tracker/runtime state and fail fast with recovery guidance when
 state is unavailable. The admin guide degrades gracefully before initialization
 or when local state is broken.
 
-`atelier status` is the root checkout signpost. It summarizes active work,
-active mission focus, ready work count, tracker freshness, and the next
+`atelier status` is the root checkout signpost. It summarizes the current-work
+set, active mission focus, ready work count, tracker freshness, and the next
 mission/work/health drill-down commands. It does not replace `mission status`;
 it points operators to the scoped status surface that owns closeout readiness.
 
 `atelier --help` should expose the normal operator path first: orient, inspect
-missions and issues, start or abandon active work, manage blockers, record
-proof, inspect history, and run health checks. Low-level state diagnostics such
-as export/rebuild, predecessor imports, raw workflow diagnostics, and command
+missions and issues, start work, manage blockers, record proof, inspect
+history, and run health checks. Low-level state diagnostics such as
+export/rebuild, predecessor imports, raw workflow diagnostics, and command
 telemetry are not normal root-help entries; `doctor`, targeted error messages,
 and migration docs may name them when they are relevant. Destructive
 maintenance may remain visible as an explicit danger-zone command.
@@ -86,10 +84,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `man` | Show role-specific operating guidance for worker, reviewer, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, `doctor`, role-specific commands. |
-| `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
-| `start` | Establish active local work on one issue within the current mission worktree and epic branch. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
-| `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |
-| `repair` | Clear stale active local work when the recorded worktree path is missing after interrupted cleanup. | Confirmation of the cleared issue/path plus status and worktree inspection commands; refuses to clear a live path. | Issue ID and cleared token. | `status`, `worktree status`, `abandon`. |
+| `status` | Root orientation for the current checkout. | Current-work set, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
+| `start` | Move one issue into the checkout's current-work set by transitioning it to `in_progress` in canonical Markdown. | Confirmation, resulting workflow status, checkout/branch context, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
 | `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
@@ -123,10 +119,10 @@ time pressure:
   Owned by `atelier status`, `atelier issue show/list`, `atelier mission show`,
   `atelier mission status`, `atelier history`, and `atelier search`.
 - Select and run work: choose a clear slice, prepare the mission worktree and
-  epic branch, start the issue slice, leave notes, advance or close it with
-  proof, and abandon it locally when needed. Owned by `atelier issue ...`,
-  `atelier worktree ...`, `atelier branch ...`, root `atelier start`, root
-  `atelier abandon`, record-specific note commands, and `atelier evidence ...`.
+  epic branch, start the issue slice, leave notes, and advance or close it
+  with proof. Owned by `atelier issue ...`, `atelier worktree ...`,
+  `atelier branch ...`, root `atelier start`, record-specific note commands,
+  and `atelier evidence ...`.
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, closeout readiness, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
@@ -300,23 +296,31 @@ and separates canonical tracker history from local runtime diagnostics. Issue
 and mission show surfaces may include compact recent activity or record context,
 but they point to scoped history for full activity instead of expanding
 unbounded logs.
-Root `atelier start <issue-id>`, `atelier issue close <issue-id> --reason "..."`,
-and `atelier abandon [issue-id] --reason "..."` are the normal work lifecycle
-commands. They store local work association in runtime state and enforce clean
-worktree plus current derived-state health checks where they affect workflow
-transitions. Root `atelier repair [issue-id]` is the recovery path for stale
-active local work whose recorded workspace path no longer exists; it must not
-replace `abandon` for intentional context switches. A separate durable claim
-system is not part of the normal workflow unless a later assignment policy
-justifies it.
-The local association is scoped to the current checkout and records the active
-mission workspace, epic branch, and issue slice: one checkout can have one
-active issue, repeated starts of that same issue are safe, and switching to a
-different issue requires `atelier abandon <active-id> --reason "..."` first.
-Use the mission worktree for parallel work within the same mission and the epic
-branch as the review boundary. Separate issue worktrees are exceptional
-containment for conflicting, dirty, high-risk, or explicitly assigned isolated
-slices.
+Root `atelier start <issue-id>` and `atelier issue close <issue-id> --reason
+"..."` are the normal work lifecycle commands. `start` should move the issue
+into `in_progress` in the current checkout's canonical Markdown tracker copy
+after confirming the relevant worktree, branch, and health context; it must not
+create a second durable active-work pointer in runtime state. Current-work
+orientation is then derived from the set of canonical `in_progress` issues in
+that checkout.
+
+There is no target-state rule that one checkout may hold only one current issue.
+Repeated starts of the same issue are harmless, and starting a second issue in
+the same checkout should extend the current-work set when the workflow allows
+it. `atelier status` and `atelier mission status` should render all
+`in_progress` issues visible in the checkout rather than promote one hidden
+"active issue". Use the mission worktree for parallel work within the same
+mission and the epic branch as the review boundary. Separate issue worktrees
+are exceptional containment for conflicting, dirty, high-risk, or explicitly
+assigned isolated slices.
+
+Because each Git worktree carries its own tracked `.atelier/` record copy,
+current-work state may diverge across worktrees or branches until the canonical
+Markdown records are reconciled through Git. Legacy root `abandon` and `repair`
+commands have been removed: stopping work without a durable status change does
+not need a cleanup command, and stale checkout recovery should use normal
+status/worktree inspection plus canonical issue transitions rather than hidden
+active-pointer repair.
 Root `atelier status`, `atelier mission status`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
 the removed work-status helper or any legacy work-start path for
@@ -387,7 +391,7 @@ surface is `delete` unless it is in the core list above.
 | Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
 | Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns normal explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use `issue create/list/show/update/transition/close/block/unblock/blocked`, root `search`, cross-record `graph`, record-specific notes, `evidence`, and `status`. |
-| Hidden work-status helper and any legacy work-start path | Remove | Duplicate lifecycle paths obscure the workflow-backed root commands, and work-start under that removed group is no longer supported. | Docs and help teach root `start`, root `abandon`, `issue close`, `status`, and `worktree`. |
+| Root `abandon`, root `repair`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach root `start`, `issue transition`, `issue close`, `status`, `mission status`, and `worktree status`. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle and blockers; `graph` owns cross-record impact/tree inspection. |
 | Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers use issue commands; evidence uses evidence commands; graph inspects impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
@@ -397,8 +401,8 @@ surface is `delete` unless it is in the core list above.
 Removed command surfaces:
 
 - `mission view`; use `mission show`.
-- The normal `work start` and `work status` group; use root `start`, root
-  `abandon`, `issue close`, and `status`.
+- The normal `work start` and `work status` group; use root `start`,
+  workflow-backed `issue transition`/`issue close`, and `status`.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
   `update`, `block`, `unblock`, `search`, `relate`, `related`, and `tree`; use
   `atelier issue ...`.
@@ -428,8 +432,8 @@ product workflow or root help. Public orientation commands such as
 guidance should absorb routine cache recovery.
 
 Internal helpers may remain only when a core workflow still uses them. For
-example, session rows remain an implementation detail of current work
-association, but there is no `session` command.
+example, session rows may remain an implementation detail of checkout context
+or runtime diagnostics, but there is no `session` command.
 
 ## Integration Or Experimental
 
@@ -499,8 +503,8 @@ Use this recovery order:
 | Unsure whether committed tracker records are valid | `atelier lint` | Edit the named `.atelier/` Markdown or workflow config, then rerun `atelier lint`. |
 | Operator-facing command reports stale or missing derived state | Re-run the same command once after the automatic refresh path, or run `atelier doctor` when it reports degraded health | Use `atelier doctor --fix` for ignored runtime/cache/projection repair. It must not edit tracked canonical records. |
 | Canonical Markdown parse or schema error | `atelier lint <id-or-path>` | Fix the named tracked file. Do not treat parser failures as cache problems. |
-| Active local work points at a missing worktree | `atelier status` then `atelier repair [issue-id]` | `repair` clears stale active-work runtime state only when the recorded path is gone. Use `abandon` for intentional context switches. |
-| Worktree setup or association failed mid-command | `atelier worktree status` then `atelier worktree repair <issue-id>` when available | Confirm the issue/path association before starting new work. |
+| Checkout/worktree context is unclear after interrupted cleanup or a missing worktree | `atelier status` then `atelier worktree status` | Recreate or inspect the mission worktree context, then reconcile canonical issue statuses through normal issue transitions or record edits. There is no separate active-pointer repair path in the target workflow. |
+| Worktree setup or association failed mid-command | `atelier worktree status` then `atelier worktree repair <issue-id>` when available | Confirm the mission or issue path context before starting new work. |
 | Installed binary does not understand committed record shape | `cargo build` then `target/debug/atelier <command>` for local CLI changes | Update or rebuild the binary before diagnosing canonical records. |
 
 Export and rebuild diagnostics are advanced implementation tools. Normal

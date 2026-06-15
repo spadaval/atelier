@@ -222,6 +222,7 @@ than "make mission status faster."
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export check, and degraded-state or recovery transcript when relevant. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, closeout, mission orchestration, or future worker behavior. |
+| Crate migration root-deletion closeout | `python3 scripts/check_crate_migration_closeout.py`, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before the root is deleted, use `python3 scripts/check_crate_migration_closeout.py --self-test` to prove the guard detects representative regressions. | First-class evidence attached to the root-deletion or closeout issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission closeout. |
 | Epic closeout | Closeout issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured closeout check, and records residual risks. | First-class evidence attached to the closeout issue; the epic derives readiness from that linked closeout plus child evidence. | Always required, performed by a closeout or validation worker that did not implement the bulk of the children. |
 | Mission closeout | Mission status and closeout synthesize linked work state, clear blockers, tracker health, configured gates, and explicit validation or closeout work when parent-level judgment is required. They do not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation or closeout issue when one exists; a direct mission link is retained only when the closeout workflow explicitly mirrors the same artifact for legacy closeout gates. | Required for explicit mission-level validation or closeout work, adversarial closeout, or cross-cutting mission claims; routine mission shell closeout stays a thin synthesis over proved child work and health gates. |
 
@@ -308,6 +309,9 @@ route to when a worker needs concrete command forms:
 | Tracker export check | `atelier export --check` |
 | Tracker health check | `atelier doctor` |
 | Python invocation | `python3 -c 'print("validation ok")'` |
+| Crate migration closeout guard | `python3 scripts/check_crate_migration_closeout.py` |
+| Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_closeout.py --self-test` |
+| Warning-free workspace check | `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` |
 
 When a Rust test needs more than one target, run separate `cargo test`
 invocations or switch to a `cargo nextest run -E` expression. Do not combine
@@ -337,6 +341,8 @@ diagnostics, or command families that belong to a different record kind.
 | `cargo test` | Cargo/libtest compatibility check |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |
+| `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` | warning-free workspace closeout |
+| `python3 scripts/check_crate_migration_closeout.py` | crate migration root-deletion guard |
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker install, local runtime, diagnostics, and workflow health |
 

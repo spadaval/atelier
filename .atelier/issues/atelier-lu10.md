@@ -12,7 +12,11 @@ relationships:
   - kind: "issue"
     id: "atelier-0fhv"
   - kind: "issue"
+    id: "atelier-3kap"
+  - kind: "issue"
     id: "atelier-fchz"
+  - kind: "issue"
+    id: "atelier-yo9i"
   children:
   - kind: "issue"
     id: "atelier-14bv"

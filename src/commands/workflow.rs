@@ -420,8 +420,7 @@ pub fn close_issue(
         Some(close_reason),
     )?;
 
-    let refreshed = Database::open(db_path)?;
-    let _ = crate::commands::work::finish_active_association(&refreshed, &issue.id)?;
+    let _ = Database::open(db_path)?;
     Ok(())
 }
 

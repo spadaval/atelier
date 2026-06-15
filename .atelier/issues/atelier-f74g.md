@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T15:36:02.879541518+00:00"
+status: "done"
 title: "Record workspace layering ADR and active-work decision"
-updated_at: "2026-06-15T05:13:25.635642858+00:00"
+updated_at: "2026-06-15T15:36:02.879541518+00:00"
 ---
 
 ## Description

@@ -15,6 +15,9 @@ relationships:
     id: "atelier-2q5s"
     type: "advances"
   - kind: "issue"
+    id: "atelier-3kap"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-4wor"
     type: "advances"
   - kind: "issue"
@@ -35,13 +38,13 @@ relationships:
 schema: "atelier.mission"
 schema_version: 1
 status: "ready"
-title: "In-place crate rewrite and SQLite projection redesign"
-updated_at: "2026-06-15T05:12:33.036752409+00:00"
+title: "Complete The Atelier Crate Migration"
+updated_at: "2026-06-15T15:16:43.243178317+00:00"
 ---
 
 ## Intent
 
-Break Atelier's single Rust crate into a layered Cargo workspace while preserving Markdown canonical state and stable visible CLI behavior. The rewrite is contract-first: architecture artifacts define crate boundaries, SQLite projection/runtime ownership, and active-work removal before implementation epics start.
+Finish the migration by making the layered workspace the only architecture, not a parallel scaffold. The root package becomes a virtual workspace, crates/atelier-cli owns the atelier binary, atelier-sqlite owns SQLite projection and runtime schema/query code, and atelier-app owns use-case orchestration through request/outcome/view APIs that atelier-cli renders.
 
 ## Constraints
 
@@ -49,7 +52,8 @@ Break Atelier's single Rust crate into a layered Cargo workspace while preservin
 - Visible CLI command intent, help surfaces, and product docs remain stable; exact transcript formatting may change deliberately with tests updated.
 - Rust crate APIs are internal and may be replaced; repo tests and fuzz targets move to the new crates.
 - SQLite schema compatibility is not required because rebuild and doctor recover local projection/runtime state from canonical Markdown.
-- Temporary migration adapters are tracked internal implementation details only and must have removal owners.
+- Closeout is deletion-driven: no root crate, no old `atelier::...` re-export paths, no removed-command runtime guidance, no SQLite comments/sessions/work-association hints, and no warnings under `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`.
+- Temporary migration adapters are tracked internal implementation details only and must have removal owners before the root-deletion epic can close.
 
 ## Risks
 
@@ -60,5 +64,5 @@ Break Atelier's single Rust crate into a layered Cargo workspace while preservin
 ## Validation
 
 - Closeout maps every mission outcome to linked epic and issue evidence.
-- Independent validation covers CLI/help/docs parity, Markdown round trips, projection rebuild, missing or stale DB recovery, active-work removal, and representative mission, issue, and evidence workflows.
-- Repository checks pass: cargo fmt -- --check, cargo nextest run, relevant extended ignored tests, atelier lint, atelier export --check, and atelier doctor.
+- Independent validation covers CLI/help/docs parity, Markdown round trips, projection rebuild, missing or stale DB recovery, active-work removal, root crate deletion, ordinary Clap rejection for removed commands, and representative mission, issue, and evidence workflows.
+- Repository checks pass: `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo fmt -- --check`, `cargo nextest run`, relevant extended ignored tests, `cargo check --manifest-path fuzz/Cargo.toml --bins`, `target/debug/atelier lint`, `target/debug/atelier export --check`, `target/debug/atelier doctor`, and `git diff --check`.

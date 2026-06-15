@@ -10,6 +10,7 @@ mod work;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
+use std::fs;
 use std::path::Path;
 
 use crate::models::Issue;
@@ -170,6 +171,11 @@ pub struct Database {
 
 impl Database {
     pub fn open(path: &Path) -> Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create database directory {}", parent.display())
+            })?;
+        }
         let conn = Connection::open(path).context("Failed to open database")?;
         let db = Database { conn };
         db.init_schema()?;

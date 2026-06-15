@@ -1402,7 +1402,6 @@ pub struct LifecycleCreateInput<'a> {
     pub issue_type: &'a str,
     pub labels: &'a [String],
     pub parent: Option<&'a str>,
-    pub work: bool,
     pub quiet: bool,
 }
 
@@ -1418,11 +1417,6 @@ pub fn create_lifecycle(
         .parent
         .map(|parent| resolve_id(&db, parent))
         .transpose()?;
-    let session = if input.work {
-        db.get_current_session().ok().flatten()
-    } else {
-        None
-    };
     drop(db);
 
     let store = RecordStore::new(state_dir);
@@ -1456,13 +1450,6 @@ pub fn create_lifecycle(
 
     super::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = Database::open(db_path)?;
-    if input.work {
-        if let Some(session) = &session {
-            refreshed.set_session_issue(session.id, &id)?;
-        } else if !input.quiet {
-            tracing::warn!("--work specified but no active session");
-        }
-    }
     let issue = refreshed.require_issue(&id)?;
     let object = issue_object(&refreshed, issue)?;
     let file_path = canonical_issue_path_from_state(state_dir, &id);
@@ -1475,9 +1462,6 @@ pub fn create_lifecycle(
             format_issue_id(parent_id.as_deref().unwrap_or_default())
         );
         println!("File: {}", file_path.display());
-        if input.work && session.is_some() {
-            println!("Now working on: {} {}", object.id, object.title);
-        }
         println!();
         println!("Next Commands");
         println!("-------------");
@@ -1490,9 +1474,6 @@ pub fn create_lifecycle(
         println!("Type:     {}", object.issue_type);
         println!("Priority: {}", object.priority);
         println!("File:     {}", file_path.display());
-        if input.work && session.is_some() {
-            println!("Now working on: {} {}", object.id, object.title);
-        }
         println!();
         println!("Next Commands");
         println!("-------------");
@@ -1527,7 +1508,6 @@ pub struct UpdateInput<'a> {
     pub labels: &'a [String],
     pub remove_labels: &'a [String],
     pub parent: Option<Option<&'a str>>,
-    pub claim: bool,
     pub append_notes: Option<&'a str>,
 }
 
@@ -1535,7 +1515,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     let db = Database::open(db_path)?;
     let id = resolve_id(&db, input.issue_ref)?;
     let previous = db.require_issue(&id)?;
-    let previous_assignee = label_value(&db.get_labels(&id)?, "assignee:");
     let parent_id = input
         .parent
         .map(|parent| parent.map(|parent| resolve_id(&db, parent)).transpose())
@@ -1613,23 +1592,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
             previous.parent_id.as_deref(),
             parent_id.as_deref(),
         )?;
-    }
-    if input.claim {
-        let assignee = current_actor();
-        if let Some(previous_assignee) = &previous_assignee {
-            record
-                .labels
-                .retain(|label| label != &format!("assignee:{previous_assignee}"));
-        }
-        push_unique(&mut record.labels, format!("assignee:{assignee}"));
-        changed_fields.push("assignee");
-        crate::commands::activity_log::record_field_changed(
-            &id,
-            "assignee",
-            previous_assignee.as_deref(),
-            Some(&assignee),
-        )?;
-        crate::commands::activity_log::record_note(&id, &format!("Claimed by {assignee}"))?;
     }
     if let Some(note) = input.append_notes {
         changed_fields.push("notes");
@@ -2373,12 +2335,6 @@ pub fn validate_priority(priority: &str) -> Result<()> {
             crate::db::VALID_PRIORITIES.join(", ")
         )
     }
-}
-
-fn current_actor() -> String {
-    std::env::var("ATELIER_AGENT")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_else(|_| "agent".to_string())
 }
 
 #[cfg(test)]

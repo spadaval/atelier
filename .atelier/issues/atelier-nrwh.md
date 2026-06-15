@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T15:56:54.300038514+00:00"
+status: "done"
 title: "Remove active-pointer cleanup command surfaces"
-updated_at: "2026-06-15T05:22:37.177805855+00:00"
+updated_at: "2026-06-15T15:56:54.300038514+00:00"
 ---
 
 ## Description

@@ -67,24 +67,6 @@ pub fn record_work_started(
     )
 }
 
-pub fn record_work_finished(issue_id: &str) -> Result<()> {
-    record(
-        issue_id,
-        ActivityEventType::WorkFinished,
-        "Finished work",
-        "finished: true",
-    )
-}
-
-pub fn record_work_abandoned(issue_id: &str, reason: &str) -> Result<()> {
-    record(
-        issue_id,
-        ActivityEventType::WorkAbandoned,
-        "Abandoned work",
-        &format!("abandoned: true\nreason: {}", scalar(reason)),
-    )
-}
-
 pub fn record_evidence_attached(
     issue_id: &str,
     evidence_id: &str,

@@ -29,7 +29,7 @@ issue-state operations.
 | `issue list` | Worker | Find candidate or assigned work. | Good, but role guides should prefer `--ready`, `--blocked`, and exact status/category examples. |
 | `issue show` | Worker | Understand the work slice and proof expectations. | Good. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `--options` should be the reviewer entry point. |
-| `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Hidden `--claim` should remain hidden or be removed if active work replaces claims. |
+| `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Hidden `--claim` should be removed; current work is derived from canonical issue status plus checkout context, not from a hidden claim system. |
 | `issue note` | Worker | Add durable progress, handoff, or observation context. | Good. |
 | `issue close` | Worker | Complete accountable work after proof exists. | Good. Should continue to require a reason. |
 | `issue block` | Manager/orchestrator | Record that one issue prevents another. | Good. |

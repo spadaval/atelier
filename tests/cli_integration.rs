@@ -322,8 +322,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier man`
 - `atelier status`
 - `atelier start`
-- `atelier abandon`
-- `atelier repair`
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
@@ -1289,8 +1287,8 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "start", "abandon", "repair", "issue", "mission", "plan",
-        "evidence", "history", "worktree", "lint", "doctor",
+        "init", "man", "status", "start", "issue", "mission", "plan", "evidence", "history",
+        "worktree", "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -1363,8 +1361,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier history --mission <id>",
         "atelier history --issue <id>",
         "atelier start <issue-id>",
-        "atelier abandon [issue-id] --reason",
-        "atelier repair [issue-id]",
         "atelier issue transition <issue-id> --options",
         "atelier issue close <issue-id> --reason",
         "atelier doctor",
@@ -1384,7 +1380,9 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for removed in [
         "archive",
+        "abandon",
         "integrations",
+        "repair",
         "timer",
         "milestone",
         "session",
@@ -1408,12 +1406,24 @@ fn test_top_level_help_only_shows_core_commands() {
 }
 
 #[test]
-fn test_repair_help_names_active_work_recovery() {
+fn test_root_active_pointer_cleanup_commands_are_removed() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["repair", "--help"]);
-    assert!(success, "repair help failed: {stderr}");
-    assert!(stdout.contains("Clear stale active local work after interrupted worktree cleanup"));
-    assert!(stdout.contains("Usage: atelier repair [OPTIONS] [ID]"));
+    assert!(!success, "repair should be removed:\n{stdout}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'repair'"),
+        "{stderr}"
+    );
+
+    let (success, stdout, stderr) = run_atelier_raw(
+        dir.path(),
+        &["abandon", "atelier-test", "--reason", "handoff"],
+    );
+    assert!(!success, "abandon should be removed:\n{stdout}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'abandon'"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -1583,7 +1593,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Atelier Status"));
     assert!(stdout.contains("Tracker:"));
     assert!(stdout.contains("Ready work:"));
-    assert!(stdout.contains("Active work:"));
+    assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Active mission:"));
     assert!(stdout.contains("Next Actions"));
     assert!(
@@ -1683,7 +1693,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
 }
 
 #[test]
-fn test_root_status_guides_active_work_to_transition_or_abandon() {
+fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -1722,7 +1732,8 @@ fn test_root_status_guides_active_work_to_transition_or_abandon() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Ready work:    0"));
-    assert!(stdout.contains(&format!("Active work:   {issue_id} - Active item")));
+    assert!(stdout.contains("Current work:  1 issue(s)"));
+    assert!(stdout.contains(&format!("  {issue_id} - Active item")));
     assert!(stdout.contains("Health:   active"));
     assert!(stdout.contains("Work:     ready 0, active 1, blocked 0, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
@@ -1735,11 +1746,12 @@ fn test_root_status_guides_active_work_to_transition_or_abandon() {
         .expect("immediate blockers section missing");
     assert!(!ready_section.contains(&format!("{issue_id} - Active item")));
     assert!(stdout.contains(&format!(
-        "Inspect active work transitions ({issue_id}): atelier issue transition {issue_id} --options"
+        "Inspect current work transitions ({issue_id}): atelier issue transition {issue_id} --options"
     )));
-    assert!(stdout.contains(&format!(
-        "Abandon local work ({issue_id}) if you are switching away: atelier abandon {issue_id} --reason \"...\""
-    )));
+    assert!(stdout.contains(
+        "Inspect worktree context if checkout state is unclear: atelier worktree status"
+    ));
+    assert!(!stdout.contains("atelier abandon"));
     assert!(!stdout.contains("Start ready active-mission work"));
     assert!(!stdout.contains(&format!("atelier start {issue_id}")));
     assert!(
@@ -1814,7 +1826,7 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(!spec.contains("atelier workflow validate"));
     assert!(spec.contains("atelier start atelier-z1p8"));
     assert!(spec.contains("atelier issue close atelier-z1p8 --reason \"done\""));
-    assert!(spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
+    assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(spec.contains("atelier status"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
     assert!(spec.contains(
@@ -1846,7 +1858,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Atelier Man: Worker"));
     assert!(stdout.contains("Current State"));
     assert!(stdout.contains("Active mission: none"));
-    assert!(stdout.contains("Active work:    none"));
+    assert!(stdout.contains("Current work:   none"));
     assert!(stdout.contains("Most Relevant Commands"));
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
@@ -1878,7 +1890,7 @@ fn test_man_manager_names_active_mission() {
 }
 
 #[test]
-fn test_man_worker_names_active_work() {
+fn test_man_worker_names_current_work() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -1894,8 +1906,9 @@ fn test_man_worker_names_active_work() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
     assert!(success, "man worker failed: {stderr}");
-    assert!(stdout.contains(&format!("Active work:    {issue_id} - Man work")));
-    assert!(stdout.contains("atelier issue show <active-id>"));
+    assert!(stdout.contains("Current work:   1 issue(s)"));
+    assert!(stdout.contains(&format!("{issue_id} - Man work")));
+    assert!(stdout.contains("atelier status - Review the checkout's current-work set."));
     assert!(stdout.contains("atelier evidence record --target issue/<id>"));
 }
 
@@ -2100,7 +2113,8 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("Active work:   {issue_id} - Root start item")));
+    assert!(status_out.contains("Current work:  1 issue(s)"));
+    assert!(status_out.contains(&format!("  {issue_id} - Root start item")));
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -2133,7 +2147,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
 }
 
 #[test]
-fn test_root_start_rejects_different_active_issue_in_same_worktree() {
+fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2151,30 +2165,29 @@ fn test_root_start_rejects_different_active_issue_in_same_worktree() {
     assert!(success, "initial start failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
-    assert!(!success, "switching active issue should fail");
-    let transcript = format!("{stdout}\n{stderr}");
+    assert!(success, "second current work issue should start: {stderr}");
     assert!(
-        transcript.contains(&format!("Worktree already has active issue {active_id}")),
-        "{transcript}"
-    );
-    assert!(
-        transcript.contains(&format!("atelier abandon {active_id} --reason \"...\"")),
-        "{transcript}"
+        stdout.contains(&format!("Started work on {next_id}")),
+        "{stdout}"
     );
 
     let next_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &next_id)).unwrap();
     assert!(
-        next_text.contains("status: \"todo\""),
-        "rejected start must not transition the second issue:\n{next_text}"
+        next_text.contains("status: \"in_progress\""),
+        "started issue must transition to in_progress:\n{next_text}"
     );
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("Active work:   {active_id} - Active item")));
-    assert!(!status_out.contains(&format!("Active work:   {next_id} - Next item")));
+    assert!(
+        status_out.contains("Current work:  2 issue(s)"),
+        "{status_out}"
+    );
+    assert!(status_out.contains(&format!("  {active_id} - Active item")));
+    assert!(status_out.contains(&format!("  {next_id} - Next item")));
 }
 
 #[test]
-fn test_root_start_same_issue_refreshes_single_active_association() {
+fn test_root_start_same_issue_reports_already_started_work() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2193,11 +2206,11 @@ fn test_root_start_same_issue_refreshes_single_active_association() {
         restart_out.contains(&format!("Started work on {issue_id}")),
         "{restart_out}"
     );
-    assert_eq!(active_work_association_count(dir.path(), &issue_id), 1);
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 0);
 }
 
 #[test]
-fn test_abandon_clears_scoped_active_issue_and_allows_switching() {
+fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2215,19 +2228,26 @@ fn test_abandon_clears_scoped_active_issue_and_allows_switching() {
     assert!(success, "first start failed: {stderr}");
     let (success, abandon_out, stderr) =
         run_atelier(dir.path(), &["abandon", &first_id, "--reason", "switching"]);
-    assert!(success, "abandon failed: {stderr}");
-    assert!(abandon_out.contains(&format!("Abandoned work on {first_id}")));
+    assert!(!success, "abandon should be removed:\n{abandon_out}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'abandon'"),
+        "{stderr}"
+    );
 
     let (success, second_out, stderr) = run_atelier(dir.path(), &["start", &second_id]);
-    assert!(success, "second start after abandon failed: {stderr}");
+    assert!(success, "second start should not require abandon: {stderr}");
     assert!(
         second_out.contains(&format!("Started work on {second_id}")),
         "{second_out}"
     );
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("Active work:   {second_id} - Second item")));
-    assert!(!status_out.contains(&format!("Active work:   {first_id} - First item")));
+    assert!(
+        status_out.contains("Current work:  2 issue(s)"),
+        "{status_out}"
+    );
+    assert!(status_out.contains(&format!("  {first_id} - First item")));
+    assert!(status_out.contains(&format!("  {second_id} - Second item")));
 }
 
 #[test]
@@ -2271,8 +2291,8 @@ fn test_separate_worktrees_can_have_different_active_issues() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("Active work:   {root_id} - Root work")));
-    assert!(!status_out.contains(&format!("Active work:   {worktree_id} - Worktree work")));
+    assert!(status_out.contains(&format!("  {root_id} - Root work")));
+    assert!(!status_out.contains(&format!("  {worktree_id} - Worktree work")));
 
     let (success, mission_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
@@ -2510,7 +2530,7 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains("Active work:   none"), "{status_out}");
+    assert!(status_out.contains("Current work:  none"), "{status_out}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -2598,7 +2618,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
 }
 
 #[test]
-fn test_abandon_requires_reason_and_preserves_issue_status() {
+fn test_removed_abandon_preserves_issue_status_and_activity() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -2616,16 +2636,15 @@ fn test_abandon_requires_reason_and_preserves_issue_status() {
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["abandon", &issue_id]);
-    assert!(!success, "abandon without reason should fail");
-    assert!(stderr.contains("--reason <REASON>"), "{stderr}");
-
     let (success, abandon_out, stderr) = run_atelier(
         dir.path(),
         &["abandon", &issue_id, "--reason", "paused for handoff"],
     );
-    assert!(success, "abandon failed: {stderr}");
-    assert!(abandon_out.contains(&format!("Abandoned work on {issue_id}")));
+    assert!(!success, "abandon should be removed:\n{abandon_out}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'abandon'"),
+        "{stderr}"
+    );
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(
@@ -2635,13 +2654,19 @@ fn test_abandon_requires_reason_and_preserves_issue_status() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains("Active work:   none"), "{status_out}");
+    assert!(
+        status_out.contains("Current work:  1 issue(s)"),
+        "{status_out}"
+    );
+    assert!(status_out.contains(&format!("  {issue_id} - Abandonable workflow item")));
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
-    assert_activity_contains(
-        &activities,
-        "work_abandoned",
-        &["abandoned: true", "reason: \"paused for handoff\""],
+    assert!(
+        !activities
+            .iter()
+            .any(|activity| activity.contains("event_type: \"work_abandoned\"")),
+        "removed abandon command must not record work_abandoned activity:\n{}",
+        activities.join("\n--- activity ---\n")
     );
 }
 
@@ -3173,19 +3198,16 @@ fn test_create_subissue() {
 }
 
 #[test]
-fn test_create_issue_with_work_prints_canonical_path() {
+fn test_create_issue_rejects_work_flag() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "create", "Work path issue", "--work"],
     );
-    assert!(success, "issue create --work failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Work path issue");
-    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
-    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
+    assert!(!success, "issue create --work should be rejected");
+    assert!(stderr.contains("unexpected argument '--work'"));
 }
 
 // ==================== Issue Listing Tests ====================
@@ -4392,7 +4414,8 @@ fn test_issue_mutations_create_activity_sidecars() {
     );
     assert!(success, "issue note failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &issue_id, "--claim"]);
-    assert!(success, "issue claim failed: {stderr}");
+    assert!(!success, "issue claim should be rejected");
+    assert!(stderr.contains("unexpected argument '--claim'"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -7281,7 +7304,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     for args in [
         vec!["issue", "list", "--json"],
         vec!["issue", "show", "1", "--json"],
-        vec!["issue", "update", "1", "--claim", "--json"],
+        vec!["issue", "update", "1", "--priority", "high", "--json"],
         vec!["mission", "list", "--json"],
         vec!["workflow", "check", "--json"],
         vec!["doctor", "--json"],
@@ -7328,19 +7351,21 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains("Next Commands"));
     let task_id = issue_id_by_title(dir.path(), "Agent Factory task");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", "1", "--claim", "--priority", "high"],
-    );
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", "1", "--claim"]);
+    assert!(!success, "claim update should be rejected");
+    assert!(stderr.contains("unexpected argument '--claim'"));
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "update", "1", "--priority", "high"]);
     assert!(success, "update failed: {stderr}");
     assert!(stdout.contains(&format!("Updated issue {task_id}")));
     assert!(stdout.contains("Priority: high"));
-    assert!(stdout.contains("Assignee:"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", "1", "handoff note"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "note", &task_id, "handoff note"]);
     assert!(success, "issue note failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "#1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
@@ -7377,7 +7402,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 
     for args in [
         vec!["issue", "list", "--status", "all"],
-        vec!["issue", "search", "Factory"],
+        vec!["search", "Factory"],
         vec!["lint"],
         vec!["export"],
         vec!["export", "--check"],
@@ -11457,6 +11482,46 @@ fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
 }
 
 #[test]
+fn test_status_recovers_when_runtime_directory_is_missing() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    migrate_default_issue_workflow(dir.path());
+
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nStatus recovers current work from canonical Markdown after ignored runtime deletion.\n\n## Evidence\n\n- `atelier status` prints the current-work issue after recreating `.atelier/runtime/state.db`.";
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Runtime directory recovery",
+            "--description",
+            body,
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Runtime directory recovery");
+    commit_all(dir.path(), "runtime recovery issue");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "start failed: {stderr}");
+    std::fs::remove_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(
+        success,
+        "status should recreate missing runtime dir: {stderr}"
+    );
+    assert!(
+        stderr.contains("Runtime projection database was missing; rebuilt local SQLite projection")
+    );
+    assert!(stdout.contains("Current work:  1 issue(s)"), "{stdout}");
+    assert!(stdout.contains(&format!("  {issue_id} - Runtime directory recovery")));
+    assert!(dir.path().join(".atelier/runtime/state.db").exists());
+}
+
+#[test]
 fn test_focused_lint_validates_missing_relationship_targets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -11903,26 +11968,30 @@ hooks:
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Atelier Status"));
-    assert!(status_out.contains(&format!("Active work:   {issue_id} - Work item")));
-    assert!(status_out.contains("Work branch:"));
-    assert!(status_out.contains("Worktree:"));
+    assert!(status_out.contains("Current work:  1 issue(s)"));
+    assert!(status_out.contains(&format!("  {issue_id} - Work item")));
 
     let (success, abandon_out, stderr) = run_atelier(
         dir.path(),
         &["abandon", &issue_id, "--reason", "switching worktrees"],
     );
-    assert!(success, "abandon failed: {stderr}");
-    assert!(abandon_out.contains(&format!("Abandoned work on {issue_id}")));
+    assert!(!success, "abandon should be removed:\n{abandon_out}");
+    assert!(
+        stderr.contains("unrecognized subcommand 'abandon'"),
+        "{stderr}"
+    );
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
         &activities,
         "work_started",
         &["branch: ", "worktree_path: "],
     );
-    assert_activity_contains(
-        &activities,
-        "work_abandoned",
-        &["abandoned: true", "reason: \"switching worktrees\""],
+    assert!(
+        !activities
+            .iter()
+            .any(|activity| activity.contains("event_type: \"work_abandoned\"")),
+        "removed abandon command must not record work_abandoned activity:\n{}",
+        activities.join("\n--- activity ---\n")
     );
 
     let worktree_path = dir.path().join(".atelier-worktrees").join(&issue_id);
@@ -11941,8 +12010,8 @@ hooks:
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "worktree-local status failed: {stderr}");
     assert!(
-        child_status_out.contains(&format!("Active work:   {issue_id} - Work item")),
-        "worktree-local runtime should be associated with active work: {child_status_out}"
+        child_status_out.contains(&format!("  {issue_id} - Work item")),
+        "worktree-local status should derive current work from issue status: {child_status_out}"
     );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
@@ -12023,7 +12092,7 @@ hooks:
 }
 
 #[test]
-fn test_repair_clears_stale_active_work_association() {
+fn test_root_repair_is_removed_and_does_not_clear_runtime_association() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
@@ -12055,19 +12124,13 @@ fn test_repair_clears_stale_active_work_association() {
     assert!(!stale_path.exists());
 
     let (success, repair_out, stderr) = run_atelier(dir.path(), &["repair", &issue_id]);
-    assert!(success, "active-work repair failed: {stderr}");
+    assert!(!success, "repair should be removed:\n{repair_out}");
     assert!(
-        repair_out.contains(&format!(
-            "Cleared stale active work association for {issue_id}: {stale_path_arg}"
-        )),
-        "unexpected repair output:\nstdout:\n{repair_out}\nstderr:\n{stderr}"
+        stderr.contains("unrecognized subcommand 'repair'"),
+        "{stderr}"
     );
-    assert!(repair_out.contains("atelier status"));
 
-    assert_eq!(active_work_association_count(dir.path(), &issue_id), 0);
-    let (success, second_repair_out, stderr) = run_atelier(dir.path(), &["repair", &issue_id]);
-    assert!(success, "second active-work repair failed: {stderr}");
-    assert!(second_repair_out.contains(&format!("No active work association for {issue_id}")));
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 1);
 }
 
 #[test]
@@ -12128,9 +12191,8 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
 
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "child status after retry failed: {stderr}");
-    assert!(child_status_out.contains(&format!(
-        "Active work:   {issue_id} - Retriable setup worktree"
-    )));
+    assert!(child_status_out.contains("Current work:  1 issue(s)"));
+    assert!(child_status_out.contains(&format!("  {issue_id} - Retriable setup worktree")));
 }
 
 #[test]

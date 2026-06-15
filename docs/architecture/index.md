@@ -1,26 +1,31 @@
 # Architecture
 
-This map covers implementation architecture for the single Rust crate rooted at
-`src/`: code ownership, persistence boundaries, local runtime state, and
-inherited Chainlink structure. Product behavior lives in
+This map covers implementation architecture for Atelier's target layered Cargo
+workspace: crate ownership, persistence boundaries, local runtime state, and
+inherited Chainlink structure being migrated out of the root package. Product behavior lives in
 [Product](../product/index.md), product intent lives in [SPEC.md](../../SPEC.md),
 domain language lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is
 documented in [Chainlink Provenance](provenance.md).
 
-## Current Implementation
+## Target Workspace
 
-Atelier is currently a single Rust crate:
+Atelier is migrating to a virtual-root Cargo workspace:
 
-- [Source Layout](source-layout.md): the current module map for command
-  dispatch, projection, `RecordStore`, workflow policy, evidence, and worktree
-  behavior.
-- `src/db/`: SQLite schema, migrations, and persistence operations.
-- `src/models.rs`: shared data structures.
-- `resources/atelier/`: inherited bundled rule assets. Core `atelier init`
-  does not copy these into repositories.
-- `tests/`: CLI integration and smoke coverage.
-- `fuzz/`: libFuzzer targets for CLI output, create, dependencies, import,
-  search, and state-machine behavior.
+- [Source Layout](source-layout.md): the target crate map for
+  `atelier-core`, `atelier-workflow`, `atelier-records`, `atelier-sqlite`,
+  `atelier-app`, and `atelier-cli`, plus the migration map from the current
+  root package.
+- `crates/atelier-cli`: owns the `atelier` binary, Clap parser, terminal
+  rendering, dispatch telemetry, and exit-code mapping.
+- `crates/atelier-app`: owns use-case orchestration through request, outcome,
+  and view-model APIs that the CLI renders.
+- `crates/atelier-sqlite`: owns rebuildable projection and runtime SQLite
+  schema/query code.
+- `crates/atelier-records`, `crates/atelier-workflow`, and
+  `crates/atelier-core`: own canonical Markdown storage, workflow policy, and
+  pure domain types.
+- `tests/` and `fuzz/`: migrate toward the crate that owns the invariant under
+  test while preserving CLI integration coverage for terminal behavior.
 
 See [Chainlink Provenance](provenance.md) for inherited module boundaries,
 preservation expectations, and deferred migration areas.
@@ -40,6 +45,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0002: Markdown-First Record Store](../adr/0002-markdown-first-record-store.md)
 - [ADR 0003: Evidence Artifact Storage](../adr/0003-evidence-artifact-storage.md)
 - [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
+- [ADR 0009: Virtual Workspace Root And CLI-Owned Binary](../adr/0009-virtual-workspace-root-and-cli-binary.md)
 
 ## Target Architecture
 
@@ -56,6 +62,8 @@ Accepted ADRs record cross-cutting product choices:
   projection contract explicitly opts in.
 - Mutating commands are migrating toward Markdown-first writes through
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
+- The root package is being deleted in favor of a virtual workspace root; all
+  executable ownership moves to `crates/atelier-cli`.
 - `doctor` and `lint` detect stale, invalid, or missing tracker state through
   operator-facing health checks.
 - `doctor --fix` repairs ignored local projection/runtime state from committed

@@ -43,6 +43,11 @@ repository's tactical operator guidance.
 - Keep this binding small. When a rule is repository-specific and executable,
   route to an Atelier-owned surface instead of restating the full command or
   workflow contract here.
+- Normal worker onboarding and recovery start with `atelier man <role>`,
+  `atelier status`, `atelier issue show <id>`, and
+  `atelier mission status <mission-id>`. Move work through issue transitions,
+  durable notes, evidence records, and explicit issue or mission closeout
+  surfaces rather than through hidden runtime state.
 - Missions are durable active-focus records. Link executable issues to missions
   and use `atelier status` or `atelier mission status <mission-id>` to select
   worker issues from the active mission or epic graph.
@@ -137,6 +142,9 @@ Do not preserve old command names, status aliases, output shims, or fallback
 readers unless a human explicitly asks for a compatibility window. Public
 compatibility decisions belong to Atelier help, product docs, workflow policy,
 or validators rather than to this binding.
+For Atelier, current work is derived from canonical issue status plus checkout
+context. Normal workflow lives on the status, transition, note, evidence, and
+closeout surfaces listed above rather than in local runtime associations.
 For issue queues, `--status` means an exact workflow status (or `all`) and
 `--category` means an exact derived workflow category; do not use or document
 category aliases such as `in_progress`.

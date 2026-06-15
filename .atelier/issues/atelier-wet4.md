@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T16:01:29.367234021+00:00"
+status: "done"
 title: "Update status and role guidance for current-work sets"
-updated_at: "2026-06-15T03:54:39.162335094+00:00"
+updated_at: "2026-06-15T16:01:29.367234021+00:00"
 ---
 
 ## Description

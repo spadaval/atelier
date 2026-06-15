@@ -10,6 +10,10 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-3kap"
+  - kind: "issue"
+    id: "atelier-4j3k"
+  - kind: "issue"
     id: "atelier-fchz"
   children:
   - kind: "issue"
@@ -43,3 +47,10 @@ Extract canonical Markdown ownership into `atelier-records` and break the curren
 - Child issue proof shows parsing/rendering extraction, mutation API extraction, and round-trip validation.
 - Record round-trip tests cover issues, missions, plans, evidence, relationships, and activity sidecars.
 - `atelier lint`, `atelier export --check`, and targeted RecordStore tests pass.
+
+## Notes
+
+- Temporary adapters used while extracting `atelier-records` must follow
+  `docs/architecture/source-layout.md`: name the adapter marker, removal owner,
+  removal condition, and proof that no public compatibility promise is being
+  created.

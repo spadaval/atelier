@@ -20,13 +20,21 @@
   RecordStore records for global queries, graph traversal, search, validation,
   and Mission Control inputs.
 - RuntimeState: local-only ignored data under `.atelier/runtime/` and
-  `.atelier/cache/` such as current work association, sessions used by that
-  association, agent identity, diagnostics, locks, and UI caches. It can
-  reference canonical IDs but is not the durable project record source.
+  `.atelier/cache/` such as ephemeral checkout/session context, agent identity,
+  diagnostics, locks, and UI caches. It can reference canonical IDs but is not
+  the durable project record source or the current-work source of truth.
 - Local command diagnostics: user-local command telemetry used for performance
   and failure analysis. It is RuntimeState-adjacent diagnostic data, not a
   canonical work record or exported run/session record.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
+- Virtual workspace root: the target repository root `Cargo.toml` shape after
+  the crate migration. It owns workspace membership and shared package metadata,
+  not a root `atelier` library or binary package.
+- Atelier crate layers: the target internal Rust crates under `crates/`:
+  `atelier-core` for pure domain types, `atelier-workflow` for workflow policy,
+  `atelier-records` for canonical Markdown storage, `atelier-sqlite` for
+  rebuildable projection and ignored runtime SQLite state, `atelier-app` for
+  use-case orchestration, and `atelier-cli` for the public `atelier` binary.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
 - Strong proof: claim-specific evidence that is reproducible from durable
@@ -74,11 +82,14 @@
   of product planning.
 - Graph: the cross-record relationship shape among missions, issues, blockers,
   plans, evidence, and other first-class records.
-- Active work: the local runtime association between an agent, an issue, the
-  mission worktree, and the epic branch for in-progress execution. It is
-  coordination state, not the durable workflow status of the issue.
-- Abandon: an explicit action that clears active work without claiming
-  completion or changing issue workflow status.
+- Current work: the set of canonical issue records in one checkout's tracked
+  `.atelier/` tree whose workflow status is `in_progress`, interpreted with the
+  mission worktree and epic branch context visible in that checkout. Different
+  Git worktrees may legitimately have different current-work sets until their
+  Markdown records reconcile through Git.
+- Abandon: a legacy active-pointer cleanup concept that should not remain the
+  normal way to leave current work once status-derived current work replaces
+  runtime work associations.
 - SQLite state: fast local projection and runtime state, currently inherited
   from Chainlink and currently living at ignored `.atelier/state.db`.
 - Doctor: an operator health surface that reports whether the repository and
@@ -115,10 +126,15 @@
   first-class concepts, not just labels on issues.
 - Validators belong to workflow policy, not to milestone records. Milestones
   own validation criteria; validators enforce transitions.
-- Durable claim/assignment and active local work are easy to confuse. Until a
-  distinct assignment policy is justified, normal work should use active work
-  rather than a parallel claim system.
+- Durable claim/assignment and current work are easy to confuse. Current work
+  is derived from canonical `in_progress` issue status in the checkout's
+  tracked Markdown records, not from runtime work associations or a parallel
+  hidden claim system.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are
   exceptional isolation tools, not the default assignment model.
+- The layered Cargo workspace is the target architecture, not a parallel
+  scaffold. Remaining root-package modules are migration input, and old
+  `atelier::...` paths should disappear rather than become compatibility
+  re-exports.

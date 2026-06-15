@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Validate active issue and claim removal"
-updated_at: "2026-06-15T03:54:39.200655416+00:00"
+updated_at: "2026-06-15T16:07:06.391684297+00:00"
 ---
 
 ## Description

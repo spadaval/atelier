@@ -353,22 +353,31 @@ An agent tasked with a mission should be able to:
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
 
-`atelier status` is the normal current-work orientation surface. Root `atelier
+`atelier status` is the normal current-work orientation surface. In a checkout,
+current work is the set of canonical issue records in that checkout's tracked
+`.atelier/` tree whose workflow status is `in_progress`. Root `atelier start
+<issue-id>` is the convenience entrypoint for moving an issue into that set
+after the mission worktree and epic branch context are ready. Root `atelier
 issue close <issue-id> --reason "..."` is the normal completion path for
-tracked work, and `atelier abandon [issue-id] --reason "..."` clears only the
-local active-work association without requiring operators to discover hidden
-work lifecycle helpers. Root `atelier repair [issue-id]` is the explicit
-recovery path for stale active-work associations whose recorded worktree path is
-missing after interrupted cleanup; it refuses to clear an association whose path
-still exists, so intentional context switches still use `abandon`.
+tracked work.
 
-Each checkout has at most one active issue association. Running `atelier start
-<issue-id>` again for the same issue refreshes the local workspace and branch
-metadata; starting a different issue in the same checkout is rejected until the
-operator runs `atelier abandon <active-id> --reason "..."`. Parallel active
-work within one mission uses the shared mission worktree and epic branches as
-the coordination boundary. Separate issue worktrees are exceptional containment
-for conflicting, dirty, high-risk, or explicitly isolated slices.
+There is no separate durable active-pointer concept. If a worker stops without
+changing the issue's durable workflow state, no extra cleanup command is
+required. If the work state changed, the operator should record a note when
+useful, inspect `atelier issue transition <id> --options`, and move the issue
+to the next canonical workflow status instead of clearing hidden runtime state.
+The former root abandon and repair cleanup flows have therefore been removed
+rather than kept as target-state workflow guidance.
+
+Different Git worktrees may legitimately show different current-work sets
+because each worktree carries its own tracked `.atelier/` record copy on its
+branch. Reconciliation happens through normal Git review and merge of the
+canonical Markdown records, not by sharing runtime work-association rows across
+checkouts. When more than one issue is `in_progress` in the same checkout,
+`atelier status` and `atelier mission status` should render that set directly
+rather than nominate one hidden active issue. Separate issue worktrees remain
+exceptional containment for conflicting, dirty, high-risk, or explicitly
+isolated slices.
 
 `atelier worktree for-mission <mission-id>` creates or locates a mission
 worktree using the configured path policy, rebuilds local SQLite state from

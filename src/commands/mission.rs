@@ -351,13 +351,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         println!("(none)");
     } else {
         for work in active_work {
-            println!(
-                "  {} [{}] branch={} worktree={}",
-                work.issue_id,
-                work.status,
-                work.branch.as_deref().unwrap_or("(none)"),
-                work.worktree_path.as_deref().unwrap_or("(none)")
-            );
+            println!("  {} [{}] - {}", work.id, work.status, work.title);
         }
     }
 
@@ -2193,19 +2187,24 @@ fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &
     }
 }
 
-fn active_work_for_mission(
-    db: &Database,
-    mission_id: &str,
-) -> Result<Vec<crate::models::WorkAssociation>> {
+fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
     let issue_ids = mission_issue_ids(db, mission_id)?;
-    let Some(active_work) = db.get_active_work_association()? else {
-        return Ok(Vec::new());
-    };
-    if issue_ids.contains(&active_work.issue_id) {
-        Ok(vec![active_work])
-    } else {
-        Ok(Vec::new())
-    }
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut issues = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| issue_ids.contains(&issue.id))
+        .filter(|issue| {
+            crate::commands::issue_workflow::issue_status_category(
+                workflow_policy.as_ref(),
+                &issue.status,
+            )
+            .as_deref()
+                == Some("active")
+        })
+        .collect::<Vec<_>>();
+    issues.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(issues)
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {

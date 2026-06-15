@@ -10,6 +10,8 @@ relationships:
   blocks:
   - kind: "issue"
     id: "atelier-14z2"
+  - kind: "issue"
+    id: "atelier-nyn0"
   children: []
   attachments: []
   relates: []

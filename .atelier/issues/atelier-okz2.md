@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T15:50:56.847814562+00:00"
+status: "done"
 title: "Remove runtime active issue association behavior"
-updated_at: "2026-06-15T03:54:39.166582212+00:00"
+updated_at: "2026-06-15T15:50:56.847814562+00:00"
 ---
 
 ## Description

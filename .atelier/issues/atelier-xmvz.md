@@ -7,7 +7,9 @@ labels:
 - "sqlite"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-wng0"
   children: []
   attachments: []
   relates: []

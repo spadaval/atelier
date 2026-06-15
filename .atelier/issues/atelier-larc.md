@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T15:43:13.185808285+00:00"
+status: "done"
 title: "Remove hidden issue claim system"
-updated_at: "2026-06-15T03:55:24.597397253+00:00"
+updated_at: "2026-06-15T15:43:13.185808285+00:00"
 ---
 
 ## Description

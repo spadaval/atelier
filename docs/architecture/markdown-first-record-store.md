@@ -16,9 +16,9 @@ The target architecture has three explicit components:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, local work/session association, or long-lived caches. |
+| `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, runtime-only checkout/session context, or long-lived caches. |
 | `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: issue lists, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
-| `RuntimeState` | Local-only ignored state under `.atelier/runtime/` and `.atelier/cache/`: current work association, sessions used by that association, local agent identity, locks, diagnostics, UI caches, and other machine-specific data. | Durable project records, dependencies, typed links, evidence metadata, or workflow policy. |
+| `RuntimeState` | Local-only ignored state under `.atelier/runtime/` and `.atelier/cache/`: ephemeral checkout/session context, local agent identity, locks, diagnostics, UI caches, and other machine-specific data. | Durable project records, the current-work source of truth, dependencies, typed links, evidence metadata, or workflow policy. |
 
 Successful canonical mutations must write Markdown first. A command may refresh
 the projection in the same operation, but durability must not depend on a later
@@ -26,6 +26,12 @@ SQLite export. Query commands may use SQLite after a cheap freshness check, but
 cache refresh is transparent product behavior; user-facing recovery should name
 record or workflow repairs rather than ask operators to maintain projection
 state.
+
+Current work in a checkout is derived from the canonical issue records in that
+checkout whose workflow status is `in_progress`, interpreted alongside the
+checkout's mission worktree and branch context. Because each Git worktree holds
+its own tracked `.atelier/` tree on its branch, different worktrees may show
+different current-work sets until Git reconciles the Markdown records.
 
 ## Write Path
 
@@ -218,7 +224,7 @@ records that share the common `title`/`status` contract.
 | --- | --- |
 | Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`, `runtime_dir`, `runtime_database`, and `cache_dir`. |
 | Compatibility-only config | `[paths].compatibility_state_root` remains tracked only while `.atelier-state/` compatibility flows still exist. |
-| Local runtime state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work associations are ignored machine-local state. |
+| Local runtime state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work-association tables are ignored machine-local state. They may cache checkout context, but they do not define current work. |
 | Projection provenance | `projection_index_sources` rows, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
 | Forbidden durable provenance | Runtime branch names, worktree paths, session IDs, lock ownership, local diagnostic output, and cache payloads must not be promoted into canonical record front matter without a separate artifact update. |
 
@@ -300,7 +306,7 @@ are classified as follows:
 | `records.body`, `records.data_json` | Removal candidate | Rich first-class record content owned by `RecordStore`; command detail views should load selected Markdown records instead of rendering these columns. |
 | `record_links.source_kind`, `source_id`, `target_kind`, `target_id`, `relation_type`, `created_at` | Projection metadata | Keep as derived cross-record graph edges for workflow validation and Mission Control rollups. |
 | `projection_index_sources.path`, `size_bytes`, `modified_micros`, `sha256`, `indexed_at` | Projection metadata | Keep as rebuildable freshness metadata. Hash is authoritative; size and modified time are optimization hints. |
-| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/runtime/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts. |
+| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/runtime/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts and do not define current work. |
 | `comments.content`, `comments.kind`, `comments.created_at` | Compatibility residue | Legacy SQLite notes retained for imports and repositories not yet migrated to activity sidecars. New issue activity detail is canonical Markdown sidecar state. |
 | Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
 
@@ -412,7 +418,7 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 | Evidence add/attach | RecordStore-owned Markdown-first | Evidence records and attachment links write canonical evidence Markdown and relationships before projection refresh. Issue evidence attachments also write issue activity sidecars. |
 | Typed record links, labels, and dependencies | RecordStore-owned Markdown-first | Rebuild derives labels, dependency edges, typed relations, hierarchy, and record links from canonical relationship front matter. |
 | Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |
-| Work start/finish and worktree helpers | Runtime plus activity sidecars | Work associations and sessions are local runtime state in `.atelier/runtime/`. The durable part is the issue activity sidecar, which is written directly under `.atelier/issues/<id>.activity/` when the issue Markdown file exists. |
+| Work start/finish and worktree helpers | Runtime plus activity sidecars | Runtime state may cache checkout/session context in `.atelier/runtime/`, but the durable current-work source of truth is the canonical issue status in tracked Markdown. The durable side effect beyond that status is the issue activity sidecar, which is written directly under `.atelier/issues/<id>.activity/` when the issue Markdown file exists. |
 | Diagnostics, telemetry, tested marker, init, import-beads, export, rebuild, lint, doctor | Runtime, maintenance, import, or repair | Telemetry and work markers are local/runtime. `import-beads` is an external import bridge that still renders canonical state from imported SQLite rows. `export` and `rebuild` are repair/projection commands, not normal durable mutation owners. |
 
 The remaining compatibility residue is internal: several inherited SQLite
@@ -473,8 +479,8 @@ compatibility check, not the target ownership model.
 
 Runtime state remains useful for coordination and operator ergonomics:
 
-- current work/session association;
-- local claim helper state used by core workflows;
+- ephemeral checkout/session context around canonical current work;
+- local claim-helper compatibility residue while legacy flows are being removed;
 - cached projection metadata;
 - UI state and terminal-view caches.
 

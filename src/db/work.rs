@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use chrono::Utc;
 use rusqlite::params;
+#[cfg(test)]
 use std::env;
 
 use super::{parse_datetime, Database};
@@ -17,7 +18,8 @@ impl Database {
         if let Some(active) = self.active_work_association_for_worktree_path(worktree_path)? {
             if active.issue_id != issue_id {
                 bail!(
-                    "Worktree already has active issue {}. Use `atelier abandon {} --reason \"...\"` before starting {}.",
+                    "Worktree already has active issue {}. Inspect with `atelier worktree status` and use `atelier worktree remove {}` or `atelier worktree repair {}` before associating {}.",
+                    active.issue_id,
                     active.issue_id,
                     active.issue_id,
                     issue_id
@@ -39,25 +41,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn finish_work_association(&self, issue_id: &str) -> Result<bool> {
-        self.complete_work_association(issue_id, "finished")
-    }
-
-    pub fn abandon_work_association(&self, issue_id: &str) -> Result<bool> {
-        self.complete_work_association(issue_id, "abandoned")
-    }
-
-    fn complete_work_association(&self, issue_id: &str, status: &str) -> Result<bool> {
-        let now = Utc::now().to_rfc3339();
-        let rows = self.conn.execute(
-            "UPDATE work_associations
-             SET status = ?1, finished_at = ?2
-             WHERE issue_id = ?3 AND status = 'active'",
-            params![status, now, issue_id],
-        )?;
-        Ok(rows > 0)
-    }
-
+    #[cfg(test)]
     pub fn get_active_work_association(&self) -> Result<Option<WorkAssociation>> {
         let path = env::current_dir()?.to_string_lossy().to_string();
         self.active_work_association_for_worktree_path(Some(&path))

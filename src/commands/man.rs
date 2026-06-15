@@ -47,7 +47,7 @@ struct Snapshot {
     tracker: String,
     repo: String,
     active_mission: Option<String>,
-    active_work: Option<String>,
+    current_work: Vec<String>,
     ready_count: usize,
     stale_count: usize,
 }
@@ -81,15 +81,11 @@ fn run_admin() -> Result<()> {
 fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Snapshot> {
     let active_mission = commands::mission::active_mission(db)?
         .map(|mission| format!("{} - {}", mission.id, mission.title));
-    let active_work = db.get_active_work_association()?.map(|work| {
-        let title = db
-            .get_issue(&work.issue_id)
-            .ok()
-            .flatten()
-            .map(|issue| issue.title)
-            .unwrap_or_else(|| "(issue missing)".to_string());
-        format!("{} - {}", work.issue_id, title)
-    });
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let current_work = commands::status::current_work_issues(db, workflow_policy.as_ref())?
+        .into_iter()
+        .map(|issue| format!("{} - {}", issue.id, issue.title))
+        .collect();
     let ready_count = db.list_ready_issues()?.len();
     let stale_count = commands::export::canonical_stale_entries(db, state_dir)?.len();
     let tracker = if stale_count == 0 { "current" } else { "stale" }.to_string();
@@ -97,7 +93,7 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         tracker,
         repo: repo.to_string(),
         active_mission,
-        active_work,
+        current_work,
         ready_count,
         stale_count,
     })
@@ -146,9 +142,19 @@ fn print_current_state(snapshot: Option<&Snapshot>, state_error: Option<&str>) {
                 Some(mission) => println!("  Active mission: {mission}"),
                 None => println!("  Active mission: none"),
             }
-            match &snapshot.active_work {
-                Some(work) => println!("  Active work:    {work}"),
-                None => println!("  Active work:    none"),
+            if snapshot.current_work.is_empty() {
+                println!("  Current work:   none");
+            } else {
+                println!("  Current work:   {} issue(s)", snapshot.current_work.len());
+                for work in snapshot.current_work.iter().take(3) {
+                    println!("    {work}");
+                }
+                if snapshot.current_work.len() > 3 {
+                    println!(
+                        "    ... and {} more issue(s)",
+                        snapshot.current_work.len() - 3
+                    );
+                }
             }
             println!("  Ready work:     {}", snapshot.ready_count);
         }
@@ -166,14 +172,17 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
     println!("----------------------");
     match role {
         Role::Worker => {
-            if snapshot.and_then(|s| s.active_work.as_ref()).is_some() {
-                println!("  1. atelier issue show <active-id> - Reopen the active work contract.");
+            if snapshot
+                .map(|s| !s.current_work.is_empty())
+                .unwrap_or(false)
+            {
+                println!("  1. atelier status - Review the checkout's current-work set.");
                 println!("  2. atelier evidence record --target issue/<id> --kind test --result pass -- <command> - Attach proof.");
                 println!("  3. atelier issue transition <id> --options - Inspect allowed next workflow steps.");
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier start <id> - Record active local work.");
+                println!("  3. atelier start <id> - Move the issue into the current-work set.");
             }
         }
         Role::Reviewer => {

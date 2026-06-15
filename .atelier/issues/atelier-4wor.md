@@ -10,6 +10,10 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-3kap"
+  - kind: "issue"
+    id: "atelier-4j3k"
+  - kind: "issue"
     id: "atelier-fchz"
   children:
   - kind: "issue"
@@ -43,3 +47,10 @@ Create the Cargo workspace shape and move stable domain/workflow code into inter
 - Child issue proof shows workspace creation, domain extraction, and workflow extraction completed under the architecture contract.
 - `cargo metadata --no-deps --format-version 1` shows the expected workspace members.
 - Focused crate tests for core and workflow pass, plus `cargo fmt -- --check` and `cargo nextest run`.
+
+## Notes
+
+- Temporary adapters used while moving root modules into `atelier-core` or
+  `atelier-workflow` must follow `docs/architecture/source-layout.md`: name the
+  adapter marker, removal owner, removal condition, and proof that no public
+  compatibility promise is being created.

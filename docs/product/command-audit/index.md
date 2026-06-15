@@ -55,4 +55,7 @@ layer: `atelier man worker`, `atelier man reviewer`, `atelier man manager`, and
 The main product risk is not that all roles share commands. The risk is that
 general help presents too many commands without answering which role should care.
 Role-specific guide pages should present a smaller command path, while root help
-continues to expose the product nouns.
+continues to expose the product nouns. Current-work orientation should come from
+canonical `in_progress` issue records rendered by `status`, `mission status`,
+and issue workflow surfaces, not from hidden claim or runtime active-pointer
+helpers.

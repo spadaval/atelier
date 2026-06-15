@@ -10,19 +10,22 @@ use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
-    let active_work = db.get_active_work_association()?;
-    let active_issue_id = active_work.as_ref().map(|work| work.issue_id.as_str());
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let active_issues = current_work_issues(db, workflow_policy.as_ref())?;
+    let active_issue_ids = active_issues
+        .iter()
+        .map(|issue| issue.id.as_str())
+        .collect::<BTreeSet<_>>();
     let active_mission = commands::mission::active_mission(db)?;
     let current_missions = db
         .list_records("mission", None)?
         .into_iter()
         .filter(|mission| mission.status != "closed")
         .collect::<Vec<_>>();
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let ready = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
-        .filter(|issue| Some(issue.id.as_str()) != active_issue_id)
+        .filter(|issue| !active_issue_ids.contains(issue.id.as_str()))
         .filter_map(|issue| {
             match commands::issue_workflow::issue_start_readiness(
                 db,
@@ -37,7 +40,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     let mission_snapshot = active_mission
         .as_ref()
-        .map(|mission| mission_snapshot(db, mission, active_issue_id))
+        .map(|mission| mission_snapshot(db, mission, &active_issue_ids))
         .transpose()?;
     let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
     let tracker_state = if export_stale.is_empty() {
@@ -49,10 +52,10 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     if quiet {
         println!(
             "work={} active_mission={} current_missions={} ready={} tracker={}",
-            if active_work.is_some() {
-                "active"
+            if active_issues.is_empty() {
+                "none".to_string()
             } else {
-                "none"
+                active_issues.len().to_string()
             },
             active_mission
                 .as_ref()
@@ -70,23 +73,13 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("Tracker:       {tracker_state}");
     println!("Ready work:    {}", ready.len());
 
-    match &active_work {
-        Some(work) => {
-            let title = db
-                .get_issue(&work.issue_id)?
-                .map(|issue| issue.title)
-                .unwrap_or_else(|| "(issue missing)".to_string());
-            println!("Active work:   {} - {}", work.issue_id, title);
-            println!(
-                "Work branch:   {}",
-                work.branch.as_deref().unwrap_or("(none)")
-            );
-            println!(
-                "Worktree:      {}",
-                work.worktree_path.as_deref().unwrap_or("(none)")
-            );
+    if active_issues.is_empty() {
+        println!("Current work:  none");
+    } else {
+        println!("Current work:  {} issue(s)", active_issues.len());
+        for issue in &active_issues {
+            println!("  {} - {}", issue.id, issue.title);
         }
-        None => println!("Active work:   none"),
     }
 
     match &active_mission {
@@ -186,14 +179,21 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 "  Open active mission record ({}): atelier mission show {}",
                 mission.id, mission.id
             );
-            if let Some(issue) = snapshot.active_issue.as_ref() {
+            if !snapshot.active_issues.is_empty() {
+                for issue in snapshot.active_issues.iter().take(3) {
+                    println!(
+                        "  Inspect current work transitions ({}): atelier issue transition {} --options",
+                        issue.id, issue.id
+                    );
+                }
+                if snapshot.active_issues.len() > 3 {
+                    println!(
+                        "  Inspect remaining current work ({} more issue(s)): atelier status",
+                        snapshot.active_issues.len() - 3
+                    );
+                }
                 println!(
-                    "  Inspect active work transitions ({}): atelier issue transition {} --options",
-                    issue.id, issue.id
-                );
-                println!(
-                    "  Abandon local work ({}) if you are switching away: atelier abandon {} --reason \"...\"",
-                    issue.id, issue.id
+                    "  Inspect worktree context if checkout state is unclear: atelier worktree status"
                 );
             } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
@@ -257,7 +257,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
 #[derive(Default)]
 struct MissionSnapshot {
     issue_ids: BTreeSet<String>,
-    active_issue: Option<Issue>,
+    active_issues: Vec<Issue>,
     ready_issues: Vec<Issue>,
     selectable_issues: Vec<Issue>,
     open_blockers: Vec<String>,
@@ -287,7 +287,7 @@ impl MissionSnapshot {
 fn mission_snapshot(
     db: &Database,
     mission: &DomainRecord,
-    active_issue_id: Option<&str>,
+    active_issue_ids: &BTreeSet<&str>,
 ) -> Result<MissionSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut snapshot = MissionSnapshot::default();
@@ -315,10 +315,10 @@ fn mission_snapshot(
         let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
-        match issue_bucket(db, &issue, active_issue_id, workflow_policy.as_ref())? {
+        match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
             IssueBucket::Active => {
                 snapshot.active += 1;
-                snapshot.active_issue = Some(issue);
+                snapshot.active_issues.push(issue);
             }
             IssueBucket::Ready => {
                 snapshot.ready += 1;
@@ -332,6 +332,7 @@ fn mission_snapshot(
             IssueBucket::Backlog => snapshot.backlog += 1,
         }
     }
+    snapshot.active_issues.sort_by(|a, b| a.id.cmp(&b.id));
     snapshot.ready_issues.sort_by(|a, b| a.id.cmp(&b.id));
     snapshot.selectable_issues.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(snapshot)
@@ -348,10 +349,10 @@ enum IssueBucket {
 fn issue_bucket(
     db: &Database,
     issue: &Issue,
-    active_issue_id: Option<&str>,
+    active_issue_ids: &BTreeSet<&str>,
     workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
 ) -> Result<IssueBucket> {
-    if Some(issue.id.as_str()) == active_issue_id {
+    if active_issue_ids.contains(issue.id.as_str()) {
         return Ok(IssueBucket::Active);
     }
     if commands::issue_workflow::issue_is_done(workflow_policy, issue) {
@@ -365,6 +366,23 @@ fn issue_bucket(
         commands::issue_workflow::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
         commands::issue_workflow::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
     }
+}
+
+pub(crate) fn current_work_issues(
+    db: &Database,
+    workflow_policy: Option<&crate::workflow_policy::WorkflowPolicy>,
+) -> Result<Vec<Issue>> {
+    let mut issues = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| {
+            commands::issue_workflow::issue_status_category(workflow_policy, &issue.status)
+                .as_deref()
+                == Some("active")
+        })
+        .collect::<Vec<_>>();
+    issues.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(issues)
 }
 
 fn open_issue_blockers(
