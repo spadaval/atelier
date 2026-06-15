@@ -1,516 +1,407 @@
 # Workflow Configuration Contract
 
-Atelier workflow policy is owned by the repository and selected by tracked
-project config. The target config entry point is:
+Version 1 issue workflow policy is a fixed repository artifact:
 
 ```text
-.atelier/config.toml
+.atelier/workflow.yaml
 ```
 
-During the compatibility window, commands may continue to load the existing root
-`atelier.workflow.yaml` when `.atelier/config.toml` has not yet selected a
-policy path. Workflow configuration is hand-authored repository policy that
-commands load alongside canonical tracker records; it is not local runtime
-state and must not be copied into generated rule trees.
+There is no config-selected policy path, environment fallback, or alternate
+workflow source in v1. Commands that inspect issue workflow state or execute
+issue transitions load and validate this file directly. If the file is missing
+or invalid, the command fails with a stable workflow-config error.
 
 ## Scope
 
-The workflow configuration defines:
+Version 1 workflow policy applies to issues only. The contract defines:
 
-- record types and their default workflows;
-- workflow states, transitions, and terminal states;
-- required fields, evidence, and workflow validators for transitions;
-- hook commands that run around workflow actions;
-- action-aware guidance rendered at the point of use.
+- a shared status catalog with explicit status categories;
+- named issue workflows and their allowed transitions;
+- terminal done states for each workflow;
+- built-in issue-type to workflow mappings;
+- configured built-in validators, including validator params;
+- simple guidance templates rendered with transitions; and
+- strict configuration errors for invalid or deferred config.
 
-It does not define direct agent-run management, coding-agent process
-supervision, durable agent-run rows, retry queues, token accounting, or live
-session metrics. Future run records may reference workflow outcomes, but the
-workflow contract itself only controls repository tracker transitions,
-validation, hooks, and guidance.
+Version 1 does not define mission, milestone, plan, or evidence lifecycles.
+Those records keep their own product contracts outside `.atelier/workflow.yaml`.
 
-## Schema Shape
+## Fixed V1 Shape
 
-The top-level file is strict YAML with explicit schema identity:
+The file is strict YAML with explicit schema identity:
 
 ```yaml
-schema: atelier.workflow_config
+schema: atelier.workflow
 schema_version: 1
 
-defaults:
-  workflow: tiny_task
-  hook_timeout_ms: 30000
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
 
-record_types:
-  issue:
-    default_workflow: tiny_task
-    workflows: [tiny_task]
-
-workflows:
-  tiny_task:
-    states: [open, claimed, done]
-    initial_state: open
-    terminal_states: [done]
-    transitions:
-      claim:
-        from: open
-        to: claimed
-      close:
-        from: claimed
-        to: done
-        validators: [durable_state_current]
+statuses:
+  open:
+    category: todo
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
 
 validators:
-  durable_state_current:
-    kind: builtin
+  durable_current:
     builtin: durable_state_current
+  review_ready:
+    builtin: review_complete
+  proof_attached:
+    builtin: evidence_attached
+    params:
+      min_count: 1
+  blockers_clear:
+    builtin: no_open_blockers
+  lint_clear:
+    builtin: no_blocking_lints
+  closeout_clean:
+    builtin: git_worktree_clean
 
-hooks: {}
-guidance: {}
+guidance_templates:
+  close_with_proof:
+    format: markdown
+    template: |
+      Closing {{ issue.id }} requires attached evidence and no open blockers.
+  record_spike_outcome:
+    format: markdown
+    template: |
+      Record a concise close reason that captures what {{ issue.id }} learned
+      and what follow-up work remains.
+
+workflows:
+  standard_review_proof:
+    initial_status: open
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [open, blocked]
+        to: in_progress
+      block:
+        from: [open, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_ready]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - blockers_clear
+          - lint_clear
+          - durable_current
+          - closeout_clean
+        guidance: [close_with_proof]
+
+  lightweight_spike:
+    initial_status: open
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [open, blocked]
+        to: in_progress
+      block:
+        from: [open, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      revise:
+        from: [review]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - review_ready
+          - durable_current
+        guidance: [record_spike_outcome]
 ```
 
-Required top-level fields are `schema`, `schema_version`, `record_types`,
-`workflows`, and `validators`. Optional top-level fields are `defaults`, `hooks`,
-and `guidance`.
+Required top-level fields are `schema`, `schema_version`, `issue_types`,
+`statuses`, `validators`, `guidance_templates`, and `workflows`.
 
-Names for workflows, states, transitions, validators, hooks, and guidance blocks
-use stable lowercase ASCII identifiers: `^[a-z][a-z0-9_]*$`. Human-readable
-labels may be added later, but identifiers are the machine contract.
+Unknown fields are hard errors. Unknown references are hard errors. Schema
+version 1 does not permit compatibility aliases, partial parsing, or silent
+fallback behavior.
 
-Unknown fields are configuration errors. Unknown references are configuration
-errors. Future schema versions are unsupported unless an implementation
-explicitly ships a migration or compatibility reader.
+## Statuses And Categories
 
-## Transition Fields
+`statuses` is a shared catalog of named status objects. Status names use stable
+lowercase ASCII identifiers: `^[a-z][a-z0-9_]*$`.
 
-Each transition may define:
+Each status object currently has one required field:
 
 | Field | Rule |
 | --- | --- |
-| `from` | Required source state or source-state array. |
-| `to` | Required destination state. |
-| `required_fields` | Optional record fields that must be non-empty before the transition. |
-| `evidence` | Optional evidence requirements such as `min_count`, `types`, or linked validation criteria. |
-| `validators` | Optional ordered list of validator identifiers. |
-| `hooks` | Optional hook lists keyed by event, such as `before_transition`. |
-| `guidance` | Optional guidance block identifiers rendered for the action. |
-| `allow_override` | Optional boolean. Overrides are rejected unless this is true and a reason is recorded. |
+| `category` | Required. One of `todo`, `active`, `blocked`, `review`, `validation`, or `done`. |
 
-Workflow completion is represented by transitions into `terminal_states`.
-Closure rules should be expressed through `required_fields`, `evidence`, and
-`validators` on those transitions rather than by adding special milestone fields.
-For missions, completion requires all linked work closed, required evidence
-attached, workflow validators passing, and a clean Git worktree.
+Status categories are operator-facing summary buckets. They help `atelier
+status`, ready queues, issue detail, and mission status describe where work is
+without changing workflow semantics. Categories do not replace transitions.
 
-## Invalid Configuration Errors
+Statuses in a workflow's `done_statuses` list are terminal for that workflow:
 
-Configuration loading must report stable error names. Human-readable text may
-change, but these names are the API contract for diagnostics, lint, workflow
-evidence, and Mission Control projections.
+- every `done_statuses` value must exist in `statuses`;
+- every terminal status must have category `done`; and
+- no transition may leave a terminal done status.
+
+## Issue-Type Mappings
+
+`issue_types` maps each built-in issue type to one named workflow. Version 1
+accepts only these built-in issue types:
+
+- `bug`
+- `closeout`
+- `epic`
+- `feature`
+- `spike`
+- `task`
+- `validation`
+
+Repositories may remap those built-in types to any defined workflow, but they
+may not invent custom issue types in v1.
+
+The starter policy is:
+
+| Issue type | Default workflow |
+| --- | --- |
+| `bug` | `standard_review_proof` |
+| `closeout` | `standard_review_proof` |
+| `epic` | `standard_review_proof` |
+| `feature` | `standard_review_proof` |
+| `spike` | `lightweight_spike` |
+| `task` | `standard_review_proof` |
+| `validation` | `standard_review_proof` |
+
+## Workflows And Transitions
+
+`workflows` is a map of named workflow definitions. Each workflow defines:
+
+| Field | Rule |
+| --- | --- |
+| `initial_status` | Required status name. Must exist in `statuses` and must not be terminal. |
+| `done_statuses` | Required non-empty list of terminal status names. |
+| `transitions` | Required map of named transition objects. |
+
+Each transition object defines:
+
+| Field | Rule |
+| --- | --- |
+| `from` | Required status name or non-empty list of status names. |
+| `to` | Required destination status name. |
+| `required_fields` | Optional list of canonical issue field names that must be non-empty before the transition succeeds. |
+| `validators` | Optional ordered list of validator definition names from the top-level `validators` map. |
+| `guidance` | Optional list of guidance template names from `guidance_templates`. |
+
+Transition names use the same stable identifier rule as statuses and workflows.
+A transition is invalid when it references an unknown status, targets a status
+outside the workflow, duplicates another transition name in the same workflow,
+or attempts to leave a terminal done status.
+
+Version 1 required-field enforcement is intentionally narrow. `close_reason` is
+the key required field used by the starter workflows to make low-risk closure
+inspectable even when first-class evidence is not required.
+
+## Validator Definitions
+
+`validators` is a map of repository-defined validator entries. Each entry uses:
+
+| Field | Rule |
+| --- | --- |
+| `builtin` | Required built-in validator name. |
+| `params` | Optional params object validated by the chosen built-in validator. |
+
+Transition validators reference these validator entry names, not raw built-in
+strings, so repositories can reuse one configured validator in multiple
+transitions.
+
+Version 1 built-in validator names are fixed:
+
+| Built-in | Params | Behavior |
+| --- | --- | --- |
+| `durable_state_current` | none | Fails when canonical tracker state or required export freshness is stale for the transition. |
+| `evidence_attached` | `min_count` (required integer >= 1), `kind` (optional evidence kind) | Fails when the issue does not have enough attached evidence records matching the params. |
+| `review_complete` | none | Fails when the issue has not gone through the expected review path for the transition. |
+| `validation_criteria_satisfied` | none | Fails when the issue or parent closeout criteria required by the workflow remain unproven. |
+| `no_open_blockers` | none | Fails when blocking issue dependencies remain open. |
+| `no_blocking_lints` | none | Fails when tracker lint reports blocking defects for the issue or transition. |
+| `git_worktree_clean` | none | Fails when the current worktree has tracked or untracked changes that make closeout non-clean. |
+
+Unknown built-in names, missing required params, wrong param types, and
+unexpected params are strict configuration errors.
+
+## Guidance Templates
+
+`guidance_templates` is a map of named advisory templates rendered near a
+transition or failure path. Each template currently defines:
+
+| Field | Rule |
+| --- | --- |
+| `format` | Required. `markdown` only in v1. |
+| `template` | Required template string. |
+
+Template rendering is strict. Unknown variables or malformed template syntax
+fail configuration validation. The supported template context is intentionally
+small:
+
+- `issue.id`
+- `issue.type`
+- `transition.name`
+- `transition.from`
+- `transition.to`
+
+Guidance is descriptive only. It does not replace validators and it does not
+run commands.
+
+## Strict Configuration Errors
+
+Workflow-dependent commands report stable error names. Human-readable text may
+change, but these names are the contract for diagnostics and validation proof.
 
 | Error name | Meaning |
 | --- | --- |
-| `workflow_config_missing` | The configured workflow policy file is required for the action and is absent. |
-| `workflow_config_not_file` | The configured path exists but is not a regular file. |
+| `workflow_config_missing` | `.atelier/workflow.yaml` is required for the action and is absent. |
+| `workflow_config_not_file` | The workflow path exists but is not a regular file. |
 | `workflow_config_parse_error` | YAML parsing failed. |
 | `workflow_config_schema_missing` | `schema` or `schema_version` is absent. |
 | `workflow_config_schema_unsupported` | The schema name or version is unsupported. |
 | `workflow_config_unknown_field` | A top-level or nested field is not part of schema version 1. |
-| `workflow_config_invalid_name` | A workflow, state, transition, validator, hook, or guidance identifier is malformed. |
-| `workflow_config_duplicate_name` | A list or map defines the same identifier more than once. |
-| `workflow_config_unknown_reference` | A transition, record type, validator, hook, or guidance block references an undefined identifier. |
-| `workflow_config_invalid_transition` | A transition has invalid `from` or `to` states, cannot be reached, or conflicts with terminal-state rules. |
-| `workflow_config_invalid_validator` | A validator definition is malformed or names an unsupported validator kind. |
-| `workflow_config_invalid_hook` | A hook definition is malformed or names an unsupported hook event. |
-| `workflow_config_invalid_env` | An environment-variable reference is malformed, missing when required, or used in a field that does not permit expansion. |
-| `workflow_config_invalid_template` | Guidance rendering references an unknown variable, filter, or context field. |
-| `workflow_config_reload_failed` | A reload check found a different file hash but the new file could not be loaded. |
+| `workflow_config_duplicate_name` | A map or list defines the same status, workflow, transition, validator, or guidance name more than once. |
+| `workflow_config_invalid_status` | A status entry is malformed or uses an unsupported category. |
+| `workflow_config_invalid_workflow` | A workflow entry is malformed or internally inconsistent. |
+| `workflow_config_invalid_transition` | A transition entry is malformed, unreachable, or violates terminal-state rules. |
+| `workflow_config_invalid_validator` | A validator entry is malformed, names an unsupported built-in, or uses invalid params. |
+| `workflow_config_invalid_guidance_template` | A guidance template is malformed or references unsupported template variables. |
+| `workflow_config_invalid_issue_type_mapping` | An issue type mapping is missing, uses an unsupported issue type, or points at an undefined workflow. |
+| `workflow_config_unknown_reference` | A transition, workflow, validator, or guidance block references an undefined name. |
+| `workflow_config_deferred_feature` | The config uses a feature that version 1 intentionally does not support. |
 
-Every error payload should include `path`, `error`, `message`, and, when
-available, `line`, `column`, `field`, and `reference`.
+Error payloads should include `path`, `error`, and `message`, plus `line`,
+`column`, `field`, or `reference` when that detail is available.
 
-## Environment Expansion
+## Standard Review/Proof Workflow Example
 
-Environment values are never expanded implicitly. Plain YAML strings are literal,
-including strings that contain `$NAME` or `${NAME}`.
-
-Expansion is allowed only where the schema says an expandable scalar is valid,
-and the value must use this object shape:
+The standard starter workflow is the contract for most issue types. It makes
+review and proof explicit before `done`:
 
 ```yaml
-value:
-  from_env: ATELIER_TOKEN
-  required: true
-```
-
-Optional environment values may provide a literal default:
-
-```yaml
-value:
-  from_env: ATELIER_BRANCH_PREFIX
-  required: false
-  default: codex
-```
-
-Workflow names, state names, transition names, validator names, hook names,
-record type names, and schema fields are not expandable. Repository policy must
-remain visible in the committed file; environment indirection is only for local
-secrets or machine-specific scalar values.
-
-## Hooks
-
-Hooks are side-effect commands declared by workflow policy. They are not a
-replacement for validators: validators decide whether a transition is allowed,
-while hooks run integration steps around an allowed action.
-
-Hook definitions use explicit argv arrays and do not run through a shell unless
-the repository intentionally invokes one:
-
-```yaml
-hooks:
-  test_before_milestone_close:
-    event: before_transition
-    transitions: [close]
-    command:
-      argv: [cargo, test]
-      env: {}
-    timeout_ms: 120000
-    failure_mode: block
-```
-
-Supported hook events for schema version 1 are:
-
-- `before_transition`: runs after static transition checks and validators pass,
-  but before the tracker mutation is committed;
-- `after_transition`: runs after the canonical record write and any derived-state
-  refresh or repair marking is complete;
-- `worktree_setup`: runs when a worktree helper prepares a worktree.
-
-The staged `atelier worktree for` implementation executes hooks whose
-definition has `event: worktree_setup`. The hook command runs in the created or
-located worktree with `ATELIER_WORKTREE_PATH`, `ATELIER_WORK_ISSUE_ID`, and
-`ATELIER_WORK_BRANCH` set. Non-zero exit status blocks the helper and is
-reported in command output.
-
-`timeout_ms` is required unless `defaults.hook_timeout_ms` is set. Hook
-timeouts and non-zero exits produce machine-readable results. A hook with
-`failure_mode: block` prevents the action and reports `hook_timeout`,
-`hook_failed`, or `hook_spawn_failed`. A hook with `failure_mode: warn` allows
-the action to continue and emits the same result names as warnings.
-
-The default failure mode is `block` for `before_transition` and `worktree_setup`
-hooks, and `warn` for `after_transition` hooks. Blocking `after_transition`
-hooks are not allowed because the record mutation has already happened.
-
-Hook stdin receives the same context shape used by workflow validators plus the
-hook identifier and event. Hook stdout and stderr are captured, truncated for
-display, and available to diagnostics and Mission Control projections.
-
-Schema version 1 examples still use `export_current` for compatibility with the
-existing Mission Control projection vocabulary. New schema work should prefer
-separate durable-record and projection-index freshness fields.
-
-## Workflow Validators
-
-Workflow validators are transition checks attached to workflow policy. The
-validator identifier is stable and appears in transition definitions, JSON
-results, lint output, and Mission Control projections.
-
-Validator definitions have one of these schema version 1 kinds:
-
-```yaml
-validators:
-  durable_state_current:
-    kind: builtin
-    builtin: durable_state_current
-
-  evidence_attached:
-    kind: builtin
-    builtin: evidence_attached
-    params:
-      min_count: 1
-
-  milestone_acceptance_met:
-    kind: builtin
-    builtin: validation_criteria_satisfied
-
-  clean_worktree:
-    kind: builtin
-    builtin: git_worktree_clean
-```
-
-Builtin validator names are implementation-owned stable names. The initial
-stable builtin namespace is:
-
-- `durable_state_current`
-- `evidence_attached`
-- `validation_criteria_satisfied`
-- `no_open_blockers`
-- `no_blocking_lints`
-- `review_complete`
-- `git_worktree_clean`
-
-`git_worktree_clean` checks tracked and untracked changes with
-`git status --porcelain`; any output is a validation failure.
-
-Custom validators are deferred until an implementation issue defines execution,
-sandboxing, caching, and result validation. Hook commands must not be treated as
-custom validators.
-
-### Validator Context
-
-Validators receive a deterministic input context:
-
-```json
-{
-  "schema": "atelier.workflow_validator_context",
-  "schema_version": 1,
-  "config": {
-    "path": ".atelier/config.toml",
-    "sha256": "<config-file-sha256>"
-  },
-  "workflow": "milestone_task",
-  "transition": {
-    "name": "close",
-    "from": "validation",
-    "to": "done"
-  },
-  "record": {
-    "kind": "issue",
-    "id": "atelier-z1p8",
-    "status": "validation"
-  },
-  "linked_records": [],
-  "blockers": [],
-  "evidence": [],
-  "milestone": null,
-  "projection": {
-    "state_path": ".atelier",
-    "export_current": true
-  },
-  "git": {
-    "branch": "codex/example",
-    "dirty": false
-  },
-  "now": "2026-06-09T00:00:00Z"
-}
-```
-
-Implementations may add fields in a future schema version. Schema version 1
-validators must not silently ignore missing required context: if a builtin
-cannot use required context, it fails with an actionable message.
-
-### Validator Result
-
-Validator results are machine-readable and use a pass/fail shape:
-
-```json
-{
-  "schema": "atelier.workflow_validator_result",
-  "schema_version": 1,
-  "validator": "evidence_attached",
-  "workflow": "milestone_task",
-  "transition": "close",
-  "record": {
-    "kind": "issue",
-    "id": "atelier-z1p8"
-  },
-  "result": "fail",
-  "message": "Attach at least 1 evidence record before closing atelier-z1p8.",
-  "actions": [
-    "Run the required validation command.",
-    "Record the result with atelier evidence record --target issue/atelier-z1p8.",
-    "Retry the close transition."
-  ],
-  "details": {
-    "required_count": 1,
-    "actual_count": 0
-  }
-}
-```
-
-`result` is `pass` or `fail`. A failing result must name the failed condition,
-the affected record, and at least one next action. Commands that cannot build a
-validator context may report the command-level validation state `blocked`, but a
-validator that runs returns only `pass` or `fail`. `atelier workflow validate`
-treats validator failures as command failures by default.
-
-## Guidance Rendering
-
-Guidance blocks are advisory text rendered close to the action they affect. They
-may be attached to record types, workflows, states, or transitions:
-
-```yaml
-guidance:
-  milestone_close:
-    applies_to:
-      workflow: milestone_task
-      transition: close
-    format: markdown
-    template: |
-      Closing {{ record.id }} requires current export state and attached
-      evidence for every milestone validation criterion.
-```
-
-Template rendering is strict. Unknown variables, filters, or context paths fail
-with `workflow_config_invalid_template` at reload-check time when statically
-detectable, or at action time when dependent on runtime context. Guidance
-receives the same context as validators and must not read environment variables
-except through explicit expandable values in the config.
-
-## Reload Behavior
-
-Every CLI invocation that depends on workflow policy reads and validates the
-configured workflow policy before acting. The command captures the config file
-hash in validator, hook, and diagnostic output.
-
-Long-lived future surfaces such as Mission Control, file watchers, or local
-helpers must perform a reload check before each config-dependent action:
-
-1. Hash the configured workflow policy file.
-2. If the hash is unchanged, keep the loaded config.
-3. If the hash changed, parse and validate the new file.
-4. If the new file is valid, use it for the action and report the new hash.
-5. If the new file is invalid, reject mutating config-dependent actions with
-   `workflow_config_reload_failed`.
-
-Read-only projections may display the last valid config only if they also show
-the current reload failure. They must not silently fall back for transitions,
-validators, hooks, or guidance.
-
-Hidden advanced/internal workflow diagnostics may inspect workflow policy when a
-binding, assignment, or closeout contract explicitly names that diagnostic path.
-They are not normal operator guidance and do not replace domain status,
-transition, lint, or doctor surfaces. Routine config health is surfaced through
-`atelier lint` and `atelier doctor`.
-
-## Tiny Task Example
-
-Tiny tasks avoid milestone ceremony but still protect durable state freshness:
-
-```yaml
-schema: atelier.workflow_config
-schema_version: 1
-
-defaults:
-  workflow: tiny_task
-  hook_timeout_ms: 30000
-
-record_types:
-  issue:
-    default_workflow: tiny_task
-    workflows: [tiny_task]
-
 workflows:
-  tiny_task:
-    states: [open, claimed, done]
-    initial_state: open
-    terminal_states: [done]
+  standard_review_proof:
+    initial_status: open
+    done_statuses: [done]
     transitions:
-      claim:
-        from: open
-        to: claimed
-      close:
-        from: claimed
-        to: done
-        validators: [durable_state_current]
-
-validators:
-  durable_state_current:
-    kind: builtin
-    builtin: durable_state_current
-```
-
-This workflow lets small issues move from open to claimed to done. It does not
-require evidence unless repository policy opts into that stricter validator.
-
-## Stricter Milestone Workflow Example
-
-Milestone-bound work can require planning, review, validation evidence, and a
-current export before completion:
-
-```yaml
-schema: atelier.workflow_config
-schema_version: 1
-
-defaults:
-  workflow: milestone_task
-  hook_timeout_ms: 30000
-
-record_types:
-  issue:
-    default_workflow: milestone_task
-    workflows: [milestone_task]
-
-workflows:
-  milestone_task:
-    states:
-      - research
-      - planning
-      - implementation
-      - review
-      - validation
-      - done
-    initial_state: research
-    terminal_states: [done]
-    transitions:
-      plan:
-        from: research
-        to: planning
-      implement:
-        from: planning
-        to: implementation
+      start:
+        from: [open, blocked]
+        to: in_progress
+      block:
+        from: [open, in_progress, review, validation]
+        to: blocked
       request_review:
-        from: implementation
+        from: [in_progress]
         to: review
-      validate:
-        from: [implementation, review]
+      request_validation:
+        from: [in_progress, review]
         to: validation
-        validators: [review_complete]
+        validators: [review_ready]
       close:
-        from: validation
+        from: [validation]
         to: done
+        required_fields: [close_reason]
         validators:
-          - validation_criteria_satisfied
-          - evidence_attached
-          - durable_state_current
-          - no_open_blockers
-          - git_worktree_clean
-        hooks:
-          before_transition: [test_before_milestone_close]
-
-validators:
-  durable_state_current:
-    kind: builtin
-    builtin: durable_state_current
-  evidence_attached:
-    kind: builtin
-    builtin: evidence_attached
-    params:
-      min_count: 1
-  no_open_blockers:
-    kind: builtin
-    builtin: no_open_blockers
-  review_complete:
-    kind: builtin
-    builtin: review_complete
-  git_worktree_clean:
-    kind: builtin
-    builtin: git_worktree_clean
-  validation_criteria_satisfied:
-    kind: builtin
-    builtin: validation_criteria_satisfied
-
-hooks:
-  test_before_milestone_close:
-    event: before_transition
-    transitions: [close]
-    command:
-      argv: [cargo, test]
-      env: {}
-    timeout_ms: 120000
-    failure_mode: block
+          - proof_attached
+          - blockers_clear
+          - lint_clear
+          - durable_current
+          - closeout_clean
+        guidance: [close_with_proof]
 ```
 
-This stricter workflow scales process to milestone risk without making that
-ceremony the default for tiny tasks.
+This workflow is intentionally strict at close:
+
+- work must pass through review and validation/proof states;
+- `close_reason` must be recorded;
+- at least one evidence record must be attached;
+- blockers and blocking lints must be clear; and
+- durable tracker state and the worktree must be current enough for closeout.
+
+## Lightweight Spike Workflow Example
+
+The lightweight spike workflow is deliberately smaller. It still uses the review
+path, but it does not require first-class evidence for low-risk closure:
+
+```yaml
+workflows:
+  lightweight_spike:
+    initial_status: open
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [open, blocked]
+        to: in_progress
+      block:
+        from: [open, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      revise:
+        from: [review]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - review_ready
+          - durable_current
+        guidance: [record_spike_outcome]
+```
+
+This example makes the intended trade-off explicit:
+
+- spikes still move through review before they close;
+- spikes still record an inspectable `close_reason`; and
+- spikes do not require attached evidence unless a repository intentionally maps
+  them to a stricter workflow.
+
+## Deferred Features
+
+These features are outside version 1 and must be rejected with
+`workflow_config_deferred_feature` when they appear in
+`.atelier/workflow.yaml`:
+
+- custom issue types;
+- custom validator execution;
+- expression validators;
+- hooks;
+- triggers;
+- post-functions;
+- waivers; and
+- workflow projection tables.
+
+Version 1 keeps the contract small on purpose. Future workflow work can extend
+the schema with a new version once those behaviors have an explicit execution
+and validation model.

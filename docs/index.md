@@ -36,8 +36,8 @@
   first-class checkpoint record fields, validation model, evidence links, and
   command-surface ownership.
 - [docs/product/workflow-configuration.md](product/workflow-configuration.md):
-  repository-owned workflow policy path, schema, validators, hooks, reload
-  behavior, and risk-scaled examples.
+  fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
+  guidance templates, strict errors, and starter workflow examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
   RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
   durable writes, issue activity sidecars, rebuildable SQLite indexes, and

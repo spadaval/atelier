@@ -261,9 +261,9 @@ discover the hidden `atelier work` command group.
 
 `atelier worktree for <issue-id>` creates or locates a Git worktree using the
 configured branch/path policy, rebuilds local SQLite state from
-tracked `.atelier/` records, runs `worktree_setup` hooks from the configured
-workflow policy, and records the issue/branch/worktree association in local
-runtime state.
+tracked `.atelier/` records, and records the issue/branch/worktree association
+in local runtime state. Workflow-defined hooks are deferred in v1 and are not
+part of the current worktree contract.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated work, and canonical export
 freshness when available. `atelier worktree merge` and

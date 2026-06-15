@@ -255,44 +255,65 @@ their domain command groups instead of a public generic `link` command.
 
 ## Workflows
 
-Atelier should support configurable workflows. A workflow defines allowed phases,
-transitions, required fields, workflow validators, evidence requirements, and
-closure rules.
+Atelier should support repository-owned configurable issue workflows. Version 1
+uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
+policy path. The file defines shared statuses with explicit categories, named
+issue workflows, terminal done states, built-in issue-type mappings, transition
+rules, configured built-in validators with params, guidance templates, strict
+configuration errors, and deferred features.
 
 Example workflow:
 
 ```yaml
-types:
-  epic:
-    workflow: epic_delivery
+issue_types:
+  bug: standard_review_proof
+  closeout: standard_review_proof
+  epic: standard_review_proof
+  feature: standard_review_proof
+  spike: lightweight_spike
+  task: standard_review_proof
+  validation: standard_review_proof
+
+statuses:
+  open:
+    category: todo
+  in_progress:
+    category: active
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
 
 workflows:
-  epic_delivery:
-    phases:
-      - research
-      - impact_report
-      - planning
-      - implementation
-      - code_review
-      - validation
-      - done
+  standard_review_proof:
+    initial_status: open
+    done_statuses: [done]
     transitions:
-      research: [impact_report]
-      impact_report: [planning, research]
-      planning: [implementation, research]
-      implementation: [code_review, validation]
-      code_review: [implementation, validation]
-      validation: [done, implementation]
-    done_requires:
-      evidence:
-        min_count: 1
-      validators:
-        - tests_passed
-        - durable_state_current
+      start:
+        from: [open]
+        to: in_progress
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - durable_current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
-ceremony unless policy says so.
+ceremony unless policy says so. The starter contract uses a standard
+review/proof workflow for most issue types and a lighter reviewed spike
+workflow that still records an inspectable close reason without requiring
+first-class evidence.
 
 ## Rules, Lint, And Guidance
 
@@ -324,7 +345,6 @@ Process should be:
 
 - Configurable.
 - Risk-scaled.
-- Overrideable with a recorded reason.
 - Split between start requirements and close requirements.
 - Strict only where strictness protects correctness or coordination.
 
@@ -335,7 +355,8 @@ Rules should have severities:
 - `error`
 - `policy`
 
-Waivers should be explicit and visible in Mission Control.
+Version 1 deliberately avoids workflow waivers. If a future product slice adds
+waivers, they need an explicit contract and visibility model.
 
 ## Branches And Worktrees
 
@@ -387,14 +408,15 @@ local Atelier runtime association and canonical export freshness checks.
 Evidence should be a first-class condition for closing work. Workflow validators
 evaluate whether a record can advance or close.
 
-Example validators:
+Version 1 built-in validators include:
 
 - `durable_state_current`
-- `tests_passed`
 - `review_complete`
 - `evidence_attached`
 - `validation_criteria_satisfied`
+- `no_open_blockers`
 - `no_blocking_lints`
+- `git_worktree_clean`
 
 Validators should produce machine-readable results for Mission Control.
 

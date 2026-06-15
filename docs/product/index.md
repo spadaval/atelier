@@ -22,8 +22,8 @@ that can be implemented and validated.
 - [Milestone Records](milestone-records.md): first-class checkpoint record
   fields, validation model, evidence links, and command-surface ownership.
 - [Workflow Configuration Contract](workflow-configuration.md):
-  repository-owned workflow policy path, schema, validators, hooks, reload
-  behavior, and risk-scaled examples.
+  fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
+  guidance templates, strict errors, and starter workflow examples.
 
 ## Interfaces
 
