@@ -19,6 +19,8 @@ relationships:
   - kind: "issue"
     id: "atelier-c0f1"
   - kind: "issue"
+    id: "atelier-e05r"
+  - kind: "issue"
     id: "atelier-krm3"
   - kind: "issue"
     id: "atelier-larc"

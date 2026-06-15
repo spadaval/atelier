@@ -811,7 +811,7 @@ fn evaluate_builtin_with_params(
                 Ok((false, format!("open linked work: {}", open.join(", "))))
             }
         }
-        "git_worktree_clean" => git_worktree_clean(),
+        "git_worktree_clean" => git_worktree_clean(target_kind, target_id),
         "no_blocking_lints" => {
             let status = Command::new(std::env::current_exe()?)
                 .arg("lint")
@@ -1184,7 +1184,7 @@ fn collect_issue_and_descendants(
     Ok(())
 }
 
-fn git_worktree_clean() -> Result<(bool, String)> {
+fn git_worktree_clean(target_kind: &str, target_id: &str) -> Result<(bool, String)> {
     let root = repo_root()?;
     let output = Command::new("git")
         .args(["status", "--porcelain", "--untracked-files=all"])
@@ -1213,7 +1213,7 @@ fn git_worktree_clean() -> Result<(bool, String)> {
     if dirty.is_empty() {
         Ok((true, "git worktree is clean".to_string()))
     } else {
-        let classified = classify_git_dirty_entries(&root, &dirty)?;
+        let classified = classify_git_dirty_entries(&root, &dirty, target_kind, target_id)?;
         if classified.blocking_entries.is_empty() {
             if classified.tracker_generated_entries.is_empty() {
                 return Ok((true, "git worktree is clean".to_string()));
@@ -1297,6 +1297,8 @@ fn summarize_git_dirty_entries(entries: &[String]) -> String {
 fn classify_git_dirty_entries(
     repo_root: &Path,
     entries: &[GitDirtyEntry],
+    target_kind: &str,
+    target_id: &str,
 ) -> Result<ClassifiedGitDirtyEntries> {
     let tracker_activity_issue_ids = entries
         .iter()
@@ -1319,6 +1321,16 @@ fn classify_git_dirty_entries(
             tracker_generated_entries.push(entry.raw.clone());
             continue;
         }
+        if is_tracker_generated_new_target_issue(
+            relative,
+            &entry.raw,
+            target_kind,
+            target_id,
+            &tracker_activity_issue_ids,
+        ) {
+            tracker_generated_entries.push(entry.raw.clone());
+            continue;
+        }
         if is_tracker_generated_issue_bookkeeping(
             repo_root,
             relative,
@@ -1338,6 +1350,22 @@ fn classify_git_dirty_entries(
         blocking_entries,
         tracker_generated_entries,
     })
+}
+
+fn is_tracker_generated_new_target_issue(
+    relative: &Path,
+    raw_status: &str,
+    target_kind: &str,
+    target_id: &str,
+    tracker_activity_issue_ids: &BTreeSet<String>,
+) -> bool {
+    if target_kind != "issue" || !raw_status.trim_start().starts_with("??") {
+        return false;
+    }
+    let Some(issue_id) = issue_id_from_canonical_issue_path(relative) else {
+        return false;
+    };
+    issue_id == target_id && tracker_activity_issue_ids.contains(target_id)
 }
 
 fn atelier_relative_path(repo_path: &str) -> Option<&Path> {
