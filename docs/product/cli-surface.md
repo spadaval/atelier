@@ -21,7 +21,7 @@ Workflow-first commands are stable enough to appear in `atelier --help` and are
 the normal repo-owned operational path that Agent Factory should reference:
 
 - `atelier init`
-- `atelier prime`
+- `atelier man [worker|reviewer|manager|admin]`
 - `atelier status`
 - `atelier issue ...`
 - `atelier search <query>`
@@ -50,13 +50,16 @@ input was detected but must not silently convert it. Its default next steps
 must not route a fresh checkout directly to issue creation before `atelier
 lint` confirms the committed tracker and workflow configuration are valid.
 
-`atelier prime` is the recovery and onboarding signpost. It explains how an
-agent should operate in this repository, where durable tracker state lives, what
-local runtime/cache state is ignored, and which command families matter. It is
-mostly static guidance with a small dynamic header for repository path, active
-mission, active work, ready work, and tracker freshness. It is not a live status
-dashboard, full command reference, or implementation tutorial; every command it
-prints must have a concrete reason.
+`atelier man [<role>]` is the role-specific guide surface. It filters the
+existing product command surface for the operator's job without creating
+role-prefixed command namespaces. Valid roles are `worker`, `reviewer`,
+`manager`, and `admin`. `manager` is the broad CLI role class for work
+coordination; Agent Factory may still use `orchestrator` for a specific agent
+type inside that class, but `orchestrator` is not a `man` role alias. With no
+role, `atelier man` lists the valid roles. Worker, reviewer, and manager guides
+require valid tracker/runtime state and fail fast with recovery guidance when
+state is unavailable. The admin guide degrades gracefully before initialization
+or when local state is broken.
 
 `atelier status` is the root checkout signpost. It summarizes active work,
 active mission focus, ready work count, tracker freshness, and the next
@@ -81,8 +84,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
-| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `prime`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
-| `prime` | Recovery and onboarding signpost for this checkout. | Small dynamic repo header plus concise workflow guidance and named commands. | Repo path, active mission/work IDs, ready count, freshness token. | `status`, `mission status`, `issue list --ready`. |
+| `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
+| `man` | Show role-specific operating guidance for worker, reviewer, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, `doctor`, role-specific commands. |
 | `status` | Root orientation for the current checkout. | Active work, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Establish active local work on one issue within the current mission worktree and epic branch. | Confirmation, local association state, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
 | `abandon` | Drop the local work association without mutating tracker status. | Confirmation, recorded reason, and any remaining local cleanup hint. | Issue ID and cleared token. | `status`, `worktree status`, `issue show <id>`. |

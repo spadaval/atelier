@@ -34,6 +34,9 @@ that can be implemented and validated.
   and tracker-first ownership policy.
 - [CLI Surface Tiers](cli-surface.md): public CLI core command surface, removed
   compatibility commands, and inherited utility disposition.
+- [Command Audit](command-audit/index.md): role ownership, naming, documentation,
+  output hierarchy, and role-specific guide proposal for each root command
+  surface.
 - [Human CLI Output](human-cli-output.md): human-readable CLI output grammar,
   formatter boundaries, color/width policy, and test expectations.
 - [Mission Control TUI](mission-control-tui.md): Mission Control TUI projection

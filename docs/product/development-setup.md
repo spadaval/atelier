@@ -30,7 +30,7 @@ From the repository root:
 ```bash
 cargo fmt -- --check
 cargo nextest run
-atelier prime
+atelier man admin
 atelier doctor
 ```
 

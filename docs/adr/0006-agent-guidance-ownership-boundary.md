@@ -8,7 +8,7 @@ Accepted.
 
 Atelier currently uses Agent Factory as the primary agent entry point, with
 more tactical repository guidance repeated or routed through surfaces such as
-`atelier prime`, `atelier status`, mission status, workflow policy, and product
+`atelier man <role>`, `atelier status`, mission status, workflow policy, and product
 docs.
 
 That split has become awkward. Agent Factory is useful because it carries
@@ -34,7 +34,7 @@ Agent Factory remains the portable orchestration discipline.
    Repo-specific command selection, workflow recovery, tracker state
    explanation, mission and issue drill-down, evidence routing, health checks,
    readiness cues, and closeout diagnostics belong in Atelier-owned surfaces:
-   `atelier prime`, `atelier status`, mission and issue commands, workflow
+   `atelier man <role>`, `atelier status`, mission and issue commands, workflow
    policy, product docs, validation docs, and command help.
 
 2. Agent Factory owns portable coordination behavior.
@@ -55,11 +55,11 @@ Agent Factory remains the portable orchestration discipline.
    workflow policy, active mission, active work, or repository health, prefer an
    Atelier command surface over static Agent Factory text.
 
-5. Role-scoped guidance may be added to Atelier when it helps operators.
-   Additional surfaces such as `atelier prime --role orchestrator`,
-   `atelier prime --role worker`, `atelier prime --role validator`, or an
-   equivalent guide namespace are acceptable if they remain repo-owned,
-   dynamic, and consistent with product command-surface contracts.
+5. Role-scoped guidance belongs in Atelier when it helps operators.
+   `atelier man <role>` is the repo-owned guide namespace for tactical role
+   guidance. Valid roles are `worker`, `reviewer`, `manager`, and `admin`.
+   `manager` is the broad CLI role class for work coordination; `orchestrator`
+   remains an Agent Factory agent type within that class.
 
 ## Consequences
 
@@ -82,5 +82,5 @@ Agent Factory remains the portable orchestration discipline.
   is distinct: Agent Factory coordinates agents, while Atelier explains this
   repository's live operating state.
 - Role-scoped CLI guidance can make Atelier more valuable, but it must stay
-  concise. `atelier prime` should remain an onboarding and recovery signpost,
-  not a full tutorial or hidden process manual.
+  concise. `atelier man <role>` filters existing commands for the operator's
+  job; it does not create role-prefixed command namespaces.

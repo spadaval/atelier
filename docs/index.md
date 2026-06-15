@@ -59,6 +59,9 @@
 - [docs/product/cli-surface.md](product/cli-surface.md): public CLI
   core command surface, removed compatibility commands, and inherited utility
   disposition.
+- [docs/product/command-audit/index.md](product/command-audit/index.md):
+  role ownership, naming, documentation, output hierarchy, and role-specific
+  guide proposal for each root command surface.
 - [docs/product/human-cli-output.md](product/human-cli-output.md):
   human-readable CLI output grammar, formatter boundaries, color/width policy,
   and test expectations.

@@ -21,6 +21,10 @@ Information hierarchy matters: default views should emphasize what is current,
 mission-relevant, and actionable without making the full record the default
 view.
 
+Less is more, and curation is a virtue: every feature has a cost and must
+justify itself through clearer decisions, safer coordination, or more
+trustworthy work.
+
 Guidance at friction points: when work is blocked, invalid, stale, or missing
 proof, Atelier should explain what is missing, why it matters, and how to move
 forward.

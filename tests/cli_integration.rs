@@ -319,7 +319,7 @@ fn valid_command_surface_doc() -> &'static str {
 ## Core
 
 - `atelier init`
-- `atelier prime`
+- `atelier man`
 - `atelier status`
 - `atelier start`
 - `atelier abandon`
@@ -336,6 +336,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
+- `atelier branch for-epic/status/merge`
 - `atelier maintenance delete`
 - `atelier lint`
 - `atelier doctor`
@@ -698,7 +699,7 @@ fn test_init_creates_atelier_directory() {
     assert!(stdout.contains(".atelier/workflow.yaml"));
     assert!(stdout.contains("atelier lint"));
     assert!(stdout.contains("atelier issue create \"Task\""));
-    assert!(stdout.contains("atelier prime"));
+    assert!(stdout.contains("atelier man admin"));
     let lint_pos = stdout.find("atelier lint").unwrap();
     let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
     assert!(
@@ -1288,11 +1289,17 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "prime", "status", "start", "abandon", "repair", "issue", "mission", "plan",
+        "init", "man", "status", "start", "abandon", "repair", "issue", "mission", "plan",
         "evidence", "history", "worktree", "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("prime ")),
+        "root help should not expose removed prime command:\n{stdout}"
+    );
     assert!(
         !stdout
             .lines()
@@ -1343,7 +1350,11 @@ fn test_top_level_help_only_shows_core_commands() {
     );
 
     for common in [
-        "atelier prime",
+        "atelier man",
+        "atelier man worker",
+        "atelier man reviewer",
+        "atelier man manager",
+        "atelier man admin",
         "atelier issue list",
         "atelier issue list --ready",
         "atelier issue show <id>",
@@ -1812,80 +1823,104 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
 }
 
 #[test]
-fn test_prime_guides_empty_checkout_without_repeating_status() {
+fn test_man_lists_roles() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man"]);
+    assert!(success, "man failed: {stderr}");
+    assert!(stdout.contains("Atelier Man"));
+    assert!(stdout.contains("worker"));
+    assert!(stdout.contains("reviewer"));
+    assert!(stdout.contains("manager"));
+    assert!(stdout.contains("admin"));
+    assert!(stdout.contains("atelier man worker"));
+}
+
+#[test]
+fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
-    assert!(success, "prime failed: {stderr}");
-    assert!(stdout.contains("Atelier Prime"));
-    assert!(stdout.contains("Context Recovery"));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
+    assert!(success, "man worker failed: {stderr}");
+    assert!(stdout.contains("Atelier Man: Worker"));
+    assert!(stdout.contains("Current State"));
     assert!(stdout.contains("Active mission: none"));
-    assert!(stdout.contains("Active work: none"));
-    assert!(stdout.contains("Core Rules"));
-    assert!(stdout.contains("Essential Commands"));
-    assert!(stdout.contains("Common Workflows"));
-    assert!(stdout.contains("Validation/Closeout Checklist"));
-    assert!(stdout.contains("Repository Notes"));
-    assert!(stdout.contains(
-        "`atelier status` - Check active work, active mission, ready count, and tracker freshness."
-    ));
-    assert!(stdout.contains(
-        "`atelier history --issue <id>` - Inspect full canonical activity instead of relying on chat memory."
-    ));
+    assert!(stdout.contains("Active work:    none"));
+    assert!(stdout.contains("Most Relevant Commands"));
+    assert!(stdout.contains("Normal Loop"));
+    assert!(stdout.contains("Not Usually For This Role"));
+    assert!(stdout.contains("atelier issue list --ready"));
+    assert!(stdout.contains("atelier start <id>"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
     assert!(!stdout.contains("etc."));
 }
 
 #[test]
-fn test_prime_names_active_mission() {
+fn test_man_manager_names_active_mission() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Prime mission"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Man mission"]);
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Prime mission");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Man mission");
     let mission_id = mission_id.as_str();
     let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id]);
     assert!(success, "mission start failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
-    assert!(success, "prime failed: {stderr}");
-    assert!(stdout.contains(&format!("Active mission: {mission_id} - Prime mission")));
-    assert!(stdout.contains(&format!(
-        "`atelier mission status {mission_id}` - Drill into the active mission named above."
-    )));
-    assert!(stdout.contains("`atelier history --mission <id>`"));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "manager"]);
+    assert!(success, "man manager failed: {stderr}");
+    assert!(stdout.contains("Atelier Man: Manager"));
+    assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
+    assert!(stdout.contains("atelier mission status"));
+    assert!(stdout.contains("atelier mission add-work <mission-id> <issue-id>"));
 }
 
 #[test]
-fn test_prime_names_active_work() {
+fn test_man_worker_names_active_work() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Prime work"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Man work"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Prime work");
+    let issue_id = issue_id_by_title(dir.path(), "Man work");
     let issue_id = issue_id.as_str();
     migrate_default_issue_workflow(dir.path());
-    commit_all(dir.path(), "prime work setup");
+    commit_all(dir.path(), "man work setup");
     let (success, _, stderr) = run_atelier(dir.path(), &["start", issue_id]);
     assert!(success, "start failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["prime"]);
-    assert!(success, "prime failed: {stderr}");
-    assert!(stdout.contains(&format!("Active work: {issue_id} - Prime work")));
-    assert!(stdout.contains(&format!(
-        "`atelier issue show {issue_id}` - Reopen the active work contract named above."
-    )));
-    assert!(stdout.contains(
-        "`atelier issue close <id> --reason \"summary\"` - Apply the configured terminal transition and clear active local work."
-    ));
-    assert!(stdout.contains(
-        "`atelier abandon [issue-id] --reason \"...\"` - Clear local active work without changing issue status."
-    ));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
+    assert!(success, "man worker failed: {stderr}");
+    assert!(stdout.contains(&format!("Active work:    {issue_id} - Man work")));
+    assert!(stdout.contains("atelier issue show <active-id>"));
+    assert!(stdout.contains("atelier evidence record --target issue/<id>"));
+}
+
+#[test]
+fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
+    let dir = tempdir().unwrap();
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "bogus"]);
+    assert!(!success, "unknown role should fail");
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("unknown man role 'bogus'"));
+    assert!(stderr.contains("Valid roles: worker, reviewer, manager, admin"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);
+    assert!(!success, "worker guide should require tracker state");
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("Not an Atelier repository"));
+    assert!(stderr.contains("atelier man admin"));
+
+    let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "admin"]);
+    assert!(success, "admin guide should degrade before init: {stderr}");
+    assert!(stdout.contains("Atelier Man: Admin"));
+    assert!(stdout.contains("Tracker: unavailable"));
+    assert!(stdout.contains("Not an Atelier repository"));
+    assert!(stdout.contains("atelier init"));
 }
 
 #[test]
@@ -8981,7 +9016,7 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Policy:         pass"));
     assert!(stdout.contains("Issue Types:    7"));
     assert!(stdout.contains("Statuses:       7"));
-    assert!(stdout.contains("Workflows:      2"));
+    assert!(stdout.contains("Workflows:      3"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
     assert!(stdout.contains("Docs/Help Drift: clear"));
@@ -9184,9 +9219,7 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
     assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains(
-            "allowed statuses: archived, blocked, done, in_progress, review, todo, validation"
-        ),
+        stderr.contains("allowed statuses: archived, blocked, done, in_progress, todo, validation"),
         "stderr: {stderr}"
     );
 }

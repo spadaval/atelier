@@ -320,7 +320,7 @@ when the command already accepts the direct value you want to inspect.
 
 After the first clear unrecognized command or wrong command-family error, stop
 and consult the repository-owned command map instead of probing neighboring
-names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier prime`,
+names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier man <role>`,
 `atelier status`, or `atelier mission status` to recover the correct surface
 for the current job.
 

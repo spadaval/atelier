@@ -36,7 +36,7 @@ use record_store::RecordStore;
   init          Initialize Atelier in the current repository
 
 Orientation:
-  prime         Show repository operating guidance for recovery and onboarding
+  man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
   start         Start tracked work on an issue
   abandon       Clear active local work without changing issue status
@@ -65,7 +65,11 @@ Maintenance:
   doctor        Check runtime and derived-state health; use --fix for local repair
 
 Common commands:
-  atelier prime
+  atelier man
+  atelier man worker
+  atelier man reviewer
+  atelier man manager
+  atelier man admin
   atelier status
   atelier issue list
   atelier issue list --ready
@@ -124,8 +128,11 @@ enum Commands {
         import_beads: bool,
     },
 
-    /// Show repository operating guidance for recovery and onboarding
-    Prime,
+    /// Show role-specific operating guidance
+    Man {
+        /// Role guide to print: worker, reviewer, manager, or admin
+        role: Option<String>,
+    },
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
@@ -1108,11 +1115,7 @@ fn run() -> Result<()> {
             commands::init::run(&cwd, force, import_beads)
         }
 
-        Commands::Prime => {
-            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-            let repo_root = storage.repo_root().to_path_buf();
-            commands::prime::run(storage.db(), &storage.state_dir(), &repo_root)
-        }
+        Commands::Man { role } => commands::man::run(role),
 
         Commands::Status => {
             let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
@@ -1763,7 +1766,7 @@ fn command_path_tokens(args: &[String]) -> Vec<&str> {
 fn command_identity(command: &Commands) -> &'static str {
     match command {
         Commands::Init { .. } => "init",
-        Commands::Prime => "prime",
+        Commands::Man { .. } => "man",
         Commands::Status => "status",
         Commands::Start { .. } => "start",
         Commands::Abandon { .. } => "abandon",
