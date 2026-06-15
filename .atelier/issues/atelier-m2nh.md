@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-15T01:25:13.964604675+00:00"
+status: "done"
 title: "Validate simplified mission workflow behavior"
-updated_at: "2026-06-15T01:23:09.246738701+00:00"
+updated_at: "2026-06-15T01:25:13.964604675+00:00"
 ---
 
 ## Description
