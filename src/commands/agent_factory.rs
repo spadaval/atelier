@@ -397,47 +397,11 @@ fn render_issue_show_human(
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct TransitionAction {
-    name: &'static str,
-    allowed: bool,
-    reason: String,
-    command: String,
-}
-
 pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
-    let actions = transition_actions(db, &issue)?;
-    let identity = format!(
-        "Issue Transitions {} - {}",
-        format_issue_id(&id),
-        issue.title
-    );
-    println!("{identity}");
-    println!("{}", "=".repeat(identity.len()));
-
-    println!("State");
-    println!("-----");
-    println!("Status:   {}", issue.status);
-    if let Some(active) = db.get_active_work_association()? {
-        if active.issue_id == id {
-            println!("Work:     active on this issue");
-        } else {
-            println!("Work:     active on {}", format_issue_id(&active.issue_id));
-        }
-    } else {
-        println!("Work:     none active");
-    }
-
-    print_action_group(
-        "Allowed Actions",
-        actions.iter().filter(|action| action.allowed),
-    );
-    print_action_group(
-        "Blocked Actions",
-        actions.iter().filter(|action| !action.allowed),
-    );
+    let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
+    crate::commands::workflow::print_issue_transition_options(&issue, &options);
     Ok(())
 }
 
@@ -446,24 +410,27 @@ fn render_transition_readiness(
     canonical_id: &str,
     object: &IssueObject,
 ) -> Result<()> {
-    let issue = db.require_issue(canonical_id)?;
-    let actions = transition_actions(db, &issue)?;
     println!("\nTransition Readiness");
     println!("--------------------");
-    for action in actions
-        .iter()
-        .filter(|action| matches!(action.name, "start" | "finish" | "close" | "reopen"))
-    {
-        if action.name == "finish" && !action.allowed {
-            continue;
+    match crate::commands::workflow::issue_transition_options(db, canonical_id) {
+        Ok(options) => {
+            for option in options {
+                let state = if option.allowed { "allowed" } else { "blocked" };
+                let summary = if option.allowed {
+                    format!("to {}", option.to)
+                } else {
+                    option
+                        .blockers
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| format!("to {}", option.to))
+                };
+                println!("  {}: {} - {}", option.name, state, summary);
+                println!("    {}", option.command);
+            }
         }
-        if action.name == "reopen" && object.status != "closed" {
-            continue;
-        }
-        let state = if action.allowed { "ready" } else { "blocked" };
-        println!("  {}: {} - {}", action.name, state, action.reason);
-        if action.allowed {
-            println!("    {}", action.command);
+        Err(error) => {
+            println!("  options: blocked - {error}");
         }
     }
     println!(
@@ -471,129 +438,6 @@ fn render_transition_readiness(
         object.id
     );
     Ok(())
-}
-
-fn print_action_group<'a>(title: &str, actions: impl Iterator<Item = &'a TransitionAction>) {
-    println!();
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
-    let actions = actions.collect::<Vec<_>>();
-    if actions.is_empty() {
-        println!("(none)");
-        return;
-    }
-    for action in actions {
-        println!("  {}", action.name);
-        println!("    Reason:  {}", action.reason);
-        println!("    Command: {}", action.command);
-    }
-}
-
-fn transition_actions(db: &Database, issue: &Issue) -> Result<Vec<TransitionAction>> {
-    let id = format_issue_id(&issue.id);
-    let active_work = db.get_active_work_association()?;
-    let section_blockers = issue_section_blockers(&issue.id);
-    let open_blockers = open_blocker_ids(db, &issue.id)?;
-    let evidence_gate = issue_evidence_gate_status(db, issue)?;
-    let mut close_blockers = Vec::new();
-    close_blockers.extend(open_blockers.iter().map(|id| format!("open blocker {id}")));
-    close_blockers.extend(section_blockers.iter().cloned());
-    if !evidence_gate.passed {
-        if evidence_gate.reason == "no validating evidence link found" {
-            close_blockers.push(
-                "missing issue-level proof; capture passing evidence or attach existing evidence"
-                    .to_string(),
-            );
-        } else {
-            close_blockers.push(evidence_gate.reason.clone());
-        }
-    }
-
-    let start_blocker = if issue.status == "closed" {
-        Some("issue is closed".to_string())
-    } else if let Some(active) = &active_work {
-        if active.issue_id == issue.id {
-            Some("work is already active on this issue".to_string())
-        } else {
-            Some(format!("active work already exists on {}", active.issue_id))
-        }
-    } else if let Some(blocker) = section_blockers.first() {
-        Some(blocker.clone())
-    } else {
-        None
-    };
-
-    let finish_allowed = active_work
-        .as_ref()
-        .map(|active| active.issue_id == issue.id)
-        .unwrap_or(false);
-    let finish_reason = if finish_allowed {
-        "work is active on this issue".to_string()
-    } else {
-        "no active work is associated with this issue".to_string()
-    };
-
-    Ok(vec![
-        TransitionAction {
-            name: "start",
-            allowed: start_blocker.is_none(),
-            reason: start_blocker
-                .unwrap_or_else(|| "issue is open and required sections parse".to_string()),
-            command: format!("atelier start {id}"),
-        },
-        TransitionAction {
-            name: "finish",
-            allowed: finish_allowed,
-            reason: finish_reason,
-            command: format!("atelier finish {id}"),
-        },
-        TransitionAction {
-            name: "close",
-            allowed: issue.status != "closed" && close_blockers.is_empty(),
-            reason: if issue.status == "closed" {
-                "issue is already closed".to_string()
-            } else if close_blockers.is_empty() {
-                "required sections, blockers, and validating evidence gates pass".to_string()
-            } else {
-                close_blockers.join("; ")
-            },
-            command: format!("atelier issue close {id} --reason \"...\""),
-        },
-        TransitionAction {
-            name: "reopen",
-            allowed: issue.status == "closed",
-            reason: if issue.status == "closed" {
-                "closed issue can be reopened for follow-up work".to_string()
-            } else {
-                "issue is already open".to_string()
-            },
-            command: format!("atelier issue update {id} --status open"),
-        },
-        TransitionAction {
-            name: "repair sections",
-            allowed: !section_blockers.is_empty(),
-            reason: if section_blockers.is_empty() {
-                "required sections parse".to_string()
-            } else {
-                section_blockers.join("; ")
-            },
-            command: format!("atelier lint {id}"),
-        },
-    ])
-}
-
-fn issue_section_blockers(issue_id: &str) -> Vec<String> {
-    match canonical_issue_detail(issue_id) {
-        Ok(Some(record)) => record
-            .sections
-            .section_states()
-            .into_iter()
-            .filter(|state| state.required && (!state.present || state.empty))
-            .map(|state| format!("missing or empty {} section", state.name.title()))
-            .collect(),
-        Ok(None) => Vec::new(),
-        Err(error) => vec![format!("malformed issue sections: {error}")],
-    }
 }
 
 fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<DomainRecord>> {
@@ -1025,18 +869,10 @@ fn render_command_footer(canonical_id: &str, object: &IssueObject) -> Result<()>
         "  Show transition options: atelier issue transition {} --options",
         object.id
     );
-    if object.status == "closed" {
-        println!(
-            "  Reopen this issue: atelier issue update {} --status open",
-            object.id
-        );
-    } else {
-        println!("  Start tracked work: atelier start {}", object.id);
-        println!(
-            "  Close when complete: atelier issue close {} --reason \"...\"",
-            object.id
-        );
-    }
+    println!(
+        "  Execute a transition: atelier issue transition {} <transition>",
+        object.id
+    );
     Ok(())
 }
 

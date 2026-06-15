@@ -11,6 +11,23 @@ workflow source in v1. Commands that inspect issue workflow state or execute
 issue transitions load and validate this file directly. If the file is missing
 or invalid, the command fails with a stable workflow-config error.
 
+## Operator Surface
+
+Issue workflow execution is explicit:
+
+```text
+atelier issue transition <id> <transition>
+atelier issue transition <id> --options
+```
+
+`atelier issue transition <id> --options` renders the transitions available
+from the issue's current workflow status. Each option reports whether the
+transition is currently allowed, the configured validator results, rendered
+guidance, and the exact command to run next. A blocked attempt records a
+`transition_blocked` issue activity entry. A successful attempt records a
+`transition_applied` activity entry and updates the canonical issue `status`
+field to the destination workflow status.
+
 ## Scope
 
 Version 1 workflow policy applies to issues only. The contract defines:
