@@ -8,9 +8,9 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
-use crate::db::Database;
 use atelier_core::{EvidenceRecordData, Issue};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
+use atelier_sqlite::Database;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidatorResult {

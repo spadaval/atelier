@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
-use crate::db::Database;
+use atelier_sqlite::Database;
 
 const STANDARD_BEADS_IMPORT_PATH: &str = ".beads/issues.manual.jsonl";
 

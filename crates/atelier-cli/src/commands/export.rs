@@ -3,8 +3,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::db::Database;
-use crate::projection_index;
 use crate::storage_layout;
 use atelier_core::{DomainRecord, Issue, RecordLink};
 use atelier_records as record_store;
@@ -12,6 +10,8 @@ use atelier_records::{
     attachment_relationship, relates_relationship, relationship_target, CanonicalIssueRecord,
     IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
 };
+use atelier_sqlite::projection_index;
+use atelier_sqlite::Database;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {

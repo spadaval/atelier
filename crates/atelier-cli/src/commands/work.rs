@@ -3,8 +3,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::db::Database;
 use atelier_core::Issue;
+use atelier_sqlite::Database;
 
 const MISSION_WORKTREE_OWNER_FILE: &str = "mission-worktree-owner";
 

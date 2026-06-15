@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::db::Database;
 use crate::utils::{format_issue_id, truncate};
+use atelier_sqlite::Database;
 
 pub fn list_blocked(db: &Database) -> Result<()> {
     let issues = db.list_blocked_issues()?;

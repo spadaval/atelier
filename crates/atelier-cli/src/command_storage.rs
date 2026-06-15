@@ -2,9 +2,9 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 use crate::commands;
-use crate::db::Database;
-use crate::projection_index;
 use crate::storage_layout;
+use atelier_sqlite::projection_index;
+use atelier_sqlite::Database;
 
 pub fn find_atelier_dir() -> Result<PathBuf> {
     storage_layout::find_atelier_dir()

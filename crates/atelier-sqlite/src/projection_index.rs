@@ -7,9 +7,9 @@ use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-use crate::db::Database;
-use crate::storage_layout;
 use atelier_records as record_store;
+
+use crate::Database;
 
 const MAX_PROBLEM_SAMPLES: usize = 5;
 
@@ -282,13 +282,46 @@ fn collect_source_files(root: &Path, dir: &Path, entries: &mut Vec<SourceEntry>)
             let relative = path
                 .strip_prefix(root)
                 .context("Failed to relativize source file")?;
-            if storage_layout::is_local_atelier_path(relative) {
+            if is_local_atelier_path(relative) {
                 continue;
             }
             entries.push(source_entry(root, &path)?);
         }
     }
     Ok(())
+}
+
+fn is_local_atelier_path(relative_path: &Path) -> bool {
+    if is_local_artifact_path(relative_path) {
+        return true;
+    }
+
+    let Some(first) = relative_path.components().next() else {
+        return false;
+    };
+    let first = first.as_os_str();
+    first == ".cache"
+        || first == "runtime"
+        || first == "cache"
+        || first == "rules"
+        || first == "rules.local"
+        || relative_path == Path::new("config.toml")
+        || relative_path == Path::new("state.db")
+        || relative_path == Path::new("agent.json")
+}
+
+fn is_local_artifact_path(relative_path: &Path) -> bool {
+    let Some(file_name) = relative_path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+
+    file_name.starts_with(".state.db.")
+        && (file_name.ends_with(".rebuild-tmp")
+            || file_name.ends_with(".rebuild-tmp-shm")
+            || file_name.ends_with(".rebuild-tmp-wal")
+            || file_name.ends_with(".rebuild-tmp-journal"))
+        || file_name.ends_with(".tmp")
+        || file_name.ends_with(".lock")
 }
 
 fn source_entry(root: &Path, path: &Path) -> Result<SourceEntry> {

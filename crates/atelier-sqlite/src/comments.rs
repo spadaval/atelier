@@ -1,5 +1,4 @@
 use anyhow::Result;
-#[cfg(test)]
 use chrono::Utc;
 
 use super::{Database, MAX_COMMENT_LEN};
@@ -7,7 +6,6 @@ use atelier_core::Comment;
 use atelier_records::activity::{create_issue_activity, list_issue_activities, ActivityEventType};
 
 impl Database {
-    #[cfg(test)]
     pub fn add_comment(&self, issue_id: impl ToString, content: &str, kind: &str) -> Result<i64> {
         let issue_id = issue_id.to_string();
         if content.len() > MAX_COMMENT_LEN {
@@ -123,24 +121,33 @@ impl Database {
     }
 
     fn current_runtime_state_dir(&self) -> Result<Option<(std::path::PathBuf, bool)>> {
-        let Some(state_dir) = crate::storage_layout::find_canonical_dir_from_cwd()? else {
+        let Some(state_dir) = find_canonical_dir_from_cwd()? else {
             return Ok(self
                 .path
                 .parent()
                 .map(|parent| (parent.join(".atelier"), false)));
         };
-        let layout = crate::storage_layout::StorageLayout::new(
-            state_dir
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new(".")),
-        );
-        if self.path == layout.runtime_db_path() {
+        let runtime_db_path = state_dir.join("runtime").join("state.db");
+        if self.path == runtime_db_path {
             Ok(Some((state_dir, true)))
         } else {
             Ok(self
                 .path
                 .parent()
                 .map(|parent| (parent.join(".atelier"), false)))
+        }
+    }
+}
+
+fn find_canonical_dir_from_cwd() -> Result<Option<std::path::PathBuf>> {
+    let mut current = std::env::current_dir()?;
+    loop {
+        let canonical_dir = current.join(".atelier");
+        if canonical_dir.is_dir() {
+            return Ok(Some(canonical_dir));
+        }
+        if !current.pop() {
+            return Ok(None);
         }
     }
 }

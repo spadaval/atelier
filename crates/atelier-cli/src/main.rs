@@ -3,9 +3,9 @@ use atelier::command_storage::{
     canonical_mutation_db, command_storage, degraded_projection_query_db, lint_db,
     projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
 };
-use atelier::db::Database;
 use atelier::{commands, telemetry};
 use atelier_records::RecordStore;
+use atelier_sqlite::Database;
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 use std::env;

@@ -6,10 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
-use crate::db::Database;
 use crate::record_id;
 use crate::utils::format_issue_id;
 use atelier_core::Issue;
+use atelier_sqlite::Database;
 
 #[derive(Debug, Deserialize)]
 struct BeadsIssue {

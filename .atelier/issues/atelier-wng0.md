@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:24:44.094131159+00:00"
+status: "done"
 title: "Retarget storage callers to atelier-sqlite APIs"
-updated_at: "2026-06-15T15:16:59.251743840+00:00"
+updated_at: "2026-06-15T18:24:44.094131159+00:00"
 ---
 
 ## Description

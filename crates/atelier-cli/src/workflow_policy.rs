@@ -6,8 +6,8 @@ use std::fmt;
 use std::fs;
 use std::path::Path;
 
-use crate::db::Database;
 use atelier_core::Issue;
+use atelier_sqlite::Database;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";

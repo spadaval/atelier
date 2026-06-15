@@ -9,7 +9,6 @@ use crate::commands::issue_workflow::{
     issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
     IssueStartReadiness,
 };
-use crate::db::{validate_issue_type, Database};
 use crate::utils::format_issue_id;
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
@@ -18,6 +17,7 @@ use atelier_records::{
     issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
     IssueSections, RecordStore, Relationships,
 };
+use atelier_sqlite::{validate_issue_type, Database};
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -1992,7 +1992,7 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
                 "message": "Issue title must not be empty"
             }));
         }
-        if !crate::db::VALID_ISSUE_TYPES.contains(&issue.issue_type.as_str()) {
+        if !atelier_sqlite::VALID_ISSUE_TYPES.contains(&issue.issue_type.as_str()) {
             findings.push(json!({
                 "id": issue_id_for_agent(db, &issue)?,
                 "code": "invalid_issue_type",
@@ -2114,7 +2114,7 @@ pub fn doctor(
     };
 
     let rebuild_ready = super::rebuild::validate_canonical_state(state_dir).is_ok();
-    let projection_fresh = crate::projection_index::check(active_db, state_dir)
+    let projection_fresh = atelier_sqlite::projection_index::check(active_db, state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
     let runtime_tables_available = active_db.runtime_state_tables_available().unwrap_or(false);
@@ -2168,7 +2168,7 @@ pub fn doctor(
     );
     println!(
         "  tables: {}",
-        crate::db::CANONICAL_PROJECTION_TABLES.join(", ")
+        atelier_sqlite::CANONICAL_PROJECTION_TABLES.join(", ")
     );
     println!("Cache health:");
     println!("  cache_dir: {}", optional_dir_status(&cache_dir));
@@ -2199,7 +2199,10 @@ pub fn doctor(
     );
     println!("  diagnostics: {diagnostics}");
     println!("Compatibility:");
-    println!("  tables: {}", crate::db::COMPATIBILITY_TABLES.join(", "));
+    println!(
+        "  tables: {}",
+        atelier_sqlite::COMPATIBILITY_TABLES.join(", ")
+    );
     println!("Legacy health:");
     for (key, value) in health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });
@@ -2260,13 +2263,13 @@ pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if crate::db::VALID_PRIORITIES.contains(&priority) {
+    if atelier_sqlite::VALID_PRIORITIES.contains(&priority) {
         Ok(())
     } else {
         bail!(
             "Invalid priority '{}'. Valid values: {}",
             priority,
-            crate::db::VALID_PRIORITIES.join(", ")
+            atelier_sqlite::VALID_PRIORITIES.join(", ")
         )
     }
 }

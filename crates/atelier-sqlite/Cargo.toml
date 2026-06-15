@@ -15,7 +15,12 @@ atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
+chrono.workspace = true
 rusqlite.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
+proptest = "1"
 tempfile = "3"

@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use crate::db::Database;
 use crate::utils::format_issue_id;
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::Issue;
+use atelier_sqlite::Database;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IssueStartReadiness {

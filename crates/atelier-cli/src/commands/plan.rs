@@ -5,14 +5,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::db::{
-    validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
-};
 use atelier_core::{
     DomainRecord, EvidenceRecordData, Issue, MilestoneRecordData, PlanRecordData, PlanRevision,
 };
 use atelier_records::{
     is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
+};
+use atelier_sqlite::{
+    validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
 };
 
 const KIND: &str = "plan";

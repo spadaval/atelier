@@ -8,7 +8,6 @@ use atelier_core::{DomainRecord, RecordLink};
 use atelier_records as record_store;
 
 impl Database {
-    #[cfg(test)]
     pub fn create_record(
         &self,
         kind: &str,
@@ -58,8 +57,6 @@ impl Database {
         let record = stmt.query_row(params![kind, id], record_from_row).ok();
         Ok(record)
     }
-
-    #[cfg(test)]
     pub fn record_exists(&self, id: &str) -> Result<bool> {
         if self.get_issue(id)?.is_some() {
             return Ok(true);

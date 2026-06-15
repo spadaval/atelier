@@ -5,10 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::agent_factory::ProofCoverageStatus;
-use crate::db::Database;
 use atelier_core::{DomainRecord, Issue, RecordLink};
 use atelier_records as record_store;
 use atelier_records::{RecordStore, MISSION_EMPTY_DATA_JSON};
+use atelier_sqlite::Database;
 
 const KIND: &str = "mission";
 pub fn create(

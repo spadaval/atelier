@@ -102,6 +102,7 @@ dependencies = [
  "atelier-app",
  "atelier-core",
  "atelier-records",
+ "atelier-sqlite",
  "atelier-workflow",
  "chrono",
  "clap",
@@ -147,8 +148,13 @@ dependencies = [
  "atelier-core",
  "atelier-records",
  "atelier-workflow",
+ "chrono",
+ "proptest",
  "rusqlite",
+ "serde_json",
+ "sha2",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

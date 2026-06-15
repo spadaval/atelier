@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::command_storage::{command_storage, CommandStorageAccess};
 use crate::commands;
-use crate::db::Database;
+use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
 

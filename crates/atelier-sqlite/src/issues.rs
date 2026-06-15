@@ -45,8 +45,6 @@ impl Database {
         self.insert_issue_rebuild(issue)?;
         Ok(())
     }
-
-    #[cfg(test)]
     pub fn create_issue(
         &self,
         title: &str,
@@ -55,8 +53,6 @@ impl Database {
     ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, "task", None)
     }
-
-    #[cfg(test)]
     pub fn create_subissue(
         &self,
         parent_id: &str,
@@ -66,8 +62,6 @@ impl Database {
     ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, "task", Some(parent_id))
     }
-
-    #[cfg(test)]
     pub fn create_issue_with_type(
         &self,
         title: &str,
@@ -77,8 +71,6 @@ impl Database {
     ) -> Result<String> {
         self.create_issue_with_parent(title, description, priority, issue_type, None)
     }
-
-    #[cfg(test)]
     fn create_issue_with_parent(
         &self,
         title: &str,
@@ -177,9 +169,8 @@ impl Database {
     /// Get an issue by ID, returning an error if not found.
     pub fn require_issue(&self, id: impl ToString) -> Result<Issue> {
         let id = id.to_string();
-        self.get_issue(&id)?.ok_or_else(|| {
-            anyhow::anyhow!("Issue {} not found", crate::utils::format_issue_id(&id))
-        })
+        self.get_issue(&id)?
+            .ok_or_else(|| anyhow::anyhow!("Issue {} not found", format_issue_id(&id)))
     }
 
     pub fn list_issues(
@@ -233,8 +224,6 @@ impl Database {
 
         Ok(issues)
     }
-
-    #[cfg(test)]
     pub fn update_issue(
         &self,
         id: impl ToString,
@@ -293,8 +282,6 @@ impl Database {
         let rows = self.conn.execute(&sql, params_refs.as_slice())?;
         Ok(rows > 0)
     }
-
-    #[cfg(test)]
     pub fn close_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
@@ -304,8 +291,6 @@ impl Database {
         )?;
         Ok(rows > 0)
     }
-
-    #[cfg(test)]
     pub fn reopen_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let now = Utc::now().to_rfc3339();
@@ -315,8 +300,6 @@ impl Database {
         )?;
         Ok(rows > 0)
     }
-
-    #[cfg(test)]
     pub fn delete_issue(&self, id: impl ToString) -> Result<bool> {
         let id = id.to_string();
         let rows = self
@@ -324,8 +307,6 @@ impl Database {
             .execute("DELETE FROM issues WHERE id = ?1", [id])?;
         Ok(rows > 0)
     }
-
-    #[cfg(test)]
     pub fn update_parent(&self, id: impl ToString, parent_id: Option<&str>) -> Result<bool> {
         let id = id.to_string();
         let now = chrono::Utc::now().to_rfc3339();
@@ -351,7 +332,6 @@ impl Database {
     }
 
     /// Search issues by query string across titles and descriptions.
-    #[cfg(test)]
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
         let escaped = query.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{}%", escaped);
@@ -371,6 +351,10 @@ impl Database {
 
         Ok(issues)
     }
+}
+
+fn format_issue_id(id: &str) -> String {
+    id.to_string()
 }
 
 fn validate_description_length(description: &str) -> Result<()> {

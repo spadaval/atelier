@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 
-use crate::db::Database;
 use atelier_core::{DomainRecord, Issue};
+use atelier_sqlite::Database;
 
 const COMPACT_MAX_DEPTH: usize = 3;
 const COMPACT_MAX_SIBLINGS: usize = 6;

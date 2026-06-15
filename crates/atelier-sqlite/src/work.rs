@@ -1,5 +1,4 @@
 use anyhow::Result;
-#[cfg(test)]
 use std::env;
 
 use super::Database;
@@ -16,8 +15,6 @@ impl Database {
         let _ = (branch, worktree_path);
         Ok(())
     }
-
-    #[cfg(test)]
     pub fn get_active_work_association(&self) -> Result<Option<WorkAssociation>> {
         let path = env::current_dir()?.to_string_lossy().to_string();
         self.active_work_association_for_worktree_path(Some(&path))

@@ -29,6 +29,7 @@ path = "src/main.rs"
 atelier-app = { path = "../atelier-app" }
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
+atelier-sqlite = { path = "../atelier-sqlite" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 chrono.workspace = true

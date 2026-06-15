@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::db::{validate_record_kind, Database};
 use atelier_core::{
     DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
     RecordLink,
 };
 use atelier_records::RecordStore;
+use atelier_sqlite::{validate_record_kind, Database};
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;

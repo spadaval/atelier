@@ -1,13 +1,678 @@
-//! SQLite projection and runtime-state boundary.
-//!
-//! Rebuild freshness, query indexes, graph/search/readiness queries, and local
-//! runtime recovery move here during the migration.
+mod comments;
+mod dependencies;
+mod issues;
+mod labels;
+pub mod projection_index;
+mod record_id;
+mod records;
+mod relations;
+mod sessions;
+mod work;
 
 use anyhow::{Context, Result};
-pub use atelier_core::RecordId;
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use atelier_core::Issue;
+use atelier_records as record_store;
+
+const SCHEMA_VERSION: i32 = 18;
+
+/// Well-known relation types. Unknown types are accepted with a warning;
+/// these are the recognized conventions.
+pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &[
+    "related",    // generic bidirectional link (default, backward compatible)
+    "assumption", // "shares underlying assumption" — concept clustering
+    "falsifies",  // "this evidence falsifies that assumption"
+    "derived",    // "this conclusion was derived from that assumption"
+];
+
+pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
+    "advances",
+    "blocked_by",
+    "has_checkpoint",
+    "contributes_to",
+    "planned_by",
+    "validates",
+    "evidenced_by",
+    "implements",
+    "part_of",
+    "supersedes",
+    "derived_from",
+    "duplicates",
+    "related",
+];
+
+/// SQLite tables rebuilt from canonical Markdown records.
+pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
+    "issues",
+    "labels",
+    "dependencies",
+    "relations",
+    "records",
+    "record_links",
+    "projection_index_sources",
+];
+
+/// SQLite tables that hold local-only runtime state and may be reset by rebuild.
+pub const RUNTIME_STATE_TABLES: &[&str] = &[];
+
+/// Transitional tables retained for command compatibility during migration.
+pub const COMPATIBILITY_TABLES: &[&str] = &[];
+
+/// Valid values for issue priority.
+pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
+
+/// Valid values for canonical issue type.
+pub const VALID_ISSUE_TYPES: &[&str] = &[
+    "bug",
+    "closeout",
+    "epic",
+    "feature",
+    "spike",
+    "task",
+    "validation",
+];
+
+/// Maximum lengths for string inputs.
+pub const MAX_TITLE_LEN: usize = 512;
+pub const MAX_LABEL_LEN: usize = 128;
+pub const MAX_DESCRIPTION_LEN: usize = 64 * 1024; // 64KB
+pub const MAX_COMMENT_LEN: usize = 1024 * 1024; // 1MB
+
+/// Validate that a status value is known, returning an error if not.
+pub fn validate_status(status: &str) -> Result<()> {
+    let mut chars = status.chars();
+    if matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
+        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid status '{}'. Status values must match ^[a-z][a-z0-9_]*$",
+            status,
+        )
+    }
+}
+
+/// Validate that a priority value is known, returning an error if not.
+pub fn validate_priority(priority: &str) -> Result<()> {
+    if VALID_PRIORITIES.contains(&priority) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid priority '{}'. Valid values: {}",
+            priority,
+            VALID_PRIORITIES.join(", ")
+        )
+    }
+}
+
+/// Validate that an issue type value is known, returning an error if not.
+pub fn validate_issue_type(issue_type: &str) -> Result<()> {
+    if VALID_ISSUE_TYPES.contains(&issue_type) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid issue_type '{}'. Valid values: {}",
+            issue_type,
+            VALID_ISSUE_TYPES.join(", ")
+        )
+    }
+}
+
+/// Validate relation type: empty strings are rejected; unknown types emit a
+/// warning but are still accepted (warn-but-accept pattern).
+pub fn validate_relation_type(relation_type: &str) -> Result<()> {
+    if relation_type.is_empty() {
+        anyhow::bail!("Relation type cannot be empty");
+    }
+    if !WELL_KNOWN_RELATION_TYPES.contains(&relation_type) {
+        tracing::warn!(
+            "Unknown relation type '{}'. Known types: {}",
+            relation_type,
+            WELL_KNOWN_RELATION_TYPES.join(", ")
+        );
+    }
+    Ok(())
+}
+
+pub fn validate_record_kind(kind: &str) -> Result<()> {
+    record_store::validate_record_kind(kind)
+}
+
+pub fn validate_link_type(relation_type: &str) -> Result<()> {
+    if relation_type.is_empty() {
+        anyhow::bail!("Link type cannot be empty");
+    }
+    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Invalid link type '{}'. Valid values: {}",
+            relation_type,
+            WELL_KNOWN_LINK_TYPES.join(", ")
+        )
+    }
+}
+
+pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
+    if WELL_KNOWN_LINK_TYPES.contains(&relation_type) {
+        Ok(())
+    } else {
+        validate_relation_type(relation_type)
+    }
+}
+
+pub struct Database {
+    pub conn: Connection,
+    pub(crate) path: PathBuf,
+}
+
+impl Database {
+    pub fn open(path: &Path) -> Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create database directory {}", parent.display())
+            })?;
+        }
+        let conn = Connection::open(path).context("Failed to open database")?;
+        let db = Database {
+            conn,
+            path: path.to_path_buf(),
+        };
+        db.init_schema()?;
+        Ok(db)
+    }
+
+    /// Execute a closure within a database transaction.
+    /// If the closure returns Ok, the transaction is committed.
+    /// If the closure returns Err, the transaction is rolled back.
+    pub fn transaction<T, F>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce() -> Result<T>,
+    {
+        self.conn.execute("BEGIN TRANSACTION", [])?;
+        match f() {
+            Ok(result) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(result)
+            }
+            Err(e) => {
+                if let Err(rollback_err) = self.conn.execute("ROLLBACK", []) {
+                    tracing::warn!("ROLLBACK failed: {}", rollback_err);
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// Run a migration statement, logging unexpected errors.
+    /// Expected errors (duplicate column, table already exists) are logged at debug level.
+    fn migrate(&self, sql: &str) {
+        if let Err(e) = self.conn.execute(sql, []) {
+            let msg = e.to_string();
+            if msg.contains("duplicate column") || msg.contains("already exists") {
+                tracing::debug!("migration skipped (already applied): {}", msg);
+            } else {
+                tracing::warn!("migration error ({}): {}", sql.trim(), msg);
+            }
+        }
+    }
+
+    /// Run a batch migration statement, logging unexpected errors.
+    fn migrate_batch(&self, sql: &str) {
+        if let Err(e) = self.conn.execute_batch(sql) {
+            let msg = e.to_string();
+            if msg.contains("duplicate column") || msg.contains("already exists") {
+                tracing::debug!("migration batch skipped (already applied): {}", msg);
+            } else {
+                tracing::warn!("migration batch error: {}", msg);
+            }
+        }
+    }
+
+    fn init_schema(&self) -> Result<()> {
+        let version = self.current_schema_version();
+
+        if version < SCHEMA_VERSION {
+            self.install_core_schema()?;
+            self.apply_schema_migrations(version)?;
+            self.set_schema_version()?;
+        }
+
+        // Enable foreign keys
+        self.conn.execute("PRAGMA foreign_keys = ON", [])?;
+        self.init_projection_index_schema()?;
+
+        Ok(())
+    }
+
+    fn current_schema_version(&self) -> i32 {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(MAX(user_version), 0) FROM pragma_user_version",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    fn install_core_schema(&self) -> Result<()> {
+        self.conn.execute_batch(
+            r#"
+            -- Core issues table
+            CREATE TABLE IF NOT EXISTS issues (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'todo',
+                issue_type TEXT NOT NULL DEFAULT 'task',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                parent_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                closed_at TEXT,
+                FOREIGN KEY (parent_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Labels (many-to-many)
+            CREATE TABLE IF NOT EXISTS labels (
+                issue_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (issue_id, label),
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Dependencies (blocker blocks blocked)
+            CREATE TABLE IF NOT EXISTS dependencies (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                PRIMARY KEY (blocker_id, blocked_id),
+                FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Relations (related issues, bidirectional, typed)
+            CREATE TABLE IF NOT EXISTS relations (
+                issue_id_1 TEXT NOT NULL,
+                issue_id_2 TEXT NOT NULL,
+                relation_type TEXT NOT NULL DEFAULT 'related',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
+                FOREIGN KEY (issue_id_1) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
+            );
+
+            -- Indexes
+            CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+            CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
+            CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
+            CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
+            CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
+            "#,
+        )?;
+        Ok(())
+    }
+
+    fn apply_schema_migrations(&self, version: i32) -> Result<()> {
+        self.migrate(
+            "ALTER TABLE issues ADD COLUMN parent_id INTEGER REFERENCES issues(id) ON DELETE CASCADE",
+        );
+        self.migrate_typed_issue_columns(version)?;
+        self.migrate_first_class_record_tables(version);
+        self.drop_removed_runtime_tables(version);
+        self.drop_local_only_tables(version);
+        Ok(())
+    }
+
+    fn migrate_typed_issue_columns(&self, version: i32) -> Result<()> {
+        if version < 13 {
+            self.migrate(
+                "ALTER TABLE relations ADD COLUMN relation_type TEXT NOT NULL DEFAULT 'related'",
+            );
+        }
+        if version < 14 {
+            self.migrate("ALTER TABLE issues ADD COLUMN issue_type TEXT NOT NULL DEFAULT 'task'");
+        }
+        if version < 15 {
+            self.migrate_issue_ids_to_text()?;
+        }
+        Ok(())
+    }
+
+    fn migrate_first_class_record_tables(&self, version: i32) {
+        if version < 16 {
+            self.migrate_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS records (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open',
+                    body TEXT,
+                    data_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
+                CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+
+                CREATE TABLE IF NOT EXISTS record_links (
+                    source_kind TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (source_kind, source_id, target_kind, target_id, relation_type)
+                );
+                CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
+                CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
+
+                "#,
+            );
+        }
+    }
+
+    fn drop_removed_runtime_tables(&self, version: i32) {
+        if version < 17 {
+            self.migrate_batch(
+                r#"
+                DROP INDEX IF EXISTS idx_token_usage_agent;
+                DROP INDEX IF EXISTS idx_token_usage_session;
+                DROP INDEX IF EXISTS idx_token_usage_timestamp;
+                DROP TABLE IF EXISTS token_usage;
+                DROP INDEX IF EXISTS idx_time_entries_issue;
+                DROP TABLE IF EXISTS time_entries;
+                DROP INDEX IF EXISTS idx_milestone_issues_m;
+                DROP INDEX IF EXISTS idx_milestone_issues_i;
+                DROP TABLE IF EXISTS milestone_issues;
+                DROP TABLE IF EXISTS milestones;
+                "#,
+            );
+        }
+    }
+
+    fn drop_local_only_tables(&self, version: i32) {
+        if version < 18 {
+            self.migrate_batch(
+                r#"
+                DROP INDEX IF EXISTS idx_comments_issue;
+                DROP INDEX IF EXISTS idx_work_associations_status;
+                DROP TABLE IF EXISTS comments;
+                DROP TABLE IF EXISTS sessions;
+                DROP TABLE IF EXISTS sessions_new;
+                DROP TABLE IF EXISTS work_associations;
+                "#,
+            );
+        }
+    }
+
+    fn set_schema_version(&self) -> Result<()> {
+        self.conn
+            .execute(&format!("PRAGMA user_version = {}", SCHEMA_VERSION), [])?;
+        Ok(())
+    }
+
+    fn migrate_issue_ids_to_text(&self) -> Result<()> {
+        if self.issue_id_column_is_text()? {
+            return Ok(());
+        }
+
+        let mappings = self.legacy_issue_id_mappings()?;
+        self.create_v15_text_id_tables()?;
+        self.copy_v15_issue_rows(&mappings)?;
+        self.copy_v15_issue_children(&mappings)?;
+        self.copy_v15_issue_scoped_rows(&mappings)?;
+        self.copy_v15_graph_edges(&mappings)?;
+        self.replace_v15_tables()?;
+        Ok(())
+    }
+
+    fn issue_id_column_is_text(&self) -> Result<bool> {
+        let mut stmt = self.conn.prepare("PRAGMA table_info(issues)")?;
+        let columns = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(columns
+            .iter()
+            .any(|(name, column_type)| name == "id" && column_type.eq_ignore_ascii_case("TEXT")))
+    }
+
+    fn legacy_issue_id_mappings(&self) -> Result<Vec<(i64, String)>> {
+        let mut mappings = Vec::new();
+        let mut stmt = self.conn.prepare("SELECT id FROM issues ORDER BY id")?;
+        let ids = stmt
+            .query_map([], |row| row.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for id in ids {
+            mappings.push((id, record_id::legacy_issue_id(id)));
+        }
+        Ok(mappings)
+    }
+
+    fn create_v15_text_id_tables(&self) -> Result<()> {
+        self.conn.execute_batch(
+            r#"
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE issues_v15 (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'todo',
+                issue_type TEXT NOT NULL DEFAULT 'task',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                parent_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                closed_at TEXT,
+                FOREIGN KEY (parent_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE labels_v15 (
+                issue_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                PRIMARY KEY (issue_id, label),
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE dependencies_v15 (
+                blocker_id TEXT NOT NULL,
+                blocked_id TEXT NOT NULL,
+                PRIMARY KEY (blocker_id, blocked_id),
+                FOREIGN KEY (blocker_id) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (blocked_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE time_entries_v15 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                issue_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                duration_seconds INTEGER,
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE relations_v15 (
+                issue_id_1 TEXT NOT NULL,
+                issue_id_2 TEXT NOT NULL,
+                relation_type TEXT NOT NULL DEFAULT 'related',
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (issue_id_1, issue_id_2, relation_type),
+                FOREIGN KEY (issue_id_1) REFERENCES issues(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id_2) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            CREATE TABLE milestone_issues_v15 (
+                milestone_id INTEGER NOT NULL,
+                issue_id TEXT NOT NULL,
+                PRIMARY KEY (milestone_id, issue_id),
+                FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
+                FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+            );
+            "#,
+        )?;
+        Ok(())
+    }
+
+    fn copy_v15_issue_rows(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
+            self.conn.execute(
+                "INSERT INTO issues_v15
+                 SELECT ?2, title, description, status, issue_type, priority, NULL, created_at, updated_at, closed_at
+                 FROM issues WHERE id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn copy_v15_issue_children(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
+            let parent: Option<i64> = self
+                .conn
+                .query_row(
+                    "SELECT parent_id FROM issues WHERE id = ?1",
+                    rusqlite::params![old_id],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+            if let Some(parent) = parent {
+                self.conn.execute(
+                    "UPDATE issues_v15 SET parent_id = ?1 WHERE id = ?2",
+                    rusqlite::params![record_id::legacy_issue_id(parent), new_id],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn copy_v15_issue_scoped_rows(&self, mappings: &[(i64, String)]) -> Result<()> {
+        for (old_id, new_id) in mappings {
+            self.conn.execute(
+                "INSERT INTO labels_v15 SELECT ?2, label FROM labels WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+            self.conn.execute(
+                "INSERT INTO time_entries_v15 SELECT id, ?2, started_at, ended_at, duration_seconds FROM time_entries WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+            self.conn.execute(
+                "INSERT INTO milestone_issues_v15 SELECT milestone_id, ?2 FROM milestone_issues WHERE issue_id = ?1",
+                rusqlite::params![old_id, new_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn copy_v15_graph_edges(&self, mappings: &[(i64, String)]) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO dependencies_v15
+             SELECT printf('atelier-%04s', lower(hex(blocker_id))), printf('atelier-%04s', lower(hex(blocked_id)))
+             FROM dependencies WHERE 0",
+            [],
+        )?;
+        for (old_blocker, new_blocker) in mappings {
+            for (old_blocked, new_blocked) in mappings {
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO dependencies_v15
+                     SELECT ?2, ?4 FROM dependencies WHERE blocker_id = ?1 AND blocked_id = ?3",
+                    rusqlite::params![old_blocker, new_blocker, old_blocked, new_blocked],
+                )?;
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO relations_v15
+                     SELECT ?2, ?4, relation_type, created_at FROM relations WHERE issue_id_1 = ?1 AND issue_id_2 = ?3",
+                    rusqlite::params![old_blocker, new_blocker, old_blocked, new_blocked],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn replace_v15_tables(&self) -> Result<()> {
+        self.conn.execute_batch(
+            r#"
+            DROP TABLE labels;
+            DROP TABLE dependencies;
+            DROP TABLE IF EXISTS comments;
+            DROP TABLE IF EXISTS sessions;
+            DROP TABLE time_entries;
+            DROP TABLE relations;
+            DROP TABLE milestone_issues;
+            DROP TABLE issues;
+
+            ALTER TABLE issues_v15 RENAME TO issues;
+            ALTER TABLE labels_v15 RENAME TO labels;
+            ALTER TABLE dependencies_v15 RENAME TO dependencies;
+            ALTER TABLE time_entries_v15 RENAME TO time_entries;
+            ALTER TABLE relations_v15 RENAME TO relations;
+            ALTER TABLE milestone_issues_v15 RENAME TO milestone_issues;
+
+            CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+            CREATE INDEX IF NOT EXISTS idx_issues_priority ON issues(priority);
+            CREATE INDEX IF NOT EXISTS idx_labels_issue ON labels(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocker ON dependencies(blocker_id);
+            CREATE INDEX IF NOT EXISTS idx_deps_blocked ON dependencies(blocked_id);
+            CREATE INDEX IF NOT EXISTS idx_issues_parent ON issues(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_time_entries_issue ON time_entries(issue_id);
+            CREATE INDEX IF NOT EXISTS idx_relations_1 ON relations(issue_id_1);
+            CREATE INDEX IF NOT EXISTS idx_relations_2 ON relations(issue_id_2);
+            CREATE INDEX IF NOT EXISTS idx_milestone_issues_i ON milestone_issues(issue_id);
+
+            PRAGMA foreign_keys = ON;
+            "#,
+        )?;
+        Ok(())
+    }
+
+    pub fn runtime_state_tables_available(&self) -> Result<bool> {
+        for table in RUNTIME_STATE_TABLES {
+            let exists: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                rusqlite::params![table],
+                |row| row.get(0),
+            )?;
+            if exists == 0 {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
+
+pub(crate) fn parse_datetime(s: String) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(&s)
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now())
+}
+
+/// Maps a database row to an Issue struct.
+/// Expects columns in order: id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at
+pub(crate) fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
+    Ok(Issue {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        description: row.get(2)?,
+        status: row.get(3)?,
+        issue_type: row.get(4)?,
+        priority: row.get(5)?,
+        parent_id: row.get(6)?,
+        created_at: parse_datetime(row.get::<_, String>(7)?),
+        updated_at: parse_datetime(row.get::<_, String>(8)?),
+        closed_at: row.get::<_, Option<String>>(9)?.map(parse_datetime),
+    })
+}
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod proptest_tests;
 /// Issue row stored in the rebuildable SQLite projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionIssue {
@@ -357,7 +1022,7 @@ pub fn table_owner(table: &str) -> Option<TableOwner> {
 }
 
 #[cfg(test)]
-mod tests {
+mod projection_index_api_tests {
     use super::*;
 
     #[test]

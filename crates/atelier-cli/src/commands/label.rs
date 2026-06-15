@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::db::Database;
 use crate::utils::format_issue_id;
 use atelier_records::RecordStore;
+use atelier_sqlite::Database;
 
 #[cfg(test)]
 pub fn add(db: &Database, issue_id: &str, label: &str) -> Result<()> {

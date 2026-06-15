@@ -3,8 +3,8 @@ use std::io::{self, Write};
 
 use std::path::Path;
 
-use crate::db::Database;
 use crate::utils::format_issue_id;
+use atelier_sqlite::Database;
 
 #[cfg(test)]
 pub fn run(db: &Database, id: &str, force: bool) -> Result<()> {

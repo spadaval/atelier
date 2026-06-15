@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::db::Database;
 use crate::utils::format_issue_id;
+use atelier_sqlite::Database;
 
 const KNOWN_COMMENT_KINDS: &[&str] = &[
     "note",
