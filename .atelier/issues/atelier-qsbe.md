@@ -60,9 +60,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T07:02:48.882519775+00:00"
+status: "done"
 title: "Epic: Architecture contracts and ADRs for crate rewrite"
-updated_at: "2026-06-15T05:13:27.586244262+00:00"
+updated_at: "2026-06-15T07:02:48.882519775+00:00"
 ---
 
 ## Description
