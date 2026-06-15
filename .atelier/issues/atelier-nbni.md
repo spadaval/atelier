@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-15T07:21:48.570095768+00:00"
+status: "done"
 title: "Extract core domain types into atelier-core"
-updated_at: "2026-06-15T07:13:48.633011405+00:00"
+updated_at: "2026-06-15T07:21:48.570095768+00:00"
 ---
 
 ## Description
