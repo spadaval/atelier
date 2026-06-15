@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T04:33:59.725580892+00:00"
+status: "done"
 title: "Fold preserved issue branches into epic branches"
-updated_at: "2026-06-14T21:45:38.869255767+00:00"
+updated_at: "2026-06-15T04:33:59.725580892+00:00"
 ---
 
 ## Description
