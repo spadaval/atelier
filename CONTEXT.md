@@ -35,8 +35,21 @@
   unverifiable, stale, or not mapped to the specific claim it is supposed to
   prove. Broad green test suites and mission summaries can support strong proof,
   but they are weak when they are the only proof for a concrete outcome.
-- Workflow validator: a machine-readable transition check that controls whether
-  a workflow transition can proceed and returns an actionable failure reason.
+- Workflow: repository-owned policy that defines issue workflow statuses,
+  transitions, terminal states, validators, and guidance.
+- Workflow status: the canonical issue `status` value defined by workflow
+  policy. It is durable repository state, not a derived summary or a local
+  runtime marker.
+- Status category: derived orientation metadata that groups workflow statuses
+  into stable operator-facing buckets such as ready, active, blocked, done, or
+  archived. Categories help commands summarize work but do not replace workflow
+  status in durable state or transition checks.
+- Transition: a named workflow action that moves a record from one workflow
+  status to another after required fields, evidence, and validators succeed.
+- Validator: a machine-readable workflow transition check that controls whether
+  a transition can proceed and returns an actionable failure reason.
+- Guidance: advisory workflow text rendered near an action, status, or failure
+  to explain the next operator move. Guidance informs; validators decide.
 - Issue: a durable accountability unit. It does not have to map one-to-one to an
   agent run.
 - Milestone: a validated intermediate checkpoint state with scope boundaries,
@@ -50,6 +63,11 @@
 - Plan: durable execution intent that matters beyond ephemeral context.
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
+- Active work: the local runtime association between an agent, an issue, and
+  the current branch/worktree for in-progress execution. It is coordination
+  state, not the durable workflow status of the issue.
+- Abandon: an explicit action that clears active work without claiming
+  completion or changing issue workflow status.
 - SQLite state: fast local projection and runtime state, currently inherited
   from Chainlink and currently living at ignored `.atelier/state.db`.
 
@@ -71,5 +89,5 @@
   and `relates` for peer semantic relationships.
 - Missions, milestone checkpoint records, plans, evidence, and runs are target
   first-class concepts, not just labels on issues.
-- Workflow validators belong to workflow policy, not to milestone records.
-  Milestones own validation criteria; validators enforce transitions.
+- Validators belong to workflow policy, not to milestone records. Milestones
+  own validation criteria; validators enforce transitions.
