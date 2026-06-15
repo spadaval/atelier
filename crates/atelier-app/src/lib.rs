@@ -1,5 +1,7 @@
 //! Application use-case contracts for Atelier.
 
+pub mod status;
+
 pub const CRATE_NAME: &str = "atelier-app";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

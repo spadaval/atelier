@@ -13,8 +13,8 @@ use crate::commands::issue_workflow::{
 use crate::db::Database;
 use crate::models::{Comment, DomainRecord, Issue};
 use crate::record_store::{
-    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
-    IssueSections, RecordStore, RelationshipTarget, Relationships,
+    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, CreateIssueRecord,
+    IssueSectionName, IssueSections, RecordStore, UpdateIssueRecord,
 };
 use crate::utils::format_issue_id;
 use atelier_workflow::WorkflowPolicy;
@@ -1420,33 +1420,17 @@ pub fn create_lifecycle(
     drop(db);
 
     let store = RecordStore::new(state_dir);
-    let now = Utc::now();
-    let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
-    let record = CanonicalIssueRecord {
-        issue: Issue {
-            id: id.clone(),
-            title: input.title.to_string(),
-            description: input.description.map(str::to_string),
-            status: initial_status,
-            issue_type: input.issue_type.to_string(),
-            priority: input.priority.to_string(),
-            parent_id: None,
-            created_at: now,
-            updated_at: now,
-            closed_at: None,
-        },
-        labels: input.labels.to_vec(),
-        sections: IssueSections::unchecked_from_body(input.description),
-        relationships: Relationships::default(),
-    };
-    store.write_issue_atomic(&record)?;
-    if let Some(parent_id) = &parent_id {
-        let mut parent = store.load_issue_by_id(parent_id)?;
-        add_child_relationship(&mut parent, &id);
-        parent.issue.updated_at = now;
-        store.write_issue_atomic(&parent)?;
-    }
+    let record = store.create_issue_record(CreateIssueRecord {
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+        issue_type: input.issue_type,
+        labels: input.labels,
+        status: &initial_status,
+        parent_id: parent_id.as_deref(),
+    })?;
+    let id = record.issue.id;
 
     super::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = Database::open(db_path)?;
@@ -1524,11 +1508,8 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
 
     let mut changed_fields = Vec::new();
     let store = RecordStore::new(state_dir);
-    let mut record = store.load_issue_by_id(&id)?;
-    let now = Utc::now();
 
     if let Some(title) = input.title {
-        record.issue.title = title.to_string();
         changed_fields.push("title");
         crate::commands::activity_log::record_field_changed(
             &id,
@@ -1539,7 +1520,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     }
     if let Some(priority) = input.priority {
         validate_priority(priority)?;
-        record.issue.priority = priority.to_string();
         changed_fields.push("priority");
         crate::commands::activity_log::record_field_changed(
             &id,
@@ -1550,7 +1530,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     }
     if let Some(issue_type) = input.issue_type {
         crate::db::validate_issue_type(issue_type)?;
-        record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
         crate::commands::activity_log::record_field_changed(
             &id,
@@ -1560,30 +1539,17 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         )?;
     }
     for label in input.labels {
-        push_unique(&mut record.labels, label.to_string());
         changed_fields.push("labels");
         crate::commands::activity_log::record_field_changed(&id, "labels", None, Some(label))?;
     }
     for label in input.remove_labels {
-        record.labels.retain(|existing| existing != label);
         changed_fields.push("labels");
         crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
     }
     if input.parent.is_some() {
-        let old_parent = parent_record_containing_child(&store, &id)?;
+        let old_parent = store.issue_parent_id(&id)?;
         if old_parent.as_deref() != parent_id.as_deref() {
-            if let Some(old_parent) = old_parent {
-                let mut parent = store.load_issue_by_id(&old_parent)?;
-                remove_child_relationship(&mut parent, &id);
-                parent.issue.updated_at = now;
-                store.write_issue_atomic(&parent)?;
-            }
-            if let Some(parent_id) = &parent_id {
-                let mut parent = store.load_issue_by_id(parent_id)?;
-                add_child_relationship(&mut parent, &id);
-                parent.issue.updated_at = now;
-                store.write_issue_atomic(&parent)?;
-            }
+            store.set_issue_parent(&id, parent_id.as_deref())?;
         }
         changed_fields.push("parent");
         crate::commands::activity_log::record_field_changed(
@@ -1600,8 +1566,17 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     if changed_fields.is_empty() {
         bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
-    record.issue.updated_at = now;
-    store.write_issue_atomic(&record)?;
+    store.update_issue_record(
+        &id,
+        UpdateIssueRecord {
+            title: input.title,
+            priority: input.priority,
+            issue_type: input.issue_type,
+            add_labels: input.labels,
+            remove_labels: input.remove_labels,
+            parent_id: input.parent.map(|_| parent_id.as_deref()),
+        },
+    )?;
 
     super::projection::refresh_after_canonical_write(state_dir, db_path)?;
     let db = Database::open(db_path)?;
@@ -1649,17 +1624,11 @@ pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Re
     drop(db);
 
     let store = RecordStore::new(state_dir);
-    for parent_id in parent_records_containing_any_child(&store, &descendants)? {
+    for parent_id in store.issue_parent_ids_containing_any_child(&descendants)? {
         if descendants.contains(&parent_id) {
             continue;
         }
-        let mut parent = store.load_issue_by_id(&parent_id)?;
-        parent
-            .relationships
-            .children
-            .retain(|child| !descendants.contains(&child.id));
-        parent.issue.updated_at = Utc::now();
-        store.write_issue_atomic(&parent)?;
+        store.remove_issue_children(&parent_id, &descendants)?;
     }
     for issue_id in &descendants {
         store.delete_issue_atomic(issue_id)?;
@@ -1679,62 +1648,6 @@ fn descendant_issue_ids(db: &Database, root: &str) -> Result<Vec<String>> {
         index += 1;
     }
     Ok(ids)
-}
-
-fn parent_record_containing_child(store: &RecordStore, child_id: &str) -> Result<Option<String>> {
-    Ok(store
-        .load_issues()?
-        .into_iter()
-        .find(|record| {
-            record
-                .relationships
-                .children
-                .iter()
-                .any(|child| child.kind == "issue" && child.id == child_id)
-        })
-        .map(|record| record.issue.id))
-}
-
-fn parent_records_containing_any_child(
-    store: &RecordStore,
-    child_ids: &[String],
-) -> Result<Vec<String>> {
-    let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
-    Ok(store
-        .load_issues()?
-        .into_iter()
-        .filter(|record| {
-            record
-                .relationships
-                .children
-                .iter()
-                .any(|child| child.kind == "issue" && child_ids.contains(&child.id))
-        })
-        .map(|record| record.issue.id)
-        .collect())
-}
-
-fn add_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
-    let child = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: child_id.to_string(),
-    };
-    if !record.relationships.children.contains(&child) {
-        record.relationships.children.push(child);
-    }
-}
-
-fn remove_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
-    record
-        .relationships
-        .children
-        .retain(|child| !(child.kind == "issue" && child.id == child_id));
-}
-
-fn push_unique(values: &mut Vec<String>, value: String) {
-    if !values.contains(&value) {
-        values.push(value);
-    }
 }
 
 pub fn dep_add_canonical(

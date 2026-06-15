@@ -5,96 +5,53 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::activity::list_all_issue_activities;
-use crate::models::{DomainRecord, Issue};
+use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
+use atelier_app::status::{
+    self as app_status, GitStatusView, IssueStartReadiness, IssueSummary, MissionSummary,
+    ResultView, StatusPorts, TrackerState,
+};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
-    let current_work = current_work_issues(db)?;
-    let current_work_ids = current_work
-        .iter()
-        .map(|issue| issue.id.as_str())
-        .collect::<BTreeSet<_>>();
-    let active_mission = commands::mission::active_mission(db)?;
-    let current_missions = db
-        .list_records("mission", None)?
-        .into_iter()
-        .filter(|mission| mission.status != "closed")
-        .collect::<Vec<_>>();
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let ready = db
-        .list_issues(Some("all"), None, None)?
-        .into_iter()
-        .filter(|issue| !current_work_ids.contains(issue.id.as_str()))
-        .filter_map(|issue| {
-            match commands::issue_workflow::issue_start_readiness(
-                db,
-                workflow_policy.as_ref(),
-                &issue,
-            ) {
-                Ok(commands::issue_workflow::IssueStartReadiness::Ready) => Some(Ok(issue)),
-                Ok(_) => None,
-                Err(error) => Some(Err(error)),
-            }
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let mission_snapshot = active_mission
-        .as_ref()
-        .map(|mission| mission_snapshot(db, mission, &current_work_ids))
-        .transpose()?;
-    let export_stale = commands::export::canonical_stale_entries(db, state_dir)?;
-    let tracker_state = if export_stale.is_empty() {
-        "current"
-    } else {
-        "stale"
-    };
+    let ports = StatusCommandPorts { db, state_dir };
+    let view = app_status::load_status(&ports)?;
 
     if quiet {
-        println!(
-            "work={} active_mission={} current_missions={} ready={} tracker={}",
-            match current_work.len() {
-                0 => "none",
-                1 => "current",
-                _ => "multiple",
-            },
-            active_mission
-                .as_ref()
-                .map(|mission| mission.id.as_str())
-                .unwrap_or("none"),
-            current_missions.len(),
-            ready.len(),
-            tracker_state
-        );
+        println!("{}", view.quiet_line());
         return Ok(());
     }
 
     println!("Atelier Status");
     println!("==============");
-    println!("Tracker:       {tracker_state}");
-    println!("Ready work:    {}", ready.len());
-    print_current_work_summary(&current_work);
+    println!("Tracker:       {}", view.tracker_state.label());
+    println!("Ready work:    {}", view.ready_work_count);
+    print_current_work_summary(&view.current_work);
 
-    match &active_mission {
+    match &view.active_mission {
         Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
-        None if current_missions.is_empty() => println!("Active mission: none"),
-        None => println!("Active mission: none ({} current)", current_missions.len()),
+        None if view.current_mission_count == 0 => println!("Active mission: none"),
+        None => println!(
+            "Active mission: none ({} current)",
+            view.current_mission_count
+        ),
     }
 
-    if !export_stale.is_empty() {
-        println!("Export issues: {}", export_stale.len());
+    if view.tracker_state.stale_count() > 0 {
+        println!("Export issues: {}", view.tracker_state.stale_count());
     }
 
     println!();
     println!("Local State");
     println!("-----------");
-    print_git_state();
-    println!("Tracker:  {tracker_state}");
+    print_git_state(&view.git);
+    println!("Tracker:  {}", view.tracker_state.label());
 
-    if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
+    if let Some(snapshot) = view.active_mission_snapshot.as_ref() {
         println!();
         println!("Active Mission");
         println!("--------------");
-        println!("{} - {}", mission.id, mission.title);
+        println!("{} - {}", snapshot.mission.id, snapshot.mission.title);
         println!("Health:   {}", snapshot.health());
         if snapshot.active > 0 {
             println!(
@@ -114,13 +71,13 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         if snapshot.selectable_issues.is_empty() {
             println!("(none)");
         } else {
-            for issue in snapshot.selectable_issues.iter().take(5) {
+            for selectable in snapshot.selectable_issues.iter().take(5) {
                 println!(
                     "  {} - {} | ready: no open blockers; {}; {}",
-                    issue.id,
-                    issue.title,
-                    parent_context(issue),
-                    proof_context(db, &issue.id)?
+                    selectable.issue.id,
+                    selectable.issue.title,
+                    selectable.parent_context,
+                    selectable.proof_context
                 );
             }
         }
@@ -131,23 +88,18 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         if snapshot.open_blockers.is_empty() {
             println!("(none)");
         } else {
-            for blocker_id in snapshot.open_blockers.iter().take(5) {
-                let title = db
-                    .get_issue(blocker_id)?
-                    .map(|issue| issue.title)
-                    .unwrap_or_else(|| "(issue missing)".to_string());
-                println!("  {blocker_id} - {title}");
+            for blocker in snapshot.open_blockers.iter().take(5) {
+                println!("  {} - {}", blocker.id, blocker.title);
             }
         }
 
         println!();
         println!("Recent Activity");
         println!("---------------");
-        let recent = recent_mission_activity(state_dir, &snapshot.issue_ids)?;
-        if recent.is_empty() {
+        if snapshot.recent_activity.is_empty() {
             println!("(none)");
         } else {
-            for activity in recent {
+            for activity in &snapshot.recent_activity {
                 println!("{activity}");
             }
         }
@@ -161,204 +113,139 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!();
     println!("Next Actions");
     println!("------------");
-    match active_mission.as_ref().zip(mission_snapshot.as_ref()) {
-        Some((mission, snapshot)) => {
-            println!(
-                "  Inspect active mission health ({}): atelier mission status {}",
-                mission.id, mission.id
-            );
-            println!(
-                "  Open active mission record ({}): atelier mission show {}",
-                mission.id, mission.id
-            );
-            if let Some(issue) = snapshot.current_work.first() {
-                println!(
-                    "  Inspect current work transitions ({} in progress; first {}): atelier issue transition {} --options",
-                    snapshot.current_work.len(),
-                    issue.id, issue.id
-                );
-            } else if let Some(issue) = snapshot.selectable_issues.first() {
-                println!(
-                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
-                    snapshot.selectable_issues.len(),
-                    issue.id
-                );
-            } else if snapshot.blocked > 0 || !snapshot.open_blockers.is_empty() {
-                println!(
-                    "  Inspect blocked active-mission work (no ready work is available): atelier mission status {}",
-                    mission.id
-                );
-            } else {
-                println!(
-                    "  Review active mission closeout (no ready work is available): atelier mission status {}",
-                    mission.id
-                );
-            }
-        }
-        None => {
-            match &active_mission {
-                Some(mission) => println!(
-                    "  Inspect active mission ({} is active): atelier mission status {}",
-                    mission.id, mission.id
-                ),
-                None if current_missions.is_empty() => {
-                    println!("  Inspect mission readiness (no mission is active): atelier mission status")
-                }
-                None => println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier mission status",
-            current_missions.len()
-        ),
-            }
-        }
-    }
-    if active_mission.is_some() {
-        // Active-mission scoped actions above own work selection in focused runs.
-    } else if ready.is_empty() {
-        println!(
-            "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
-        );
-    } else {
-        println!(
-            "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
-            ready.len()
-        );
-        println!("  Start selected work (ready work exists): atelier start <issue-id>");
-    }
-    if export_stale.is_empty() {
-        println!("  Check runtime health (tracker export is current): atelier doctor");
-    } else {
-        println!(
-            "  Refresh canonical export ({} stale record(s)): atelier export",
-            export_stale.len()
-        );
-        println!("  Check tracker records (export is stale): atelier lint");
+    for action in view.next_actions() {
+        println!("  {action}");
     }
     Ok(())
 }
 
-#[derive(Default)]
-struct MissionSnapshot {
-    issue_ids: BTreeSet<String>,
-    current_work: Vec<Issue>,
-    ready_issues: Vec<Issue>,
-    selectable_issues: Vec<Issue>,
-    open_blockers: Vec<String>,
-    active: usize,
-    ready: usize,
-    blocked: usize,
-    done: usize,
-    backlog: usize,
+struct StatusCommandPorts<'a> {
+    db: &'a Database,
+    state_dir: &'a Path,
 }
 
-impl MissionSnapshot {
-    fn health(&self) -> &'static str {
-        if !self.open_blockers.is_empty() || self.blocked > 0 {
-            "blocked"
-        } else if self.active > 0 {
-            "active"
-        } else if self.ready > 0 {
-            "ready"
-        } else if self.done > 0 {
-            "closeout"
-        } else {
-            "steady"
-        }
+impl StatusPorts for StatusCommandPorts<'_> {
+    fn current_work_issues(&self) -> Result<Vec<IssueSummary>> {
+        current_work_issues(self.db)
     }
-}
 
-fn mission_snapshot(
-    db: &Database,
-    mission: &DomainRecord,
-    current_work_ids: &BTreeSet<&str>,
-) -> Result<MissionSnapshot> {
-    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut snapshot = MissionSnapshot::default();
-    snapshot.issue_ids = mission_issue_ids(db, &mission.id)?;
-
-    let mut blocker_ids = mission_direct_blocker_ids(db, &mission.id)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    for issue_id in &snapshot.issue_ids {
-        for blocker_id in db.get_blockers(issue_id)? {
-            blocker_ids.insert(blocker_id);
-        }
+    fn all_issues(&self) -> Result<Vec<IssueSummary>> {
+        Ok(self
+            .db
+            .list_issues(Some("all"), None, None)?
+            .into_iter()
+            .map(issue_summary)
+            .collect())
     }
-    snapshot.open_blockers = blocker_ids
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| {
-            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
-        })
-        .map(|issue| issue.id)
-        .collect();
-    snapshot.open_blockers.sort();
 
-    for issue_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(issue_id)? else {
-            continue;
+    fn issue(&self, issue_id: &str) -> Result<Option<IssueSummary>> {
+        Ok(self.db.get_issue(issue_id)?.map(issue_summary))
+    }
+
+    fn blockers(&self, issue_id: &str) -> Result<Vec<String>> {
+        self.db.get_blockers(issue_id)
+    }
+
+    fn subissues(&self, issue_id: &str) -> Result<Vec<IssueSummary>> {
+        Ok(self
+            .db
+            .get_subissues(issue_id)?
+            .into_iter()
+            .map(issue_summary)
+            .collect())
+    }
+
+    fn active_mission(&self) -> Result<Option<MissionSummary>> {
+        Ok(commands::mission::active_mission(self.db)?.map(mission_summary))
+    }
+
+    fn current_missions(&self) -> Result<Vec<MissionSummary>> {
+        Ok(self
+            .db
+            .list_records("mission", None)?
+            .into_iter()
+            .filter(|mission| mission.status != "closed")
+            .map(mission_summary)
+            .collect())
+    }
+
+    fn mission_issue_ids(&self, mission_id: &str) -> Result<BTreeSet<String>> {
+        mission_issue_ids(self.db, mission_id)
+    }
+
+    fn mission_direct_blocker_ids(&self, mission_id: &str) -> Result<Vec<String>> {
+        mission_direct_blocker_ids(self.db, mission_id)
+    }
+
+    fn has_validating_evidence(&self, issue_id: &str) -> Result<bool> {
+        has_validating_evidence(self.db, issue_id)
+    }
+
+    fn issue_start_readiness(&self, issue: &IssueSummary) -> Result<IssueStartReadiness> {
+        let Some(db_issue) = self.db.get_issue(&issue.id)? else {
+            return Ok(IssueStartReadiness::NotReady);
         };
-        match issue_bucket(db, &issue, current_work_ids, workflow_policy.as_ref())? {
-            IssueBucket::Active => {
-                snapshot.active += 1;
-                snapshot.current_work.push(issue);
-            }
-            IssueBucket::Ready => {
-                snapshot.ready += 1;
-                if is_selectable_work(db, &issue)? {
-                    snapshot.selectable_issues.push(issue.clone());
+        let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+        Ok(
+            match commands::issue_workflow::issue_start_readiness(
+                self.db,
+                workflow_policy.as_ref(),
+                &db_issue,
+            )? {
+                commands::issue_workflow::IssueStartReadiness::Ready => IssueStartReadiness::Ready,
+                commands::issue_workflow::IssueStartReadiness::Blocked => {
+                    IssueStartReadiness::Blocked
                 }
-                snapshot.ready_issues.push(issue);
+                commands::issue_workflow::IssueStartReadiness::NotReady => {
+                    IssueStartReadiness::NotReady
+                }
+            },
+        )
+    }
+
+    fn issue_status_category(&self, status: &str) -> Option<String> {
+        let workflow_policy = commands::issue_workflow::load_issue_workflow_policy().ok()?;
+        commands::issue_workflow::issue_status_category(workflow_policy.as_ref(), status)
+    }
+
+    fn tracker_state(&self) -> Result<TrackerState> {
+        let export_stale = commands::export::canonical_stale_entries(self.db, self.state_dir)?;
+        Ok(if export_stale.is_empty() {
+            TrackerState::Current
+        } else {
+            TrackerState::Stale {
+                issue_count: export_stale.len(),
             }
-            IssueBucket::Blocked => snapshot.blocked += 1,
-            IssueBucket::Done => snapshot.done += 1,
-            IssueBucket::Backlog => snapshot.backlog += 1,
-        }
+        })
     }
-    snapshot.ready_issues.sort_by(|a, b| a.id.cmp(&b.id));
-    snapshot.selectable_issues.sort_by(|a, b| a.id.cmp(&b.id));
-    snapshot.current_work.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(snapshot)
-}
 
-enum IssueBucket {
-    Active,
-    Ready,
-    Blocked,
-    Done,
-    Backlog,
-}
+    fn recent_mission_activity(&self, issue_ids: &BTreeSet<String>) -> Result<Vec<String>> {
+        recent_mission_activity(self.state_dir, issue_ids)
+    }
 
-fn issue_bucket(
-    db: &Database,
-    issue: &Issue,
-    current_work_ids: &BTreeSet<&str>,
-    workflow_policy: Option<&atelier_workflow::WorkflowPolicy>,
-) -> Result<IssueBucket> {
-    if current_work_ids.contains(issue.id.as_str()) {
-        return Ok(IssueBucket::Active);
-    }
-    if commands::issue_workflow::issue_is_done(workflow_policy, issue) {
-        return Ok(IssueBucket::Done);
-    }
-    if !open_issue_blockers(db, &issue.id, workflow_policy)?.is_empty() {
-        return Ok(IssueBucket::Blocked);
-    }
-    match commands::issue_workflow::issue_start_readiness(db, workflow_policy, issue)? {
-        commands::issue_workflow::IssueStartReadiness::Ready => Ok(IssueBucket::Ready),
-        commands::issue_workflow::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
-        commands::issue_workflow::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
+    fn git_status(&self) -> Result<GitStatusView> {
+        let state = git_state()?;
+        Ok(GitStatusView {
+            branch: state.branch,
+            dirty_entries: state.dirty_entries,
+        })
     }
 }
 
-pub(crate) fn current_work_issues(db: &Database) -> Result<Vec<Issue>> {
+pub(crate) fn current_work_issues(db: &Database) -> Result<Vec<IssueSummary>> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut issues = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| is_current_work_issue(issue, workflow_policy.as_ref()))
+        .map(issue_summary)
         .collect::<Vec<_>>();
     issues.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(issues)
+}
+
+pub(crate) fn format_current_work_line(issue: &IssueSummary) -> String {
+    app_status::format_current_work_line(issue)
 }
 
 fn is_current_work_issue(
@@ -370,11 +257,7 @@ fn is_current_work_issue(
         || issue.status == "in_progress"
 }
 
-pub(crate) fn format_current_work_line(issue: &Issue) -> String {
-    format!("{} - {} [{}]", issue.id, issue.title, issue.status)
-}
-
-fn print_current_work_summary(current_work: &[Issue]) {
+fn print_current_work_summary(current_work: &[IssueSummary]) {
     match current_work.len() {
         0 => println!("Current work:  none"),
         1 => {
@@ -387,43 +270,6 @@ fn print_current_work_summary(current_work: &[Issue]) {
                 println!("  {}", format_current_work_line(issue));
             }
         }
-    }
-}
-
-fn open_issue_blockers(
-    db: &Database,
-    issue_id: &str,
-    workflow_policy: Option<&atelier_workflow::WorkflowPolicy>,
-) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for blocker_id in db.get_blockers(issue_id)? {
-        if commands::issue_workflow::issue_blocks_work(
-            workflow_policy,
-            &db.require_issue(&blocker_id)?,
-        ) {
-            blockers.push(blocker_id);
-        }
-    }
-    blockers.sort();
-    Ok(blockers)
-}
-
-fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
-    Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
-}
-
-fn parent_context(issue: &Issue) -> String {
-    match issue.parent_id.as_deref() {
-        Some(parent_id) => format!("parent {parent_id}"),
-        None => "mission-linked root".to_string(),
-    }
-}
-
-fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
-    if has_validating_evidence(db, issue_id)? {
-        Ok("proof attached")
-    } else {
-        Ok("proof missing")
     }
 }
 
@@ -482,11 +328,7 @@ fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<Str
     Ok(blockers)
 }
 
-fn other_side<'a>(
-    link: &'a crate::models::RecordLink,
-    kind: &str,
-    id: &str,
-) -> Option<(&'a str, &'a str)> {
+fn other_side<'a>(link: &'a RecordLink, kind: &str, id: &str) -> Option<(&'a str, &'a str)> {
     if link.source_kind == kind && link.source_id == id {
         Some((&link.target_kind, &link.target_id))
     } else if link.target_kind == kind && link.target_id == id {
@@ -514,10 +356,10 @@ fn recent_mission_activity(state_dir: &Path, issue_ids: &BTreeSet<String>) -> Re
         .collect())
 }
 
-fn print_git_state() {
-    match git_state() {
-        Ok(state) => {
-            if let Some(branch) = state.branch {
+fn print_git_state(git: &ResultView<GitStatusView>) {
+    match git {
+        ResultView::Available(state) => {
+            if let Some(branch) = state.branch.as_ref() {
                 println!("Branch:   {branch}");
             }
             if state.dirty_entries.is_empty() {
@@ -529,7 +371,7 @@ fn print_git_state() {
                 }
             }
         }
-        Err(error) => println!("Worktree: unavailable - {error}"),
+        ResultView::Unavailable(error) => println!("Worktree: unavailable - {error}"),
     }
 }
 
@@ -564,6 +406,23 @@ fn git_state() -> Result<GitState> {
         branch,
         dirty_entries,
     })
+}
+
+fn issue_summary(issue: Issue) -> IssueSummary {
+    IssueSummary {
+        id: issue.id,
+        title: issue.title,
+        status: issue.status,
+        issue_type: issue.issue_type,
+        parent_id: issue.parent_id,
+    }
+}
+
+fn mission_summary(record: DomainRecord) -> MissionSummary {
+    MissionSummary {
+        id: record.id,
+        title: record.title,
+    }
 }
 
 pub fn close_all_lifecycle(

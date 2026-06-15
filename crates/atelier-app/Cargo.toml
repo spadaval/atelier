@@ -13,6 +13,7 @@ description = "Application use-case contracts for Atelier"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow = "1"
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
 atelier-sqlite = { path = "../atelier-sqlite" }

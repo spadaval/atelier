@@ -56,6 +56,7 @@ name = "atelier"
 path = "src/main.rs"
 
 [dependencies]
+atelier-app = { path = "crates/atelier-app" }
 atelier-core = { path = "crates/atelier-core" }
 atelier-records = { path = "crates/atelier-records" }
 atelier-sqlite = { path = "crates/atelier-sqlite" }

@@ -9,10 +9,7 @@ use crate::db::{validate_issue_type, validate_priority, validate_status, Databas
 use crate::models::{
     DomainRecord, EvidenceRecordData, Issue, MilestoneRecordData, PlanRecordData, PlanRevision,
 };
-use crate::record_store::{
-    AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, IssueSections,
-    RecordStore, RelatesRelationship, RelationshipTarget, Relationships,
-};
+use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 
 const KIND: &str = "plan";
 
@@ -101,11 +98,7 @@ pub fn link(
     validate_record_ref(&db, target_kind, target_id)?;
     drop(db);
     let store = RecordStore::new(state_dir);
-    if is_attachment_role(relation_type) {
-        store.add_attachment_relationship(KIND, id, target_kind, target_id, relation_type)?;
-    } else {
-        store.add_relates_relationship(KIND, id, target_kind, target_id, relation_type)?;
-    }
+    store.add_record_relationship(KIND, id, target_kind, target_id, relation_type)?;
     refresh_projection(state_dir, db_path)?;
     println!("Linked plan {id} {relation_type} {target_kind} {target_id}");
     Ok(())
@@ -119,13 +112,6 @@ fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
         db.require_record(kind, id)?;
     }
     Ok(())
-}
-
-fn is_attachment_role(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
-    )
 }
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -956,97 +942,24 @@ fn add_relationship(
     target: &ResolvedRef,
     relation_type: &str,
 ) -> Result<()> {
-    if source.kind == "issue" {
-        let mut record = store.load_issue_by_id(&source.id)?;
-        add_relationship_to_issue(&mut record, target, relation_type);
-        record.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&record)
-    } else {
-        let mut record = store.load_domain_record_by_id(&source.kind, &source.id)?;
-        add_relationship_to_domain(&mut record, target, relation_type);
-        record.record.updated_at = chrono::Utc::now();
-        store.write_domain_record_atomic(&record)
-    }
+    store.add_record_relationship(
+        &source.kind,
+        &source.id,
+        &target.kind,
+        &target.id,
+        relation_type,
+    )?;
+    Ok(())
 }
 
 fn add_issue_child(store: &RecordStore, parent_id: &str, child_id: &str) -> Result<()> {
-    let mut parent = store.load_issue_by_id(parent_id)?;
-    let child = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: child_id.to_string(),
-    };
-    if !parent.relationships.children.contains(&child) {
-        parent.relationships.children.push(child);
-        parent.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&parent)?;
-    }
+    store.add_issue_child(parent_id, child_id)?;
     Ok(())
 }
 
 fn add_issue_block(store: &RecordStore, blocker_id: &str, blocked_id: &str) -> Result<()> {
-    let mut blocker = store.load_issue_by_id(blocker_id)?;
-    let blocked = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: blocked_id.to_string(),
-    };
-    if !blocker.relationships.blocks.contains(&blocked) {
-        blocker.relationships.blocks.push(blocked);
-        blocker.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&blocker)?;
-    }
+    store.add_issue_block(blocked_id, blocker_id)?;
     Ok(())
-}
-
-fn add_relationship_to_issue(
-    record: &mut CanonicalIssueRecord,
-    target: &ResolvedRef,
-    relation_type: &str,
-) {
-    if is_attachment_role(relation_type) {
-        let attachment = AttachmentRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            role: relation_type.to_string(),
-        };
-        if !record.relationships.attachments.contains(&attachment) {
-            record.relationships.attachments.push(attachment);
-        }
-    } else {
-        let relation = RelatesRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            relation_type: relation_type.to_string(),
-        };
-        if !record.relationships.relates.contains(&relation) {
-            record.relationships.relates.push(relation);
-        }
-    }
-}
-
-fn add_relationship_to_domain(
-    record: &mut CanonicalDomainRecord,
-    target: &ResolvedRef,
-    relation_type: &str,
-) {
-    if is_attachment_role(relation_type) {
-        let attachment = AttachmentRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            role: relation_type.to_string(),
-        };
-        if !record.relationships.attachments.contains(&attachment) {
-            record.relationships.attachments.push(attachment);
-        }
-    } else {
-        let relation = RelatesRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            relation_type: relation_type.to_string(),
-        };
-        if !record.relationships.relates.contains(&relation) {
-            record.relationships.relates.push(relation);
-        }
-    }
 }
 
 fn issue_description(issue: &BulkIssue) -> Option<String> {

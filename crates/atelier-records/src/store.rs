@@ -20,7 +20,9 @@ pub use crate::record_kinds::{
     ISSUE_KIND,
 };
 pub use crate::relationships::{
-    issue_relates_relationship, issue_relationship_target, sort_relationships,
+    add_relationship_link_for_owner, attachment_relationship, is_attachment_role,
+    is_child_relation, is_first_class_attachment_kind, issue_relates_relationship,
+    issue_relationship_target, relates_relationship, relationship_target, sort_relationships,
     AttachmentRelationship, RelatesRelationship, RelationshipTarget, Relationships,
 };
 
@@ -246,6 +248,26 @@ pub struct RecordStore {
     state_dir: PathBuf,
 }
 
+pub struct CreateIssueRecord<'a> {
+    pub title: &'a str,
+    pub description: Option<&'a str>,
+    pub priority: &'a str,
+    pub issue_type: &'a str,
+    pub labels: &'a [String],
+    pub status: &'a str,
+    pub parent_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UpdateIssueRecord<'a> {
+    pub title: Option<&'a str>,
+    pub priority: Option<&'a str>,
+    pub issue_type: Option<&'a str>,
+    pub add_labels: &'a [String],
+    pub remove_labels: &'a [String],
+    pub parent_id: Option<Option<&'a str>>,
+}
+
 impl RecordStore {
     pub fn new(state_dir: impl Into<PathBuf>) -> Self {
         Self {
@@ -348,6 +370,164 @@ impl RecordStore {
         self.write_atomic(&relative, render_issue_record(record)?)
     }
 
+    pub fn create_issue_record(
+        &self,
+        input: CreateIssueRecord<'_>,
+    ) -> Result<CanonicalIssueRecord> {
+        validate_priority(input.priority)?;
+        validate_issue_type(input.issue_type)?;
+        validate_status(input.status)?;
+        let now = Utc::now();
+        let record = CanonicalIssueRecord {
+            issue: Issue {
+                id: self.allocate_issue_id()?,
+                title: input.title.to_string(),
+                description: input.description.map(str::to_string),
+                status: input.status.to_string(),
+                issue_type: input.issue_type.to_string(),
+                priority: input.priority.to_string(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
+            },
+            labels: input.labels.to_vec(),
+            sections: IssueSections::unchecked_from_body(input.description),
+            relationships: Relationships::default(),
+        };
+        self.write_issue_atomic(&record)?;
+        if let Some(parent_id) = input.parent_id {
+            self.add_issue_child(parent_id, &record.issue.id)?;
+        }
+        Ok(record)
+    }
+
+    pub fn update_issue_record(
+        &self,
+        issue_id: &str,
+        input: UpdateIssueRecord<'_>,
+    ) -> Result<CanonicalIssueRecord> {
+        let mut record = self.load_issue_by_id(issue_id)?;
+        if let Some(title) = input.title {
+            record.issue.title = title.to_string();
+        }
+        if let Some(priority) = input.priority {
+            validate_priority(priority)?;
+            record.issue.priority = priority.to_string();
+        }
+        if let Some(issue_type) = input.issue_type {
+            validate_issue_type(issue_type)?;
+            record.issue.issue_type = issue_type.to_string();
+        }
+        for label in input.add_labels {
+            push_unique(&mut record.labels, label.to_string());
+        }
+        for label in input.remove_labels {
+            record.labels.retain(|existing| existing != label);
+        }
+        if let Some(parent_id) = input.parent_id {
+            self.set_issue_parent(issue_id, parent_id)?;
+        }
+        record.issue.updated_at = Utc::now();
+        self.write_issue_atomic(&record)?;
+        Ok(record)
+    }
+
+    pub fn issue_parent_id(&self, child_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .load_issues()?
+            .into_iter()
+            .find(|record| {
+                record
+                    .relationships
+                    .children
+                    .iter()
+                    .any(|child| child.kind == ISSUE_KIND.kind && child.id == child_id)
+            })
+            .map(|record| record.issue.id))
+    }
+
+    pub fn issue_parent_ids_containing_any_child(
+        &self,
+        child_ids: &[String],
+    ) -> Result<Vec<String>> {
+        let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
+        Ok(self
+            .load_issues()?
+            .into_iter()
+            .filter(|record| {
+                record
+                    .relationships
+                    .children
+                    .iter()
+                    .any(|child| child.kind == ISSUE_KIND.kind && child_ids.contains(&child.id))
+            })
+            .map(|record| record.issue.id)
+            .collect())
+    }
+
+    pub fn add_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
+        if parent_id == child_id {
+            bail!("An issue cannot be its own parent");
+        }
+        self.load_issue_by_id(child_id)?;
+        let mut parent = self.load_issue_by_id(parent_id)?;
+        let child = issue_relationship_target(child_id);
+        if parent.relationships.children.contains(&child) {
+            return Ok(false);
+        }
+        parent.relationships.children.push(child);
+        parent.issue.updated_at = Utc::now();
+        self.write_issue_atomic(&parent)?;
+        Ok(true)
+    }
+
+    pub fn remove_issue_child(&self, parent_id: &str, child_id: &str) -> Result<bool> {
+        let mut parent = self.load_issue_by_id(parent_id)?;
+        let original_len = parent.relationships.children.len();
+        parent
+            .relationships
+            .children
+            .retain(|child| !(child.kind == ISSUE_KIND.kind && child.id == child_id));
+        if parent.relationships.children.len() == original_len {
+            return Ok(false);
+        }
+        parent.issue.updated_at = Utc::now();
+        self.write_issue_atomic(&parent)?;
+        Ok(true)
+    }
+
+    pub fn remove_issue_children(&self, parent_id: &str, child_ids: &[String]) -> Result<bool> {
+        let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
+        let mut parent = self.load_issue_by_id(parent_id)?;
+        let original_len = parent.relationships.children.len();
+        parent
+            .relationships
+            .children
+            .retain(|child| !(child.kind == ISSUE_KIND.kind && child_ids.contains(&child.id)));
+        if parent.relationships.children.len() == original_len {
+            return Ok(false);
+        }
+        parent.issue.updated_at = Utc::now();
+        self.write_issue_atomic(&parent)?;
+        Ok(true)
+    }
+
+    pub fn set_issue_parent(&self, child_id: &str, parent_id: Option<&str>) -> Result<bool> {
+        self.load_issue_by_id(child_id)?;
+        let old_parent = self.issue_parent_id(child_id)?;
+        if old_parent.as_deref() == parent_id {
+            return Ok(false);
+        }
+        if let Some(old_parent) = old_parent {
+            self.remove_issue_child(&old_parent, child_id)?;
+        }
+        if let Some(parent_id) = parent_id {
+            self.add_issue_child(parent_id, child_id)?;
+        }
+        Ok(true)
+    }
+
     pub fn create_domain_record(
         &self,
         kind: &str,
@@ -405,6 +585,53 @@ impl RecordStore {
         record.record.updated_at = Utc::now();
         self.write_domain_record_atomic(&record)?;
         Ok(true)
+    }
+
+    pub fn add_record_relationship(
+        &self,
+        source_kind: &str,
+        source_id: &str,
+        target_kind: &str,
+        target_id: &str,
+        relation_type: &str,
+    ) -> Result<bool> {
+        if source_kind == ISSUE_KIND.kind {
+            validate_relationship_type(relation_type)?;
+            let mut record = self.load_issue_by_id(source_id)?;
+            if is_attachment_role(relation_type) {
+                let attachment = attachment_relationship(target_kind, target_id, relation_type);
+                if record.relationships.attachments.contains(&attachment) {
+                    return Ok(false);
+                }
+                record.relationships.attachments.push(attachment);
+            } else {
+                let relation = relates_relationship(target_kind, target_id, relation_type);
+                if record.relationships.relates.contains(&relation) {
+                    return Ok(false);
+                }
+                record.relationships.relates.push(relation);
+            }
+            record.issue.updated_at = Utc::now();
+            self.write_issue_atomic(&record)?;
+            return Ok(true);
+        }
+        if is_attachment_role(relation_type) {
+            self.add_attachment_relationship(
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                relation_type,
+            )
+        } else {
+            self.add_relates_relationship(
+                source_kind,
+                source_id,
+                target_kind,
+                target_id,
+                relation_type,
+            )
+        }
     }
 
     pub fn add_relates_relationship(
@@ -665,6 +892,12 @@ where
         "Unable to allocate unique record ID after {} attempts",
         MAX_ALLOC_ATTEMPTS
     )
+}
+
+fn push_unique(values: &mut Vec<String>, value: String) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
 }
 
 fn random_base36_suffix(len: usize) -> Result<String> {
@@ -3739,6 +3972,90 @@ Legacy missions used free-form body headings.
             .unwrap()
             .labels
             .is_empty());
+    }
+
+    #[test]
+    fn record_store_create_issue_record_writes_markdown_and_parent_relationship() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        let mut parent = issue_record("atelier-prnt");
+        parent.relationships = Relationships::default();
+        store.write_issue_atomic(&parent).unwrap();
+
+        let created = store
+            .create_issue_record(CreateIssueRecord {
+                title: "Created through records API",
+                description: Some("Records API owns canonical issue creation."),
+                priority: "high",
+                issue_type: "task",
+                labels: &["records".to_string()],
+                status: "todo",
+                parent_id: Some("atelier-prnt"),
+            })
+            .unwrap();
+
+        let issue_path = store.state_dir.join(issue_record_path(&created.issue.id));
+        let issue_text = fs::read_to_string(issue_path).unwrap();
+        assert!(issue_text.contains("title: \"Created through records API\""));
+        assert!(issue_text.contains("labels:\n- \"records\"\n"));
+        assert!(issue_text.contains("Records API owns canonical issue creation."));
+        assert_eq!(
+            store.issue_parent_id(&created.issue.id).unwrap().as_deref(),
+            Some("atelier-prnt")
+        );
+        assert!(
+            fs::read_to_string(store.state_dir.join(issue_record_path("atelier-prnt")))
+                .unwrap()
+                .contains(&format!("id: \"{}\"", created.issue.id))
+        );
+    }
+
+    #[test]
+    fn record_store_update_issue_record_mutates_labels_and_parent_relationships() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+        for id in ["atelier-chld", "atelier-oldp", "atelier-newp"] {
+            let mut record = issue_record(id);
+            record.relationships = Relationships::default();
+            record.labels.clear();
+            store.write_issue_atomic(&record).unwrap();
+        }
+        store
+            .add_issue_child("atelier-oldp", "atelier-chld")
+            .unwrap();
+
+        store
+            .update_issue_record(
+                "atelier-chld",
+                UpdateIssueRecord {
+                    title: Some("Updated through records API"),
+                    priority: Some("low"),
+                    issue_type: None,
+                    add_labels: &["new-label".to_string()],
+                    remove_labels: &[],
+                    parent_id: Some(Some("atelier-newp")),
+                },
+            )
+            .unwrap();
+
+        let updated = store.load_issue_by_id("atelier-chld").unwrap();
+        assert_eq!(updated.issue.title, "Updated through records API");
+        assert_eq!(updated.issue.priority, "low");
+        assert_eq!(updated.labels, vec!["new-label".to_string()]);
+        assert_eq!(
+            store.issue_parent_id("atelier-chld").unwrap().as_deref(),
+            Some("atelier-newp")
+        );
+        assert!(
+            !fs::read_to_string(store.state_dir.join(issue_record_path("atelier-oldp")))
+                .unwrap()
+                .contains("atelier-chld")
+        );
+        assert!(
+            fs::read_to_string(store.state_dir.join(issue_record_path("atelier-newp")))
+                .unwrap()
+                .contains("atelier-chld")
+        );
     }
 
     #[test]

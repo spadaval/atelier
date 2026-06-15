@@ -2190,7 +2190,10 @@ fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &
     }
 }
 
-fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
+fn active_work_for_mission(
+    db: &Database,
+    mission_id: &str,
+) -> Result<Vec<atelier_app::status::IssueSummary>> {
     let issue_ids = mission_issue_ids(db, mission_id)?;
     Ok(crate::commands::status::current_work_issues(db)?
         .into_iter()

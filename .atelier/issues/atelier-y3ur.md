@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T07:50:57.689803195+00:00"
+status: "done"
 title: "Move RecordStore mutations and relationship rendering behind records API"
-updated_at: "2026-06-15T05:13:36.523358965+00:00"
+updated_at: "2026-06-15T07:50:57.689803195+00:00"
 ---
 
 ## Description
