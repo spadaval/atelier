@@ -12,8 +12,6 @@ relationships:
     id: "atelier-4ra1"
   - kind: "issue"
     id: "atelier-f74g"
-  - kind: "issue"
-    id: "atelier-qsib"
   children: []
   attachments: []
   relates: []

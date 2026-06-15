@@ -19,6 +19,8 @@ relationships:
   - kind: "issue"
     id: "atelier-epzs"
   - kind: "issue"
+    id: "atelier-qsib"
+  - kind: "issue"
     id: "atelier-vu2b"
   attachments: []
   relates: []

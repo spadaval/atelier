@@ -68,15 +68,13 @@ relationships:
     id: "atelier-4ra1"
   - kind: "issue"
     id: "atelier-f74g"
-  - kind: "issue"
-    id: "atelier-qsib"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Architecture contracts and ADRs for crate rewrite"
-updated_at: "2026-06-15T15:16:25.104361056+00:00"
+updated_at: "2026-06-15T16:33:34.501849454+00:00"
 ---
 
 ## Description
