@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T06:33:43.927136784+00:00"
+status: "done"
 title: "Close workflow must allow freshly recorded evidence"
-updated_at: "2026-06-15T06:20:46.971423020+00:00"
+updated_at: "2026-06-15T06:33:43.927136784+00:00"
 ---
 
 ## Description

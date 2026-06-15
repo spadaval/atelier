@@ -8601,6 +8601,83 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
 }
 
 #[test]
+fn test_validation_issue_closeout_allows_freshly_recorded_evidence() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let validation_body = "## Description\n\nFresh evidence closeout body.\n\n## Outcome\n\nThe issue closes immediately after targeted evidence is recorded.\n\n## Evidence\n\n- A disposable workflow transcript records evidence and closes without an intervening commit.";
+    let (success, validation_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Fresh evidence closeout",
+            "--issue-type",
+            "validation",
+            "--description",
+            validation_body,
+        ],
+    );
+    assert!(success, "validation issue create failed: {stderr}");
+    assert!(validation_out.contains("Created issue atelier-"));
+    let validation_id = issue_id_by_title(dir.path(), "Fresh evidence closeout");
+    commit_all(dir.path(), "fresh evidence closeout baseline");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "start"],
+    );
+    assert!(success, "start failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "request_review"],
+    );
+    assert!(success, "request_review failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &validation_id, "request_validation"],
+    );
+    assert!(success, "request_validation failed: {stderr}");
+
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        &validation_id,
+        "fresh validation evidence recorded before close",
+    );
+    let dirty_before_close = git_status_short(dir.path());
+    assert!(
+        dirty_before_close.contains(".atelier/evidence/"),
+        "evidence record should be dirty before close:\n{dirty_before_close}"
+    );
+    assert!(
+        dirty_before_close.contains(&format!(".atelier/issues/{validation_id}.activity/")),
+        "evidence activity should be dirty before close:\n{dirty_before_close}"
+    );
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "close",
+            &validation_id,
+            "--reason",
+            "fresh evidence accepted",
+        ],
+    );
+    assert!(
+        success,
+        "issue close should accept freshly recorded evidence without an intervening commit: {stderr}"
+    );
+    assert!(
+        close_out.contains("Applied transition close"),
+        "{close_out}"
+    );
+    assert!(close_out.contains("To:       done"), "{close_out}");
+}
+
+#[test]
 fn test_issue_closeout_requires_passing_evidence_records() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

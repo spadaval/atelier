@@ -1328,6 +1328,10 @@ fn classify_git_dirty_entries(
             tracker_generated_entries.push(entry.raw.clone());
             continue;
         }
+        if is_tracker_generated_evidence_bookkeeping(repo_root, relative, &entry.repo_path)? {
+            tracker_generated_entries.push(entry.raw.clone());
+            continue;
+        }
         blocking_entries.push(entry.raw.clone());
     }
     Ok(ClassifiedGitDirtyEntries {
@@ -1447,6 +1451,109 @@ fn issue_id_from_canonical_issue_path(relative: &Path) -> Option<String> {
     file.strip_suffix(".md").map(ToOwned::to_owned)
 }
 
+fn is_tracker_generated_evidence_bookkeeping(
+    repo_root: &Path,
+    relative: &Path,
+    repo_path: &str,
+) -> Result<bool> {
+    let Some(evidence_id) = evidence_id_from_canonical_evidence_path(relative) else {
+        return Ok(false);
+    };
+    let state_dir = crate::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let store = RecordStore::new(&state_dir);
+    let record = match store.load_domain_record_by_id("evidence", &evidence_id) {
+        Ok(record) => record,
+        Err(_) => return Ok(false),
+    };
+    if !evidence_record_validates_target(&record)? {
+        return Ok(false);
+    }
+    let diff = git_diff_against_head(repo_root, repo_path)?;
+    if diff.trim().is_empty() {
+        return Ok(true);
+    }
+    let current_text = fs::read_to_string(repo_root.join(repo_path))?;
+    let Some(front_matter_end_line) = front_matter_end_line(&current_text) else {
+        return Ok(false);
+    };
+    let mut saw_allowed_change = false;
+    let mut current_line = None;
+    for line in diff.lines() {
+        if line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+        {
+            continue;
+        }
+        if line.starts_with("@@ ") {
+            current_line = parse_new_hunk_start(line);
+            continue;
+        }
+        let Some(line_no) = current_line.as_mut() else {
+            continue;
+        };
+        match line.chars().next() {
+            Some('+') => {
+                saw_allowed_change = true;
+                if *line_no > front_matter_end_line
+                    || !is_allowed_evidence_bookkeeping_line(&line[1..])
+                {
+                    return Ok(false);
+                }
+                *line_no += 1;
+            }
+            Some('-') => {
+                saw_allowed_change = true;
+                if *line_no > front_matter_end_line
+                    || !is_allowed_evidence_bookkeeping_line(&line[1..])
+                {
+                    return Ok(false);
+                }
+            }
+            Some(' ') => *line_no += 1,
+            _ => {}
+        }
+    }
+    Ok(saw_allowed_change)
+}
+
+fn evidence_id_from_canonical_evidence_path(relative: &Path) -> Option<String> {
+    let mut components = relative.components();
+    let root = components.next()?.as_os_str();
+    if root != "evidence" {
+        return None;
+    }
+    let file = components.next()?.as_os_str().to_string_lossy();
+    if components.next().is_some() || !file.ends_with(".md") {
+        return None;
+    }
+    file.strip_suffix(".md").map(ToOwned::to_owned)
+}
+
+fn evidence_record_validates_target(
+    record: &crate::record_store::CanonicalDomainRecord,
+) -> Result<bool> {
+    let data = serde_json::from_str::<EvidenceRecordData>(&record.record.data_json)?;
+    if data
+        .target
+        .as_ref()
+        .is_some_and(|target| target.role == "validates")
+    {
+        return Ok(true);
+    }
+    Ok(record
+        .relationships
+        .attachments
+        .iter()
+        .any(|attachment| attachment.role == "validates")
+        || record
+            .relationships
+            .relates
+            .iter()
+            .any(|relation| relation.relation_type == "validates"))
+}
+
 fn front_matter_end_line(text: &str) -> Option<usize> {
     let mut fence_count = 0;
     for (index, line) in text.lines().enumerate() {
@@ -1473,6 +1580,20 @@ fn is_allowed_issue_bookkeeping_line(line: &str) -> bool {
     line.starts_with("status: ")
         || line.starts_with("updated_at: ")
         || line.starts_with("closed_at: ")
+}
+
+fn is_allowed_evidence_bookkeeping_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    line.starts_with("updated_at: ")
+        || line == "relationships:"
+        || trimmed.starts_with("attachments:")
+        || trimmed.starts_with("relates:")
+        || trimmed.starts_with("blocks:")
+        || trimmed.starts_with("children:")
+        || trimmed.starts_with("- kind: ")
+        || trimmed.starts_with("id: ")
+        || trimmed.starts_with("role: \"validates\"")
+        || trimmed.starts_with("type: \"validates\"")
 }
 
 fn git_diff_against_head(repo_root: &Path, repo_path: &str) -> Result<String> {
