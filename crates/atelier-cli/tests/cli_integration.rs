@@ -85,11 +85,8 @@ fn migrate_default_issue_workflow(dir: &Path) {
     if workflow_path.exists() {
         return;
     }
-    fs::write(
-        &workflow_path,
-        atelier::workflow_policy::STARTER_POLICY_YAML,
-    )
-    .expect("failed to write starter workflow policy");
+    fs::write(&workflow_path, atelier_workflow::STARTER_POLICY_YAML)
+        .expect("failed to write starter workflow policy");
 }
 
 fn init_git_repo(dir: &Path) {
