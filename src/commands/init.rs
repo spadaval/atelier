@@ -15,7 +15,6 @@ runtime_database = ".atelier/state.db"
 cache_dir = ".atelier/cache"
 "#;
 pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
-    "/.atelier/.locks-cache/",
     "/.atelier/state.db",
     "/.atelier/state.db-shm",
     "/.atelier/state.db-wal",
@@ -132,7 +131,6 @@ mod tests {
         let gitignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
         assert!(gitignore.contains("/.atelier/state.db"));
         assert!(gitignore.contains("/.atelier/.state.db.*.rebuild-tmp*"));
-        assert!(gitignore.contains("/.atelier/.locks-cache/"));
         assert!(gitignore.contains("/.atelier/cache/"));
         assert!(!gitignore.contains("/.atelier/rules/"));
         assert!(!gitignore.contains("/.atelier/rules.local/"));
