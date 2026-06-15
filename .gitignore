@@ -1,4 +1,5 @@
 /target/
+/fuzz/target/
 
 # Atelier project state under .atelier/ is tracked intentionally.
 # Keep canonical records and .atelier/config.toml visible to git; ignore only
