@@ -32,9 +32,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Split application layer and CLI shell"
-updated_at: "2026-06-15T15:17:32.624440938+00:00"
+updated_at: "2026-06-15T18:53:43.294436196+00:00"
 ---
 
 ## Description
