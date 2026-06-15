@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use crate::db::Database;
-use crate::models::Issue;
+use crate::models::{EvidenceRecordData, Issue};
 use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
 
 const SLOW_VALIDATOR_WARNING_MS: u128 = 100;
@@ -931,9 +931,28 @@ fn linked_evidence_records(
         let record = db.require_record("evidence", &evidence_id)?;
         if let Some(required_kind) = required_kind {
             let data =
-                serde_json::from_str::<serde_json::Value>(&record.data_json).unwrap_or_default();
-            let actual_kind = data.get("kind").and_then(|value| value.as_str());
-            if actual_kind != Some(required_kind) {
+                serde_json::from_str::<EvidenceRecordData>(&record.data_json).unwrap_or_else(
+                    |_| EvidenceRecordData {
+                        evidence_type: String::new(),
+                        captured_at: chrono::Utc::now(),
+                        command: None,
+                        path: None,
+                        uri: None,
+                        producer: None,
+                        proof_scope: None,
+                        agent_identity: None,
+                        independence_level: None,
+                        residual_risks: Vec::new(),
+                        follow_up_ids: Vec::new(),
+                        exit_code: None,
+                        exit_status: None,
+                        success: None,
+                        spawn_error: None,
+                        output: None,
+                        target: None,
+                    },
+                );
+            if data.evidence_type != required_kind {
                 continue;
             }
         }

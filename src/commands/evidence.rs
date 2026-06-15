@@ -1,11 +1,13 @@
 use anyhow::{bail, Result};
-use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::db::Database;
-use crate::models::{DomainRecord, RecordLink};
+use crate::models::{
+    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
+    RecordLink,
+};
 use crate::record_store::RecordStore;
 
 const KIND: &str = "evidence";
@@ -81,22 +83,33 @@ pub fn add_returning_id(
     producer: Option<&str>,
 ) -> Result<String> {
     let metadata = EvidenceMetadata::from_producer(producer);
-    let data = json!({
-        "kind": evidence_kind,
-        "result": result,
-        "path": path,
-        "uri": uri,
-        "producer": producer,
-        "captured_at": chrono::Utc::now().to_rfc3339(),
-        "proof_scope": metadata.proof_scope,
-        "agent_identity": metadata.agent_identity,
-        "independence_level": metadata.independence_level,
-        "residual_risks": metadata.residual_risks,
-        "follow_up_ids": metadata.follow_up_ids
-    });
+    let data = EvidenceRecordData {
+        evidence_type: evidence_kind.to_string(),
+        captured_at: chrono::Utc::now(),
+        command: None,
+        path: path.map(str::to_string),
+        uri: uri.map(str::to_string),
+        producer: producer.map(str::to_string),
+        proof_scope: Some(metadata.proof_scope.to_string()),
+        agent_identity: metadata.agent_identity.map(str::to_string),
+        independence_level: Some(metadata.independence_level.to_string()),
+        residual_risks: metadata.residual_risks,
+        follow_up_ids: metadata.follow_up_ids,
+        exit_code: None,
+        exit_status: None,
+        success: None,
+        spawn_error: None,
+        output: None,
+        target: None,
+    };
     let store = RecordStore::new(state_dir);
-    let created =
-        store.create_domain_record(KIND, summary, result, Some(summary), &data.to_string())?;
+    let created = store.create_domain_record(
+        KIND,
+        summary,
+        result,
+        Some(summary),
+        &serde_json::to_string(&data)?,
+    )?;
     let id = created.record.id.clone();
     refresh_projection(state_dir, db_path)?;
     Ok(id)
@@ -152,45 +165,33 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         &stderr_summary,
         spawn_error.as_deref(),
     );
-    let target_json = target.as_ref().map(|target| {
-        json!({
-            "kind": target.display_kind,
-            "id": target.id,
-            "role": target.role
-        })
-    });
-    let data = json!({
-        "kind": options.evidence_kind,
-        "result": options.result,
-        "path": options.path,
-        "uri": options.uri,
-        "producer": options.producer,
-        "captured_at": captured_at,
-        "proof_scope": metadata.proof_scope,
-        "agent_identity": metadata.agent_identity,
-        "independence_level": metadata.independence_level,
-        "residual_risks": metadata.residual_risks,
-        "follow_up_ids": metadata.follow_up_ids,
-        "command": command_display,
-        "exit_code": exit_code,
-        "exit_status": exit_status,
-        "success": success,
-        "target": target_json,
-        "output": {
-            "limit_bytes_per_stream": OUTPUT_SUMMARY_LIMIT_BYTES,
-            "stdout": {
-                "summary": stdout_summary.text,
-                "bytes": stdout_summary.original_bytes,
-                "truncated": stdout_summary.truncated
-            },
-            "stderr": {
-                "summary": stderr_summary.text,
-                "bytes": stderr_summary.original_bytes,
-                "truncated": stderr_summary.truncated
-            }
-        },
-        "spawn_error": spawn_error
-    });
+    let data = EvidenceRecordData {
+        evidence_type: options.evidence_kind.to_string(),
+        captured_at: chrono::DateTime::parse_from_rfc3339(&captured_at)?.with_timezone(&chrono::Utc),
+        command: Some(command_display.clone()),
+        path: options.path.map(str::to_string),
+        uri: options.uri.map(str::to_string),
+        producer: options.producer.map(str::to_string),
+        proof_scope: Some(metadata.proof_scope.to_string()),
+        agent_identity: metadata.agent_identity.map(str::to_string),
+        independence_level: Some(metadata.independence_level.to_string()),
+        residual_risks: metadata.residual_risks,
+        follow_up_ids: metadata.follow_up_ids,
+        exit_code,
+        exit_status: Some(exit_status.clone()),
+        success: Some(success),
+        spawn_error,
+        output: Some(EvidenceOutputSummary {
+            limit_bytes_per_stream: OUTPUT_SUMMARY_LIMIT_BYTES,
+            stdout: stdout_summary.to_stream_summary(),
+            stderr: stderr_summary.to_stream_summary(),
+        }),
+        target: target.as_ref().map(|target| EvidenceTarget {
+            kind: target.display_kind.to_string(),
+            id: target.id.to_string(),
+            role: target.role.to_string(),
+        }),
+    };
 
     let store = RecordStore::new(state_dir);
     let created = store.create_domain_record(
@@ -198,7 +199,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         &summary,
         options.result,
         Some(&body),
-        &data.to_string(),
+        &serde_json::to_string(&data)?,
     )?;
     refresh_projection(state_dir, db_path)?;
     if let Some(target) = target {
@@ -303,10 +304,10 @@ pub fn list(db: &Database, result: Option<&str>) -> Result<()> {
     print_heading("Evidence");
     println!("{} total", records.len());
     for record in records {
-        let data = evidence_data(&record)?;
-        let kind = data["kind"].as_str().unwrap_or("unknown");
-        let command = data["command"].as_str().unwrap_or("(manual)");
-        let exit_status = data["exit_status"].as_str().unwrap_or("(none)");
+        let data = evidence_record_data(&record)?;
+        let kind = data.evidence_type.as_str();
+        let command = data.command.as_deref().unwrap_or("(manual)");
+        let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
         let targets = format_targets(db, &record.id, &data)?;
         let target = if targets.is_empty() {
             "(none)".to_string()
@@ -322,7 +323,7 @@ pub fn list(db: &Database, result: Option<&str>) -> Result<()> {
 }
 
 pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
-    let data = evidence_data(record)?;
+    let data = evidence_record_data(record)?;
     println!(
         "{} [evidence] {} - {}",
         record.id, record.status, record.title
@@ -332,18 +333,12 @@ pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
         "=".repeat(record.id.len() + record.status.len() + record.title.len() + 15)
     );
     println!("Result:      {}", record.status);
-    println!(
-        "Kind:        {}",
-        data["kind"].as_str().unwrap_or("unknown")
-    );
-    println!(
-        "Captured:    {}",
-        data["captured_at"].as_str().unwrap_or("(unknown)")
-    );
-    if let Some(command) = data["command"].as_str() {
+    println!("Kind:        {}", data.evidence_type);
+    println!("Captured:    {}", data.captured_at.to_rfc3339());
+    if let Some(command) = data.command.as_deref() {
         println!("Command:     {command}");
     }
-    if let Some(exit_status) = data["exit_status"].as_str() {
+    if let Some(exit_status) = data.exit_status.as_deref() {
         println!("Exit Status: {exit_status}");
     }
     let targets = format_targets(db, &record.id, &data)?;
@@ -352,10 +347,13 @@ pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
     }
     println!(
         "Producer:    {}",
-        data["producer"].as_str().unwrap_or("(none)")
+        data.producer
+            .as_deref()
+            .or(data.agent_identity.as_deref())
+            .unwrap_or("(none)")
     );
-    println!("Path:        {}", data["path"].as_str().unwrap_or("(none)"));
-    println!("URI:         {}", data["uri"].as_str().unwrap_or("(none)"));
+    println!("Path:        {}", data.path.as_deref().unwrap_or("(none)"));
+    println!("URI:         {}", data.uri.as_deref().unwrap_or("(none)"));
     println!("Created:     {}", record.created_at.to_rfc3339());
     println!("Updated:     {}", record.updated_at.to_rfc3339());
     print_heading("Summary");
@@ -377,8 +375,12 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
-fn evidence_data(record: &DomainRecord) -> Result<Value> {
-    Ok(serde_json::from_str::<Value>(&record.data_json)?)
+fn evidence_record_data(record: &DomainRecord) -> Result<EvidenceRecordData> {
+    let mut data = serde_json::from_str::<EvidenceRecordData>(&record.data_json)?;
+    if data.agent_identity.is_none() {
+        data.agent_identity = data.producer.clone();
+    }
+    Ok(data)
 }
 
 fn capture_target<'a>(
@@ -454,6 +456,14 @@ impl BoundedText {
             truncated,
         }
     }
+
+    fn to_stream_summary(&self) -> EvidenceStreamSummary {
+        EvidenceStreamSummary {
+            summary: self.text.clone(),
+            bytes: self.original_bytes,
+            truncated: self.truncated,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -502,28 +512,24 @@ fn push_output_block(body: &mut String, text: &str) {
     }
 }
 
-fn print_output_summary(data: &Value) -> Result<()> {
-    let Some(output) = data["output"].as_object() else {
+fn print_output_summary(data: &EvidenceRecordData) -> Result<()> {
+    let Some(output) = data.output.as_ref() else {
         return Ok(());
     };
     print_heading("Output Summary");
-    print_stream_summary("Stdout", output.get("stdout"))?;
-    print_stream_summary("Stderr", output.get("stderr"))?;
+    print_stream_summary("Stdout", &output.stdout)?;
+    print_stream_summary("Stderr", &output.stderr)?;
     Ok(())
 }
 
-fn print_stream_summary(name: &str, value: Option<&Value>) -> Result<()> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let bytes = value["bytes"].as_u64().unwrap_or(0);
-    let truncated = value["truncated"].as_bool().unwrap_or(false);
+fn print_stream_summary(name: &str, value: &EvidenceStreamSummary) -> Result<()> {
+    let bytes = value.bytes;
+    let truncated = value.truncated;
     println!("{name}: {bytes} bytes, truncated: {}", yes_no(truncated));
-    let summary = value["summary"].as_str().unwrap_or("");
-    if summary.is_empty() {
+    if value.summary.is_empty() {
         println!("(none)");
     } else {
-        println!("{summary}");
+        println!("{}", value.summary);
     }
     Ok(())
 }
@@ -536,7 +542,11 @@ fn yes_no(value: bool) -> &'static str {
     }
 }
 
-fn format_targets(db: &Database, evidence_id: &str, data: &Value) -> Result<Vec<String>> {
+fn format_targets(
+    db: &Database,
+    evidence_id: &str,
+    data: &EvidenceRecordData,
+) -> Result<Vec<String>> {
     let mut targets = BTreeSet::new();
     if let Some(target) = format_data_target(data) {
         targets.insert(target);
@@ -550,15 +560,9 @@ fn format_targets(db: &Database, evidence_id: &str, data: &Value) -> Result<Vec<
     Ok(targets.into_iter().collect())
 }
 
-fn format_data_target(data: &Value) -> Option<String> {
-    let target = data["target"].as_object()?;
-    let kind = target.get("kind")?.as_str()?;
-    let id = target.get("id")?.as_str()?;
-    let role = target
-        .get("role")
-        .and_then(Value::as_str)
-        .unwrap_or("validates");
-    Some(format!("{kind}/{id} ({role})"))
+fn format_data_target(data: &EvidenceRecordData) -> Option<String> {
+    let target = data.target.as_ref()?;
+    Some(format!("{}/{id} ({})", target.kind, target.role, id = target.id))
 }
 
 fn evidence_link_target<'a>(

@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-13T17:48:01.156384900+00:00"
 id: "atelier-fjhv"
-data: "{\"captured_at\":\"2026-06-13T17:48:01.156355111+00:00\",\"kind\":\"validation\",\"path\":\"docs/product/workflow-configuration.md\",\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T17:48:01.156355111+00:00"
+command: null
+exit_status: null
+path: "docs/product/workflow-configuration.md"
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

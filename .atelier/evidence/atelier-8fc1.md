@@ -1,15 +1,25 @@
 ---
 created_at: "2026-06-12T21:25:15.375142832+00:00"
 id: "atelier-8fc1"
-data: "{\"captured_at\":\"2026-06-12T21:25:15.375131130+00:00\",\"kind\":\"review\",\"path\":\"/root/.agents-worktrees/atelier-v6nd/skills/agent-factory/standards/proof-routing.md\",\"producer\":\"root\",\"result\":\"pass\",\"uri\":null}"
+evidence_type: "review"
+captured_at: "2026-06-12T21:25:15.375131130+00:00"
+command: null
+exit_status: null
+path: "/root/.agents-worktrees/atelier-v6nd/skills/agent-factory/standards/proof-routing.md"
+uri: null
+proof_scope: null
+agent_identity: "root"
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "issue"
     id: "atelier-v6nd"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

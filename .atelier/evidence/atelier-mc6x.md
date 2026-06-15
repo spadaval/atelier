@@ -1,15 +1,25 @@
 ---
 created_at: "2026-06-12T21:53:30.110409986+00:00"
 id: "atelier-mc6x"
-data: "{\"captured_at\":\"2026-06-12T21:53:30.110361460+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-12T21:53:30.110361460+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "issue"
     id: "atelier-l0yk"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

@@ -1,15 +1,25 @@
 ---
 created_at: "2026-06-11T16:30:12.513634062+00:00"
 id: "atelier-uu8j"
-data: "{\"captured_at\":\"2026-06-11T16:30:12.513436430+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":\"codex\",\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-11T16:30:12.513436430+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: "codex"
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "mission"
     id: "atelier-dvxc"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

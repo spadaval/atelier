@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-13T01:39:55.337257886+00:00"
 id: "atelier-y90a"
-data: "{\"captured_at\":\"2026-06-13T01:39:55.337230069+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":\"Epicurus\",\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T01:39:55.337230069+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: "Epicurus"
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

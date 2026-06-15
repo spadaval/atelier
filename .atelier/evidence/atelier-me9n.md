@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-13T04:26:34.666239952+00:00"
 id: "atelier-me9n"
-data: "{\"captured_at\":\"2026-06-13T04:26:34.666217407+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-13T04:26:34.666217407+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

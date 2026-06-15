@@ -1,15 +1,25 @@
 ---
 created_at: "2026-06-12T05:28:32.812014514+00:00"
 id: "atelier-fwmn"
-data: "{\"captured_at\":\"2026-06-12T05:28:32.811968180+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-12T05:28:32.811968180+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "issue"
     id: "atelier-0j6e"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

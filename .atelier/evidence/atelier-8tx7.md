@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-12T23:54:57.951589202+00:00"
 id: "atelier-8tx7"
-data: "{\"captured_at\":\"2026-06-12T23:54:57.298202980+00:00\",\"command\":\"bash -lc 'atelier export --check && atelier lint && atelier doctor'\",\"exit_code\":0,\"exit_status\":\"0\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false},\"stdout\":{\"bytes\":704,\"summary\":\"Canonical export is current\\nState: /root/atelier/.atelier\\nLint passed.\\nDatabase: /root/atelier/.atelier/state.db\\nState: /root/atelier/.atelier\\nInstall health:\\n  config: ok\\n  ignored_runtime_paths: ok\\nProjection rebuild:\\n  state_dir: ok\\n  rebuild_ready: ok\\n  projection_fresh: ok\\n  tables: issues, labels, dependencies, relations, records, record_links, projection_index_sources\\nCache health:\\n  cache_dir: missing (optional)\\n  projection_metadata: ok\\nRuntime state:\\n  directory: ok\\n  database: ok\\n  local_tables: ok\\n  diagnostics: enabled\\nCompatibility:\\n  tables: comments\\nLegacy health:\\nconfig: ok\\ndatabase: ok\\nignore_rules: ok\\nprojection_fresh: ok\\nrebuild_ready: ok\\nruntime_state: ok\\nruntime_tables: ok\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"result\":\"pass\",\"spawn_error\":null,\"success\":true,\"target\":{\"id\":\"atelier-nzy1\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-12T23:54:57.298202980+00:00"
+command: "bash -lc 'atelier export --check && atelier lint && atelier doctor'"
+exit_status: "0"
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

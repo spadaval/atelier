@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-13T15:52:51.330135312+00:00"
 id: "atelier-f2yn"
-data: "{\"agent_identity\":null,\"captured_at\":\"2026-06-13T15:52:51.062647227+00:00\",\"command\":\"sh -c 'target/debug/atelier issue show atelier-19mc 2>&1 | grep -F '\\\"'\\\"'atelier-19mc is a mission record, not an issue record'\\\"'\\\"' | grep -F '\\\"'\\\"'atelier mission show atelier-19mc'\\\"'\\\"' && target/debug/atelier issue show atelier-nope 2>&1 | grep -F '\\\"'\\\"'Issue atelier-nope was not found'\\\"'\\\"''\",\"exit_code\":0,\"exit_status\":\"0\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"validation\",\"output\":{\"limit_bytes_per_stream\":4096,\"stderr\":{\"bytes\":0,\"summary\":\"\",\"truncated\":false},\"stdout\":{\"bytes\":143,\"summary\":\"Error: atelier-19mc is a mission record, not an issue record. Use `atelier mission show atelier-19mc`.\\nError: Issue atelier-nope was not found\\n\",\"truncated\":false}},\"path\":null,\"producer\":null,\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"spawn_error\":null,\"success\":true,\"target\":{\"id\":\"atelier-ktcm\",\"kind\":\"issue\",\"role\":\"validates\"},\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T15:52:51.062647227+00:00"
+command: "sh -c 'target/debug/atelier issue show atelier-19mc 2>&1 | grep -F '\"'\"'atelier-19mc is a mission record, not an issue record'\"'\"' | grep -F '\"'\"'atelier mission show atelier-19mc'\"'\"' && target/debug/atelier issue show atelier-nope 2>&1 | grep -F '\"'\"'Issue atelier-nope was not found'\"'\"''"
+exit_status: "0"
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

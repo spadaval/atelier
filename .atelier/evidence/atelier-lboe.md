@@ -1,18 +1,28 @@
 ---
 created_at: "2026-06-12T05:09:17.477467169+00:00"
 id: "atelier-lboe"
-data: "{\"captured_at\":\"2026-06-12T05:09:17.477439750+00:00\",\"kind\":\"test\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "test"
+captured_at: "2026-06-12T05:09:17.477439750+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
-  attachments: []
-  relates:
+  attachments:
   - kind: "issue"
     id: "atelier-5i4h"
-    type: "validates"
+    role: "validates"
   - kind: "issue"
     id: "atelier-v4u7"
-    type: "validates"
+    role: "validates"
+  relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"

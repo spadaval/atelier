@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-12T23:12:28.424763439+00:00"
 id: "atelier-gmyy"
-data: "{\"captured_at\":\"2026-06-12T23:12:28.424748125+00:00\",\"kind\":\"validation\",\"path\":null,\"producer\":null,\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-12T23:12:28.424748125+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: null
+agent_identity: null
+independence_level: null
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []

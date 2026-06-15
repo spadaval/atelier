@@ -1,7 +1,17 @@
 ---
 created_at: "2026-06-13T19:13:13.095287113+00:00"
 id: "atelier-tc7c"
-data: "{\"agent_identity\":\"codex:gpt-5.4\",\"captured_at\":\"2026-06-13T19:13:13.095208824+00:00\",\"follow_up_ids\":[],\"independence_level\":\"unspecified\",\"kind\":\"validation\",\"path\":null,\"producer\":\"codex:gpt-5.4\",\"proof_scope\":\"scoped to the attached target or summary\",\"residual_risks\":[],\"result\":\"pass\",\"uri\":null}"
+evidence_type: "validation"
+captured_at: "2026-06-13T19:13:13.095208824+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: "codex:gpt-5.4"
+independence_level: "unspecified"
+follow_up_ids: []
+residual_risks: []
 relationships:
   blocks: []
   children: []
