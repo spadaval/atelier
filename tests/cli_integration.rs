@@ -7471,6 +7471,124 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
 }
 
 #[test]
+fn test_evidence_relation_role_errors_are_corrective() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Corrective evidence target"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let target_id = issue_id_by_title(dir.path(), "Corrective evidence target");
+    let target_id = target_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--target",
+            &format!("issue/{target_id}"),
+            "--role",
+            "validation",
+            "bad role proof",
+        ],
+    );
+    assert!(!success, "invalid evidence record role should fail");
+    assert_corrective_evidence_role_error(&stderr);
+
+    let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
+    assert!(success, "evidence list failed: {stderr}");
+    assert!(
+        evidence_list.contains("(none)"),
+        "invalid targeted record should not create evidence: {evidence_list}"
+    );
+
+    let (success, record_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "--target",
+            &format!("issue/{target_id}"),
+            "accepted target proof",
+        ],
+    );
+    assert!(success, "accepted evidence record failed: {stderr}");
+    assert!(record_out.contains(&format!("Target:      issue/{target_id} (validates)")));
+    let evidence_id = record_id_by_title(dir.path(), "evidence", "accepted target proof");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Reused evidence target"]);
+    assert!(success, "reuse target issue create failed: {stderr}");
+    let reuse_id = issue_id_by_title(dir.path(), "Reused evidence target");
+    let reuse_id = reuse_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "attach",
+            &evidence_id,
+            "issue",
+            reuse_id,
+            "--role",
+            "validation",
+        ],
+    );
+    assert!(!success, "invalid evidence attach role should fail");
+    assert_corrective_evidence_role_error(&stderr);
+
+    let (success, attach_out, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "attach", &evidence_id, "issue", reuse_id],
+    );
+    assert!(success, "accepted evidence attach failed: {stderr}");
+    assert!(attach_out.contains(&format!(
+        "Attached evidence {evidence_id} to issue {reuse_id} (validates)"
+    )));
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(show_out.contains(&format!("issue/{target_id} (validates)")));
+    assert!(show_out.contains(&format!("issue/{reuse_id} (validates)")));
+}
+
+fn assert_corrective_evidence_role_error(stderr: &str) {
+    assert!(
+        stderr.contains("Invalid evidence relation role 'validation'"),
+        "error should name invalid role: {stderr}"
+    );
+    assert!(
+        stderr.contains("Accepted evidence relation vocabulary: validates"),
+        "error should name accepted relation vocabulary: {stderr}"
+    );
+    assert!(
+        stderr.contains("Evidence kinds such as validation belong in --kind, not --role"),
+        "error should distinguish evidence kind from relation role: {stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "atelier evidence record --target issue/<id> --kind validation --result pass \"summary\""
+        ),
+        "error should name normal targeted record flow: {stderr}"
+    );
+    assert!(
+        stderr.contains("atelier evidence attach <evidence-id> issue <issue-id>"),
+        "error should name existing-proof attach flow: {stderr}"
+    );
+}
+
+#[test]
 fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

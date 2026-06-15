@@ -267,6 +267,8 @@ epic readiness reads proof from linked accountable child issues. The command
 mode preserves the old capture behavior by storing the command, exit status,
 success flag, timestamp, result, and bounded stdout/stderr summaries so
 validation proof does not require manual transcript copy/paste.
+Evidence target links use the relation role `validates`; evidence classifications
+such as `validation`, `test`, or `review` belong in `--kind`.
 
 `atelier evidence attach` is not the default proof-capture workflow. Its only
 distinct job is reusing an already-created evidence record on an additional
