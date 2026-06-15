@@ -677,27 +677,6 @@ fn copy_runtime_state(db: &Database, source_db_path: &Path) -> Result<()> {
                 source_db_path.display()
             )
         })?;
-    let copy_result = (|| -> Result<()> {
-        db.conn.execute(
-            "INSERT OR IGNORE INTO sessions
-             (id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id)
-             SELECT id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id
-             FROM runtime_src.sessions
-             WHERE active_issue_id IS NULL
-                OR EXISTS (SELECT 1 FROM issues WHERE issues.id = runtime_src.sessions.active_issue_id)",
-            [],
-        )?;
-        db.conn.execute(
-            "INSERT OR IGNORE INTO work_associations
-             (issue_id, status, branch, worktree_path, started_at, finished_at)
-             SELECT issue_id, status, branch, worktree_path, started_at, finished_at
-             FROM runtime_src.work_associations
-             WHERE EXISTS (SELECT 1 FROM issues WHERE issues.id = runtime_src.work_associations.issue_id)",
-            [],
-        )?;
-        Ok(())
-    })();
-    copy_result?;
     Ok(())
 }
 

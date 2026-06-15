@@ -1,8 +1,6 @@
 use anyhow::Result;
-use chrono::Utc;
-use rusqlite::params;
 
-use super::{parse_datetime, Database};
+use super::Database;
 use crate::models::Session;
 
 impl Database {
@@ -13,42 +11,16 @@ impl Database {
     }
 
     pub fn start_session_with_agent(&self, agent_id: Option<&str>) -> Result<i64> {
-        let now = Utc::now().to_rfc3339();
-        self.conn.execute(
-            "INSERT INTO sessions (started_at, agent_id) VALUES (?1, ?2)",
-            params![now, agent_id],
-        )?;
-        Ok(self.conn.last_insert_rowid())
+        let _ = agent_id;
+        Ok(0)
     }
 
     pub fn get_current_session(&self) -> Result<Option<Session>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id FROM sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1",
-        )?;
-
-        let session = stmt
-            .query_row([], |row| {
-                Ok(Session {
-                    id: row.get(0)?,
-                    started_at: parse_datetime(row.get::<_, String>(1)?),
-                    ended_at: row.get::<_, Option<String>>(2)?.map(parse_datetime),
-                    active_issue_id: row.get(3)?,
-                    handoff_notes: row.get(4)?,
-                    last_action: row.get(5)?,
-                    agent_id: row.get(6)?,
-                })
-            })
-            .ok();
-
-        Ok(session)
+        Ok(None)
     }
 
     pub fn set_session_issue(&self, session_id: i64, issue_id: impl ToString) -> Result<bool> {
-        let issue_id = issue_id.to_string();
-        let rows = self.conn.execute(
-            "UPDATE sessions SET active_issue_id = ?1 WHERE id = ?2",
-            params![issue_id, session_id],
-        )?;
-        Ok(rows > 0)
+        let _ = (session_id, issue_id.to_string());
+        Ok(false)
     }
 }

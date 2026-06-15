@@ -351,7 +351,7 @@ impl Database {
         Ok(rows > 0)
     }
 
-    /// Search issues by query string across titles, descriptions, and comments
+    /// Search issues by query string across titles and descriptions.
     #[cfg(test)]
     pub fn search_issues(&self, query: &str) -> Result<Vec<Issue>> {
         let escaped = query.replace('%', "\\%").replace('_', "\\_");
@@ -360,10 +360,8 @@ impl Database {
             r#"
             SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
-            LEFT JOIN comments c ON i.id = c.issue_id
             WHERE i.title LIKE ?1 ESCAPE '\' COLLATE NOCASE
                OR i.description LIKE ?1 ESCAPE '\' COLLATE NOCASE
-               OR c.content LIKE ?1 ESCAPE '\' COLLATE NOCASE
             ORDER BY i.id DESC
             "#,
         )?;

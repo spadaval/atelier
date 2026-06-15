@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T17:12:25.534006039+00:00"
+status: "done"
 title: "Delete SQLite comments sessions and work-association schema"
-updated_at: "2026-06-15T15:16:51.648772613+00:00"
+updated_at: "2026-06-15T17:12:25.534006039+00:00"
 ---
 
 ## Description
