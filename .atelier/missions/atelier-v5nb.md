@@ -34,9 +34,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "In-place crate rewrite and SQLite projection redesign"
-updated_at: "2026-06-15T05:12:33.036752409+00:00"
+updated_at: "2026-06-15T08:28:23.591775786+00:00"
 ---
 
 ## Intent
@@ -62,3 +62,7 @@ Break Atelier's single Rust crate into a layered Cargo workspace while preservin
 - Closeout maps every mission outcome to linked epic and issue evidence.
 - Independent validation covers CLI/help/docs parity, Markdown round trips, projection rebuild, missing or stale DB recovery, active-work removal, and representative mission, issue, and evidence workflows.
 - Repository checks pass: cargo fmt -- --check, cargo nextest run, relevant extended ignored tests, atelier lint, atelier export --check, and atelier doctor.
+
+## Closeout Notes
+
+- Close reason: All linked work is closed and validation evidence atelier-7aga passed the mission closeout checks.

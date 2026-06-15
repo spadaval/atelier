@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T08:28:00.851636476+00:00"
+status: "done"
 title: "Validate and close out crate rewrite mission"
-updated_at: "2026-06-15T05:11:30.387029683+00:00"
+updated_at: "2026-06-15T08:28:00.851636476+00:00"
 ---
 
 ## Description
