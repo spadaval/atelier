@@ -12134,6 +12134,212 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
 }
 
 #[test]
+fn test_mission_worktree_ownership_guards_epic_branch_commands() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    migrate_default_issue_workflow(dir.path());
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Owner mission"]);
+    assert!(success, "owner mission create failed: {stderr}");
+    let owner_mission_id = record_id_by_title(dir.path(), "missions", "Owner mission");
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Other mission"]);
+    assert!(success, "other mission create failed: {stderr}");
+    let other_mission_id = record_id_by_title(dir.path(), "missions", "Other mission");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Owner epic", "--issue-type", "epic"],
+    );
+    assert!(success, "owner epic create failed: {stderr}");
+    let owner_epic_id = issue_id_by_title(dir.path(), "Owner epic");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "add-work", &owner_mission_id, &owner_epic_id],
+    );
+    assert!(success, "owner mission add epic failed: {stderr}");
+    commit_all(dir.path(), "mission worktree branch baseline");
+
+    let owner_worktree_path = dir.path().join("custom-workspaces").join("owner-space");
+    let owner_worktree_arg = owner_worktree_path.to_string_lossy().to_string();
+    let (success, owner_worktree_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "worktree",
+            "for-mission",
+            &owner_mission_id,
+            "--path",
+            &owner_worktree_arg,
+        ],
+    );
+    assert!(success, "owner mission worktree setup failed: {stderr}");
+    assert!(owner_worktree_out.contains(&owner_worktree_arg));
+    assert!(owner_worktree_out.contains(&format!("Mission: {owner_mission_id}")));
+
+    let other_worktree_path = dir.path().join("custom-workspaces").join("other-space");
+    let other_worktree_arg = other_worktree_path.to_string_lossy().to_string();
+    let (success, other_worktree_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "worktree",
+            "for-mission",
+            &other_mission_id,
+            "--path",
+            &other_worktree_arg,
+        ],
+    );
+    assert!(success, "other mission worktree setup failed: {stderr}");
+    assert!(other_worktree_out.contains(&other_worktree_arg));
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["branch", "for-epic", &owner_epic_id]);
+    assert!(
+        !success,
+        "root checkout unexpectedly allowed branch for-epic"
+    );
+    let root_for_transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        root_for_transcript.contains(&format!(
+            "atelier branch for-epic must be run inside the owning mission worktree for {owner_mission_id}"
+        )),
+        "missing root guard transcript:\n{root_for_transcript}"
+    );
+    assert!(
+        root_for_transcript.contains(&format!("atelier worktree for-mission {owner_mission_id}")),
+        "missing root recovery guidance:\n{root_for_transcript}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["branch", "status"]);
+    assert!(!success, "root checkout unexpectedly allowed branch status");
+    let root_status_transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        root_status_transcript
+            .contains("atelier branch status must be run inside a mission worktree"),
+        "missing root branch status guard:\n{root_status_transcript}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["branch", "merge", &owner_epic_id]);
+    assert!(!success, "root checkout unexpectedly allowed branch merge");
+    let root_merge_transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        root_merge_transcript.contains(&format!(
+            "atelier branch merge must be run inside the owning mission worktree for {owner_mission_id}"
+        )),
+        "missing root merge guard transcript:\n{root_merge_transcript}"
+    );
+
+    let (success, stdout, stderr) = run_atelier(
+        &other_worktree_path,
+        &["branch", "for-epic", &owner_epic_id],
+    );
+    assert!(
+        !success,
+        "wrong mission worktree unexpectedly allowed branch for-epic"
+    );
+    let wrong_worktree_transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        wrong_worktree_transcript.contains(&format!(
+            "Current checkout {} belongs to mission {}",
+            other_worktree_path.display(),
+            other_mission_id
+        )),
+        "missing wrong-worktree mission transcript:\n{wrong_worktree_transcript}"
+    );
+
+    let (success, branch_out, stderr) = run_atelier(
+        &owner_worktree_path,
+        &["branch", "for-epic", &owner_epic_id],
+    );
+    assert!(success, "owner mission branch for-epic failed: {stderr}");
+    assert!(branch_out.contains(&format!("Switched to epic/{owner_epic_id}")));
+    assert!(branch_out.contains(&format!("Mission: {owner_mission_id}")));
+    assert!(branch_out.contains(&format!("Worktree: {}", owner_worktree_path.display())));
+
+    let (success, branch_status_out, stderr) =
+        run_atelier(&owner_worktree_path, &["branch", "status"]);
+    assert!(success, "owner mission branch status failed: {stderr}");
+    assert!(branch_status_out.contains("Epic Branch Status"));
+    assert!(branch_status_out.contains(&format!("Mission: {owner_mission_id}")));
+    assert!(branch_status_out.contains(&format!("Worktree: {}", owner_worktree_path.display())));
+    assert!(branch_status_out.contains(&format!("epic/{owner_epic_id} - Owner epic")));
+
+    let (success, worktree_status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
+    assert!(success, "worktree status failed: {stderr}");
+    let owner_marker = format!(
+        "{owner_worktree_arg}\n{}",
+        "-".repeat(owner_worktree_arg.len())
+    );
+    let owner_section = worktree_status_out
+        .split(&owner_marker)
+        .nth(1)
+        .and_then(|section| {
+            section
+                .split(&format!(
+                    "{other_worktree_arg}\n{}",
+                    "-".repeat(other_worktree_arg.len())
+                ))
+                .next()
+        })
+        .expect("owner mission worktree section missing from status");
+    assert!(
+        owner_section.contains(&format!("Mission:  {owner_mission_id}")),
+        "custom mission worktree did not retain mission ownership:\n{worktree_status_out}"
+    );
+
+    std::fs::write(
+        owner_worktree_path.join("branch-proof.txt"),
+        "epic branch work\n",
+    )
+    .unwrap();
+    let status = Command::new("git")
+        .current_dir(&owner_worktree_path)
+        .args(["add", "branch-proof.txt"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git add in owner mission worktree failed");
+    let status = Command::new("git")
+        .current_dir(&owner_worktree_path)
+        .args(["commit", "-q", "-m", "epic branch work"])
+        .status()
+        .unwrap();
+    assert!(
+        status.success(),
+        "git commit in owner mission worktree failed"
+    );
+    let status = Command::new("git")
+        .current_dir(&owner_worktree_path)
+        .args(["switch", &format!("mission/{owner_mission_id}")])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git switch back to mission branch failed");
+
+    let (success, stdout, stderr) =
+        run_atelier(&other_worktree_path, &["branch", "merge", &owner_epic_id]);
+    assert!(
+        !success,
+        "wrong mission worktree unexpectedly allowed branch merge"
+    );
+    let wrong_merge_transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        wrong_merge_transcript.contains(&format!(
+            "Current checkout {} belongs to mission {}",
+            other_worktree_path.display(),
+            other_mission_id
+        )),
+        "missing wrong-worktree merge transcript:\n{wrong_merge_transcript}"
+    );
+
+    let (success, merge_out, stderr) =
+        run_atelier(&owner_worktree_path, &["branch", "merge", &owner_epic_id]);
+    assert!(success, "owner mission branch merge failed: {stderr}");
+    assert!(merge_out.contains(&format!("Merged epic/{owner_epic_id}")));
+    assert!(merge_out.contains(&format!("Mission: {owner_mission_id}")));
+    assert!(merge_out.contains(&format!("Worktree: {}", owner_worktree_path.display())));
+}
+
+#[test]
 fn test_start_refuses_shared_section_diagnostic() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());

@@ -118,10 +118,10 @@ pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 1
 
 issue_types:
-  bug: standard_review_proof
+  bug: standard_proof
   closeout: standard_review_proof
   epic: standard_review_proof
-  feature: standard_review_proof
+  feature: standard_proof
   spike: lightweight_spike
   task: standard_proof
   validation: standard_review_proof
@@ -188,7 +188,6 @@ workflows:
         required_fields: [close_reason]
         validators:
           - proof_attached
-          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current
@@ -217,6 +216,7 @@ workflows:
         required_fields: [close_reason]
         validators:
           - proof_attached
+          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current

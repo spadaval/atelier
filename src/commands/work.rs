@@ -6,6 +6,8 @@ use std::process::Command;
 use crate::db::Database;
 use crate::models::WorkAssociation;
 
+const MISSION_WORKTREE_OWNER_FILE: &str = "mission-worktree-owner";
+
 #[derive(Debug)]
 struct WorktreeStatus {
     path: String,
@@ -374,6 +376,7 @@ pub fn worktree_for_mission(db: &Database, mission_id: &str, path: Option<&str>)
     if !status.success() {
         bail!("mission worktree setup failed while rebuilding runtime projection");
     }
+    ensure_mission_worktree_owner(&layout, &mission.id)?;
     println!("{}", worktree_path.display());
     println!("Mission: {}", mission.id);
     println!("Branch: {branch}");
@@ -389,6 +392,8 @@ pub fn branch_for_epic(db: &Database, epic_id: &str) -> Result<()> {
             epic.issue_type
         );
     }
+    let mission_id = owning_mission_id(db, &epic.id)?;
+    let worktree_path = require_mission_worktree_owner(&mission_id, "atelier branch for-epic")?;
     ensure_clean_worktree()?;
     let branch = format!("epic/{}", epic.id);
     if branch_exists(&branch)? {
@@ -404,16 +409,25 @@ pub fn branch_for_epic(db: &Database, epic_id: &str) -> Result<()> {
     }
     println!("Switched to {branch}");
     println!("Epic: {} {}", epic.id, epic.title);
+    println!("Mission: {mission_id}");
+    println!("Worktree: {}", worktree_path.display());
     Ok(())
 }
 
 pub fn branch_status(db: &Database) -> Result<()> {
+    let mission_id = current_mission_worktree_owner("atelier branch status")?;
+    let worktree_path = env::current_dir().context("failed to read current checkout path")?;
     let current = current_branch().unwrap_or_else(|_| "(detached)".to_string());
     println!("Epic Branch Status");
     println!("==================");
+    println!("Mission: {mission_id}");
+    println!("Worktree: {}", worktree_path.display());
     println!("Current: {current}");
     for issue in db.list_issues(None, None, None)? {
         if issue.issue_type != "epic" {
+            continue;
+        }
+        if !crate::commands::mission::issue_advances_mission(db, &mission_id, &issue.id)? {
             continue;
         }
         let branch = format!("epic/{}", issue.id);
@@ -433,6 +447,8 @@ pub fn branch_merge(db: &Database, epic_id: &str) -> Result<()> {
             epic.issue_type
         );
     }
+    let mission_id = owning_mission_id(db, &epic.id)?;
+    let worktree_path = require_mission_worktree_owner(&mission_id, "atelier branch merge")?;
     ensure_clean_worktree()?;
     let branch = format!("epic/{}", epic.id);
     if !branch_exists(&branch)? {
@@ -446,6 +462,8 @@ pub fn branch_merge(db: &Database, epic_id: &str) -> Result<()> {
         bail!("git merge failed; resolve conflicts with Git, then rerun validation");
     }
     println!("Merged {branch}");
+    println!("Mission: {mission_id}");
+    println!("Worktree: {}", worktree_path.display());
     Ok(())
 }
 
@@ -633,11 +651,11 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
 }
 
 fn worktree_mission_id(db: &Database, path: &Path) -> Result<Option<String>> {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+    let Some(mission_id) = read_mission_worktree_owner(path)? else {
         return Ok(None);
     };
-    if db.get_record("mission", name)?.is_some() {
-        return Ok(Some(name.to_string()));
+    if db.get_record("mission", &mission_id)?.is_some() {
+        return Ok(Some(mission_id));
     }
     Ok(None)
 }
@@ -829,4 +847,91 @@ fn repo_root() -> Result<std::path::PathBuf> {
         bail!("Not in a git repository");
     }
     Ok(Path::new(String::from_utf8_lossy(&output.stdout).trim()).to_path_buf())
+}
+
+fn mission_worktree_owner_path(layout: &crate::storage_layout::StorageLayout) -> PathBuf {
+    layout
+        .target_runtime_dir()
+        .join(MISSION_WORKTREE_OWNER_FILE)
+}
+
+fn ensure_mission_worktree_owner(
+    layout: &crate::storage_layout::StorageLayout,
+    mission_id: &str,
+) -> Result<()> {
+    let owner_path = mission_worktree_owner_path(layout);
+    if let Some(existing) = read_mission_worktree_owner(layout.repo_root())? {
+        if existing != mission_id {
+            bail!(
+                "mission worktree {} is already associated with {}. Choose another path or reuse that mission workspace.",
+                layout.repo_root().display(),
+                existing
+            );
+        }
+        return Ok(());
+    }
+    std::fs::write(&owner_path, format!("{mission_id}\n")).with_context(|| {
+        format!(
+            "failed to record mission worktree ownership at {}",
+            owner_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn read_mission_worktree_owner(path: &Path) -> Result<Option<String>> {
+    let owner_path = mission_worktree_owner_path(&crate::storage_layout::StorageLayout::new(path));
+    if !owner_path.is_file() {
+        return Ok(None);
+    }
+    let owner = std::fs::read_to_string(&owner_path).with_context(|| {
+        format!(
+            "failed to read mission worktree ownership from {}",
+            owner_path.display()
+        )
+    })?;
+    let owner = owner.trim();
+    if owner.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(owner.to_string()))
+    }
+}
+
+fn current_mission_worktree_owner(command_name: &str) -> Result<String> {
+    let cwd = env::current_dir().context("failed to read current checkout path")?;
+    read_mission_worktree_owner(&cwd)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "{command_name} must be run inside a mission worktree. Current checkout: {}. Create or switch with `atelier worktree for-mission <mission-id>`.",
+            cwd.display()
+        )
+    })
+}
+
+fn require_mission_worktree_owner(
+    expected_mission_id: &str,
+    command_name: &str,
+) -> Result<PathBuf> {
+    let cwd = env::current_dir().context("failed to read current checkout path")?;
+    let actual_mission_id = read_mission_worktree_owner(&cwd)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "{command_name} must be run inside the owning mission worktree for {expected_mission_id}. Current checkout: {}. Create or switch with `atelier worktree for-mission {expected_mission_id}`.",
+            cwd.display()
+        )
+    })?;
+    if actual_mission_id != expected_mission_id {
+        bail!(
+            "{command_name} must be run inside the owning mission worktree for {expected_mission_id}. Current checkout {} belongs to mission {actual_mission_id}. Switch with `atelier worktree for-mission {expected_mission_id}`.",
+            cwd.display()
+        );
+    }
+    Ok(cwd)
+}
+
+fn owning_mission_id(db: &Database, issue_id: &str) -> Result<String> {
+    containing_mission(db, issue_id)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "{issue_id} is not linked to an open mission. Link it to a mission before using epic branch commands."
+        )
+    })
 }

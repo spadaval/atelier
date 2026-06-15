@@ -52,10 +52,10 @@ schema: atelier.workflow
 schema_version: 1
 
 issue_types:
-  bug: standard_review_proof
+  bug: standard_proof
   closeout: standard_review_proof
   epic: standard_review_proof
-  feature: standard_review_proof
+  feature: standard_proof
   spike: lightweight_spike
   task: standard_proof
   validation: standard_review_proof
@@ -114,15 +114,14 @@ workflows:
         from: [todo, blocked]
         to: in_progress
       block:
-        from: [todo, in_progress]
+        from: [todo, in_progress, validation]
         to: blocked
       close:
-        from: [in_progress]
+        from: [in_progress, validation]
         to: done
         required_fields: [close_reason]
         validators:
           - proof_attached
-          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current
@@ -151,6 +150,7 @@ workflows:
         required_fields: [close_reason]
         validators:
           - proof_attached
+          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current
@@ -231,10 +231,10 @@ The starter policy is:
 
 | Issue type | Default workflow |
 | --- | --- |
-| `bug` | `standard_review_proof` |
+| `bug` | `standard_proof` |
 | `closeout` | `standard_review_proof` |
 | `epic` | `standard_review_proof` |
-| `feature` | `standard_review_proof` |
+| `feature` | `standard_proof` |
 | `spike` | `lightweight_spike` |
 | `task` | `standard_proof` |
 | `validation` | `standard_review_proof` |
@@ -363,15 +363,14 @@ workflows:
         from: [todo, blocked]
         to: in_progress
       block:
-        from: [todo, in_progress]
+        from: [todo, in_progress, validation]
         to: blocked
       close:
-        from: [in_progress]
+        from: [in_progress, validation]
         to: done
         required_fields: [close_reason]
         validators:
           - proof_attached
-          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current
@@ -421,6 +420,7 @@ workflows:
         required_fields: [close_reason]
         validators:
           - proof_attached
+          - epic_child_proof
           - blockers_clear
           - lint_clear
           - durable_current
@@ -433,6 +433,7 @@ This workflow is intentionally strict at close:
 - review-gated work must pass through review and validation/proof states;
 - `close_reason` must be recorded;
 - at least one evidence record must be attached;
+- epic child proof must be complete when the target is an epic;
 - blockers and blocking lints must be clear; and
 - durable tracker state and the worktree must be current enough for closeout.
 

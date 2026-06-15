@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Define mission workspace and epic review model"
-updated_at: "2026-06-14T21:44:40.239656525+00:00"
+updated_at: "2026-06-15T04:17:25.845678033+00:00"
 ---
 
 ## Description

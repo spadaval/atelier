@@ -402,7 +402,7 @@ atelier worktree for-mission atelier-k7mq
 atelier branch for-epic atelier-4p7q
 atelier issue close atelier-z1p8 --reason "done"
 atelier abandon atelier-z1p8 --reason "handoff"
-atelier worktree merge
+atelier worktree merge atelier-k7mq
 ```
 
 The default branch model should be opinionated but configurable:
