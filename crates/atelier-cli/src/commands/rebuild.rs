@@ -8,11 +8,11 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::activity::IssueActivity;
 use crate::db::Database;
 use crate::projection_index;
 use atelier_core::Issue;
 use atelier_records as record_store;
+use atelier_records::activity::IssueActivity;
 use atelier_records::{
     CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
 };

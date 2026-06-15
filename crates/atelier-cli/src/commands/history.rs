@@ -3,12 +3,12 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use crate::activity::{
+use crate::db::Database;
+use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_records::activity::{
     list_all_issue_activities, list_all_mission_activities, list_issue_activities,
     list_mission_activities, IssueActivity,
 };
-use crate::db::Database;
-use atelier_core::{DomainRecord, Issue, RecordLink};
 
 pub const DEFAULT_LIMIT: usize = 20;
 

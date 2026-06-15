@@ -2,7 +2,9 @@ use anyhow::Result;
 use chrono::Utc;
 use std::path::PathBuf;
 
-use crate::activity::{create_issue_activity, create_mission_activity, ActivityEventType};
+use atelier_records::activity::{
+    create_issue_activity, create_mission_activity, ActivityEventType,
+};
 
 pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
     let (event_type, summary) = match kind {

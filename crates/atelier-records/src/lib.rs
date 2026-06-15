@@ -12,6 +12,8 @@ use atelier_core::{
     MilestoneRecordData, PlanRecordData,
 };
 
+pub mod activity;
+
 mod record_id;
 mod record_kinds;
 mod relationships;

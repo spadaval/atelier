@@ -4,7 +4,6 @@ use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::activity::{list_issue_activities, ActivityEventType};
 use crate::commands::issue_workflow::{
     format_status_with_category, issue_blocks_work, issue_start_readiness, issue_status_category,
     issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
@@ -14,6 +13,7 @@ use crate::db::{validate_issue_type, Database};
 use crate::utils::format_issue_id;
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
+use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{
     issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
     IssueSections, RecordStore, Relationships,

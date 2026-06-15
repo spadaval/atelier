@@ -3,8 +3,8 @@ use anyhow::Result;
 use chrono::Utc;
 
 use super::{Database, MAX_COMMENT_LEN};
-use crate::activity::{create_issue_activity, list_issue_activities, ActivityEventType};
 use atelier_core::Comment;
+use atelier_records::activity::{create_issue_activity, list_issue_activities, ActivityEventType};
 
 impl Database {
     #[cfg(test)]

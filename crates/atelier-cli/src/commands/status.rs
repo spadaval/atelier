@@ -4,10 +4,10 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
-use crate::activity::list_all_issue_activities;
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
 use atelier_core::{DomainRecord, Issue};
+use atelier_records::activity::list_all_issue_activities;
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;

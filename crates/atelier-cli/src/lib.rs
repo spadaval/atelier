@@ -2,7 +2,6 @@
 //!
 //! This module exposes the core functionality for use in fuzzing and testing.
 
-pub mod activity;
 pub mod command_storage;
 pub mod command_surface;
 pub mod commands;
