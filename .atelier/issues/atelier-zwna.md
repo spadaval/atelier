@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T08:15:15.215080071+00:00"
+status: "done"
 title: "Thin atelier-cli to Clap telemetry and exit-code shell"
-updated_at: "2026-06-15T05:13:49.175124659+00:00"
+updated_at: "2026-06-15T08:15:15.215080071+00:00"
 ---
 
 ## Description
