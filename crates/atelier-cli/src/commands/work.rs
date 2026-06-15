@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::db::Database;
-use crate::models::Issue;
+use atelier_core::Issue;
 
 const MISSION_WORKTREE_OWNER_FILE: &str = "mission-worktree-owner";
 

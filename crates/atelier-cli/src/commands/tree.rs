@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue};
+use atelier_core::{DomainRecord, Issue};
 
 const COMPACT_MAX_DEPTH: usize = 3;
 const COMPACT_MAX_SIBLINGS: usize = 6;

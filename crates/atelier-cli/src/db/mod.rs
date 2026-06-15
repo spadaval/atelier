@@ -13,9 +13,9 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::models::Issue;
 use crate::record_id;
-use crate::record_store;
+use atelier_core::Issue;
+use atelier_records as record_store;
 
 const SCHEMA_VERSION: i32 = 18;
 

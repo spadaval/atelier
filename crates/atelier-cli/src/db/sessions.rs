@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use super::Database;
-use crate::models::Session;
+use atelier_core::Session;
 
 impl Database {
     /// Convenience wrapper for tests — production code uses `start_session_with_agent`.

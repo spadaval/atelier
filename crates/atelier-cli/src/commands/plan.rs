@@ -5,13 +5,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::db::{validate_issue_type, validate_priority, validate_status, Database};
-use crate::models::{
+use crate::db::{
+    validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
+};
+use atelier_core::{
     DomainRecord, EvidenceRecordData, Issue, MilestoneRecordData, PlanRecordData, PlanRevision,
 };
-use crate::record_store::{
-    AttachmentRelationship, CanonicalDomainRecord, CanonicalIssueRecord, IssueSections,
-    RecordStore, RelatesRelationship, RelationshipTarget, Relationships,
+use atelier_records::{
+    is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
 };
 
 const KIND: &str = "plan";
@@ -70,7 +71,7 @@ pub fn revise(
 ) -> Result<()> {
     let store = RecordStore::new(state_dir);
     let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut data = crate::record_store::normalized_plan_data(&current.record.data_json)?;
+    let mut data = atelier_records::normalized_plan_data(&current.record.data_json)?;
     let next_revision = data.revision + 1;
     data.revision = next_revision;
     data.revisions.push(PlanRevision {
@@ -112,20 +113,13 @@ pub fn link(
 }
 
 fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
-    crate::db::validate_record_kind(kind)?;
+    validate_record_kind(kind)?;
     if kind == "issue" {
         db.require_issue(id)?;
     } else {
         db.require_record(kind, id)?;
     }
     Ok(())
-}
-
-fn is_attachment_role(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
-    )
 }
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
@@ -220,7 +214,7 @@ fn print_heading(title: &str) {
 }
 
 fn data_revision(record: &DomainRecord) -> Result<i64> {
-    Ok(crate::record_store::normalized_plan_data(&record.data_json)?.revision)
+    Ok(atelier_records::normalized_plan_data(&record.data_json)?.revision)
 }
 
 #[derive(Debug, Deserialize)]
@@ -428,7 +422,7 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
         if kind == "issue" {
             continue;
         }
-        crate::db::validate_record_kind(kind)?;
+        validate_record_kind(kind)?;
     }
 
     for issue in &plan.records.issues {
@@ -655,7 +649,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
                     issue.client_ref
                 );
             }
-            add_issue_child(&store, &parent.id, &source.id)?;
+            store.add_issue_child(&parent.id, &source.id)?;
         }
         for blocker in &issue.depends_on {
             let blocker = resolved_ref(db, plan, &resolved, blocker)?;
@@ -665,14 +659,14 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
                     issue.client_ref
                 );
             }
-            add_issue_block(&store, &blocker.id, &source.id)?;
+            store.add_issue_block(&source.id, &blocker.id)?;
         }
         for blocked in &issue.blocks {
             let blocked = resolved_ref(db, plan, &resolved, blocked)?;
             if blocked.kind != "issue" {
                 bail!("blocks for {} must resolve to an issue", issue.client_ref);
             }
-            add_issue_block(&store, &source.id, &blocked.id)?;
+            store.add_issue_block(&blocked.id, &source.id)?;
         }
     }
 
@@ -956,97 +950,14 @@ fn add_relationship(
     target: &ResolvedRef,
     relation_type: &str,
 ) -> Result<()> {
-    if source.kind == "issue" {
-        let mut record = store.load_issue_by_id(&source.id)?;
-        add_relationship_to_issue(&mut record, target, relation_type);
-        record.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&record)
-    } else {
-        let mut record = store.load_domain_record_by_id(&source.kind, &source.id)?;
-        add_relationship_to_domain(&mut record, target, relation_type);
-        record.record.updated_at = chrono::Utc::now();
-        store.write_domain_record_atomic(&record)
-    }
-}
-
-fn add_issue_child(store: &RecordStore, parent_id: &str, child_id: &str) -> Result<()> {
-    let mut parent = store.load_issue_by_id(parent_id)?;
-    let child = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: child_id.to_string(),
-    };
-    if !parent.relationships.children.contains(&child) {
-        parent.relationships.children.push(child);
-        parent.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&parent)?;
-    }
+    store.add_record_relationship(
+        &source.kind,
+        &source.id,
+        &target.kind,
+        &target.id,
+        relation_type,
+    )?;
     Ok(())
-}
-
-fn add_issue_block(store: &RecordStore, blocker_id: &str, blocked_id: &str) -> Result<()> {
-    let mut blocker = store.load_issue_by_id(blocker_id)?;
-    let blocked = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: blocked_id.to_string(),
-    };
-    if !blocker.relationships.blocks.contains(&blocked) {
-        blocker.relationships.blocks.push(blocked);
-        blocker.issue.updated_at = chrono::Utc::now();
-        store.write_issue_atomic(&blocker)?;
-    }
-    Ok(())
-}
-
-fn add_relationship_to_issue(
-    record: &mut CanonicalIssueRecord,
-    target: &ResolvedRef,
-    relation_type: &str,
-) {
-    if is_attachment_role(relation_type) {
-        let attachment = AttachmentRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            role: relation_type.to_string(),
-        };
-        if !record.relationships.attachments.contains(&attachment) {
-            record.relationships.attachments.push(attachment);
-        }
-    } else {
-        let relation = RelatesRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            relation_type: relation_type.to_string(),
-        };
-        if !record.relationships.relates.contains(&relation) {
-            record.relationships.relates.push(relation);
-        }
-    }
-}
-
-fn add_relationship_to_domain(
-    record: &mut CanonicalDomainRecord,
-    target: &ResolvedRef,
-    relation_type: &str,
-) {
-    if is_attachment_role(relation_type) {
-        let attachment = AttachmentRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            role: relation_type.to_string(),
-        };
-        if !record.relationships.attachments.contains(&attachment) {
-            record.relationships.attachments.push(attachment);
-        }
-    } else {
-        let relation = RelatesRelationship {
-            kind: target.kind.clone(),
-            id: target.id.clone(),
-            relation_type: relation_type.to_string(),
-        };
-        if !record.relationships.relates.contains(&relation) {
-            record.relationships.relates.push(relation);
-        }
-    }
 }
 
 fn issue_description(issue: &BulkIssue) -> Option<String> {

@@ -4,7 +4,7 @@ use chrono::Utc;
 
 use super::{Database, MAX_COMMENT_LEN};
 use crate::activity::{create_issue_activity, list_issue_activities, ActivityEventType};
-use crate::models::Comment;
+use atelier_core::Comment;
 
 impl Database {
     #[cfg(test)]

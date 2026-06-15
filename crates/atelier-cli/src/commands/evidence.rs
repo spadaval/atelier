@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use crate::db::Database;
-use crate::models::{
+use crate::db::{validate_record_kind, Database};
+use atelier_core::{
     DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
     RecordLink,
 };
-use crate::record_store::RecordStore;
+use atelier_records::RecordStore;
 
 const KIND: &str = "evidence";
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
@@ -270,7 +270,7 @@ fn validate_record_ref<'a>(
         });
     }
 
-    crate::db::validate_record_kind(kind)?;
+    validate_record_kind(kind)?;
     if kind == "issue" {
         db.require_issue(id)?;
     } else {

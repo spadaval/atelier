@@ -10,14 +10,14 @@ use crate::commands::issue_workflow::{
     issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
     IssueStartReadiness,
 };
-use crate::db::Database;
-use crate::models::{Comment, DomainRecord, Issue};
-use crate::record_store::{
-    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
-    IssueSections, RecordStore, RelationshipTarget, Relationships,
-};
+use crate::db::{validate_issue_type, Database};
 use crate::utils::format_issue_id;
 use crate::workflow_policy::WorkflowPolicy;
+use atelier_core::{Comment, DomainRecord, Issue};
+use atelier_records::{
+    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
+    IssueSections, RecordStore, Relationships,
+};
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -1412,7 +1412,7 @@ pub fn create_lifecycle(
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
     validate_priority(input.priority)?;
-    crate::db::validate_issue_type(input.issue_type)?;
+    validate_issue_type(input.issue_type)?;
     let db = Database::open(db_path)?;
     let parent_id = input
         .parent
@@ -1443,10 +1443,7 @@ pub fn create_lifecycle(
     };
     store.write_issue_atomic(&record)?;
     if let Some(parent_id) = &parent_id {
-        let mut parent = store.load_issue_by_id(parent_id)?;
-        add_child_relationship(&mut parent, &id);
-        parent.issue.updated_at = now;
-        store.write_issue_atomic(&parent)?;
+        store.add_issue_child(parent_id, &id)?;
     }
 
     super::projection::refresh_after_canonical_write(state_dir, db_path)?;
@@ -1550,7 +1547,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         )?;
     }
     if let Some(issue_type) = input.issue_type {
-        crate::db::validate_issue_type(issue_type)?;
+        validate_issue_type(issue_type)?;
         record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
         crate::commands::activity_log::record_field_changed(
@@ -1571,19 +1568,13 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         crate::commands::activity_log::record_field_changed(&id, "labels", Some(label), None)?;
     }
     if input.parent.is_some() {
-        let old_parent = parent_record_containing_child(&store, &id)?;
+        let old_parent = store.find_issue_parent(&id)?;
         if old_parent.as_deref() != parent_id.as_deref() {
             if let Some(old_parent) = old_parent {
-                let mut parent = store.load_issue_by_id(&old_parent)?;
-                remove_child_relationship(&mut parent, &id);
-                parent.issue.updated_at = now;
-                store.write_issue_atomic(&parent)?;
+                store.remove_issue_child(&old_parent, &id)?;
             }
             if let Some(parent_id) = &parent_id {
-                let mut parent = store.load_issue_by_id(parent_id)?;
-                add_child_relationship(&mut parent, &id);
-                parent.issue.updated_at = now;
-                store.write_issue_atomic(&parent)?;
+                store.add_issue_child(parent_id, &id)?;
             }
         }
         changed_fields.push("parent");
@@ -1650,18 +1641,7 @@ pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Re
     drop(db);
 
     let store = RecordStore::new(state_dir);
-    for parent_id in parent_records_containing_any_child(&store, &descendants)? {
-        if descendants.contains(&parent_id) {
-            continue;
-        }
-        let mut parent = store.load_issue_by_id(&parent_id)?;
-        parent
-            .relationships
-            .children
-            .retain(|child| !descendants.contains(&child.id));
-        parent.issue.updated_at = Utc::now();
-        store.write_issue_atomic(&parent)?;
-    }
+    store.remove_issue_children_from_external_parents(&descendants)?;
     for issue_id in &descendants {
         store.delete_issue_atomic(issue_id)?;
     }
@@ -1680,56 +1660,6 @@ fn descendant_issue_ids(db: &Database, root: &str) -> Result<Vec<String>> {
         index += 1;
     }
     Ok(ids)
-}
-
-fn parent_record_containing_child(store: &RecordStore, child_id: &str) -> Result<Option<String>> {
-    Ok(store
-        .load_issues()?
-        .into_iter()
-        .find(|record| {
-            record
-                .relationships
-                .children
-                .iter()
-                .any(|child| child.kind == "issue" && child.id == child_id)
-        })
-        .map(|record| record.issue.id))
-}
-
-fn parent_records_containing_any_child(
-    store: &RecordStore,
-    child_ids: &[String],
-) -> Result<Vec<String>> {
-    let child_ids = child_ids.iter().collect::<BTreeSet<_>>();
-    Ok(store
-        .load_issues()?
-        .into_iter()
-        .filter(|record| {
-            record
-                .relationships
-                .children
-                .iter()
-                .any(|child| child.kind == "issue" && child_ids.contains(&child.id))
-        })
-        .map(|record| record.issue.id)
-        .collect())
-}
-
-fn add_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
-    let child = RelationshipTarget {
-        kind: "issue".to_string(),
-        id: child_id.to_string(),
-    };
-    if !record.relationships.children.contains(&child) {
-        record.relationships.children.push(child);
-    }
-}
-
-fn remove_child_relationship(record: &mut CanonicalIssueRecord, child_id: &str) {
-    record
-        .relationships
-        .children
-        .retain(|child| !(child.kind == "issue" && child.id == child_id));
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {

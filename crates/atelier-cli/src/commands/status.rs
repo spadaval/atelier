@@ -5,9 +5,9 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::activity::list_all_issue_activities;
-use crate::models::{DomainRecord, Issue};
 use crate::utils::format_issue_id;
 use crate::{commands, db::Database};
+use atelier_core::{DomainRecord, Issue};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -478,7 +478,7 @@ fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<Str
 }
 
 fn other_side<'a>(
-    link: &'a crate::models::RecordLink,
+    link: &'a atelier_core::RecordLink,
     kind: &str,
     id: &str,
 ) -> Option<(&'a str, &'a str)> {

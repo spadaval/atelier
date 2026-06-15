@@ -1,9 +1,9 @@
 use anyhow::Result;
 
 use crate::db::{validate_relation_type, Database};
-use crate::models::Issue;
-use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
+use atelier_core::Issue;
+use atelier_records::RecordStore;
 
 #[cfg(test)]
 pub fn add_typed(

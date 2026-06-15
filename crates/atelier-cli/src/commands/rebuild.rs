@@ -10,10 +10,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::activity::IssueActivity;
 use crate::db::Database;
-use crate::models::Issue;
 use crate::projection_index;
-use crate::record_store::{
-    self, CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
+use atelier_core::Issue;
+use atelier_records as record_store;
+use atelier_records::{
+    CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
 };
 
 #[derive(Debug)]
@@ -894,7 +895,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::commands::export;
-    use crate::record_store::issue_record_path;
+    use atelier_records::issue_record_path;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {
         let dir = tempdir().unwrap();

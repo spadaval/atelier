@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::params;
 
 use super::{issue_from_row, Database};
-use crate::models::Issue;
+use atelier_core::Issue;
 
 impl Database {
     pub fn add_dependency(

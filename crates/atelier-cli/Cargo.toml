@@ -28,6 +28,7 @@ path = "src/main.rs"
 [dependencies]
 atelier-app = { path = "../atelier-app" }
 atelier-core = { path = "../atelier-core" }
+atelier-records = { path = "../atelier-records" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 chrono.workspace = true

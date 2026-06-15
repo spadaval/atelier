@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::agent_factory::ProofCoverageStatus;
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue, RecordLink};
-use crate::record_store::{self, RecordStore, MISSION_EMPTY_DATA_JSON};
+use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_records as record_store;
+use atelier_records::{RecordStore, MISSION_EMPTY_DATA_JSON};
 
 const KIND: &str = "mission";
 pub fn create(

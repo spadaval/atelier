@@ -4,13 +4,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue, RecordLink};
 use crate::projection_index;
-use crate::record_store::{
-    self, AttachmentRelationship, CanonicalIssueRecord, IssueSections, RelatesRelationship,
-    RelationshipTarget, Relationships, FIRST_CLASS_RECORD_KINDS,
-};
 use crate::storage_layout;
+use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_records as record_store;
+use atelier_records::{
+    attachment_relationship, relates_relationship, relationship_target, CanonicalIssueRecord,
+    IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct ProjectionFile {
@@ -243,24 +244,20 @@ fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> 
 fn issue_relationships(db: &Database, issue: &Issue) -> Result<Relationships> {
     let mut relationships = Relationships::default();
     for id in db.get_blocking(&issue.id)? {
-        relationships.blocks.push(RelationshipTarget {
-            kind: "issue".to_string(),
-            id,
-        });
+        relationships.blocks.push(relationship_target("issue", &id));
     }
     for child in db.get_subissues(&issue.id)? {
-        relationships.children.push(RelationshipTarget {
-            kind: "issue".to_string(),
-            id: child.id,
-        });
+        relationships
+            .children
+            .push(relationship_target("issue", &child.id));
     }
     for relation in db.get_typed_relations(&issue.id)? {
         if relation.issue_id_1 == issue.id {
-            relationships.relates.push(RelatesRelationship {
-                kind: "issue".to_string(),
-                id: relation.issue_id_2,
-                relation_type: relation.relation_type,
-            });
+            relationships.relates.push(relates_relationship(
+                "issue",
+                &relation.issue_id_2,
+                &relation.relation_type,
+            ));
         }
     }
     for link in db.list_record_links("issue", &issue.id)? {
@@ -288,22 +285,21 @@ fn classify_record_link_for_owner(
             && link.target_kind == "issue"
             && is_child_relation(&link.relation_type)
         {
-            relationships.children.push(RelationshipTarget {
-                kind: link.target_kind.clone(),
-                id: link.target_id.clone(),
-            });
+            relationships
+                .children
+                .push(relationship_target(&link.target_kind, &link.target_id));
         } else if is_attachment_kind(&link.target_kind) && is_attachment_role(&link.relation_type) {
-            relationships.attachments.push(AttachmentRelationship {
-                kind: link.target_kind.clone(),
-                id: link.target_id.clone(),
-                role: link.relation_type.clone(),
-            });
+            relationships.attachments.push(attachment_relationship(
+                &link.target_kind,
+                &link.target_id,
+                &link.relation_type,
+            ));
         } else {
-            relationships.relates.push(RelatesRelationship {
-                kind: link.target_kind.clone(),
-                id: link.target_id.clone(),
-                relation_type: link.relation_type.clone(),
-            });
+            relationships.relates.push(relates_relationship(
+                &link.target_kind,
+                &link.target_id,
+                &link.relation_type,
+            ));
         }
     }
 }

@@ -3,9 +3,9 @@ use chrono::Utc;
 use rusqlite::params;
 
 use super::{parse_datetime, validate_link_type, validate_record_kind, Database};
-use crate::models::{DomainRecord, RecordLink};
 use crate::record_id;
-use crate::record_store;
+use atelier_core::{DomainRecord, RecordLink};
+use atelier_records as record_store;
 
 impl Database {
     #[cfg(test)]

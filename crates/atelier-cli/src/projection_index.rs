@@ -8,8 +8,8 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use crate::db::Database;
-use crate::record_store;
 use crate::storage_layout;
+use atelier_records as record_store;
 
 const MAX_PROBLEM_SAMPLES: usize = 5;
 

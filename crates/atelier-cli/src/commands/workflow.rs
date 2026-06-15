@@ -9,8 +9,8 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use crate::db::Database;
-use crate::models::{EvidenceRecordData, Issue};
-use crate::record_store::{CanonicalIssueRecord, IssueSections, RecordStore};
+use atelier_core::{EvidenceRecordData, Issue};
+use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidatorResult {
@@ -975,7 +975,7 @@ fn linked_evidence_records(
     db: &Database,
     issue_id: &str,
     required_kind: Option<&str>,
-) -> Result<Vec<crate::models::DomainRecord>> {
+) -> Result<Vec<atelier_core::DomainRecord>> {
     let mut records = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {

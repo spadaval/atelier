@@ -4,8 +4,8 @@ use rusqlite::params;
 
 use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
-use crate::models::Issue;
 use crate::record_id;
+use atelier_core::Issue;
 
 impl Database {
     pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {

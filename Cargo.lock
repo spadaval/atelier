@@ -101,6 +101,7 @@ dependencies = [
  "arbitrary",
  "atelier-app",
  "atelier-core",
+ "atelier-records",
  "atelier-workflow",
  "chrono",
  "clap",
@@ -133,7 +134,9 @@ dependencies = [
  "atelier-workflow",
  "chrono",
  "serde",
+ "serde_json",
  "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]

@@ -7,9 +7,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::db::Database;
-use crate::models::Issue;
 use crate::record_id;
 use crate::utils::format_issue_id;
+use atelier_core::Issue;
 
 #[derive(Debug, Deserialize)]
 struct BeadsIssue {
@@ -411,7 +411,7 @@ fn lossy(source_id: &str, field: impl Into<String>, handling: impl Into<String>)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::record_store::{parse_issue_sections, IssueSectionName};
+    use atelier_records::{parse_issue_sections, IssueSectionName};
     use tempfile::tempdir;
 
     fn setup_test_db() -> (Database, tempfile::TempDir) {

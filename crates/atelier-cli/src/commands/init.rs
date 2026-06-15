@@ -70,7 +70,7 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
         println!("Created {}", atelier_dir.display());
     }
 
-    for dir in crate::record_store::canonical_record_dirs() {
+    for dir in atelier_records::canonical_record_dirs() {
         fs::create_dir_all(atelier_dir.join(dir))
             .with_context(|| format!("Failed to create .atelier/{} directory", dir))?;
     }

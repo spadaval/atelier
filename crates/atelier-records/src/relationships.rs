@@ -29,15 +29,31 @@ pub struct Relationships {
 }
 
 pub fn issue_relationship_target(id: &str) -> RelationshipTarget {
+    relationship_target(ISSUE_KIND.kind, id)
+}
+
+pub fn relationship_target(kind: &str, id: &str) -> RelationshipTarget {
     RelationshipTarget {
-        kind: ISSUE_KIND.kind.to_string(),
+        kind: kind.to_string(),
         id: id.to_string(),
     }
 }
 
 pub fn issue_relates_relationship(id: &str, relation_type: &str) -> RelatesRelationship {
+    relates_relationship(ISSUE_KIND.kind, id, relation_type)
+}
+
+pub fn attachment_relationship(kind: &str, id: &str, role: &str) -> AttachmentRelationship {
+    AttachmentRelationship {
+        kind: kind.to_string(),
+        id: id.to_string(),
+        role: role.to_string(),
+    }
+}
+
+pub fn relates_relationship(kind: &str, id: &str, relation_type: &str) -> RelatesRelationship {
     RelatesRelationship {
-        kind: ISSUE_KIND.kind.to_string(),
+        kind: kind.to_string(),
         id: id.to_string(),
         relation_type: relation_type.to_string(),
     }

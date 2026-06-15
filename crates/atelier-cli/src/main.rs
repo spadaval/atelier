@@ -4,8 +4,8 @@ use atelier::command_storage::{
     projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
 };
 use atelier::db::Database;
-use atelier::record_store::RecordStore;
 use atelier::{commands, telemetry};
+use atelier_records::RecordStore;
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 use std::env;

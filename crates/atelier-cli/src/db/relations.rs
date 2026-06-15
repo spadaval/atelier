@@ -3,7 +3,7 @@ use chrono::Utc;
 use rusqlite::params;
 
 use super::{issue_from_row, Database};
-use crate::models::{Issue, Relation};
+use atelier_core::{Issue, Relation};
 
 const TRANSITIVE_IMPACT_RELATIONS: &[&str] = &["derived", "caused-by", "falsifies"];
 

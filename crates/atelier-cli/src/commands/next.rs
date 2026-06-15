@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::db::Database;
-use crate::models::Issue;
 use crate::utils::format_issue_id;
+use atelier_core::Issue;
 
 /// Progress tuple: (completed subissues, total subissues)
 type Progress = Option<(i32, i32)>;

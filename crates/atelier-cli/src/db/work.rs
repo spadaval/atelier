@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::env;
 
 use super::Database;
-use crate::models::WorkAssociation;
+use atelier_core::WorkAssociation;
 
 impl Database {
     pub fn start_work_association(

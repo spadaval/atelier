@@ -8,7 +8,7 @@ use crate::activity::{
     list_mission_activities, IssueActivity,
 };
 use crate::db::Database;
-use crate::models::{DomainRecord, Issue, RecordLink};
+use atelier_core::{DomainRecord, Issue, RecordLink};
 
 pub const DEFAULT_LIMIT: usize = 20;
 

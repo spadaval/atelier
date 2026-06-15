@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::db::Database;
-use crate::record_store::RecordStore;
 use crate::utils::format_issue_id;
+use atelier_records::RecordStore;
 
 #[cfg(test)]
 pub fn add(db: &Database, issue_id: &str, label: &str) -> Result<()> {

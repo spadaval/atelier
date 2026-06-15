@@ -7,7 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::db::Database;
-use crate::models::Issue;
+use atelier_core::Issue;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
