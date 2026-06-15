@@ -146,7 +146,7 @@ fn canonical_check_entries(db: &Database, state_dir: &Path) -> Result<Vec<String
 
     if let Err(error) = crate::commands::rebuild::validate_canonical_state(state_dir) {
         stale.push(format!(
-            "invalid: canonical tracker Markdown is invalid; run `atelier lint` for details: {error:#}"
+            "invalid: canonical tracker Markdown is invalid while running `atelier export --check`: {error:#}\nrecovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun `atelier export --check`"
         ));
         return Ok(stale);
     }

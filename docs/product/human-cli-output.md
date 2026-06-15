@@ -180,6 +180,9 @@ their need:
   are the supported noninteractive checks for invalid tracker state, degraded
   local runtime, and repair guidance. Low-level projection repair commands are
   diagnostic tools, not normal script workflow.
+- Preserve blocked-command and record context in stale projection or invalid
+  canonical-record errors, then give one ordered recovery path through lint,
+  record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
   `atelier issue list --ready`, `atelier issue list --blocked`,

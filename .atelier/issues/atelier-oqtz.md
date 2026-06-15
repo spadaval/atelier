@@ -3,6 +3,7 @@ created_at: "2026-06-14T02:52:36.969281137+00:00"
 id: "atelier-oqtz"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "reliability"
 priority: "P1"
 relationships:
@@ -12,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Improve stale projection and invalid canonical recovery messages"
-updated_at: "2026-06-14T02:52:36.969281137+00:00"
+updated_at: "2026-06-14T07:30:04.267427363+00:00"
 ---
 
 ## Description

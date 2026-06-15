@@ -9323,7 +9323,8 @@ fn assert_degraded_repair_guidance(stderr: &str, issue_id: &str) {
     for needle in [
         "Tracker degraded".to_string(),
         "orientation only".to_string(),
-        "Repair: run `atelier lint`".to_string(),
+        "Recovery: 1. run `atelier lint`".to_string(),
+        "4. rerun the blocked command".to_string(),
         format!(".atelier/issues/{issue_id}.md"),
         "Missing required issue body section 'Outcome'".to_string(),
     ] {
@@ -10116,8 +10117,9 @@ fn test_projection_query_distinguishes_schema_drift_from_malformed_records() {
     let (success, _, stderr) = run_atelier(malformed_dir.path(), &["issue", "list"]);
     assert!(!success, "malformed records should block projection query");
     assert!(
-        stderr.contains("run `atelier lint` for details")
-            && stderr.contains("fix canonical tracker records before querying")
+        stderr.contains("recovery: 1. run `atelier lint`")
+            && stderr.contains("2. fix the named canonical Markdown record")
+            && stderr.contains("4. rerun the blocked command")
             && stderr.contains("Invalid YAML front matter"),
         "malformed diagnostic should stay record-focused: {stderr}"
     );
@@ -10189,7 +10191,9 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
     assert!(
         stderr.contains("12 indexed sources changed")
             && stderr.contains("showing first 5")
-            && stderr.contains("atelier rebuild"),
+            && stderr.contains("recovery: 1. run `atelier lint`")
+            && stderr.contains("3. run `atelier doctor --fix`")
+            && stderr.contains("4. rerun the blocked command"),
         "stale diagnostics should be bounded and actionable: {stderr}"
     );
     assert!(
@@ -10444,7 +10448,10 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     );
     assert!(
         stderr.contains("canonical tracker Markdown is invalid")
+            && stderr.contains("while running `atelier export --check`")
             && stderr.contains("atelier lint")
+            && stderr.contains("2. fix the named canonical Markdown record")
+            && stderr.contains("4. rerun `atelier export --check`")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected invalid export error: {stderr}"
     );
@@ -10464,6 +10471,8 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     assert!(stdout.contains(&format!("Next: atelier lint {issue_id}")));
     assert!(
         stderr.contains("Tracker degraded")
+            && stderr.contains("Recovery: 1. run `atelier lint`")
+            && stderr.contains("4. rerun the blocked command")
             && stderr.contains("atelier lint")
             && stderr.contains("Invalid YAML front matter")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
