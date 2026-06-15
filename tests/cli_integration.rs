@@ -6099,6 +6099,121 @@ fn test_lint_rejects_empty_required_issue_section() {
 }
 
 #[test]
+fn test_lint_rejects_missing_evidence_section() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Missing evidence lint"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Missing evidence lint");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    std::fs::write(&issue_path, remove_issue_section(&markdown, "Evidence")).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "lint should fail for missing Evidence");
+    assert!(
+        stdout.contains(&format!("issue {issue_id}"))
+            && stdout.contains("section Evidence")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing Evidence diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stderr.contains("Lint failed"));
+}
+
+#[test]
+fn test_lint_rejects_empty_evidence_section() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, issue_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Empty evidence lint"]);
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Empty evidence lint");
+    let issue_path = canonical_issue_path(dir.path(), &issue_id);
+    let markdown = std::fs::read_to_string(&issue_path).unwrap();
+    let invalid = markdown.replace(
+        "## Evidence\n\nEvidence was not specified.",
+        "## Evidence\n\n",
+    );
+    std::fs::write(&issue_path, invalid).unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "lint should fail for empty Evidence");
+    assert!(
+        stdout.contains(&format!("issue {issue_id}"))
+            && stdout.contains("section Evidence")
+            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
+        "missing Evidence diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn test_lint_rejects_vague_evidence_even_when_notes_name_a_command() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint flags vague Evidence entries.\n\n## Evidence\n\n- Validation complete.\n\n## Notes\n\n- `cargo test --test cli_integration vague_evidence` passes.";
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Vague evidence lint",
+            "--description",
+            body,
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Vague evidence lint");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "lint should fail for vague Evidence");
+    let transcript = format!("{stdout}\n{stderr}");
+    for needle in [
+        &issue_id,
+        "section Evidence",
+        ".atelier/issues/",
+        "observable proof target",
+        "command, transcript, evidence record, test, review artifact, file change, or manual check",
+    ] {
+        assert!(
+            transcript.contains(needle),
+            "vague Evidence diagnostic missing {needle:?}: {transcript}"
+        );
+    }
+}
+
+#[test]
+fn test_lint_accepts_concrete_evidence_without_optional_notes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint accepts concrete Evidence entries without optional Notes.\n\n## Evidence\n\n- `cargo test --test cli_integration concrete_evidence` passes.\n- Manual check confirms the lint diagnostic names the issue, section, and path.";
+
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Concrete evidence lint",
+            "--description",
+            body,
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    assert!(issue_out.contains("Created issue atelier-"));
+    let issue_id = issue_id_by_title(dir.path(), "Concrete evidence lint");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(success, "lint should accept concrete Evidence: {stderr}");
+    assert!(stdout.contains("Lint passed."));
+}
+
+#[test]
 fn test_lint_rejects_duplicate_recognized_issue_heading() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -7188,14 +7303,32 @@ The unindexed issue is discoverable after rebuild.
 fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let first_body = "## Description\n\nProjection root body.\n\n## Outcome\n\nProjection root remains queryable after rebuild.\n\n## Evidence\n\n- `atelier lint` passes after automatic rebuild.";
+    let second_body = "## Description\n\nProjection leaf body.\n\n## Outcome\n\nProjection leaf remains linked after rebuild.\n\n## Evidence\n\n- `atelier dep list` shows the linked root.";
 
-    let (success, first_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Projection root"]);
+    let (success, first_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Projection root",
+            "--description",
+            first_body,
+        ],
+    );
     assert!(success, "first create failed: {stderr}");
     assert!(first_out.contains("Created issue atelier-"));
     let first_id = issue_ref(dir.path(), 1);
-    let (success, second_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Projection leaf"]);
+    let (success, second_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Projection leaf",
+            "--description",
+            second_body,
+        ],
+    );
     assert!(success, "second create failed: {stderr}");
     assert!(second_out.contains("Created issue atelier-"));
     let second_id = issue_ref(dir.path(), 2);
@@ -7416,9 +7549,18 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
 fn test_lint_validates_canonical_markdown_when_state_db_is_missing() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let body = "## Description\n\nDescription\n\n## Outcome\n\nLint rebuilds a missing state database from canonical Markdown.\n\n## Evidence\n\n- `atelier lint` prints `Lint passed.` after rebuilding state.db.";
 
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Lint without state db"]);
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Lint without state db",
+            "--description",
+            body,
+        ],
+    );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     std::fs::remove_file(dir.path().join(".atelier/state.db")).unwrap();
@@ -7629,8 +7771,14 @@ fn assert_lint_rejects_canonical_mutation(
 ) {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let body = format!(
+        "## Description\n\n{title} body.\n\n## Outcome\n\nCanonical lint rejects the targeted malformed record.\n\n## Evidence\n\n- `atelier lint` reports the targeted malformed canonical record."
+    );
 
-    let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", title]);
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", title, "--description", &body],
+    );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
@@ -7642,14 +7790,16 @@ fn assert_lint_rejects_canonical_mutation(
         !success,
         "lint should reject {title}, stdout: {stdout}, stderr: {stderr}"
     );
+    let transcript = format!("{stdout}\n{stderr}");
     assert!(
-        stderr.contains("Canonical tracker Markdown is invalid"),
-        "lint should identify canonical markdown failure for {title}: {stderr}"
+        transcript.contains("Canonical tracker Markdown is invalid")
+            || transcript.contains("Lint found"),
+        "lint should identify canonical markdown failure for {title}: {transcript}"
     );
     for needle in expected {
         assert!(
-            stderr.contains(needle),
-            "lint diagnostic for {title} missing {needle:?}: {stderr}"
+            transcript.contains(needle),
+            "lint diagnostic for {title} missing {needle:?}: {transcript}"
         );
     }
 }
