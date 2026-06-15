@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Migrate and clean existing issue worktrees"
-updated_at: "2026-06-14T21:45:38.869255767+00:00"
+updated_at: "2026-06-15T04:34:30.406362801+00:00"
 ---
 
 ## Description
