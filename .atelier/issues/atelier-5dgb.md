@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T07:08:19.167399455+00:00"
+status: "done"
 title: "Define replacement ProjectionIndex and RuntimeState SQLite schema"
-updated_at: "2026-06-15T05:13:40.149211999+00:00"
+updated_at: "2026-06-15T07:08:19.167399455+00:00"
 ---
 
 ## Description

@@ -289,6 +289,62 @@ Issue activity sidecars are not indexed in this table because recent activity
 previews read those canonical files directly; rebuild still validates sidecar
 schema and subject references.
 
+## Target SQLite Schema Contract
+
+The replacement `atelier-sqlite` schema keeps one ignored database file at
+`.atelier/runtime/state.db`. Splitting projection and runtime data into separate
+database files is out of scope for this rewrite unless a later artifact-update
+task proves a concrete need and changes this contract.
+
+The database has two ownership groups:
+
+| Group | Rebuild semantics | Allowed contents | Forbidden contents |
+| --- | --- | --- | --- |
+| `ProjectionIndex` | Dropped and recreated from tracked `.atelier/` records, `.atelier/workflow.yaml`, and registered record-kind definitions. Losing these rows must not lose project facts. | Query rows, relationship edges, workflow categories, search text derived from canonical Markdown, freshness metadata, and Mission Control input rows. | Full Markdown payload mirrors, mutation-only facts, old schema compatibility rows, active-work pointers, claim state, local identity, locks, diagnostics, or UI cache. |
+| `RuntimeState` | Local, ignored, machine-specific state. Rebuild may preserve rows only when the table contract says they are ergonomic hints; clearing them must not change canonical records, current work, readiness, blockers, or closeout eligibility. | Local identity hints, locks, command diagnostics, cache metadata, terminal/UI state, and future local ergonomic hints that are explicitly non-authoritative. | Durable records, dependencies, evidence metadata, workflow policy, current-work truth, hidden claims, or any fact required to rebuild `ProjectionIndex`. |
+
+`ProjectionIndex` V1 owns these replacement tables. Names are target contract
+names; implementation may stage toward them in smaller internal migrations, but
+new query code should use these responsibilities rather than preserve inherited
+table meanings:
+
+| Table | Primary key | Source | Purpose |
+| --- | --- | --- | --- |
+| `projection_sources` | `path` | Canonical record files and tracked workflow/config files that affect projection rows. | Freshness checks: `kind`, optional `record_id`, `size_bytes`, `modified_micros`, authoritative `sha256`, and `indexed_at`. |
+| `projection_records` | `(kind, id)` | First-class canonical records. | Cross-record list/detail lookup metadata: title, status, derived status category, created/updated timestamps, and canonical path. |
+| `projection_issues` | `issue_id` | Issue records plus workflow policy. | Issue-specific queue metadata: issue type, priority, parent issue, closed timestamp, ready/blocking category, and sortable display fields. |
+| `projection_labels` | `(record_kind, record_id, label)` | Canonical record labels. | Label filters and Mission Control facets. |
+| `projection_links` | `(source_kind, source_id, bucket, target_kind, target_id, relation_type)` | Canonical `relationships` front matter. | Parent/child, blocker, attachment, validation, mission-work, and typed graph traversal. Inverse `blocked_by`, parent, and evidence coverage views are derived from this table. |
+| `projection_issue_search` | `issue_id` or an FTS rowid tied to `issue_id` | Issue title plus required issue body sections, with activity sidecars read directly when needed. | Search candidate selection only. Detail rendering reloads canonical Markdown instead of trusting this table as body storage. |
+| `projection_workflow_statuses` | `status` | `.atelier/workflow.yaml`. | Derived workflow categories and transition lookup inputs used by ready lists, transition checks, and closeout checks. |
+
+`RuntimeState` V1 owns only local tables whose names make the local boundary
+visible:
+
+| Table | Primary key | Contents | Reset behavior |
+| --- | --- | --- | --- |
+| `runtime_schema` | singleton row | Runtime schema version and creation/update timestamps for local migrations. | Recreated by opening or rebuilding the runtime database. |
+| `runtime_identity` | `key` | Local agent or operator identity hints. | May be cleared; commands fall back to environment/default identity. |
+| `runtime_locks` | `(scope, key)` | Local lock records, expiry, and holder hints for commands that need best-effort coordination. | May be cleared by repair; canonical workflow state is unchanged. |
+| `runtime_command_events` | event id | Local diagnostics and command telemetry allowed by the diagnostics contract. | May be truncated by retention policy or repair. |
+| `runtime_ui_cache` | `(surface, key)` | Terminal or Mission Control display cache entries derived from projection/API output. | May be dropped without affecting CLI answers. |
+
+Runtime active-work, work-association, hidden-claim, and session-active-issue
+tables are not part of this target source-of-truth model. If a later local
+ergonomics issue adds a runtime work-context hint, it must use a new
+`RuntimeState` table, must be explicitly documented as disposable, and must not
+participate in deciding which issues are current. Current work remains derived
+from canonical issue workflow status, mission/epic graph links, and the Git
+checkout context.
+
+Old SQLite schema compatibility is explicitly out of scope for the replacement
+schema. The supported migration path is to keep or recover tracked `.atelier/`
+records, run the safe rebuild/doctor path, and recreate `ProjectionIndex` plus
+empty or locally repaired `RuntimeState` tables in `.atelier/runtime/state.db`.
+No rewrite work should add shims that read obsolete `issues`, `records`,
+`record_links`, `sessions`, `work_associations`, `comments`, active-work,
+claim, or removed Chainlink tables as a compatibility source.
+
 During the staged migration, `atelier export` also refreshes this metadata after
 it writes canonical Markdown from SQLite so compatibility workflows remain
 queryable. Ordinary projection-backed read surfaces (`issue list`,
@@ -322,6 +378,19 @@ are classified as follows:
 | `sessions.*`, `work_associations.*` | Legacy runtime removal candidate | These rows are not the current-work source of truth. Current work comes from canonical issue `status: "in_progress"` in the checked-out Markdown records; rebuild may drop or ignore these tables as pointer-based workflow cleanup lands. |
 | `comments.content`, `comments.kind`, `comments.created_at` | Compatibility residue | Legacy SQLite notes retained for imports and repositories not yet migrated to activity sidecars. New issue activity detail is canonical Markdown sidecar state. |
 | Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
+
+Review artifact for old responsibilities:
+
+| Old responsibility | New owner | Notes |
+| --- | --- | --- |
+| Issue list rows, ready queues, priority/status filters, parent links, and closed timestamps | `ProjectionIndex` via `projection_records`, `projection_issues`, and `projection_workflow_statuses` | Rebuilt from issue Markdown plus workflow policy. |
+| Labels, blockers, parent/child hierarchy, typed relations, mission work, plans, milestones, and evidence coverage | `ProjectionIndex` via `projection_labels` and `projection_links` | Rebuilt from canonical `relationships`; inverse views are query products. |
+| Rich issue prose, mission/plan/evidence bodies, record payload JSON, deterministic rendering, and ID allocation | `RecordStore` | Detail commands load Markdown after SQLite identifies candidate records. |
+| Searchable issue text | `ProjectionIndex` as derived search rows only | Search rows select candidates; they are not authoritative detail storage. |
+| Activity, notes, handoffs, close reasons, and evidence attachment history | Activity sidecars and evidence records | Legacy `comments` rows are migration residue, not a new projection target. |
+| Projection freshness and rebuild provenance | `ProjectionIndex` via `projection_sources` | Hashes are authoritative; mtimes and file sizes are optimization hints. |
+| Local identity, locks, diagnostics, and terminal/UI cache | `RuntimeState` | Local, ignored, and disposable. |
+| Current work, active issue pointers, work claims, and work associations | Canonical issue workflow status plus mission/epic links and checkout context | Runtime pointers and hidden claims are excluded from the target schema and must not be compatibility-shimmed. |
 
 Representative detail paths for this boundary are `atelier issue show`,
 `atelier mission show`, `atelier plan show`, and `atelier evidence show`: the

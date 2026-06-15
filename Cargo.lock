@@ -83,6 +83,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
+name = "atelier-app"
+version = "0.2.0"
+dependencies = [
+ "atelier-core",
+ "atelier-records",
+ "atelier-sqlite",
+ "atelier-workflow",
+]
+
+[[package]]
+name = "atelier-cli"
+version = "0.2.0"
+dependencies = [
+ "atelier-app",
+]
+
+[[package]]
+name = "atelier-core"
+version = "0.2.0"
+
+[[package]]
+name = "atelier-records"
+version = "0.2.0"
+dependencies = [
+ "atelier-core",
+ "atelier-workflow",
+]
+
+[[package]]
+name = "atelier-sqlite"
+version = "0.2.0"
+dependencies = [
+ "atelier-core",
+ "atelier-records",
+ "atelier-workflow",
+]
+
+[[package]]
 name = "atelier-tracker"
 version = "0.2.0"
 dependencies = [
@@ -100,6 +138,13 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "atelier-workflow"
+version = "0.2.0"
+dependencies = [
+ "atelier-core",
 ]
 
 [[package]]

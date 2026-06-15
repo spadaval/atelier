@@ -17,6 +17,36 @@ include = [
     "LICENSE",
 ]
 
+[workspace]
+members = [
+    ".",
+    "crates/atelier-core",
+    "crates/atelier-workflow",
+    "crates/atelier-records",
+    "crates/atelier-sqlite",
+    "crates/atelier-app",
+    "crates/atelier-cli",
+]
+default-members = [
+    ".",
+    "crates/atelier-core",
+    "crates/atelier-workflow",
+    "crates/atelier-records",
+    "crates/atelier-sqlite",
+    "crates/atelier-app",
+    "crates/atelier-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/dollspace-gay/atelier"
+homepage = "https://github.com/dollspace-gay/atelier"
+keywords = ["issue-tracker", "cli", "ai-development", "session-management", "developer-tools"]
+categories = ["command-line-utilities", "development-tools"]
+
 [lib]
 name = "atelier"
 path = "src/lib.rs"

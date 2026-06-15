@@ -1,0 +1,17 @@
+[package]
+name = "atelier-records"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Canonical Markdown record contracts for Atelier"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+atelier-core = { path = "../atelier-core" }
+atelier-workflow = { path = "../atelier-workflow" }

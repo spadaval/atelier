@@ -1,0 +1,19 @@
+[package]
+name = "atelier-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Application use-case contracts for Atelier"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+atelier-core = { path = "../atelier-core" }
+atelier-records = { path = "../atelier-records" }
+atelier-sqlite = { path = "../atelier-sqlite" }
+atelier-workflow = { path = "../atelier-workflow" }
