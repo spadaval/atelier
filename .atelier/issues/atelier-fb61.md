@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-15T01:26:53.495268830+00:00"
+status: "done"
 title: "Epic: Simplify mission validation workflow"
-updated_at: "2026-06-15T01:26:25.135152435+00:00"
+updated_at: "2026-06-15T01:26:53.495268830+00:00"
 ---
 
 ## Description
