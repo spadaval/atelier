@@ -42,7 +42,7 @@ atelier man worker
 atelier status
 atelier issue list --ready
 atelier issue show <id>
-atelier start <id>
+atelier issue transition <id> start
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test --result pass -- <command>
 atelier issue transition <id> --options

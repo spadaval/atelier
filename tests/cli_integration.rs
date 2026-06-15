@@ -3173,19 +3173,41 @@ fn test_create_subissue() {
 }
 
 #[test]
-fn test_create_issue_with_work_prints_canonical_path() {
+fn test_issue_create_rejects_work_flag_and_does_not_change_active_work() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, stdout, stderr) = run_atelier(
+    let (success, create_help, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(!create_help.contains("--work"));
+    assert!(!create_help.contains("current session"));
+    assert!(!create_help.contains("active work"));
+
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "create", "Work path issue", "--work"],
     );
-    assert!(success, "issue create --work failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Work path issue");
+    assert!(!success, "issue create --work unexpectedly succeeded");
+    assert!(
+        stderr.contains("unexpected argument '--work'"),
+        "issue create --work should be rejected as unsupported:\n{stderr}"
+    );
+    assert_eq!(
+        active_work_association_count(dir.path(), "atelier-missing"),
+        0
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Plain issue"]);
+    assert!(success, "plain issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Plain issue");
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stdout.contains(&format!("atelier lint {issue_id}")));
-    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
+    assert_eq!(active_work_association_count(dir.path(), &issue_id), 0);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed after issue create: {stderr}");
+    assert!(
+        status_out.contains("Active work:   none"),
+        "issue create should not create active work:\n{status_out}"
+    );
 }
 
 // ==================== Issue Listing Tests ====================
@@ -4367,23 +4389,23 @@ fn test_issue_mutations_create_activity_sidecars() {
     ] {
         let (success, _, stderr) = run_atelier(
             dir.path(),
-            &["issue", "comment", &issue_id, body, "--kind", kind],
+            &["issue", "note", &issue_id, body, "--kind", kind],
         );
-        assert!(success, "issue comment {kind} failed: {stderr}");
+        assert!(success, "issue note {kind} failed: {stderr}");
     }
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
-            "comment",
+            "note",
             &issue_id,
             "Invalid body",
             "--kind",
             "decision",
         ],
     );
-    assert!(!success, "invalid comment kind should be rejected");
+    assert!(!success, "invalid note kind should be rejected");
     assert!(stderr.contains("Invalid comment kind 'decision'"));
 
     let (success, _, stderr) = run_atelier(
@@ -4391,8 +4413,6 @@ fn test_issue_mutations_create_activity_sidecars() {
         &["issue", "note", &issue_id, "Append note body"],
     );
     assert!(success, "issue note failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &issue_id, "--claim"]);
-    assert!(success, "issue claim failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -4442,11 +4462,6 @@ fn test_issue_mutations_create_activity_sidecars() {
         &activities,
         "field_changed",
         &["field: \"labels\"", "new: \"activity-label\""],
-    );
-    assert_activity_contains(
-        &activities,
-        "field_changed",
-        &["field: \"assignee\"", "new: "],
     );
     assert_activity_contains(
         &activities,
@@ -4501,7 +4516,6 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     assert!(stdout.contains("Canonical handoff"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Canonical close"));
-    assert!(stdout.contains("Assignee:"));
 }
 
 #[test]
@@ -7281,7 +7295,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     for args in [
         vec!["issue", "list", "--json"],
         vec!["issue", "show", "1", "--json"],
-        vec!["issue", "update", "1", "--claim", "--json"],
+        vec!["issue", "update", "1", "--priority", "high", "--json"],
         vec!["mission", "list", "--json"],
         vec!["workflow", "check", "--json"],
         vec!["doctor", "--json"],
@@ -7328,19 +7342,24 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains("Next Commands"));
     let task_id = issue_id_by_title(dir.path(), "Agent Factory task");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", "1", "--claim", "--priority", "high"],
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", "1", "--claim"]);
+    assert!(!success, "issue update --claim unexpectedly succeeded");
+    assert!(
+        stderr.contains("unexpected argument '--claim'"),
+        "issue update --claim should be rejected as unsupported:\n{stderr}"
     );
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "update", "1", "--priority", "high"]);
     assert!(success, "update failed: {stderr}");
     assert!(stdout.contains(&format!("Updated issue {task_id}")));
     assert!(stdout.contains("Priority: high"));
-    assert!(stdout.contains("Assignee:"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "note", "1", "handoff note"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "note", &task_id, "handoff note"]);
     assert!(success, "issue note failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "#1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &task_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains("handoff note"));
@@ -7377,7 +7396,7 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 
     for args in [
         vec!["issue", "list", "--status", "all"],
-        vec!["issue", "search", "Factory"],
+        vec!["search", "Factory"],
         vec!["lint"],
         vec!["export"],
         vec!["export", "--check"],

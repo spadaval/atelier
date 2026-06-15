@@ -346,29 +346,32 @@ An agent tasked with a mission should be able to:
    pursued and the validation criteria that must eventually be proven.
 3. Select a ready issue or epic slice that advances the mission and contributes
    to the milestone.
-4. Follow the issue workflow: start with `atelier start <issue-id>`, implement
-   or validate, record notes, attach evidence, inspect transition options with
-   `atelier issue transition <id> --options`, and close only when validators
-   allow the transition.
+4. Follow the issue workflow: inspect transition options with `atelier issue
+   transition <id> --options`, move the issue to `in_progress` with the
+   workflow's start transition, implement or validate, record notes, attach
+   evidence, and close only when validators allow the transition.
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
 
-`atelier status` is the normal current-work orientation surface. Root `atelier
-issue close <issue-id> --reason "..."` is the normal completion path for
-tracked work, and `atelier abandon [issue-id] --reason "..."` clears only the
-local active-work association without requiring operators to discover hidden
-work lifecycle helpers. Root `atelier repair [issue-id]` is the explicit
-recovery path for stale active-work associations whose recorded worktree path is
-missing after interrupted cleanup; it refuses to clear an association whose path
-still exists, so intentional context switches still use `abandon`.
+`atelier status` is the normal current-work orientation surface. For a checkout,
+current work is the set of issue Markdown records in that checked-out tracker
+copy whose workflow status is `in_progress`. There is no separate active issue
+pointer to clear or repair, and multiple `in_progress` issues are rendered as a
+set with their parent mission or epic context rather than collapsed to a single
+active issue.
 
-Each checkout has at most one active issue association. Running `atelier start
-<issue-id>` again for the same issue refreshes the local workspace and branch
-metadata; starting a different issue in the same checkout is rejected until the
-operator runs `atelier abandon <active-id> --reason "..."`. Parallel active
-work within one mission uses the shared mission worktree and epic branches as
-the coordination boundary. Separate issue worktrees are exceptional containment
-for conflicting, dirty, high-risk, or explicitly isolated slices.
+Each Git worktree has its own checked-out `.atelier/` Markdown tree. Current
+work may therefore differ across branches or worktrees until the relevant
+Markdown changes are merged or rebased through Git. Starting work is a workflow
+status change on the issue record. Completing or pausing work is likewise a
+workflow transition, an issue note, or an evidence record on the issue; it is
+not runtime association cleanup. Root `atelier abandon [issue-id]` and root
+`atelier repair [issue-id]` are classified for removal because local
+active-pointer cleanup is no longer a product concept.
+
+Parallel work within one mission uses the shared mission worktree and epic
+branches as the coordination boundary. Separate issue worktrees are exceptional
+containment for conflicting, dirty, high-risk, or explicitly isolated slices.
 
 `atelier worktree for-mission <mission-id>` creates or locates a mission
 worktree using the configured path policy, rebuilds local SQLite state from

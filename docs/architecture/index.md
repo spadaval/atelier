@@ -1,19 +1,23 @@
 # Architecture
 
-This map covers implementation architecture for the single Rust crate rooted at
-`src/`: code ownership, persistence boundaries, local runtime state, and
-inherited Chainlink structure. Product behavior lives in
-[Product](../product/index.md), product intent lives in [SPEC.md](../../SPEC.md),
-domain language lives in [CONTEXT.md](../../CONTEXT.md), and fork provenance is
-documented in [Chainlink Provenance](provenance.md).
+This map covers implementation architecture for Atelier's current single Rust
+crate and target layered Cargo workspace: code ownership, persistence
+boundaries, local runtime state, and inherited Chainlink structure. Product
+behavior lives in [Product](../product/index.md), product intent lives in
+[SPEC.md](../../SPEC.md), domain language lives in
+[CONTEXT.md](../../CONTEXT.md), and fork provenance is documented in
+[Chainlink Provenance](provenance.md).
 
 ## Current Implementation
 
-Atelier is currently a single Rust crate:
+Atelier is currently a single Rust crate while the crate rewrite moves toward
+the layered workspace accepted in
+[ADR 0008](../adr/0008-layered-cargo-workspace.md):
 
-- [Source Layout](source-layout.md): the current module map for command
-  dispatch, projection, `RecordStore`, workflow policy, evidence, and worktree
-  behavior.
+- [Source Layout](source-layout.md): the current module map and target
+  workspace map for command dispatch, projection, `RecordStore`, workflow
+  policy, evidence, worktree behavior, crate dependency direction, and temporary
+  adapter policy.
 - `src/db/`: SQLite schema, migrations, and persistence operations.
 - `src/models.rs`: shared data structures.
 - `resources/atelier/`: inherited bundled rule assets. Core `atelier init`
@@ -40,6 +44,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0002: Markdown-First Record Store](../adr/0002-markdown-first-record-store.md)
 - [ADR 0003: Evidence Artifact Storage](../adr/0003-evidence-artifact-storage.md)
 - [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
+- [ADR 0008: Layered Cargo Workspace](../adr/0008-layered-cargo-workspace.md)
 
 ## Target Architecture
 
@@ -56,6 +61,12 @@ Accepted ADRs record cross-cutting product choices:
   projection contract explicitly opts in.
 - Mutating commands are migrating toward Markdown-first writes through
   `RecordStore`, with SQLite refreshed as a rebuildable `ProjectionIndex`.
+- The Rust implementation is migrating toward internal crates:
+  `atelier-core`, `atelier-workflow`, `atelier-records`, `atelier-sqlite`,
+  `atelier-app`, and `atelier-cli`. The visible binary remains `atelier`.
+- Current work is derived from canonical issue workflow status, mission/epic
+  graph links, and Git checkout context. Runtime active-work and claim state are
+  local migration residue or ergonomic hints, not durable source of truth.
 - `doctor` and `lint` detect stale, invalid, or missing tracker state through
   operator-facing health checks.
 - `doctor --fix` repairs ignored local projection/runtime state from committed
@@ -70,6 +81,9 @@ Accepted ADRs record cross-cutting product choices:
 
 - CLI parsing should stay thin and delegate behavior to command and domain
   modules.
+- Internal crate dependencies should flow from `atelier-cli` to `atelier-app` to
+  records/SQLite/workflow crates and then to `atelier-core`; lower crates must
+  not depend on app or CLI layers.
 - Database code owns schema migration, transaction boundaries, and persistence
   invariants for projection and runtime tables.
 - RecordStore code must own deterministic canonical Markdown serialization and
@@ -84,6 +98,9 @@ Accepted ADRs record cross-cutting product choices:
   display text.
 - Git/worktree helpers should remain convenience layers over Git, not a
   replacement sync system.
+- Temporary internal migration adapters must name an owning issue, a removal
+  condition, and no public CLI or Rust API compatibility promise. Mission
+  closeout must inventory remaining adapter markers before the rewrite closes.
 
 ## Architecture Risks
 

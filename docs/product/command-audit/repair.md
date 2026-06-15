@@ -2,21 +2,24 @@
 
 Primary role: Worker.
 
-Primary question: "How do I clear stale active work after a worktree disappeared
-or cleanup was interrupted?"
+Primary question: "What replaces root active-pointer repair after current work
+becomes status-derived?"
 
 ## Assessment
 
-- Name: Needs care. Root `repair` overlaps conceptually with `doctor --fix` and
-  `worktree repair`; documentation must keep the scope narrow.
-- Documentation: Should emphasize stale active-work association only.
-- Design: Acceptable if it refuses to clear a live path and points to `abandon`
-  for intentional context switches.
-- Output hierarchy: Stale issue/path, refusal or clearance result, next
-  `status` and `worktree status` commands.
+- Name: Remove. Root `repair` is too broad, and stale active-work pointers are
+  not a target product concept.
+- Documentation: Should route concrete failure modes to their owning surfaces:
+  `lint` for canonical Markdown errors, `doctor --fix` for ignored
+  runtime/cache/projection repair, and `worktree status/remove` or Git recovery
+  for worktree path problems.
+- Design: Remove active-pointer repair. It must not clear or synthesize current
+  work because current work is derived from `in_progress` issue status.
+- Output hierarchy: If the legacy command remains during migration, it should
+  reject with the specific replacement surface for the detected problem.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `atelier repair [issue-id]` | Worker | Recover local active-work state. | Needs narrow wording to avoid admin-repair confusion. |
+| `atelier repair [issue-id]` | Worker | Legacy stale active-pointer cleanup. | Remove. Replacement is `lint`, `doctor --fix`, `worktree status/remove`, or ordinary Git recovery depending on the problem. |

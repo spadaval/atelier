@@ -43,9 +43,10 @@ repository's tactical operator guidance.
 - Keep this binding small. When a rule is repository-specific and executable,
   route to an Atelier-owned surface instead of restating the full command or
   workflow contract here.
-- Missions are durable active-focus records. Link executable issues to missions
-  and use `atelier status` or `atelier mission status <mission-id>` to select
-  worker issues from the active mission or epic graph.
+- Missions are durable focus records. Link executable issues to missions, use
+  `atelier man <role>` for role-specific command guidance, and use
+  `atelier status` or `atelier mission status <mission-id>` to select worker
+  issues from the current mission or epic graph.
 - Issues are executable tracker items. When sectioned Markdown is supported,
   executable issues use `Description`, `Outcome`, `Evidence`, and optional
   `Notes`.
@@ -74,9 +75,9 @@ repository's tactical operator guidance.
 - Mutating subagents should use the mission workspace and parent epic branch by
   default. Use an isolated issue worktree only when the assignment explicitly
   justifies extra isolation for contention, dirty state, high-risk work, or
-  cross-epic separation. Worktree setup, interruption recovery, and stale
-  association handling belong to Atelier-owned worktree status/help and product
-  docs; do not edit runtime state by hand.
+  cross-epic separation. Worktree setup, interruption recovery, and current-work
+  status belong to Atelier-owned worktree status/help and product docs; do not
+  edit runtime state by hand.
 - Hidden workflow diagnostics are not normal planning, implementation, or
   closeout commands. Use them only when a binding, assignment, workflow policy,
   or closeout contract explicitly names the diagnostic command; they do not

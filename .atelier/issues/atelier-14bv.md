@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T05:41:09.442483436+00:00"
+status: "done"
 title: "Define status-derived current work model"
-updated_at: "2026-06-15T03:54:39.128821336+00:00"
+updated_at: "2026-06-15T05:41:09.442483436+00:00"
 ---
 
 ## Description

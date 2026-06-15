@@ -327,9 +327,6 @@ enum IssueCommands {
         /// Parent issue ID or imported source ID
         #[arg(long)]
         parent: Option<String>,
-        /// Set as current session work item
-        #[arg(short, long)]
-        work: bool,
     },
 
     /// List issues
@@ -399,9 +396,6 @@ enum IssueCommands {
         /// Clear parent issue
         #[arg(long)]
         no_parent: bool,
-        /// Claim this issue for the current agent/user
-        #[arg(long, hide = true)]
-        claim: bool,
     },
 
     /// Add an activity note to an issue
@@ -917,7 +911,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             label,
             issue_type,
             parent,
-            work,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
@@ -937,7 +930,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     issue_type: &issue_type,
                     labels: &labels,
                     parent: parent.as_deref(),
-                    work,
                     quiet,
                 },
             )
@@ -1019,7 +1011,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             remove_label,
             parent,
             no_parent,
-            claim,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
             commands::agent_factory::update_lifecycle(
@@ -1037,7 +1028,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     } else {
                         parent.as_deref().map(Some)
                     },
-                    claim,
                     append_notes: None,
                 },
             )

@@ -13,7 +13,8 @@ mission/issue worktrees?"
 - Design: Correct if mission worktrees are the default and issue worktrees are
   explicitly exceptional isolation.
 - Output hierarchy: Mission/issue ID, path, branch/worktree state, dirty or
-  stale warnings, next status or merge command.
+  stale warnings, current `in_progress` issue count from the checked-out
+  tracker copy when useful, next status or merge command.
 
 ## Subcommands
 
@@ -24,4 +25,4 @@ mission/issue worktrees?"
 | `worktree status` | Worker | Inspect local workspace state. | Good. Also useful to managers. |
 | `worktree merge <id>` | Manager/orchestrator | Merge associated work branch. | Good. |
 | `worktree remove <id>` | Manager/orchestrator | Remove associated worktree. | Good, with force warning. |
-| `worktree repair <id>` | Admin | Clear stale worktree association. | Needs distinction from root `repair`. |
+| `worktree repair <id>` | Admin | Repair or remove stale Git worktree metadata when available. | Keep distinct from removed root active-pointer repair; it must not decide current work. |

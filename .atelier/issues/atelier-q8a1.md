@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T05:55:01.629035613+00:00"
+status: "done"
 title: "Update Agent Factory workflow standards after active-work removal"
-updated_at: "2026-06-15T03:55:14.603528547+00:00"
+updated_at: "2026-06-15T05:55:01.629035613+00:00"
 ---
 
 ## Description

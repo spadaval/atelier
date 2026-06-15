@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T05:55:40.733526673+00:00"
+status: "done"
 title: "Remove legacy session current-work creation surface"
-updated_at: "2026-06-15T05:22:48.695501224+00:00"
+updated_at: "2026-06-15T05:55:40.733526673+00:00"
 ---
 
 ## Description

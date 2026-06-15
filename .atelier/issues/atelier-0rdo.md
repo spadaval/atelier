@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T05:39:37.749219834+00:00"
+status: "done"
 title: "Define target workspace and crate boundary contract"
-updated_at: "2026-06-15T05:13:23.806138213+00:00"
+updated_at: "2026-06-15T05:39:37.749219834+00:00"
 ---
 
 ## Description

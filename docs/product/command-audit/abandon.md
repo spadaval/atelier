@@ -2,21 +2,22 @@
 
 Primary role: Worker.
 
-Primary question: "How do I stop this local work association without claiming
-the issue is done?"
+Primary question: "What replaces local active-work cleanup when work is paused
+or redirected?"
 
 ## Assessment
 
-- Name: Correct. The verb distinguishes local context cleanup from issue
-  closure.
-- Documentation: Correct when it is described as local runtime cleanup, not a
-  workflow transition.
-- Design: Correct. The required reason helps preserve continuity.
-- Output hierarchy: Cleared issue, recorded reason, remaining local cleanup
-  hints, next status command.
+- Name: Remove. The verb only makes sense when a local active pointer exists.
+- Documentation: Should not teach `abandon` as normal workflow. Current work is
+  the set of checked-out issue records with status `in_progress`.
+- Design: Remove with the active-pointer model. Pausing or redirecting work is
+  represented by issue workflow transitions, blockers, notes, and evidence.
+- Output hierarchy: If the legacy command remains during migration, it should
+  reject with corrective guidance to `issue transition`, `issue note`, `status`,
+  and `worktree status`.
 
 ## Role Use
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `atelier abandon [issue-id] --reason "..."` | Worker | Drop local active work safely. | Good. |
+| `atelier abandon [issue-id] --reason "..."` | Worker | Legacy active-pointer cleanup. | Remove. Replacement is workflow status change plus durable note/evidence as needed. |

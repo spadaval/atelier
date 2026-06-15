@@ -424,7 +424,7 @@ issue/atelier-z1p8-short-slug
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
-- Refuse claim when the worktree is dirty unless overridden.
+- Refuse active-work setup when the worktree is dirty unless overridden.
 - Record mission worktree, epic branch, and active issue association.
 - Refuse `done` when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
@@ -467,7 +467,7 @@ Mission Control should be able to show:
 - Open blockers.
 - Active agents and runs.
 - Branch/worktree associations.
-- Claims and locks.
+- Active-work associations and locks.
 - Stale exports.
 - Required evidence.
 - Workflow validator failures.
@@ -536,7 +536,7 @@ machine-readable source of truth, not command-result JSON.
 
 - Add agent worktree creation.
 - Add work branch helpers.
-- Associate claims with branches/worktrees.
+- Associate active work with branches/worktrees.
 - Rebuild SQLite in new worktrees.
 
 ### Milestone 4: Domain Model Upgrade

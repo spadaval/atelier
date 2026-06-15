@@ -34,7 +34,10 @@
 - [docs/product/zen.md](product/zen.md): product principles for
   semi-autonomous mission work, evidence, validation, and closeout.
 - [docs/architecture/index.md](architecture/index.md): implementation
-  architecture and ownership map.
+  architecture, target Cargo workspace, and ownership map.
+- [docs/architecture/source-layout.md](architecture/source-layout.md):
+  target crate responsibilities, dependency direction, internal API policy,
+  temporary adapter limits, and current-file orientation during the migration.
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
   provenance, inherited module boundaries, preservation expectations, and
   deferred migration areas.

@@ -117,8 +117,8 @@ JSON result from the command itself.
 
 | Agent Factory operation | Beads command today | Required Atelier equivalent | Required text behavior | Machine-readable replacement | Required | Owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner/assignee, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
-| Claim assigned work | `bd update <id> --claim` | `atelier issue update <id> --claim` or `atelier issue claim <id>` | Print the claimed ID, previous assignee, new assignee, and status transition. Reclaim by same actor is idempotent. | Quiet acknowledgement with changed ID/fields; canonical issue record records durable owner/assignee state. | Yes | `atelier-z1p.3` |
+| Inspect assigned bead before work | `bd show <id>` | `atelier issue show <id>` | Print title, status, type, priority, owner, parent, blockers, dependents, description, acceptance criteria, notes, and close reason when present. Missing IDs name the requested ID. | Focused drill-down command for operators; canonical `.atelier/issues/<id>.md` plus activity sidecars for durable fields. | Yes | `atelier-z1p.3` |
+| Historical claim assignment | `bd update <id> --claim` | Removed; use `atelier start <id>` for local active work and workflow transitions for durable status. | `atelier issue update <id> --claim` is rejected as an unsupported flag. Durable assignment is not part of the active issue model. | No canonical owner/assignee mutation is written by claim commands. | Removed | `atelier-larc` |
 | Append durable handoff notes | Beads update notes flag | `atelier issue note <id> "..."` | Print the ID and note timestamp. Do not require an editor. | Quiet acknowledgement plus `.atelier/issues/<id>.activity/`. | Yes | `atelier-z1p.3` |
 | Update title/priority/labels/parent | `bd update <id> --title ... --priority ... --label ... --parent ...` | `atelier issue update <id> ...` plus label/parent flags; edit rich body sections in `.atelier/issues/<id>.md` | Print changed fields and the ID. Invalid values are rejected with actionable text. | Quiet acknowledgement and canonical issue record; invalid values fail with actionable diagnostics and non-zero exit status. | Yes | `atelier-z1p.3` |
 | Move issue workflow status | `bd update <id> --status ...` | `atelier issue transition <id> <transition>` | Print the applied transition and resulting status, or rejected workflow gates with actionable text. | Canonical issue record plus transition activity sidecar. | Yes | `atelier-z1p.3` |
@@ -150,10 +150,9 @@ JSON result from the command itself.
 Agent Factory replacement requires these end-to-end workflows, not just isolated
 commands:
 
-1. Start gate: `atelier issue show <id>`, `atelier issue update <id>
-   --claim`, `git status --short --branch`, and tracker health checks must let
-   an implement worker verify scope, claim ownership, and detect stale tracker
-   state.
+1. Start gate: `atelier issue show <id>`, `atelier start <id>`, `git status
+   --short --branch`, and tracker health checks must let an implement worker
+   verify scope, enter active local work, and detect stale tracker state.
 2. Planning/orchestration: `atelier issue list --ready`, `atelier issue create`,
    parent updates, and dependency operations must let an orchestrator create and
    sequence child work without `bd`.
@@ -173,7 +172,7 @@ used by workers and orchestrators:
 | Beads command | Atelier command |
 | --- | --- |
 | `bd show <id>` | `atelier issue show <id>` |
-| `bd update <id> --claim` | `atelier issue update <id> --claim` |
+| `bd update <id> --claim` | Historical only; `atelier issue update <id> --claim` was removed. Use `atelier start <id>` for local active work. |
 | Beads update notes flag | `atelier issue note <id> "..."` |
 | `bd update <id> --title ... --priority ...` | `atelier issue update <id> --title ... --priority ...`; edit body sections in `.atelier/issues/<id>.md` |
 | `bd update <id> --parent <parent>` | `atelier issue update <id> --parent <parent>` |

@@ -174,14 +174,14 @@ Artifact-update fields:
 | `artifact_updates[].completed_at` | Sort and detail timestamp when present. |
 | `artifact_updates[].updated_at` | Fallback sort and detail timestamp. |
 
-Agent, run, branch, worktree, claim, and lock fields:
+Agent, run, branch, worktree, current-work, and lock fields:
 
 | Field path | Use |
 | --- | --- |
 | `agents[].id` | Row key and agent identifier. |
 | `agents[].name` | Human-readable agent label. |
 | `agents[].status` | Active or idle display. |
-| `agents[].current_work_ids[]` | Cross-links to active work. |
+| `agents[].current_work_ids[]` | Cross-links to issues currently `in_progress` in the projected tracker copy. |
 | `agents[].last_seen_at` | Staleness display. |
 | `runs[].id` | Row key and run identifier. |
 | `runs[].agent_id` | Cross-link to agent. |

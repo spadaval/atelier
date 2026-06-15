@@ -20,9 +20,9 @@
   RecordStore records for global queries, graph traversal, search, validation,
   and Mission Control inputs.
 - RuntimeState: local-only ignored data under `.atelier/runtime/` and
-  `.atelier/cache/` such as current work association, sessions used by that
-  association, agent identity, diagnostics, locks, and UI caches. It can
-  reference canonical IDs but is not the durable project record source.
+  `.atelier/cache/` such as agent identity, diagnostics, locks, UI caches, and
+  transient command state. It can reference canonical IDs but is not the
+  durable project record source or current-work source of truth.
 - Local command diagnostics: user-local command telemetry used for performance
   and failure analysis. It is RuntimeState-adjacent diagnostic data, not a
   canonical work record or exported run/session record.
@@ -74,11 +74,10 @@
   of product planning.
 - Graph: the cross-record relationship shape among missions, issues, blockers,
   plans, evidence, and other first-class records.
-- Active work: the local runtime association between an agent, an issue, the
-  mission worktree, and the epic branch for in-progress execution. It is
-  coordination state, not the durable workflow status of the issue.
-- Abandon: an explicit action that clears active work without claiming
-  completion or changing issue workflow status.
+- Current work set: the issues in the checkout's canonical Markdown tracker
+  copy whose workflow status is `in_progress`. Each Git worktree has its own
+  tracked `.atelier/` copy, so current work can diverge by branch or worktree
+  and reconcile through Git.
 - SQLite state: fast local projection and runtime state, currently inherited
   from Chainlink and currently living at ignored `.atelier/state.db`.
 - Doctor: an operator health surface that reports whether the repository and
@@ -115,9 +114,10 @@
   first-class concepts, not just labels on issues.
 - Validators belong to workflow policy, not to milestone records. Milestones
   own validation criteria; validators enforce transitions.
-- Durable claim/assignment and active local work are easy to confuse. Until a
-  distinct assignment policy is justified, normal work should use active work
-  rather than a parallel claim system.
+- Durable assignment, hidden claims, and current work are distinct concepts.
+  Until a separate assignment policy is justified, normal work should use
+  workflow status in canonical Markdown rather than hidden claim helpers or
+  runtime active-work pointers.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are

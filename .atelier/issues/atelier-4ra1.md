@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T05:55:31.905575125+00:00"
+status: "done"
 title: "Define tracked migration adapter policy"
-updated_at: "2026-06-15T05:13:27.586244262+00:00"
+updated_at: "2026-06-15T05:55:31.905575125+00:00"
 ---
 
 ## Description

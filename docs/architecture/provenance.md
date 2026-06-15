@@ -61,9 +61,10 @@ documenting target product behavior or new architecture choices.
 Inherited behavior should be preserved until assigned tracker work or an ADR
 explicitly changes it:
 
-- Preserve useful CLI behavior, SQLite persistence invariants, sessions used by
-  current work association, hooks, durable projection behavior, and practical
-  test coverage while rename and migration work is underway.
+- Preserve useful CLI behavior, SQLite persistence invariants, hooks, durable
+  projection behavior, and practical test coverage while rename and migration
+  work is underway. Pointer-based current-work sessions are superseded by the
+  status-derived current-work model when assigned cleanup lands.
 - Do not replace working inherited modules with compatibility shims whose only
   purpose is hiding current names before target behavior exists.
 - Do not treat backup-oriented Chainlink export/import as the target canonical

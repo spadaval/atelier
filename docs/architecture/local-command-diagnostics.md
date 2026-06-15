@@ -266,4 +266,4 @@ non-negative integer millisecond durations.
 
 The event writer should be isolated from canonical record writes. It must never
 hold a transaction or lock required by `RecordStore`, `ProjectionIndex`, or
-runtime work association while performing diagnostics IO.
+runtime health state while performing diagnostics IO.
