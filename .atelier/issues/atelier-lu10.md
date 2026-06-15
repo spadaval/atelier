@@ -19,6 +19,8 @@ relationships:
   - kind: "issue"
     id: "atelier-c0f1"
   - kind: "issue"
+    id: "atelier-krm3"
+  - kind: "issue"
     id: "atelier-larc"
   - kind: "issue"
     id: "atelier-nrwh"
@@ -30,13 +32,15 @@ relationships:
     id: "atelier-t35w"
   - kind: "issue"
     id: "atelier-wet4"
+  - kind: "issue"
+    id: "atelier-yyuc"
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Remove active issue and legacy claim systems"
-updated_at: "2026-06-15T05:22:48.695501224+00:00"
+updated_at: "2026-06-15T06:20:46.971423020+00:00"
 ---
 
 ## Description
