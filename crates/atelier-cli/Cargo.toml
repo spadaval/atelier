@@ -1,13 +1,24 @@
 [package]
 name = "atelier-cli"
 description = "Atelier CLI shell and binary owner"
+categories = ["command-line-utilities", "development-tools"]
 edition.workspace = true
 homepage.workspace = true
+keywords = ["issue-tracker", "cli", "ai-development", "session-management", "developer-tools"]
 license.workspace = true
+readme = "../../README.md"
 repository.workspace = true
 version.workspace = true
+include = [
+    "src/**/*",
+    "../../resources/**/*",
+    "!**/__pycache__/**",
+    "build.rs",
+    "../../LICENSE",
+]
 
 [lib]
+name = "atelier"
 path = "src/lib.rs"
 
 [[bin]]
@@ -17,6 +28,18 @@ path = "src/main.rs"
 [dependencies]
 atelier-app = { path = "../atelier-app" }
 anyhow.workspace = true
+chrono.workspace = true
 clap.workspace = true
+fs2.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+arbitrary = "1"
+proptest = "1"
+tempfile = "3"

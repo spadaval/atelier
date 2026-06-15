@@ -135,6 +135,6 @@
   issues own local implementation proof. Per-issue worktrees or branches are
   exceptional isolation tools, not the default assignment model.
 - The layered Cargo workspace is the target architecture, not a parallel
-  scaffold. Remaining root-package modules are migration input, and old
-  `atelier::...` paths should disappear rather than become compatibility
-  re-exports.
+  scaffold. The repository root is a virtual workspace; remaining monolithic
+  modules under `crates/atelier-cli/src/` are migration input for lower crates,
+  and old root-package compatibility paths must not return.

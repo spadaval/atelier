@@ -1,10 +1,11 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use tempfile::tempdir;
 use std::io::Write;
+use tempfile::tempdir;
 
 use atelier::db::Database;
+use atelier::models::Issue;
 
 fuzz_target!(|data: &[u8]| {
     let dir = match tempdir() {
@@ -47,7 +48,23 @@ fuzz_target!(|data: &[u8]| {
                         .get("priority")
                         .and_then(|p| p.as_str())
                         .unwrap_or("medium");
-                    let _ = db.create_issue(title, desc, priority);
+                    let id = format!(
+                        "atelier-fuzz-{}",
+                        issue
+                            .get("id")
+                            .and_then(|id| id.as_str())
+                            .unwrap_or("import")
+                            .chars()
+                            .filter(|ch| ch.is_ascii_alphanumeric())
+                            .take(8)
+                            .collect::<String>()
+                    );
+                    let _ = db.insert_issue_rebuild(&fuzz_issue(
+                        &id,
+                        title,
+                        desc.map(str::to_string),
+                        priority,
+                    ));
                 }
             }
         }
@@ -56,3 +73,19 @@ fuzz_target!(|data: &[u8]| {
     // Verify database is still functional after import attempt
     let _ = db.list_issues(None, None, None);
 });
+
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
+    let now = chrono::Utc::now();
+    Issue {
+        id: id.to_string(),
+        title: title.to_string(),
+        description,
+        status: "todo".to_string(),
+        issue_type: "task".to_string(),
+        priority: priority.to_string(),
+        parent_id: None,
+        created_at: now,
+        updated_at: now,
+        closed_at: None,
+    }
+}

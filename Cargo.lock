@@ -98,8 +98,18 @@ name = "atelier-cli"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "atelier-app",
+ "chrono",
  "clap",
+ "fs2",
+ "proptest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]
@@ -132,26 +142,6 @@ dependencies = [
  "atelier-records",
  "atelier-workflow",
  "rusqlite",
-]
-
-[[package]]
-name = "atelier-tracker"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "arbitrary",
- "chrono",
- "clap",
- "fs2",
- "proptest",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

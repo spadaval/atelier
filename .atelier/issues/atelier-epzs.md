@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Delete root crate source modules after migration"
-updated_at: "2026-06-15T15:17:23.703959381+00:00"
+updated_at: "2026-06-15T16:40:28.474508475+00:00"
 ---
 
 ## Description

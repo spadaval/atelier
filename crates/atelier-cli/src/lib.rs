@@ -1,6 +1,19 @@
-//! CLI shell boundary for the `atelier` binary.
+//! Atelier issue tracker library
 //!
-//! Clap definitions, telemetry, terminal rendering, and exit-code mapping move
-//! here as the root crate is deleted.
+//! This module exposes the core functionality for use in fuzzing and testing.
 
-pub const BINARY_NAME: &str = "atelier";
+pub mod activity;
+pub mod command_storage;
+pub mod command_surface;
+pub mod commands;
+pub mod db;
+pub mod identity;
+pub mod models;
+pub mod projection_index;
+pub mod record_id;
+pub mod record_store;
+pub mod storage_layout;
+pub mod telemetry;
+pub mod test_inventory;
+pub mod utils;
+pub mod workflow_policy;

@@ -4,6 +4,7 @@ use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
 use atelier::db::Database;
+use atelier::models::Issue;
 
 fuzz_target!(|query: String| {
     let dir = match tempdir() {
@@ -17,11 +18,37 @@ fuzz_target!(|query: String| {
         Err(_) => return,
     };
 
-    // Create some test data
-    let _ = db.create_issue("Test issue one", Some("Description here"), "medium");
-    let _ = db.create_issue("Another test", None, "high");
-    let _ = db.create_issue("Third issue", Some("More content"), "low");
+    let _ = db.insert_issue_rebuild(&fuzz_issue(
+        "atelier-fuzz-a",
+        "Test issue one",
+        Some("Description here".to_string()),
+        "medium",
+    ));
+    let _ = db.insert_issue_rebuild(&fuzz_issue("atelier-fuzz-b", "Another test", None, "high"));
+    let _ = db.insert_issue_rebuild(&fuzz_issue(
+        "atelier-fuzz-c",
+        "Third issue",
+        Some("More content".to_string()),
+        "low",
+    ));
 
-    // Fuzz search - should never panic, even with malicious SQL
-    let _ = db.search_issues(&query);
+    // Fuzz lookup/listing paths with arbitrary input.
+    let _ = db.get_issue(&query);
+    let _ = db.list_issues(None, None, None);
 });
+
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
+    let now = chrono::Utc::now();
+    Issue {
+        id: id.to_string(),
+        title: title.to_string(),
+        description,
+        status: "todo".to_string(),
+        issue_type: "task".to_string(),
+        priority: priority.to_string(),
+        parent_id: None,
+        created_at: now,
+        updated_at: now,
+        closed_at: None,
+    }
+}

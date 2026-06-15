@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Move root integration smoke and fuzz imports into owning crates"
-updated_at: "2026-06-15T15:17:42.061160516+00:00"
+updated_at: "2026-06-15T16:40:24.619459188+00:00"
 ---
 
 ## Description

@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+status: "in_progress"
 title: "Add crate migration guardrails and warning-free closeout gate"
-updated_at: "2026-06-15T16:08:59.624052065+00:00"
+updated_at: "2026-06-15T16:40:22.829227589+00:00"
 ---
 
 ## Description

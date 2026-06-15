@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Prove no root compatibility paths or removed-command guidance remain"
-updated_at: "2026-06-15T15:17:52.722416229+00:00"
+updated_at: "2026-06-15T16:40:26.489787428+00:00"
 ---
 
 ## Description

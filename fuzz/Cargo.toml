@@ -14,10 +14,11 @@ arbitrary = { version = "1", features = ["derive"] }
 tempfile = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dependencies.atelier]
-package = "atelier-tracker"
-path = ".."
+package = "atelier-cli"
+path = "../crates/atelier-cli"
 
 # Prevent this from interfering with workspaces
 [workspace]

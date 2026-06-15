@@ -6,9 +6,10 @@ membership and shared package metadata only; it must not define a root library
 or binary package after the crate migration closes. The `atelier` executable is
 owned by `crates/atelier-cli`.
 
-The current single-crate `src/` tree is migration input. During the rewrite,
-agents should use this document as the destination map and treat remaining
-root-package modules as code waiting to move behind the target crate boundary.
+The former single-crate root `src/` tree has moved under `crates/atelier-cli`.
+During the rewrite, agents should use this document as the destination map and
+treat remaining monolithic modules inside `atelier-cli` as code waiting to move
+behind the lower target crate boundary.
 
 ## Target Workspace
 
@@ -55,14 +56,14 @@ classified as not an adapter because it is target-state code.
 
 ## Current Migration Map
 
-| Current root area | Target owner |
+| Current migration area | Target owner |
 | --- | --- |
-| `src/models.rs`, `src/record_id.rs`, pure shared helpers | `atelier-core` |
-| `src/workflow_policy.rs`, `src/commands/issue_workflow.rs`, `src/commands/workflow.rs` policy internals | `atelier-workflow` |
-| `src/record_store.rs`, `src/record_store/` | `atelier-records` |
-| `src/projection_index.rs`, `src/db/`, projection/rebuild storage internals | `atelier-sqlite` |
-| `src/commands/*.rs` use-case logic, doctor/lint/export/status orchestration | `atelier-app` |
-| `src/main.rs`, Clap definitions, terminal output, command-surface tracing | `atelier-cli` |
+| `crates/atelier-cli/src/models.rs`, `crates/atelier-cli/src/record_id.rs`, pure shared helpers | `atelier-core` |
+| `crates/atelier-cli/src/workflow_policy.rs`, `crates/atelier-cli/src/commands/issue_workflow.rs`, `crates/atelier-cli/src/commands/workflow.rs` policy internals | `atelier-workflow` |
+| `crates/atelier-cli/src/record_store.rs`, `crates/atelier-cli/src/record_store/` | `atelier-records` |
+| `crates/atelier-cli/src/projection_index.rs`, `crates/atelier-cli/src/db/`, projection/rebuild storage internals | `atelier-sqlite` |
+| `crates/atelier-cli/src/commands/*.rs` use-case logic, doctor/lint/export/status orchestration | `atelier-app` |
+| `crates/atelier-cli/src/main.rs`, Clap definitions, terminal output, command-surface tracing | `atelier-cli` |
 
 ## Orientation Order
 
@@ -70,7 +71,7 @@ When a scout needs to orient during the migration, read in this order:
 
 1. This target workspace map and [ADR 0009](../adr/0009-virtual-workspace-root-and-cli-binary.md).
 2. [`CONTEXT.md`](../../CONTEXT.md) for domain vocabulary.
-3. The current `src/` modules only as migration input for the target owner
-   named above.
+3. The current `crates/atelier-cli/src/` modules only as migration input for
+   the target owner named above.
 4. The child tracker issue for the crate being moved, because it names the
    current proof and any temporary adapter removal owner.

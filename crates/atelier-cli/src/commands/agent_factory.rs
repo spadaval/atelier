@@ -593,6 +593,7 @@ pub(crate) struct EvidenceGateStatus {
     pub reason: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProofCoverageStatus {
     Covered,

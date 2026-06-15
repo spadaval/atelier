@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
@@ -32,7 +34,7 @@ fn run_atelier_raw(dir: &Path, args: &[&str]) -> (bool, String, String) {
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        register_issue_ids_from_stdout(dir, &stdout);
+        register_issue_ids_fromstdout(dir, &stdout);
         register_issue_ids_from_state(dir);
     }
 
@@ -56,7 +58,7 @@ fn run_atelier_with_env(
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     if output.status.success() {
-        register_issue_ids_from_stdout(dir, &stdout);
+        register_issue_ids_fromstdout(dir, &stdout);
         register_issue_ids_from_state(dir);
     }
 
@@ -571,7 +573,7 @@ fn register_issue_id(dir: &Path, id: String) {
     }
 }
 
-fn register_issue_ids_from_stdout(dir: &Path, stdout: &str) {
+fn register_issue_ids_fromstdout(dir: &Path, stdout: &str) {
     let bytes = stdout.as_bytes();
     let mut index = 0;
     while let Some(offset) = stdout[index..].find("atelier-") {
@@ -954,28 +956,28 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
 
     corrupt_issue_title_yaml(dir.path(), &issue_id, "Doctor runtime boundary");
 
-    let (lint_success, lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(
         !lint_success,
-        "lint must reject malformed canonical Markdown, stdout: {lint_stdout}"
+        "lint must reject malformed canonical Markdown, stdout: {lintstdout}"
     );
-    let lint_transcript = format!("{lint_stdout}\n{lint_stderr}");
+    let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     assert!(
         lint_transcript.contains("Canonical tracker Markdown is invalid")
             && lint_transcript.contains("Invalid YAML front matter"),
         "unexpected lint error: {lint_transcript}"
     );
 
-    let (doctor_success, doctor_stdout, doctor_stderr) = run_atelier(dir.path(), &["doctor"]);
+    let (doctor_success, doctorstdout, doctor_stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(
         doctor_success,
         "doctor should continue reporting runtime health: {doctor_stderr}"
     );
-    assert!(doctor_stdout.contains("Projection rebuild:"));
-    assert!(doctor_stdout.contains("rebuild_ready: not ok"));
-    assert!(doctor_stdout.contains("Runtime state:"));
-    assert!(doctor_stdout.contains("database: ok"));
-    assert!(doctor_stdout.contains("local_tables: ok"));
+    assert!(doctorstdout.contains("Projection rebuild:"));
+    assert!(doctorstdout.contains("rebuild_ready: not ok"));
+    assert!(doctorstdout.contains("Runtime state:"));
+    assert!(doctorstdout.contains("database: ok"));
+    assert!(doctorstdout.contains("local_tables: ok"));
 }
 
 #[test]
@@ -10939,11 +10941,11 @@ fn test_mission_list_default_current_empty_state() {
     assert!(stdout.contains("(none)"));
     assert!(!stdout.contains("Closed only"));
 
-    let (success, closed_stdout, stderr) =
+    let (success, closedstdout, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "closed"]);
     assert!(success, "closed mission list failed: {stderr}");
-    assert!(closed_stdout.contains("1 closed mission | 0 blocked"));
-    assert!(closed_stdout.contains("Closed only"));
+    assert!(closedstdout.contains("1 closed mission | 0 blocked"));
+    assert!(closedstdout.contains("Closed only"));
 }
 
 #[test]
@@ -12424,9 +12426,9 @@ fn test_start_refuses_shared_section_diagnostic() {
     std::fs::write(&issue_path, malformed).unwrap();
     commit_all(dir.path(), "malformed issue section");
 
-    let (lint_success, lint_stdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
+    let (lint_success, lintstdout, lint_stderr) = run_atelier(dir.path(), &["lint"]);
     assert!(!lint_success, "lint should report malformed issue sections");
-    let lint_transcript = format!("{lint_stdout}\n{lint_stderr}");
+    let lint_transcript = format!("{lintstdout}\n{lint_stderr}");
     for needle in [
         "Missing required issue body section 'Outcome'",
         &issue_id,
@@ -12439,13 +12441,12 @@ fn test_start_refuses_shared_section_diagnostic() {
         );
     }
 
-    let (start_success, start_stdout, start_stderr) =
-        run_atelier(dir.path(), &["start", &issue_id]);
+    let (start_success, startstdout, start_stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(
         !start_success,
         "start should refuse malformed issue sections"
     );
-    let start_transcript = format!("{start_stdout}\n{start_stderr}");
+    let start_transcript = format!("{startstdout}\n{start_stderr}");
     for needle in [
         "Missing required issue body section 'Outcome'",
         &issue_id,
