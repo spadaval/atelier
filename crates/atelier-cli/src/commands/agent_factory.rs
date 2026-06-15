@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use chrono::{DateTime, Local, Utc};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,10 +13,7 @@ use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
-use atelier_records::{
-    issue_record_path, issue_section_diagnostic, CanonicalIssueRecord, IssueSectionName,
-    IssueSections, RecordStore, Relationships,
-};
+use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
 
 #[derive(Debug, Clone)]
@@ -1794,289 +1791,23 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
     }
 }
 
-const EVIDENCE_PROOF_TARGET_HINT: &str = "command, transcript, evidence record, test, \
-review artifact, file change, or manual check";
-
-const CONCRETE_EVIDENCE_MARKERS: &[&str] = &[
-    "command",
-    "transcript",
-    "evidence record",
-    "evidence id",
-    "test",
-    "tests",
-    "nextest",
-    "lint",
-    "doctor",
-    "export",
-    "review artifact",
-    "review",
-    "artifact",
-    "file change",
-    "file diff",
-    "manual check",
-    "manual validation",
-    "screenshot",
-    "stdout",
-    "stderr",
-    "command output",
-    "help text",
-    "atelier ",
-    "`atelier ",
-    "cargo ",
-    "git diff",
-    "target/debug/atelier",
-    ".rs",
-    ".md",
-    ".toml",
-    ".json",
-    ".yaml",
-    ".yml",
-];
-
-const VAGUE_EVIDENCE_MARKERS: &[&str] = &[
-    "not specified",
-    "to be determined",
-    "tbd",
-    "todo",
-    "none yet",
-    "will be added",
-    "add later",
-    "later",
-];
-
-fn issue_requires_concrete_evidence(issue: &Issue) -> bool {
-    !matches!(issue.status.as_str(), "done" | "archived") && issue.issue_type != "epic"
-}
-
-fn evidence_entries(evidence: &str) -> Vec<String> {
-    if evidence
-        .lines()
-        .any(|line| strip_markdown_list_marker(line.trim()).is_some())
-    {
-        let mut entries = Vec::new();
-        let mut current = String::new();
-        for line in evidence.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Some(item) = strip_markdown_list_marker(trimmed) {
-                if !current.trim().is_empty() {
-                    entries.push(current.trim().to_string());
-                }
-                current = item.trim().to_string();
-            } else if current.trim().is_empty() {
-                current = trimmed.to_string();
-            } else {
-                current.push(' ');
-                current.push_str(trimmed);
-            }
-        }
-        if !current.trim().is_empty() {
-            entries.push(current.trim().to_string());
-        }
-        entries
-    } else {
-        evidence
-            .split("\n\n")
-            .map(str::trim)
-            .filter(|entry| !entry.is_empty())
-            .map(str::to_string)
-            .collect()
-    }
-}
-
-fn strip_markdown_list_marker(line: &str) -> Option<&str> {
-    for prefix in ["- ", "* ", "+ "] {
-        if let Some(rest) = line.strip_prefix(prefix) {
-            return Some(rest);
-        }
-    }
-
-    let (digits, rest) = line.split_once('.')?;
-    if !digits.is_empty()
-        && digits.chars().all(|character| character.is_ascii_digit())
-        && rest.starts_with(' ')
-    {
-        Some(rest.trim_start())
-    } else {
-        None
-    }
-}
-
-fn evidence_entry_names_observable_target(entry: &str) -> bool {
-    let lower = entry.to_lowercase();
-    if VAGUE_EVIDENCE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
-    {
-        return false;
-    }
-    CONCRETE_EVIDENCE_MARKERS
-        .iter()
-        .any(|marker| lower.contains(marker))
-}
-
 pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
-    let issues = if let Some(issue_ref) = issue_ref {
-        let id = resolve_id(db, issue_ref)?;
-        vec![db.require_issue(&id)?]
-    } else {
-        db.list_issues(Some("all"), None, None)?
-    };
-    let canonical_state_dir = find_state_dir_from_cwd()?;
-    let (canonical_issues, canonical_findings) = if let Some(state_dir) = &canonical_state_dir {
-        let store = RecordStore::new(&state_dir);
-        let mut records = BTreeMap::new();
-        let mut findings = Vec::new();
-        let paths = if let Some(issue_ref) = issue_ref {
-            let id = resolve_id(db, issue_ref)?;
-            vec![issue_record_path(&id)]
-        } else {
-            match store.discover_issue_paths() {
-                Ok(paths) => paths,
-                Err(error) => {
-                    findings.push(json!({
-                        "id": "(canonical)",
-                        "code": "invalid_canonical_state",
-                        "path": state_dir.display().to_string(),
-                        "message": format!("Canonical tracker Markdown is invalid: {error:#}")
-                    }));
-                    Vec::new()
-                }
-            }
-        };
-        for relative in paths {
-            match store.load_issue(&relative) {
-                Ok(record) => {
-                    records.insert(record.issue.id.clone(), record);
-                }
-                Err(error) => {
-                    findings.push(json!({
-                        "id": issue_ref
-                            .map(|_| relative.file_stem()
-                                .and_then(|stem| stem.to_str())
-                                .unwrap_or("(unknown)")
-                                .to_string())
-                            .unwrap_or_else(|| relative.file_stem()
-                                .and_then(|stem| stem.to_str())
-                                .unwrap_or("(unknown)")
-                                .to_string()),
-                        "code": "invalid_canonical_issue",
-                        "path": state_dir.join(&relative).display().to_string(),
-                        "message": format!("Canonical tracker Markdown is invalid: {error:#}")
-                    }));
-                }
-            }
-        }
-        if findings.is_empty() {
-            if let Err(error) = atelier_app::rebuild::validate_canonical_state(state_dir) {
-                findings.push(json!({
-                    "id": "(canonical)",
-                    "code": "invalid_canonical_state",
-                    "path": state_dir.display().to_string(),
-                    "message": format!("Canonical tracker Markdown is invalid: {error:#}")
-                }));
-            }
-        }
-        (records, findings)
-    } else {
-        (BTreeMap::new(), Vec::new())
-    };
-    let mut findings = canonical_findings;
-    for issue in issues {
-        if issue.title.trim().is_empty() {
-            findings.push(json!({
-                "id": issue_id_for_agent(db, &issue)?,
-                "code": "missing_title",
-                "message": "Issue title must not be empty"
-            }));
-        }
-        if !atelier_sqlite::VALID_ISSUE_TYPES.contains(&issue.issue_type.as_str()) {
-            findings.push(json!({
-                "id": issue_id_for_agent(db, &issue)?,
-                "code": "invalid_issue_type",
-                "message": format!("Issue type '{}' is not valid", issue.issue_type)
-            }));
-        }
-        for blocker_id in db.get_blockers(&issue.id)? {
-            if db.get_issue(&blocker_id)?.is_none() {
-                findings.push(json!({
-                    "id": issue_id_for_agent(db, &issue)?,
-                    "code": "missing_blocker",
-                    "message": format!("Dependency references missing issue {}", format_issue_id(&blocker_id))
-                }));
-            }
-        }
-        if let Some(record) = canonical_issues.get(&issue.id) {
-            for state in record.sections.section_states() {
-                if state.required && (!state.present || state.empty) {
-                    findings.push(json!({
-                        "id": issue_id_for_agent(db, &issue)?,
-                        "code": "invalid_issue_section",
-                        "section": state.name.title(),
-                        "path": canonical_state_dir
-                            .as_ref()
-                            .map(|state_dir| {
-                                canonical_issue_path_from_state(state_dir, &issue.id)
-                                    .display()
-                                    .to_string()
-                            })
-                            .unwrap_or_default(),
-                        "message": format!(
-                            "Issue section {} must be present and non-empty",
-                            state.name.title()
-                        )
-                    }));
-                }
-            }
-            if issue_requires_concrete_evidence(&issue) {
-                for (index, entry) in evidence_entries(&record.sections.evidence)
-                    .iter()
-                    .enumerate()
-                {
-                    if !evidence_entry_names_observable_target(entry) {
-                        let relative = issue_record_path(&issue.id);
-                        findings.push(json!({
-                            "id": issue_id_for_agent(db, &issue)?,
-                            "code": "vague_evidence",
-                            "section": IssueSectionName::Evidence.title(),
-                            "path": canonical_state_dir
-                                .as_ref()
-                                .map(|state_dir| {
-                                    canonical_issue_path_from_state(state_dir, &issue.id)
-                                        .display()
-                                        .to_string()
-                                })
-                                .unwrap_or_default(),
-                            "message": issue_section_diagnostic(
-                                Some(&issue.id),
-                                IssueSectionName::Evidence.title(),
-                                &relative,
-                                &format!(
-                                    "Issue section Evidence entry {} must name an observable proof target ({})",
-                                    index + 1,
-                                    EVIDENCE_PROOF_TARGET_HINT
-                                )
-                            )
-                        }));
-                    }
-                }
-            }
-        }
-    }
-    if findings.is_empty() {
+    let outcome = atelier_app::lint::lint(atelier_app::Request {
+        input: atelier_app::lint::LintRequest { db, issue_ref },
+    })?;
+    let view = outcome.value.data;
+    if view.findings.is_empty() {
         println!("Lint passed.");
     } else {
-        println!("Lint found {} issue(s):", findings.len());
-        for finding in &findings {
-            println!("  {}: {}", finding["id"], finding["message"]);
+        println!("Lint found {} issue(s):", view.findings.len());
+        for finding in &view.findings {
+            println!("  {}: {}", finding.id, finding.message);
         }
     }
-    if findings.is_empty() {
+    if view.findings.is_empty() {
         Ok(())
     } else {
-        bail!("Lint failed with {} finding(s)", findings.len())
+        bail!("Lint failed with {} finding(s)", view.findings.len())
     }
 }
 
@@ -2088,101 +1819,74 @@ pub fn doctor(
     runtime_db_existed: bool,
     fix: bool,
 ) -> Result<()> {
-    let layout = atelier_app::storage_layout::StorageLayout::new(repo_root);
-    let atelier_dir = layout.atelier_dir();
-    let config_path = layout.config_path();
-    let cache_dir = layout.cache_dir();
+    let outcome = atelier_app::health::doctor(atelier_app::Request {
+        input: atelier_app::health::DoctorRequest {
+            db,
+            repo_root: repo_root.to_path_buf(),
+            state_dir: state_dir.to_path_buf(),
+            db_path: db_path.to_path_buf(),
+            runtime_db_existed,
+            fix,
+            diagnostics_enabled: crate::telemetry::diagnostics_enabled(),
+        },
+    })?;
+    render_doctor(outcome.value.data);
+    Ok(())
+}
 
-    let repaired_db;
-    let active_db = if fix {
-        atelier_app::rebuild::validate_canonical_state(state_dir).with_context(|| {
-            "doctor --fix refused to edit tracked `.atelier/` canonical records; \
-             run `atelier lint`, fix the named canonical Markdown record, then rerun `atelier doctor --fix`"
-        })?;
-        atelier_app::rebuild::refresh_projection_preserving_runtime(state_dir, db_path)
-            .with_context(|| {
-                format!(
-                    "doctor --fix failed while repairing ignored local projection state at {}",
-                    db_path.display()
-                )
-            })?;
-        repaired_db = Database::open(db_path).context("Failed to reopen repaired database")?;
-        &repaired_db
-    } else {
-        db
-    };
-
-    let rebuild_ready = atelier_app::rebuild::validate_canonical_state(state_dir).is_ok();
-    let projection_fresh = atelier_sqlite::projection_index::check(active_db, state_dir)
-        .map(|report| report.is_fresh())
-        .unwrap_or(false);
-    let runtime_tables_available = active_db.runtime_state_tables_available().unwrap_or(false);
-    let runtime_db_available = if fix {
-        db_path.exists()
-    } else {
-        runtime_db_existed
-    };
-    let ignore_rules_current = runtime_gitignore_entries_present(repo_root);
-    let diagnostics = if crate::telemetry::diagnostics_enabled() {
-        "enabled"
-    } else {
-        "disabled"
-    };
-    let mut health = BTreeMap::new();
-    health.insert("config", config_path.exists());
-    health.insert("database", runtime_db_available);
-    health.insert("ignore_rules", ignore_rules_current);
-    health.insert("projection_fresh", projection_fresh);
-    health.insert("rebuild_ready", rebuild_ready);
-    health.insert("runtime_state", atelier_dir.is_dir());
-    health.insert("runtime_tables", runtime_tables_available);
-    println!("Database: {}", db_path.display());
-    println!("State: {}", state_dir.display());
-    if fix {
+fn render_doctor(view: atelier_app::health::DoctorView) {
+    println!("Database: {}", view.db_path.display());
+    println!("State: {}", view.state_dir.display());
+    if view.fix {
         println!("Repair:");
         println!("  local_projection: repaired");
         println!("  canonical_records: unchanged");
     }
     println!("Install health:");
-    println!(
-        "  config: {}",
-        if config_path.exists() { "ok" } else { "not ok" }
-    );
+    println!("  config: {}", if view.config_ok { "ok" } else { "not ok" });
     println!(
         "  ignored_runtime_paths: {}",
-        if ignore_rules_current { "ok" } else { "not ok" }
+        if view.ignore_rules_current {
+            "ok"
+        } else {
+            "not ok"
+        }
     );
     println!("Projection rebuild:");
     println!(
         "  state_dir: {}",
-        if state_dir.is_dir() { "ok" } else { "not ok" }
+        if view.state_dir_ok { "ok" } else { "not ok" }
     );
     println!(
         "  rebuild_ready: {}",
-        if rebuild_ready { "ok" } else { "not ok" }
+        if view.rebuild_ready { "ok" } else { "not ok" }
     );
     println!(
         "  projection_fresh: {}",
-        if projection_fresh { "ok" } else { "not ok" }
+        if view.projection_fresh {
+            "ok"
+        } else {
+            "not ok"
+        }
     );
     println!(
         "  tables: {}",
         atelier_sqlite::CANONICAL_PROJECTION_TABLES.join(", ")
     );
     println!("Cache health:");
-    println!("  cache_dir: {}", optional_dir_status(&cache_dir));
+    println!("  cache_dir: {}", view.cache_dir_status);
     println!(
         "  projection_metadata: {}",
-        if projection_fresh { "ok" } else { "stale" }
+        if view.projection_fresh { "ok" } else { "stale" }
     );
     println!("Runtime state:");
     println!(
         "  directory: {}",
-        if atelier_dir.is_dir() { "ok" } else { "not ok" }
+        if view.runtime_dir_ok { "ok" } else { "not ok" }
     );
     println!(
         "  database: {}",
-        if runtime_db_available {
+        if view.runtime_db_available {
             "ok"
         } else {
             "missing (runtime projection artifact)"
@@ -2190,39 +1894,21 @@ pub fn doctor(
     );
     println!(
         "  local_tables: {}",
-        if runtime_tables_available {
+        if view.runtime_tables_available {
             "ok"
         } else {
             "not ok"
         }
     );
-    println!("  diagnostics: {diagnostics}");
+    println!("  diagnostics: {}", view.diagnostics);
     println!("Compatibility:");
     println!(
         "  tables: {}",
         atelier_sqlite::COMPATIBILITY_TABLES.join(", ")
     );
     println!("Legacy health:");
-    for (key, value) in health {
+    for (key, value) in view.health {
         println!("{key}: {}", if value { "ok" } else { "not ok" });
-    }
-    Ok(())
-}
-
-fn runtime_gitignore_entries_present(repo_root: &Path) -> bool {
-    let Ok(gitignore) = std::fs::read_to_string(repo_root.join(".gitignore")) else {
-        return false;
-    };
-    crate::commands::init::ROOT_GITIGNORE_ENTRIES
-        .iter()
-        .all(|entry| gitignore.lines().any(|line| line.trim() == *entry))
-}
-
-fn optional_dir_status(path: &Path) -> &'static str {
-    if path.is_dir() {
-        "ok"
-    } else {
-        "missing (optional)"
     }
 }
 

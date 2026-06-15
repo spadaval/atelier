@@ -1,123 +1,36 @@
-use anyhow::{Context, Result};
-use std::fs;
+use anyhow::Result;
 use std::path::Path;
 
 use atelier_sqlite::Database;
 
-const STANDARD_BEADS_IMPORT_PATH: &str = ".beads/issues.manual.jsonl";
-
-pub(crate) const PROJECT_CONFIG_TOML: &str = r#"schema = "atelier.project_config"
-schema_version = 1
-project_slug = "atelier"
-
-[paths]
-state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
-"#;
-pub(crate) const ROOT_GITIGNORE_ENTRIES: &[&str] = &[
-    "/.atelier/agent.json",
-    "/.atelier/.cache/",
-    "/.atelier/runtime/",
-    "/.atelier/cache/",
-    "/.atelier-worktrees/",
-];
-
-pub(crate) fn ensure_root_gitignore(path: &Path, force: bool) -> Result<()> {
-    let gitignore_path = path.join(".gitignore");
-    let mut existing = match fs::read_to_string(&gitignore_path) {
-        Ok(content) => content,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(anyhow::Error::from(e).context("Failed to read .gitignore")),
-    };
-    let mut changed = force && !gitignore_path.exists();
-    if !existing.is_empty() && !existing.ends_with('\n') {
-        existing.push('\n');
-        changed = true;
-    }
-
-    let missing = ROOT_GITIGNORE_ENTRIES
-        .iter()
-        .copied()
-        .filter(|entry| !existing.lines().any(|line| line.trim() == *entry))
-        .collect::<Vec<_>>();
-    if !missing.is_empty() {
-        if !existing.is_empty() {
-            existing.push('\n');
-        }
-        existing.push_str("# Atelier local runtime/cache\n");
-        for entry in missing {
-            existing.push_str(entry);
-            existing.push('\n');
-        }
-        changed = true;
-    }
-
-    if changed {
-        fs::write(&gitignore_path, existing).context("Failed to write .gitignore")?;
-    }
-    Ok(())
-}
-
 pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
-    let layout = atelier_app::storage_layout::StorageLayout::new(path);
-    let atelier_dir = layout.atelier_dir();
-
-    let atelier_exists = atelier_dir.exists();
-    if !atelier_exists {
-        fs::create_dir_all(&atelier_dir).context("Failed to create .atelier directory")?;
-        println!("Created {}", atelier_dir.display());
+    let outcome = atelier_app::init::initialize(atelier_app::Request {
+        input: atelier_app::init::InitRequest {
+            path: path.to_path_buf(),
+            force,
+            import_beads,
+        },
+    })?;
+    let view = outcome.value.data;
+    for created_path in &view.created_paths {
+        println!("Created {}", created_path.display());
     }
-
-    for dir in atelier_records::canonical_record_dirs() {
-        fs::create_dir_all(atelier_dir.join(dir))
-            .with_context(|| format!("Failed to create .atelier/{} directory", dir))?;
-    }
-
-    let project_config_path = layout.config_path();
-    if !project_config_path.exists() {
-        fs::write(&project_config_path, PROJECT_CONFIG_TOML)
-            .context("Failed to write .atelier/config.toml")?;
-        println!("Created {}", project_config_path.display());
-    }
-
-    fs::create_dir_all(layout.target_runtime_dir())
-        .context("Failed to create .atelier/runtime directory")?;
-    let db_path = layout.runtime_db_path();
-    let db_existed = db_path.exists();
-    let db = Database::open(&db_path)?;
-    if !db_existed {
-        println!("Created {}", db_path.display());
-    }
-
-    let workflow_path = path.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
-    if !workflow_path.exists() {
-        fs::write(
-            &workflow_path,
-            atelier_app::workflow_policy::STARTER_POLICY_YAML,
-        )
-        .context("Failed to write .atelier/workflow.yaml")?;
-        atelier_app::workflow_policy::load(path)?;
-        println!("Created {}", workflow_path.display());
-    }
-
-    ensure_root_gitignore(path, force)?;
-
-    let beads_import_path = path.join(STANDARD_BEADS_IMPORT_PATH);
-    if import_beads {
-        if !beads_import_path.exists() {
-            anyhow::bail!(
-                "Beads migration input not found at {}",
-                beads_import_path.display()
+    match &view.beads_import {
+        Some(atelier_app::init::BeadsImportView::Requested {
+            input_path,
+            state_dir,
+        }) => {
+            let db_path = atelier_app::storage_layout::StorageLayout::new(path).runtime_db_path();
+            let db = Database::open(&db_path)?;
+            crate::commands::import::run_beads_jsonl(&db, input_path, state_dir)?;
+        }
+        Some(atelier_app::init::BeadsImportView::Available { input_path }) => {
+            println!(
+                "Detected Beads migration input at {}. Re-run with `atelier init --import-beads` to import it.",
+                input_path.display()
             );
         }
-        crate::commands::import::run_beads_jsonl(&db, &beads_import_path, &atelier_dir)?;
-    } else if beads_import_path.exists() {
-        println!(
-            "Detected Beads migration input at {}. Re-run with `atelier init --import-beads` to import it.",
-            beads_import_path.display()
-        );
+        None => {}
     }
 
     println!("Atelier initialized successfully!");
@@ -132,6 +45,7 @@ pub fn run(path: &Path, force: bool, import_beads: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]

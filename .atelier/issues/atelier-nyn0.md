@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:50:27.129861181+00:00"
+status: "done"
 title: "Migrate command workflows vertically into app CLI and storage crates"
-updated_at: "2026-06-15T15:17:32.624440938+00:00"
+updated_at: "2026-06-15T18:50:27.129861181+00:00"
 ---
 
 ## Description

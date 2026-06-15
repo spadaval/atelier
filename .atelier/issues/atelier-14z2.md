@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:49:31.189710616+00:00"
+status: "done"
 title: "Move command handlers and view models into atelier-app"
-updated_at: "2026-06-15T05:13:47.369776164+00:00"
+updated_at: "2026-06-15T18:49:31.189710616+00:00"
 ---
 
 ## Description
