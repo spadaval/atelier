@@ -37,9 +37,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Complete The Atelier Crate Migration"
-updated_at: "2026-06-15T15:16:43.243178317+00:00"
+updated_at: "2026-06-15T19:02:20.988195150+00:00"
 ---
 
 ## Intent
@@ -66,3 +66,7 @@ Finish the migration by making the layered workspace the only architecture, not 
 - Closeout maps every mission outcome to linked epic and issue evidence.
 - Independent validation covers CLI/help/docs parity, Markdown round trips, projection rebuild, missing or stale DB recovery, active-work removal, root crate deletion, ordinary Clap rejection for removed commands, and representative mission, issue, and evidence workflows.
 - Repository checks pass: `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo fmt -- --check`, `cargo nextest run`, relevant extended ignored tests, `cargo check --manifest-path fuzz/Cargo.toml --bins`, `target/debug/atelier lint`, `target/debug/atelier export --check`, `target/debug/atelier doctor`, and `git diff --check`.
+
+## Closeout Notes
+
+- Close reason: All crate rewrite mission work, epics, validations, and closeout gates are complete.
