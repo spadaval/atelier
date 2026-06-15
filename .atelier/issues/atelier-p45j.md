@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:17:48.854843026+00:00"
+status: "done"
 title: "Clarify ready-list parent headers for blocked epics"
-updated_at: "2026-06-15T04:05:54.474930114+00:00"
+updated_at: "2026-06-15T18:17:48.854843026+00:00"
 ---
 
 ## Description

@@ -1295,12 +1295,15 @@ fn queue_summary(rows: &[QueueRow]) -> String {
 }
 
 fn print_queue_group(group: QueueGroup, show_status: bool) {
-    let heading = match (&group.id, &group.issue_type, &group.priority) {
+    let mut heading = match (&group.id, &group.issue_type, &group.priority) {
         (Some(id), Some(issue_type), Some(priority)) => {
             format!("[{issue_type}] {id} {priority} - {}", group.title)
         }
         _ => group.title,
     };
+    if group.id.is_some() && !group.external_blockers.is_empty() {
+        heading.push_str(" (context; parent blocked)");
+    }
     println!("\n{heading}");
     println!("{}", "-".repeat(heading.len()));
     if !group.external_blockers.is_empty() {

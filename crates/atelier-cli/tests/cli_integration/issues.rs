@@ -1664,6 +1664,42 @@ fn test_issue_list_ready_treats_internal_epic_blockers_as_ready() {
 }
 
 #[test]
+fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Blocked parent epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Ready child"]);
+    run_atelier(dir.path(), &["issue", "create", "Outside blocker"]);
+    let parent_id = issue_ref(dir.path(), 1);
+    let child_id = issue_ref(dir.path(), 2);
+    let blocker_id = issue_ref(dir.path(), 3);
+    run_atelier(dir.path(), &["issue", "block", &parent_id, &blocker_id]);
+
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "ready list failed: {stderr}");
+    assert!(
+        ready_out.contains("Blocked parent epic (context; parent blocked)"),
+        "{ready_out}"
+    );
+    assert!(ready_out.contains(&format!("blocked by {blocker_id}")));
+    assert!(ready_out.contains(&format!("{child_id} - Ready child")));
+
+    let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "blocked", &parent_id]);
+    assert!(success, "blocked detail failed: {stderr}");
+    assert!(blocked_out.contains(&blocker_id), "{blocked_out}");
+}
+
+#[test]
 fn test_issue_list_marks_external_epic_blockers_by_id() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
