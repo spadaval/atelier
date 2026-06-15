@@ -15,7 +15,7 @@ enum StateOp {
     ArchiveIssue { idx: usize },
     UnarchiveIssue { idx: usize },
     DeleteIssue { idx: usize },
-    AddComment { idx: usize, content: String },
+    AddLabel { idx: usize, label: String },
     // Queries (should never panic)
     ListIssues,
     ListArchived,
@@ -84,11 +84,11 @@ fuzz_target!(|input: StateMachineInput| {
                     let _ = db.get_issue(id);
                 }
             }
-            StateOp::AddComment { idx, content } => {
+            StateOp::AddLabel { idx, label } => {
                 if !issue_ids.is_empty() {
                     let id = &issue_ids[*idx % issue_ids.len()];
-                    let _ = db.add_comment(id, content);
-                    let _ = db.get_comments(id);
+                    let _ = db.add_label(id, label);
+                    let _ = db.get_labels(id);
                 }
             }
             StateOp::ListIssues => {

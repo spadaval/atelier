@@ -85,14 +85,6 @@ fuzz_target!(|input: CliOutputInput| {
         let _ = db.list_ready_issues();
     }
 
-    // Test comments with Unicode
-    if let Some(id) = created_ids.first() {
-        if let Some(desc) = &input.description {
-            let _ = db.add_comment(id, desc);
-        }
-        let _ = db.get_comments(id);
-    }
-
     // Test labels with Unicode (should be rejected but not panic)
     if let Some(id) = created_ids.first() {
         let label: String = input.title.chars().take(20).collect();
