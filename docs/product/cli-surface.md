@@ -35,7 +35,6 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier start`
 - `atelier abandon`
 - `atelier worktree for/status/merge/remove`
-- `atelier integrations ...`
 - `atelier maintenance ...`
 - `atelier import-beads <path>`
 - `atelier lint`
@@ -100,7 +99,6 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
-| `integrations` | Install or refresh optional external-tool integrations. | Acknowledges the targeted integration and the managed files it wrote or verified. | Integration name and success token. | Re-run the same integration command or inspect the managed files. |
 | `import-beads` | Import a repo-local or explicit Beads backup into canonical Atelier records. | Import summary, created-record counts, and any follow-up lint or review guidance. | Imported counts and success token. | `history`, `issue show <id>`, `lint`. |
 | `diagnostics` | Inspect local command telemetry for Atelier itself. | Stable local-only diagnostic output for the named probe, currently `slow`; advanced only, never a normal mission or issue next action and never the source of ready-work, blocker, validation, evidence-coverage, or closeout decisions. | Same diagnostic result trimmed to essential rows or counts. | `doctor`, performance follow-up issues, or the owning architecture docs. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |

@@ -22,8 +22,9 @@ that Atelier is evolving:
   `src/sync.rs`, and `src/utils.rs`: shared data types and operational helpers
   around identity, locks, sync, and CLI support behavior. Token accounting
   helpers were removed with the legacy usage command surface.
-- `resources/atelier/` and `resources/claude/`: renamed resource, rule, hook,
-  MCP, and integration assets that descend from Chainlink resource content.
+- `resources/atelier/`: renamed rule assets that descend from Chainlink
+  resource content. Claude Code hook, MCP, and integration assets were removed
+  from the target Atelier product surface.
 - `tests/` and `fuzz/`: inherited CLI integration, smoke, property, and fuzz
   coverage for current behavior.
 

@@ -29,19 +29,6 @@ fn main() {
         }
     }
 
-    // Track claude resource files
-    println!("cargo:rerun-if-changed=resources/claude/settings.json");
-    println!("cargo:rerun-if-changed=resources/claude/hooks/prompt-guard.py");
-    println!("cargo:rerun-if-changed=resources/claude/hooks/post-edit-check.py");
-    println!("cargo:rerun-if-changed=resources/claude/hooks/session-start.py");
-    println!("cargo:rerun-if-changed=resources/claude/hooks/pre-web-check.py");
-    println!("cargo:rerun-if-changed=resources/claude/hooks/work-check.py");
-    println!("cargo:rerun-if-changed=resources/claude/mcp/safe-fetch-server.py");
-    println!("cargo:rerun-if-changed=resources/mcp.json");
-
-    // Track atelier config
-    println!("cargo:rerun-if-changed=resources/atelier/hook-config.json");
-
     // Auto-discover and track all rule files in resources/atelier/rules/
     println!("cargo:rerun-if-changed=resources/atelier/rules/");
     let rules_dir = Path::new("resources/atelier/rules");

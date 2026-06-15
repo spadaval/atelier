@@ -23,7 +23,7 @@ Observed transcript: `target/debug/atelier --help`.
 | Evidence | `evidence record/show/attach/list` | Pass for normal help: predecessor `add` and `capture` are hidden from help. | Closed `atelier-u08r`, `atelier-of3h`; typed domain follow-up `atelier-ihz0` remains. |
 | Worktrees | `worktree` | Pass as advanced worktree management. | Closed runtime/worktree items; complexity follow-ups remain. |
 | State | `export`, `rebuild`, `import-beads` | Partial. State health is good, but predecessor import residue remains intentionally scoped to migration. | `atelier-10qm`, `atelier-d7lw` |
-| Integrations | `integrations claude install` | Pass as optional integration rather than core init behavior. | Closed setup work. |
+| Integrations | `integrations claude install` | Historical classification only. Superseded by `atelier-vau5`, which removes the integration command surface and bundled Claude hook/MCP assets from the target product. | `atelier-vau5` |
 | Maintenance/diagnostics | `maintenance`, `diagnostics`, `lint`, `doctor` | Pass for explicit advanced/health surfaces. | `atelier-c9ej` for freshness checks. |
 
 Observed transcript: `target/debug/atelier evidence --help`.
@@ -78,7 +78,7 @@ Classification:
 | `data:` | Canonical mission/evidence records are clean; tests and docs retain legacy fixtures/examples. Plan/generic record plumbing remains. | `atelier-ihz0`; `docs/product/work-model.md` stale example should be handled there or by docs freshness work. |
 | `state.db` | `.atelier/runtime/state.db` is the runtime path. Root `.atelier/state.db` is local rebuildable residue and is ignored by this audit patch. Some docs still mention legacy root state in compatibility/history contexts. | `atelier-fyrm` closed; stale docs can be swept by `atelier-c9ej` if not intentionally historical. |
 | `beads` / `chainlink` | `import-beads` is the explicit predecessor import bridge; `SPEC.md` and context mention repository provenance. | `atelier-10qm` for inherited residue cleanup where not product intent. |
-| `Claude` | Optional integration surface remains visible by design; core `init` no longer installs hooks. | Closed setup/integration work. |
+| `Claude` | Historical residue from the previous optional integration surface. Superseded by `atelier-vau5`, which removes Claude hook/MCP assets and keeps only explicitly historical mentions. | `atelier-vau5` |
 
 ## Current Open Owner Map
 

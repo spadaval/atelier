@@ -3,6 +3,7 @@ created_at: "2026-06-14T05:58:48.026698534+00:00"
 id: "atelier-vau5"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Remove Claude integrations command surface"
-updated_at: "2026-06-14T05:58:48.026698534+00:00"
+updated_at: "2026-06-14T07:50:27.020628074+00:00"
 ---
 
 ## Description

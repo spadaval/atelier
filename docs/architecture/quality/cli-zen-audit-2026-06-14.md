@@ -38,9 +38,10 @@ Tracked by `atelier-4yrt`.
 ### Root Command Hierarchy Makes Recovery Look Routine
 
 The root help is already grouped, but it gives `export`, `rebuild`,
-`import-beads`, `integrations`, `maintenance`, and `diagnostics` the same
-top-level weight as everyday commands such as `status`, `start`, `mission`,
-`issue`, and `evidence`.
+`import-beads`, `maintenance`, and `diagnostics` the same top-level weight as
+everyday commands such as `status`, `start`, `mission`, `issue`, and
+`evidence`. A historical version of this finding also named `integrations`;
+that command surface is removed by `atelier-vau5`.
 
 This conflicts with:
 

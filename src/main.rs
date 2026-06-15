@@ -61,9 +61,6 @@ Advanced work:
 State management:
   import-beads  Import an external Beads JSONL backup
 
-Integrations:
-  integrations  Install optional integrations such as Claude hooks
-
 Maintenance:
   maintenance   Run explicit destructive maintenance commands
   diagnostics   Inspect advanced local-only command diagnostics
@@ -200,12 +197,6 @@ enum Commands {
         output: Option<String>,
     },
 
-    /// Optional external tool integrations
-    Integrations {
-        #[command(subcommand)]
-        action: IntegrationCommands,
-    },
-
     /// First-class mission records
     Mission {
         #[command(subcommand)]
@@ -288,25 +279,6 @@ enum Commands {
         /// Repair ignored local runtime/cache/projection state; never edits tracked canonical records
         #[arg(long)]
         fix: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum IntegrationCommands {
-    /// Claude Code hooks and MCP setup
-    Claude {
-        #[command(subcommand)]
-        action: ClaudeIntegrationCommands,
-    },
-}
-
-#[derive(Subcommand)]
-enum ClaudeIntegrationCommands {
-    /// Install or update the optional Claude Code integration
-    Install {
-        /// Overwrite Atelier-managed Claude integration files
-        #[arg(short, long)]
-        force: bool,
     },
 }
 
@@ -1603,15 +1575,6 @@ fn run() -> Result<()> {
             )
         }
 
-        Commands::Integrations { action } => match action {
-            IntegrationCommands::Claude { action } => match action {
-                ClaudeIntegrationCommands::Install { force } => {
-                    let repo_root = storage_layout::find_repo_root()?;
-                    commands::integrations::install_claude(&repo_root, force)
-                }
-            },
-        },
-
         Commands::Mission { action } => match action {
             MissionCommands::Create {
                 title,
@@ -2069,6 +2032,9 @@ fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
         ["work", ..] => Some(
             "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, `atelier abandon`, or `atelier worktree ...`.",
         ),
+        ["integrations", ..] => Some(
+            "`atelier integrations` was removed; external assistant hooks are not an Atelier product feature.",
+        ),
         ["archive", ..] => Some(
             "`atelier archive` was removed; use workflow-backed `atelier issue close <id> --to archived --reason \"...\"` when the configured workflow allows archive.",
         ),
@@ -2165,11 +2131,6 @@ fn command_identity(command: &Commands) -> &'static str {
         }
         Commands::Rebuild { .. } => "rebuild",
         Commands::ImportBeads { .. } => "import-beads",
-        Commands::Integrations { action } => match action {
-            IntegrationCommands::Claude { action } => match action {
-                ClaudeIntegrationCommands::Install { .. } => "integrations claude install",
-            },
-        },
         Commands::Mission { action } => match action {
             MissionCommands::Create { .. } => "mission create",
             MissionCommands::Show { .. } => "mission show",

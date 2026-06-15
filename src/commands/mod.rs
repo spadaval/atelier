@@ -9,7 +9,6 @@ pub mod export;
 pub mod history;
 pub mod import;
 pub mod init;
-pub mod integrations;
 pub mod issue_workflow;
 pub mod label;
 pub mod mission;
