@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Move workflow review gates from issues to epics"
-updated_at: "2026-06-14T21:44:54.240353912+00:00"
+updated_at: "2026-06-15T04:30:47.496467352+00:00"
 ---
 
 ## Description

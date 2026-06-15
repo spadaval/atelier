@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Add mission worktree and epic branch commands"
-updated_at: "2026-06-14T21:45:09.697720927+00:00"
+updated_at: "2026-06-15T04:30:52.337797323+00:00"
 ---
 
 ## Description
