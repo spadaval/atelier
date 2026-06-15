@@ -61,21 +61,17 @@ fn create_close_reopen_search_and_blocking_examples() {
 }
 
 #[test]
-fn session_issue_delete_cascade_clears_active_issue() {
+fn session_issue_delete_cascade_has_no_runtime_session_state() {
     let (db, _dir) = setup_test_db();
     let issue_id = db.create_issue("Session issue", None, "medium").unwrap();
     let session_id = db.start_session().unwrap();
     db.set_session_issue(session_id, &issue_id).unwrap();
 
-    assert_eq!(
-        db.get_current_session().unwrap().unwrap().active_issue_id,
-        Some(issue_id.clone())
-    );
+    assert_eq!(session_id, 0);
+    assert!(db.get_current_session().unwrap().is_none());
 
     db.delete_issue(&issue_id).unwrap();
-    let session_after = db.get_current_session().unwrap().unwrap();
-    assert_eq!(session_after.id, session_id);
-    assert_eq!(session_after.active_issue_id, None);
+    assert!(db.get_current_session().unwrap().is_none());
 }
 
 proptest! {

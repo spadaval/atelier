@@ -55,6 +55,9 @@ impl Database {
         {
             return Ok(Vec::new());
         }
+        if !require_issue_file && self.get_issue(&issue_id)?.is_none() {
+            return Ok(Vec::new());
+        }
         let mut comments = Vec::new();
         for (idx, activity) in list_issue_activities(&state_dir, &issue_id)?
             .into_iter()
@@ -93,6 +96,9 @@ impl Database {
         };
         let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
         if require_issue_file && !issue_file.is_file() {
+            return Ok(());
+        }
+        if !require_issue_file && self.get_issue(issue_id)?.is_none() {
             return Ok(());
         }
         let event_type = match kind {

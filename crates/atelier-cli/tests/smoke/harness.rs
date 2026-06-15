@@ -224,13 +224,14 @@ impl SmokeHarness {
     }
 
     fn translate_issue_refs_owned<T: AsRef<str>>(&self, args: &[T]) -> Vec<String> {
+        let args = translate_legacy_test_command(args);
         args.iter()
             .enumerate()
             .map(|(index, arg)| {
-                if issue_ref_position(args, index) {
-                    self.translate_issue_ref(arg.as_ref())
+                if issue_ref_position(&args, index) {
+                    self.translate_issue_ref(arg)
                 } else {
-                    arg.as_ref().to_string()
+                    arg.to_string()
                 }
             })
             .collect()
@@ -341,6 +342,111 @@ fn command_offset<T: AsRef<str>>(args: &[T]) -> usize {
         .unwrap_or(args.len())
 }
 
+fn translate_legacy_test_command<T: AsRef<str>>(args: &[T]) -> Vec<String> {
+    let offset = command_offset(args);
+    let rest = args
+        .get(offset..)
+        .unwrap_or_default()
+        .iter()
+        .map(|arg| arg.as_ref())
+        .collect::<Vec<_>>();
+
+    match rest.as_slice() {
+        ["issue", "label", id, label, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "update", *id, "--label", *label].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "unlabel", id, label, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated
+                .extend(["issue", "update", *id, "--remove-label", *label].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "comment", id, text, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "note", *id, *text].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "relate", blocked, blocker, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "block", *blocked, *blocker].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "unrelate", blocked, blocker, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "unblock", *blocked, *blocker].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "related", id, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "blocked", *id].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "search", query, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["search", *query].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "tree", tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["graph", "tree"].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "next", tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "list", "--ready"].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        ["issue", "subissue", parent, title, tail @ ..] => {
+            let mut translated = args[..offset]
+                .iter()
+                .map(|arg| arg.as_ref().to_string())
+                .collect::<Vec<_>>();
+            translated.extend(["issue", "create", *title, "--parent", *parent].map(str::to_string));
+            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
+            translated
+        }
+        _ => args.iter().map(|arg| arg.as_ref().to_string()).collect(),
+    }
+}
+
 fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
     let offset = command_offset(args);
     if index <= offset {
@@ -367,6 +473,14 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
         ["milestone", "add" | "remove", ..] => index > offset + 2,
         ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
             index == offset + 2
+        }
+        ["issue", "note", ..] => index == offset + 2,
+        ["issue", "create", ..] => {
+            index > offset + 2
+                && args
+                    .get(index - 1)
+                    .map(|arg| arg.as_ref() == "--parent")
+                    .unwrap_or(false)
         }
         ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
         ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {

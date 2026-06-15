@@ -596,7 +596,7 @@ fn write_rebuilt_database(
             for issue in &rebuild.issues {
                 let mut row = issue.issue.clone();
                 row.parent_id = None;
-                row.description = Some(issue.sections.searchable_text());
+                row.description = Some(issue.sections.description.clone());
                 db.insert_issue_rebuild(&row)?;
             }
             for (child_id, parent_id) in &rebuild.child_edges {
@@ -990,7 +990,7 @@ mod tests {
                 "Plan",
                 "open",
                 Some("Plan body"),
-                r#"{"revision":1,"revisions":[]}"#,
+                r#"{"revision":1,"revisions":[{"revision":1,"reason":"initial","body":"Plan body"}]}"#,
             )
             .unwrap();
         let evidence_id = db
@@ -999,7 +999,7 @@ mod tests {
                 "Evidence",
                 "pass",
                 Some("Evidence body"),
-                r#"{"kind":"test","result":"pass"}"#,
+                r#"{"kind":"test","captured_at":"2026-06-15T12:00:00Z","result":"pass"}"#,
             )
             .unwrap();
         db.add_record_link("mission", &mission_id, "plan", &plan_id, "planned_by")
@@ -1141,18 +1141,11 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_recreates_canonical_projection_and_resets_runtime_state() {
+    fn rebuild_recreates_canonical_projection_without_runtime_state() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Runtime reset", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
-
-        let session_id = db.start_session().unwrap();
-        db.set_session_issue(session_id, &id).unwrap();
-        db.start_work_association(&id, Some("branch"), Some("/tmp/worktree"))
-            .unwrap();
-        assert!(db.get_current_session().unwrap().is_some());
-        assert!(db.get_active_work_association().unwrap().is_some());
 
         let db_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &db_path).unwrap();
@@ -1165,7 +1158,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_projection_preserves_valid_runtime_state() {
+    fn refresh_projection_rebuilds_without_runtime_state() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::create_dir_all(db_path.parent().unwrap()).unwrap();
@@ -1176,30 +1169,14 @@ mod tests {
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
 
-        let session_id = db.start_session().unwrap();
-        db.set_session_issue(session_id, &id).unwrap();
-        db.start_work_association(&id, Some("branch"), Some("/tmp/worktree"))
-            .unwrap();
         drop(db);
 
         refresh_projection_preserving_runtime(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
 
         assert!(refreshed.require_issue(&id).is_ok());
-        assert_eq!(
-            refreshed
-                .get_current_session()
-                .unwrap()
-                .and_then(|session| session.active_issue_id),
-            Some(id.clone())
-        );
-        assert_eq!(
-            refreshed
-                .get_active_work_association()
-                .unwrap()
-                .map(|work| work.issue_id),
-            Some(id)
-        );
+        assert!(refreshed.get_current_session().unwrap().is_none());
+        assert!(refreshed.get_active_work_association().unwrap().is_none());
     }
 
     #[test]

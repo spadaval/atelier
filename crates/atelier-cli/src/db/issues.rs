@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::params;
-use std::path::Path;
 
 use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
@@ -18,9 +17,6 @@ impl Database {
                 "Title exceeds maximum length of {} characters",
                 MAX_TITLE_LEN
             );
-        }
-        if let Some(description) = &issue.description {
-            validate_rebuild_description_length(description)?;
         }
 
         self.conn.execute(
@@ -43,6 +39,9 @@ impl Database {
     }
 
     pub fn insert_issue_import(&self, issue: &Issue) -> Result<()> {
+        if let Some(description) = &issue.description {
+            validate_description_length(description)?;
+        }
         self.insert_issue_rebuild(issue)?;
         Ok(())
     }
@@ -374,17 +373,9 @@ impl Database {
     }
 }
 
-fn validate_rebuild_description_length(description: &str) -> Result<()> {
+fn validate_description_length(description: &str) -> Result<()> {
     if description.len() <= MAX_DESCRIPTION_LEN {
         return Ok(());
-    }
-
-    if let Ok(sections) =
-        crate::record_store::parse_issue_sections(description, Path::new("<issue description>"))
-    {
-        if sections.description.len() <= MAX_DESCRIPTION_LEN {
-            return Ok(());
-        }
     }
 
     bail!(

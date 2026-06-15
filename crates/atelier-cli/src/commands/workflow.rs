@@ -1542,7 +1542,6 @@ mod tests {
                 "durable_state_current",
                 "issue_sections_parseable",
                 "no_open_work",
-                "evidence_attached",
                 "no_open_blockers",
                 "validation_criteria_satisfied",
                 "no_blocking_lints",

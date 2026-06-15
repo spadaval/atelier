@@ -411,29 +411,23 @@ fn test_blocked_becomes_ready_when_blocker_closed() {
 // ==================== Sessions Tests ====================
 
 #[test]
-fn test_start_and_get_session() {
+fn test_session_runtime_adapter_is_removed() {
     let (db, _dir) = setup_test_db();
 
     let id = db.start_session().unwrap();
-    assert!(id > 0);
-
-    let session = db.get_current_session().unwrap().unwrap();
-    assert_eq!(session.id, id);
-    assert!(session.ended_at.is_none());
-    assert!(session.active_issue_id.is_none());
+    assert_eq!(id, 0);
+    assert!(db.get_current_session().unwrap().is_none());
 }
 
 #[test]
-fn test_set_session_issue() {
+fn test_set_session_issue_is_removed_noop() {
     let (db, _dir) = setup_test_db();
 
     let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
     let session_id = db.start_session().unwrap();
 
     db.set_session_issue(session_id, &issue_id).unwrap();
-
-    let session = db.get_current_session().unwrap().unwrap();
-    assert_eq!(session.active_issue_id, Some(issue_id));
+    assert!(db.get_current_session().unwrap().is_none());
 }
 
 // ==================== Search Tests ====================
@@ -469,7 +463,7 @@ fn test_search_issues_by_description() {
 }
 
 #[test]
-fn test_search_issues_by_comment() {
+fn test_search_issues_ignores_activity_sidecars() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Some issue", None, "medium").unwrap();
@@ -477,8 +471,7 @@ fn test_search_issues_by_comment() {
         .unwrap();
 
     let results = db.search_issues("authentication").unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].id, id);
+    assert!(results.is_empty());
 }
 
 // ==================== Relations Tests ====================
