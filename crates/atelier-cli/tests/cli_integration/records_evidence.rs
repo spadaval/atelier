@@ -2260,10 +2260,9 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
         "{stderr}"
     );
     assert!(
-        stderr.contains("`atelier workflow init` was removed"),
+        !stderr.contains("was removed") && !stderr.contains("atelier init"),
         "{stderr}"
     );
-    assert!(stderr.contains("atelier init"), "{stderr}");
 }
 
 #[test]

@@ -414,13 +414,12 @@ Removed command surfaces:
   Standalone `import-beads` remains a hidden transitional command for explicit
   backup paths until migration cleanup removes it.
 
-When a removed or commonly retried command is rejected, the CLI keeps the
-command unsupported and appends a corrective replacement. Examples include
-`finish`, `current-work`, `issue new`, `work start`, `archive`, `session`, and
-`timer`. `workflow check` remains a hidden low-level diagnostic, but unsupported
-forms such as JSON mode also point operators to `issue transition <id>
---options`, `mission status`, `lint`, and `doctor` instead of teaching it as the
-normal workflow path.
+When a removed or commonly retried command is rejected, the CLI lets Clap report
+the path as unknown or invalid without a compatibility guidance shim. Examples
+include `finish`, `current-work`, `issue new`, `work start`, `archive`,
+`session`, and `timer`. `workflow check` remains a hidden low-level diagnostic;
+unsupported forms such as JSON mode fail as ordinary invalid arguments instead
+of teaching a legacy workflow path.
 
 ## Low-Level Debug And Repair
 

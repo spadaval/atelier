@@ -104,14 +104,8 @@ fn test_integrations_command_is_removed() {
         stderr.contains("unrecognized subcommand 'integrations'"),
         "{stderr}"
     );
-    assert!(
-        stderr.contains("`atelier integrations` was removed"),
-        "{stderr}"
-    );
-    assert!(
-        stderr.contains("external assistant hooks are not an Atelier product feature"),
-        "{stderr}"
-    );
+    assert!(!stderr.contains("was removed"), "{stderr}");
+    assert!(!stderr.contains("external assistant hooks"), "{stderr}");
     assert!(!stderr.contains("Claude"), "{stderr}");
 
     assert!(!dir.path().join(".claude").exists());
@@ -752,8 +746,15 @@ fn test_generic_note_command_rejects_with_record_specific_guidance() {
     );
 
     assert!(!success, "generic note command should be removed");
-    assert!(stderr.contains("was removed"));
-    assert!(stderr.contains("atelier issue note atelier-missing"));
+    assert!(
+        stderr.contains("unrecognized subcommand 'note'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("was removed"), "{stderr}");
+    assert!(
+        !stderr.contains("atelier issue note atelier-missing"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -766,13 +767,14 @@ fn test_generic_link_command_rejects_with_record_specific_guidance() {
     );
 
     assert!(!success, "generic link command should be removed");
-    assert!(stderr.contains("`atelier link` was removed"));
-    assert!(stderr.contains("atelier mission add-work"));
-    assert!(stderr.contains("atelier mission unlink"));
-    assert!(stderr.contains("atelier issue block"));
-    assert!(stderr.contains("atelier issue unblock"));
-    assert!(stderr.contains("atelier evidence attach"));
-    assert!(stderr.contains("atelier graph impact"));
+    assert!(
+        stderr.contains("unrecognized subcommand 'link'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("was removed"), "{stderr}");
+    assert!(!stderr.contains("atelier mission add-work"), "{stderr}");
+    assert!(!stderr.contains("atelier issue block"), "{stderr}");
+    assert!(!stderr.contains("atelier evidence attach"), "{stderr}");
 }
 
 #[test]
@@ -2346,7 +2348,7 @@ fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
 }
 
 #[test]
-fn test_generic_link_rejection_names_record_specific_replacements() {
+fn test_generic_link_rejection_is_plain_unknown_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2356,10 +2358,14 @@ fn test_generic_link_rejection_names_record_specific_replacements() {
         &["link", "add", "mission", "atelier-none", "issue", "1"],
     );
     assert!(!success, "generic link command should be removed");
-    assert!(stderr.contains("`atelier link` was removed"));
-    assert!(stderr.contains("atelier mission add-work"));
-    assert!(stderr.contains("atelier issue block"));
-    assert!(stderr.contains("atelier evidence attach"));
+    assert!(
+        stderr.contains("unrecognized subcommand 'link'"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("was removed"), "{stderr}");
+    assert!(!stderr.contains("atelier mission add-work"), "{stderr}");
+    assert!(!stderr.contains("atelier issue block"), "{stderr}");
+    assert!(!stderr.contains("atelier evidence attach"), "{stderr}");
 }
 
 #[test]
@@ -2407,70 +2413,19 @@ fn test_removed_aliases_fail_as_unknown_commands() {
 }
 
 #[test]
-fn test_removed_commands_suggest_supported_replacements() {
+fn test_removed_commands_fail_without_compatibility_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    for (args, expected) in [
-        (
-            vec!["workflow", "check", "--json"],
-            vec![
-                "`atelier workflow check` is not the normal workflow-readiness path",
-                "atelier issue transition <id> --options",
-                "atelier mission status [<id>]",
-            ],
-        ),
-        (
-            vec!["finish"],
-            vec![
-                "`atelier finish` was removed",
-                "atelier issue close <id> --reason",
-                "atelier issue transition <id> --options",
-            ],
-        ),
-        (
-            vec!["current-work"],
-            vec![
-                "`atelier current-work` was removed",
-                "atelier status",
-                "atelier issue transition <id> --options",
-            ],
-        ),
-        (
-            vec!["issue", "new", "Replacement test"],
-            vec!["`atelier issue new` was removed", "atelier issue create"],
-        ),
-        (
-            vec!["work", "start", "atelier-z1p8"],
-            vec![
-                "`atelier work start` was removed",
-                "atelier start <issue-id>",
-                "atelier worktree for <issue-id>",
-            ],
-        ),
-        (
-            vec!["archive", "add", "atelier-z1p8"],
-            vec![
-                "`atelier archive` was removed",
-                "atelier issue close <id> --to archived --reason",
-            ],
-        ),
-        (
-            vec!["session", "status"],
-            vec![
-                "`atelier session` was removed",
-                "atelier start <issue-id>",
-                "atelier issue note <id>",
-            ],
-        ),
-        (
-            vec!["timer"],
-            vec![
-                "`atelier timer` was removed",
-                "atelier status",
-                "atelier history --issue <id>",
-            ],
-        ),
+    for args in [
+        vec!["workflow", "check", "--json"],
+        vec!["finish"],
+        vec!["current-work"],
+        vec!["issue", "new", "Replacement test"],
+        vec!["work", "start", "atelier-z1p8"],
+        vec!["archive", "add", "atelier-z1p8"],
+        vec!["session", "status"],
+        vec!["timer"],
     ] {
         let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} unexpectedly succeeded");
@@ -2478,11 +2433,15 @@ fn test_removed_commands_suggest_supported_replacements() {
             stdout.is_empty(),
             "{args:?} should not execute a compatibility path:\n{stdout}"
         );
-        for expected_text in expected {
-            assert!(
-                stderr.contains(expected_text),
-                "{args:?} stderr missing {expected_text:?}:\n{stderr}"
-            );
-        }
+        assert!(
+            stderr.contains("unrecognized subcommand")
+                || stderr.contains("unexpected argument")
+                || stderr.contains("Usage:"),
+            "{args:?} did not fail through Clap:\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("was removed"),
+            "{args:?} emitted compatibility guidance:\n{stderr}"
+        );
     }
 }

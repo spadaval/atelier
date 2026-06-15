@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T18:37:48.539380911+00:00"
+status: "done"
 title: "Own CLI parser dispatch tracing telemetry and rendering in atelier-cli"
-updated_at: "2026-06-15T15:16:21.401620485+00:00"
+updated_at: "2026-06-15T18:37:48.539380911+00:00"
 ---
 
 ## Description

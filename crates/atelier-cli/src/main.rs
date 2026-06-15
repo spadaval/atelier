@@ -137,13 +137,6 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Removed generic activity note commands
-    #[command(hide = true)]
-    Note {
-        #[command(subcommand)]
-        action: NoteCommands,
-    },
-
     /// Export canonical state
     Export {
         /// State directory for canonical export
@@ -423,19 +416,6 @@ enum GraphCommands {
         /// Show a bounded, scan-friendly hierarchy instead of the full tree
         #[arg(long)]
         compact: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum NoteCommands {
-    /// Removed: use record-specific note commands
-    Add {
-        target_kind: String,
-        target_id: String,
-        text: String,
-        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
-        #[arg(long, default_value = "note")]
-        kind: String,
     },
 }
 
@@ -1106,28 +1086,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Note { action } => match action {
-            NoteCommands::Add {
-                target_kind,
-                target_id,
-                text,
-                kind,
-            } => {
-                let replacement = match target_kind.as_str() {
-                    "issue" => format!("atelier issue note {target_id} {text:?} --kind {kind}"),
-                    "mission" => {
-                        format!("atelier mission note {target_id} {text:?} --kind {kind}")
-                    }
-                    _ => "atelier issue note <id> \"...\" or atelier mission note <id> \"...\""
-                        .to_string(),
-                };
-                bail!(
-                    "`atelier note add <kind> <id>` was removed. Use `{}` instead.",
-                    replacement
-                )
-            }
-        },
-
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
             let state_dir = output
@@ -1609,89 +1567,13 @@ fn parse_cli_or_exit() -> Cli {
     match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let args = env::args().skip(1).collect::<Vec<_>>();
-            let removed_guidance = removed_command_guidance(&args);
             let exit_code = error.exit_code();
             if let Err(print_error) = error.print() {
                 eprintln!("{print_error}");
             }
-            if let Some(guidance) = removed_guidance {
-                eprintln!();
-                eprintln!("{guidance}");
-            }
             std::process::exit(exit_code);
         }
     }
-}
-
-fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
-    let path = command_path_tokens(args);
-    match path.as_slice() {
-        ["workflow", "check", ..] => Some(
-            "`atelier workflow check` is not the normal workflow-readiness path; use `atelier issue transition <id> --options`, `atelier mission status [<id>]`, `atelier lint`, or `atelier doctor`.",
-        ),
-        ["workflow", "init", ..] => Some(
-            "`atelier workflow init` was removed; use root `atelier init` to create `.atelier/workflow.yaml` during tracker setup.",
-        ),
-        ["finish", ..] => Some(
-            "`atelier finish` was removed; use `atelier issue close <id> --reason \"...\"` or inspect `atelier issue transition <id> --options`.",
-        ),
-        ["current-work", ..] => Some(
-            "`atelier current-work` was removed; use `atelier status` for current-work orientation or `atelier issue transition <id> --options` for next steps.",
-        ),
-        ["issue", "new", ..] => Some(
-            "`atelier issue new` was removed; use `atelier issue create \"title\"`.",
-        ),
-        ["work", "start", ..] => Some(
-            "`atelier work start` was removed; use root `atelier start <issue-id>` for tracked work or `atelier worktree for <issue-id>` for an issue worktree.",
-        ),
-        ["work", ..] => Some(
-            "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, issue transitions, or `atelier worktree ...`.",
-        ),
-        ["integrations", ..] => Some(
-            "`atelier integrations` was removed; external assistant hooks are not an Atelier product feature.",
-        ),
-        ["link", ..] => Some(
-            "`atelier link` was removed. Use record-specific commands: `atelier mission add-work` or `atelier mission unlink` for mission work, `atelier issue block` or `atelier issue unblock` for blockers, `atelier evidence attach` for evidence, and `atelier graph impact` or `atelier graph tree` for inspection.",
-        ),
-        ["archive", ..] => Some(
-            "`atelier archive` was removed; use workflow-backed `atelier issue close <id> --to archived --reason \"...\"` when the configured workflow allows archive.",
-        ),
-        ["session", ..] => Some(
-            "`atelier session` was removed; use `atelier start <issue-id>` to begin tracked work, `atelier status` for orientation, and `atelier issue note <id> \"...\"` for handoff context.",
-        ),
-        ["timer", ..] => Some(
-            "`atelier timer` was removed; use `atelier status` and `atelier history --issue <id>` for work orientation and activity history.",
-        ),
-        _ => None,
-    }
-}
-
-fn command_path_tokens(args: &[String]) -> Vec<&str> {
-    let mut tokens = Vec::new();
-    let mut index = 0;
-    while index < args.len() {
-        let arg = args[index].as_str();
-        match arg {
-            "-q" | "--quiet" => {
-                index += 1;
-            }
-            "--log-level" | "--log-format" => {
-                index += 2;
-            }
-            _ if arg.starts_with("--log-level=") || arg.starts_with("--log-format=") => {
-                index += 1;
-            }
-            _ if arg.starts_with('-') => {
-                index += 1;
-            }
-            _ => {
-                tokens.push(arg);
-                index += 1;
-            }
-        }
-    }
-    tokens
 }
 
 fn command_identity(command: &Commands) -> &'static str {
@@ -1716,9 +1598,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Graph { action } => match action {
             GraphCommands::Impact { .. } => "graph impact",
             GraphCommands::Tree { .. } => "graph tree",
-        },
-        Commands::Note { action } => match action {
-            NoteCommands::Add { .. } => "note add",
         },
         Commands::Export { check, .. } => {
             if *check {
