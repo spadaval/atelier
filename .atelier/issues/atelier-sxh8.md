@@ -3,6 +3,7 @@ created_at: "2026-06-14T03:47:10.898366522+00:00"
 id: "atelier-sxh8"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -14,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Remove generic link command and normalize relationship ownership"
-updated_at: "2026-06-14T03:47:10.898366522+00:00"
+updated_at: "2026-06-14T07:50:06.469728470+00:00"
 ---
 
 ## Description
