@@ -378,6 +378,14 @@ Removed command surfaces:
   predecessor imports until `init --import-beads` owns the normal migration
   path.
 
+When a removed or commonly retried command is rejected, the CLI keeps the
+command unsupported and appends a corrective replacement. Examples include
+`finish`, `current-work`, `issue new`, `work start`, `archive`, `session`, and
+`timer`. `workflow check` remains a hidden low-level diagnostic, but unsupported
+forms such as JSON mode also point operators to `issue transition <id>
+--options`, `mission status`, `lint`, and `doctor` instead of teaching it as the
+normal workflow path.
+
 ## Low-Level Debug And Repair
 
 The implementation may retain low-level commands such as `atelier export`,

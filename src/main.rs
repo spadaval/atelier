@@ -1391,7 +1391,7 @@ fn main() -> Result<()> {
 }
 
 fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_cli_or_exit();
     init_tracing(&cli.log_level, &cli.log_format);
     let quiet = cli.quiet;
     let command_name = command_identity(&cli.command);
@@ -1976,6 +1976,86 @@ fn run() -> Result<()> {
         success,
     );
     result
+}
+
+fn parse_cli_or_exit() -> Cli {
+    match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let args = env::args().skip(1).collect::<Vec<_>>();
+            let removed_guidance = removed_command_guidance(&args);
+            let exit_code = error.exit_code();
+            if let Err(print_error) = error.print() {
+                eprintln!("{print_error}");
+            }
+            if let Some(guidance) = removed_guidance {
+                eprintln!();
+                eprintln!("{guidance}");
+            }
+            std::process::exit(exit_code);
+        }
+    }
+}
+
+fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
+    let path = command_path_tokens(args);
+    match path.as_slice() {
+        ["workflow", "check", ..] => Some(
+            "`atelier workflow check` is not the normal workflow-readiness path; use `atelier issue transition <id> --options`, `atelier mission status [<id>]`, `atelier lint`, or `atelier doctor`.",
+        ),
+        ["finish", ..] => Some(
+            "`atelier finish` was removed; use `atelier issue close <id> --reason \"...\"` or inspect `atelier issue transition <id> --options`.",
+        ),
+        ["current-work", ..] => Some(
+            "`atelier current-work` was removed; use `atelier status` for current-work orientation or `atelier issue transition <id> --options` for next steps.",
+        ),
+        ["issue", "new", ..] => Some(
+            "`atelier issue new` was removed; use `atelier issue create \"title\"`.",
+        ),
+        ["work", "start", ..] => Some(
+            "`atelier work start` was removed; use root `atelier start <issue-id>` for tracked work or `atelier worktree for <issue-id>` for an issue worktree.",
+        ),
+        ["work", ..] => Some(
+            "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, `atelier abandon`, or `atelier worktree ...`.",
+        ),
+        ["archive", ..] => Some(
+            "`atelier archive` was removed; use workflow-backed `atelier issue close <id> --to archived --reason \"...\"` when the configured workflow allows archive.",
+        ),
+        ["session", ..] => Some(
+            "`atelier session` was removed; use `atelier start <issue-id>` to begin tracked work, `atelier status` for orientation, and `atelier note add issue <id> \"...\"` for handoff context.",
+        ),
+        ["timer", ..] => Some(
+            "`atelier timer` was removed; use `atelier status` and `atelier history --issue <id>` for work orientation and activity history.",
+        ),
+        _ => None,
+    }
+}
+
+fn command_path_tokens(args: &[String]) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        match arg {
+            "-q" | "--quiet" => {
+                index += 1;
+            }
+            "--log-level" | "--log-format" => {
+                index += 2;
+            }
+            _ if arg.starts_with("--log-level=") || arg.starts_with("--log-format=") => {
+                index += 1;
+            }
+            _ if arg.starts_with('-') => {
+                index += 1;
+            }
+            _ => {
+                tokens.push(arg);
+                index += 1;
+            }
+        }
+    }
+    tokens
 }
 
 fn command_identity(command: &Commands) -> &'static str {

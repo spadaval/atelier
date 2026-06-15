@@ -2361,6 +2361,87 @@ fn test_removed_aliases_fail_as_unknown_commands() {
     }
 }
 
+#[test]
+fn test_removed_commands_suggest_supported_replacements() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for (args, expected) in [
+        (
+            vec!["workflow", "check", "--json"],
+            vec![
+                "`atelier workflow check` is not the normal workflow-readiness path",
+                "atelier issue transition <id> --options",
+                "atelier mission status [<id>]",
+            ],
+        ),
+        (
+            vec!["finish"],
+            vec![
+                "`atelier finish` was removed",
+                "atelier issue close <id> --reason",
+                "atelier issue transition <id> --options",
+            ],
+        ),
+        (
+            vec!["current-work"],
+            vec![
+                "`atelier current-work` was removed",
+                "atelier status",
+                "atelier issue transition <id> --options",
+            ],
+        ),
+        (
+            vec!["issue", "new", "Replacement test"],
+            vec!["`atelier issue new` was removed", "atelier issue create"],
+        ),
+        (
+            vec!["work", "start", "atelier-z1p8"],
+            vec![
+                "`atelier work start` was removed",
+                "atelier start <issue-id>",
+                "atelier worktree for <issue-id>",
+            ],
+        ),
+        (
+            vec!["archive", "add", "atelier-z1p8"],
+            vec![
+                "`atelier archive` was removed",
+                "atelier issue close <id> --to archived --reason",
+            ],
+        ),
+        (
+            vec!["session", "status"],
+            vec![
+                "`atelier session` was removed",
+                "atelier start <issue-id>",
+                "atelier note add issue <id>",
+            ],
+        ),
+        (
+            vec!["timer"],
+            vec![
+                "`atelier timer` was removed",
+                "atelier status",
+                "atelier history --issue <id>",
+            ],
+        ),
+    ] {
+        let (success, stdout, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(!success, "{args:?} unexpectedly succeeded");
+        assert!(
+            stdout.is_empty(),
+            "{args:?} should not execute a compatibility path:\n{stdout}"
+        );
+        for expected_text in expected {
+            assert!(
+                stderr.contains(expected_text),
+                "{args:?} stderr missing {expected_text:?}:\n{stderr}"
+            );
+        }
+    }
+}
+
 // ==================== Issue Creation Tests ====================
 
 #[test]
