@@ -26,9 +26,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-15T18:59:02.074088774+00:00"
+status: "done"
 title: "Epic: Root package deletion and warning-free closeout"
-updated_at: "2026-06-15T18:58:44.335338085+00:00"
+updated_at: "2026-06-15T18:59:02.074088774+00:00"
 ---
 
 ## Description
