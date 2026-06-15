@@ -346,17 +346,14 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         }
     }
 
-    print_mission_heading("Active Work");
+    print_mission_heading("Current Work");
     if active_work.is_empty() {
         println!("(none)");
     } else {
-        for work in active_work {
+        for issue in active_work {
             println!(
-                "  {} [{}] branch={} worktree={}",
-                work.issue_id,
-                work.status,
-                work.branch.as_deref().unwrap_or("(none)"),
-                work.worktree_path.as_deref().unwrap_or("(none)")
+                "  {}",
+                crate::commands::status::format_current_work_line(&issue)
             );
         }
     }
@@ -2193,19 +2190,12 @@ fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &
     }
 }
 
-fn active_work_for_mission(
-    db: &Database,
-    mission_id: &str,
-) -> Result<Vec<crate::models::WorkAssociation>> {
+fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
     let issue_ids = mission_issue_ids(db, mission_id)?;
-    let Some(active_work) = db.get_active_work_association()? else {
-        return Ok(Vec::new());
-    };
-    if issue_ids.contains(&active_work.issue_id) {
-        Ok(vec![active_work])
-    } else {
-        Ok(Vec::new())
-    }
+    Ok(crate::commands::status::current_work_issues(db)?
+        .into_iter()
+        .filter(|issue| issue_ids.contains(&issue.id))
+        .collect())
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {

@@ -365,9 +365,9 @@ work may therefore differ across branches or worktrees until the relevant
 Markdown changes are merged or rebased through Git. Starting work is a workflow
 status change on the issue record. Completing or pausing work is likewise a
 workflow transition, an issue note, or an evidence record on the issue; it is
-not runtime association cleanup. Root `atelier abandon [issue-id]` and root
-`atelier repair [issue-id]` are classified for removal because local
-active-pointer cleanup is no longer a product concept.
+not runtime association cleanup. The old root abandon and root repair
+active-pointer cleanup commands have been removed because local active-pointer
+cleanup is no longer a product concept.
 
 Parallel work within one mission uses the shared mission worktree and epic
 branches as the coordination boundary. Separate issue worktrees are exceptional

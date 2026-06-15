@@ -39,8 +39,6 @@ Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
   start         Start tracked work on an issue
-  abandon       Clear active local work without changing issue status
-  repair        Clear stale active local work after interrupted worktree cleanup
 
 Issues:
   issue         Create, list, show, update, close, and manage blockers
@@ -85,8 +83,6 @@ Common commands:
   atelier history --mission <id>
   atelier history --issue <id>
   atelier start <issue-id>
-  atelier abandon [issue-id] --reason \"...\"
-  atelier repair [issue-id]
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
   atelier doctor
@@ -139,21 +135,6 @@ enum Commands {
 
     /// Start tracked work on an issue
     Start { id: String },
-
-    /// Clear active local work without changing issue status
-    Abandon {
-        /// Issue ID; defaults to the active work association
-        id: Option<String>,
-        /// Reason for abandoning the local work association
-        #[arg(long)]
-        reason: String,
-    },
-
-    /// Clear stale active local work after interrupted worktree cleanup
-    Repair {
-        /// Issue ID; defaults to the active work association
-        id: Option<String>,
-    },
 
     /// Issue lifecycle commands (create, show, list, close, ...)
     Issue {
@@ -1119,29 +1100,6 @@ fn run() -> Result<()> {
             commands::work::start_lifecycle(&state_dir, &db_path, &id)
         }
 
-        Commands::Abandon { id, reason } => {
-            let db = runtime_db()?;
-            let id = match id {
-                Some(id) => resolve_issue_arg(&db, &id)?,
-                None => db
-                    .get_active_work_association()?
-                    .map(|work| work.issue_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("No active work. Use `atelier start <issue-id>` first.")
-                    })?,
-            };
-            commands::work::abandon(&db, &id, &reason)
-        }
-
-        Commands::Repair { id } => {
-            let db = runtime_db()?;
-            let id = match id {
-                Some(id) => Some(resolve_issue_arg(&db, &id)?),
-                None => None,
-            };
-            commands::work::repair_active(&db, id.as_deref())
-        }
-
         Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Search { query } => {
@@ -1705,7 +1663,13 @@ fn removed_command_guidance(args: &[String]) -> Option<&'static str> {
             "`atelier work start` was removed; use root `atelier start <issue-id>` for tracked work or `atelier worktree for <issue-id>` for an issue worktree.",
         ),
         ["work", ..] => Some(
-            "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, `atelier abandon`, or `atelier worktree ...`.",
+            "`atelier work` was removed; use root `atelier start <issue-id>`, `atelier status`, or `atelier worktree ...`.",
+        ),
+        ["abandon", ..] => Some(
+            "`atelier abandon` was removed; use issue workflow transitions plus `atelier issue note <id> \"...\"` or evidence for durable pause and handoff context.",
+        ),
+        ["repair", ..] => Some(
+            "`atelier repair` was removed; use `atelier doctor --fix` for ignored runtime/projection repair or `atelier worktree status` and `atelier worktree repair <id>` for stale worktree metadata.",
         ),
         ["integrations", ..] => Some(
             "`atelier integrations` was removed; external assistant hooks are not an Atelier product feature.",
@@ -1759,8 +1723,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Man { .. } => "man",
         Commands::Status => "status",
         Commands::Start { .. } => "start",
-        Commands::Abandon { .. } => "abandon",
-        Commands::Repair { .. } => "repair",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",

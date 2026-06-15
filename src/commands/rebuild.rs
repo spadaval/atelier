@@ -681,10 +681,8 @@ fn copy_runtime_state(db: &Database, source_db_path: &Path) -> Result<()> {
         db.conn.execute(
             "INSERT OR IGNORE INTO sessions
              (id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id)
-             SELECT id, started_at, ended_at, active_issue_id, handoff_notes, last_action, agent_id
-             FROM runtime_src.sessions
-             WHERE active_issue_id IS NULL
-                OR EXISTS (SELECT 1 FROM issues WHERE issues.id = runtime_src.sessions.active_issue_id)",
+             SELECT id, started_at, ended_at, NULL, handoff_notes, last_action, agent_id
+             FROM runtime_src.sessions",
             [],
         )?;
         db.conn.execute(
@@ -1186,7 +1184,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_projection_preserves_valid_runtime_state() {
+    fn refresh_projection_preserves_worktree_metadata_but_clears_active_session_pointer() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::create_dir_all(db_path.parent().unwrap()).unwrap();
@@ -1212,11 +1210,11 @@ mod tests {
                 .get_current_session()
                 .unwrap()
                 .and_then(|session| session.active_issue_id),
-            Some(id.clone())
+            None
         );
         assert_eq!(
             refreshed
-                .get_active_work_association()
+                .get_work_association(&id)
                 .unwrap()
                 .map(|work| work.issue_id),
             Some(id)

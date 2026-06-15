@@ -24,108 +24,22 @@ struct WorktreeStatus {
     export_errors: Vec<String>,
 }
 
-fn start_work_association(db: &Database, id: &str) -> Result<()> {
-    let issue = db.require_issue(id)?;
-    let branch = current_branch().ok();
-    let path = env::current_dir()?.to_string_lossy().to_string();
-    db.start_work_association(id, branch.as_deref(), Some(&path))?;
-    crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
-    ensure_session_work(db, id)?;
-    println!("Started work on {} {}", issue.id, issue.title);
-    if let Some(branch) = branch {
-        println!("Branch: {branch}");
-    }
-    println!("Worktree: {path}");
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Inspect checkout status: atelier status");
-    if let Some(mission_id) = containing_mission(db, id)? {
-        println!("  Inspect mission selection and blockers: atelier mission status {mission_id}");
-    }
-    println!("  Inspect work transitions: atelier issue transition {id} --options");
-    Ok(())
-}
-
 pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()> {
     let db = Database::open(db_path)?;
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
     ensure_clean_worktree()?;
-    if let Some(active) = db.get_active_work_association()? {
-        if active.issue_id != id {
-            bail!(
-                "Worktree already has active issue {}. Use `atelier abandon {} --reason \"...\"` before starting {}.",
-                active.issue_id,
-                active.issue_id,
-                id
-            );
-        }
-        return start_work_association(&db, id);
-    }
+    let mission_id = containing_mission(&db, id)?;
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
-    drop(db);
-
-    let db = Database::open(db_path)?;
-    start_work_association(&db, id)
-}
-
-pub fn abandon(db: &Database, id: &str, reason: &str) -> Result<()> {
-    let issue = db.require_issue(id)?;
-    let abandoned = db.abandon_work_association(id)?;
-    if abandoned {
-        crate::commands::activity_log::record_work_abandoned(id, reason)?;
-        println!("Abandoned work on {} {}", issue.id, issue.title);
-        println!("Reason:   {reason}");
-    } else {
-        println!("No active work association for {}", issue.id);
-    }
-    Ok(())
-}
-
-pub fn repair_active(db: &Database, id: Option<&str>) -> Result<()> {
-    let work = match id {
-        Some(id) => db
-            .get_work_association(id)?
-            .filter(|work| work.status == "active"),
-        None => db.get_active_work_association()?,
-    };
-    let Some(work) = work else {
-        if let Some(id) = id {
-            println!("No active work association for {id}");
-        } else {
-            println!("No active work association to repair.");
-        }
-        return Ok(());
-    };
-    db.require_issue(&work.issue_id)?;
-    match work.worktree_path.as_deref() {
-        Some(path) if Path::new(path).exists() => {
-            bail!(
-                "Active work path still exists for {}: {path}. Use `atelier abandon {} --reason \"...\"` to switch away, or inspect with `atelier status`.",
-                work.issue_id,
-                work.issue_id
-            );
-        }
-        Some(path) => {
-            db.remove_work_association(&work.issue_id)?;
-            println!(
-                "Cleared stale active work association for {}: {path}",
-                work.issue_id
-            );
-        }
-        None => {
-            db.remove_work_association(&work.issue_id)?;
-            println!(
-                "Cleared active work association with missing worktree path for {}",
-                work.issue_id
-            );
-        }
-    }
+    println!("Tracked work is now derived from issue workflow status.");
+    println!();
     println!("Next Commands");
     println!("-------------");
     println!("  Inspect checkout status: atelier status");
-    println!("  Inspect worktrees: atelier worktree status");
+    if let Some(mission_id) = mission_id {
+        println!("  Inspect mission selection and blockers: atelier mission status {mission_id}");
+    }
+    println!("  Inspect work transitions: atelier issue transition {id} --options");
     Ok(())
 }
 
@@ -314,12 +228,12 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
             .context("worktree setup failed while rebuilding runtime projection")?;
         if !status.success() {
             bail!(
-                "worktree setup failed while rebuilding runtime projection; active work association was not changed"
+                "worktree setup failed while rebuilding runtime projection; worktree association was not changed"
             );
         }
     } else {
         bail!(
-            "worktree setup failed because {} does not contain .atelier; active work association was not changed",
+            "worktree setup failed because {} does not contain .atelier; worktree association was not changed",
             worktree_path.display()
         );
     }
@@ -509,7 +423,7 @@ fn ensure_git_worktree(path: &Path) -> Result<()> {
         .with_context(|| format!("failed to inspect worktree path {}", path.display()))?;
     if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
         bail!(
-            "worktree setup failed because {} is not a Git worktree; active work association was not changed",
+            "worktree setup failed because {} is not a Git worktree; worktree association was not changed",
             path.display()
         );
     }
@@ -531,7 +445,7 @@ fn start_worktree_runtime_association(
         .context("worktree setup failed while associating the worktree session")?;
     worktree_db
         .start_work_association(id, Some(branch), Some(worktree_path))
-        .context("worktree setup failed while recording worktree active work association")?;
+        .context("worktree setup failed while recording worktree association")?;
     Ok(())
 }
 
