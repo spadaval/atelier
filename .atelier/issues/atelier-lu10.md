@@ -8,12 +8,20 @@ labels:
 - "state-model"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-0fhv"
+  - kind: "issue"
+    id: "atelier-fchz"
   children:
   - kind: "issue"
     id: "atelier-14bv"
   - kind: "issue"
+    id: "atelier-c0f1"
+  - kind: "issue"
     id: "atelier-larc"
+  - kind: "issue"
+    id: "atelier-nrwh"
   - kind: "issue"
     id: "atelier-okz2"
   - kind: "issue"
@@ -28,7 +36,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "todo"
 title: "Remove active issue and legacy claim systems"
-updated_at: "2026-06-15T04:05:54.474930114+00:00"
+updated_at: "2026-06-15T05:22:48.695501224+00:00"
 ---
 
 ## Description

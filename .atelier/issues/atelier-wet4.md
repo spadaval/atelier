@@ -36,4 +36,4 @@ Update human-facing status and role guidance after the active issue feature is r
 - CLI transcript or tests cover no in_progress issues, one in_progress issue, and multiple in_progress issues.
 - Help transcript proves removed commands/guidance are absent.
 - Role-guide transcript proves current-work guidance is status-derived and role-scoped.
-- `target/debug/atelier lint`, `target/debug/atelier export --check`, and focused CLI integration tests pass.
+- `atelier lint atelier-wet4`, `atelier export --check`, and focused CLI integration tests pass.

@@ -35,5 +35,5 @@ Independently validate that the active issue and legacy claim systems have been 
 
 - Independent validation transcript covers cache deletion/rebuild, `atelier status`, `atelier start`, removed command rejection, and hidden `--claim` rejection.
 - Targeted source search transcript shows no active dispatch for runtime active issue or claim mutation behavior.
-- Focused integration tests, `target/debug/atelier lint`, `target/debug/atelier export --check`, and `git diff --check` pass.
+- Focused integration tests, `atelier lint atelier-t35w`, `atelier export --check`, and `git diff --check` pass.
 - Validation evidence record is attached to this issue and referenced by epic closeout.

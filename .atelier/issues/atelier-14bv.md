@@ -9,11 +9,17 @@ priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
+    id: "atelier-c0f1"
+  - kind: "issue"
     id: "atelier-larc"
+  - kind: "issue"
+    id: "atelier-nrwh"
   - kind: "issue"
     id: "atelier-okz2"
   - kind: "issue"
     id: "atelier-q8a1"
+  - kind: "issue"
+    id: "atelier-rjua"
   - kind: "issue"
     id: "atelier-wet4"
   children: []
@@ -43,4 +49,4 @@ Update the product and architecture contract so current work in a worktree is de
   architecture docs.
 - Command audit docs name removed or changed commands and the replacement operator behavior.
 - Targeted search transcript shows no remaining guidance that treats runtime work_associations or hidden claim as the current-work source of truth.
-- `target/debug/atelier lint atelier-lu10` and `target/debug/atelier export --check` pass.
+- `atelier lint atelier-14bv` and `atelier export --check` pass.

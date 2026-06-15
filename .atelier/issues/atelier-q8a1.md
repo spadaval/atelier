@@ -37,5 +37,5 @@ Remove obsolete Agent Factory guidance that still teaches hidden claim, finish, 
 - File change review shows the Agent Factory binding and portable tracker
   standard updated.
 - Targeted search transcript over `AGENTFACTORY.md` and `/root/.agents/skills/agent-factory` shows no active guidance for `--claim`, `atelier finish`, or runtime active-work association.
-- `target/debug/atelier lint atelier-lu10` and `target/debug/atelier export --check` pass after the tracker updates.
+- `atelier lint atelier-q8a1` and `atelier export --check` pass after the tracker updates.
 - Review artifact or issue note maps the old worker-flow example to the replacement guidance.
