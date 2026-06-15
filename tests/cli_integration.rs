@@ -289,6 +289,17 @@ fn remove_projection_state(dir: &Path) {
     std::fs::remove_file(dir.join(".atelier/runtime/state.db")).unwrap();
 }
 
+fn remove_runtime_and_cache_dirs(dir: &Path) {
+    let runtime_dir = dir.join(".atelier/runtime");
+    let cache_dir = dir.join(".atelier/cache");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::write(cache_dir.join("projection.lock"), "cache").unwrap();
+    std::fs::remove_dir_all(&runtime_dir).unwrap();
+    std::fs::remove_dir_all(&cache_dir).unwrap();
+    assert!(!runtime_dir.exists());
+    assert!(!cache_dir.exists());
+}
+
 fn canonical_evidence_front_matter(dir: &Path, evidence_id: &str) -> serde_json::Value {
     canonical_record_front_matter(dir, "evidence", evidence_id)
 }
@@ -2156,9 +2167,10 @@ fn test_status_preserves_current_work_after_runtime_database_rebuild() {
     assert!(status_before.contains("Current work:  1 issue"));
     assert!(status_before.contains(&format!("{issue_id} - Rebuild current work [in_progress]")));
 
-    remove_projection_state(dir.path());
+    remove_runtime_and_cache_dirs(dir.path());
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed after runtime deletion: {stderr}");
+    assert!(dir.path().join(".atelier/runtime/state.db").exists());
 
     let (success, status_after, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status after rebuild failed: {stderr}");

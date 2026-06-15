@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T06:26:38.944553276+00:00"
+status: "done"
 title: "Rebuild must recreate missing runtime directory"
-updated_at: "2026-06-15T06:20:43.787628365+00:00"
+updated_at: "2026-06-15T06:26:38.944553276+00:00"
 ---
 
 ## Description

@@ -74,6 +74,12 @@ impl CommandStorage {
 
 pub fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     let layout = storage_layout::StorageLayout::discover()?;
+    std::fs::create_dir_all(layout.target_runtime_dir()).with_context(|| {
+        format!(
+            "Failed to create runtime directory {}",
+            layout.target_runtime_dir().display()
+        )
+    })?;
     let runtime_db_existed = layout.runtime_db_path().exists();
     let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
     let db = if mode.requires_fresh_projection() {
