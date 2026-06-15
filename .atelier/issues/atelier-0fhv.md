@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T08:16:30.802111896+00:00"
+status: "done"
 title: "Epic: Rewrite SQLite projection and runtime storage"
-updated_at: "2026-06-15T05:13:43.698977551+00:00"
+updated_at: "2026-06-15T08:16:30.802111896+00:00"
 ---
 
 ## Description

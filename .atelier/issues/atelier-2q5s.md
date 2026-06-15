@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T08:17:06.433656288+00:00"
+status: "done"
 title: "Epic: Split application layer and CLI shell"
-updated_at: "2026-06-15T05:13:49.175124659+00:00"
+updated_at: "2026-06-15T08:17:06.433656288+00:00"
 ---
 
 ## Description

@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T08:17:41.720867592+00:00"
+status: "done"
 title: "Epic: Workspace scaffold and domain extraction"
-updated_at: "2026-06-15T05:13:32.914496453+00:00"
+updated_at: "2026-06-15T08:17:41.720867592+00:00"
 ---
 
 ## Description
