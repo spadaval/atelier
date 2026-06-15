@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-15T16:57:41.926118351+00:00"
+status: "done"
 title: "Retarget fuzz harnesses to new internal crate APIs"
-updated_at: "2026-06-15T05:13:54.680676454+00:00"
+updated_at: "2026-06-15T16:57:41.926118351+00:00"
 ---
 
 ## Description

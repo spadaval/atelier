@@ -4,8 +4,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier::db::Database;
-use atelier::models::Issue;
+use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
 
 #[derive(Arbitrary, Debug, Clone)]
 enum StateOp {
@@ -16,18 +15,12 @@ enum StateOp {
     ArchiveIssue { idx: usize },
     UnarchiveIssue { idx: usize },
     DeleteIssue { idx: usize },
-    // Session lifecycle
-    StartSession,
-    EndSession { notes: Option<String> },
-    SetSessionIssue { idx: usize },
-    // Timer lifecycle
-    StartTimer { idx: usize },
-    StopTimer { idx: usize },
+    AddComment { idx: usize, content: String },
     // Queries (should never panic)
-    GetCurrentSession,
-    GetActiveTimer,
     ListIssues,
     ListArchived,
+    ListReady,
+    ListBlocked,
 }
 
 #[derive(Arbitrary, Debug)]
@@ -42,20 +35,19 @@ fuzz_target!(|input: StateMachineInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match Database::open(&db_path) {
+    let db = match ProjectionIndex::open(&db_path) {
         Ok(d) => d,
         Err(_) => return,
     };
 
     let mut issue_ids: Vec<String> = Vec::new();
-    let mut session_id: Option<i64> = None;
 
     for op in input.ops.iter().take(100) {
         match op {
             StateOp::CreateIssue { title, priority } => {
                 let id = format!("atelier-fuzz-{}", issue_ids.len());
                 if db
-                    .insert_issue_rebuild(&fuzz_issue(&id, title, None, priority))
+                    .insert_issue(&fuzz_issue(&id, title, None, priority))
                     .is_ok()
                 {
                     issue_ids.push(id);
@@ -92,71 +84,35 @@ fuzz_target!(|input: StateMachineInput| {
                     let _ = db.get_issue(id);
                 }
             }
-            StateOp::StartSession => {
-                if let Ok(id) = db.start_session_with_agent(None) {
-                    session_id = Some(id);
-                }
-            }
-            StateOp::EndSession { notes } => {
-                if let Some(sid) = session_id {
-                    let _ = (sid, notes);
-                    session_id = None;
-                }
-            }
-            StateOp::SetSessionIssue { idx } => {
-                if let Some(sid) = session_id {
-                    if !issue_ids.is_empty() {
-                        let id = &issue_ids[*idx % issue_ids.len()];
-                        let _ = db.set_session_issue(sid, id);
-                    }
-                }
-            }
-            StateOp::StartTimer { idx } => {
+            StateOp::AddComment { idx, content } => {
                 if !issue_ids.is_empty() {
                     let id = &issue_ids[*idx % issue_ids.len()];
-                    let _ = db.get_issue(id);
+                    let _ = db.add_comment(id, content);
+                    let _ = db.get_comments(id);
                 }
-            }
-            StateOp::StopTimer { idx } => {
-                if !issue_ids.is_empty() {
-                    let id = &issue_ids[*idx % issue_ids.len()];
-                    let _ = db.get_issue(id);
-                }
-            }
-            StateOp::GetCurrentSession => {
-                let _ = db.get_current_session();
-            }
-            StateOp::GetActiveTimer => {
-                let _ = db.list_work_associations();
             }
             StateOp::ListIssues => {
-                let _ = db.list_issues(None, None, None);
+                let _ = db.list_issues(None, None);
             }
             StateOp::ListArchived => {
-                let _ = db.list_issues(Some("archived"), None, None);
+                let _ = db.list_issues(Some("archived"), None);
+            }
+            StateOp::ListReady => {
+                let _ = db.list_ready_issues();
+            }
+            StateOp::ListBlocked => {
+                let _ = db.list_blocked_issues();
             }
         }
     }
 
     // Final consistency checks - should never panic
-    let _ = db.get_current_session();
-    let _ = db.list_work_associations();
-    let _ = db.list_issues(None, None, None);
-    let _ = db.list_issues(Some("archived"), None, None);
+    let _ = db.list_ready_issues();
+    let _ = db.list_blocked_issues();
+    let _ = db.list_issues(None, None);
+    let _ = db.list_issues(Some("archived"), None);
 });
 
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
-    let now = chrono::Utc::now();
-    Issue {
-        id: id.to_string(),
-        title: title.to_string(),
-        description,
-        status: "todo".to_string(),
-        issue_type: "task".to_string(),
-        priority: priority.to_string(),
-        parent_id: None,
-        created_at: now,
-        updated_at: now,
-        closed_at: None,
-    }
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
+    ProjectionIssue::new(id, title, description, priority)
 }

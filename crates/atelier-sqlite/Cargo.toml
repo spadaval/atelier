@@ -16,3 +16,6 @@ atelier-records = { path = "../atelier-records" }
 atelier-workflow = { path = "../atelier-workflow" }
 anyhow.workspace = true
 rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -142,6 +142,7 @@ dependencies = [
  "atelier-records",
  "atelier-workflow",
  "rusqlite",
+ "tempfile",
 ]
 
 [[package]]

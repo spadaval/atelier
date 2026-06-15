@@ -4,8 +4,7 @@ use libfuzzer_sys::fuzz_target;
 use std::io::Write;
 use tempfile::tempdir;
 
-use atelier::db::Database;
-use atelier::models::Issue;
+use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
 
 fuzz_target!(|data: &[u8]| {
     let dir = match tempdir() {
@@ -25,7 +24,7 @@ fuzz_target!(|data: &[u8]| {
     }
     drop(file);
 
-    let db = match Database::open(&db_path) {
+    let db = match ProjectionIndex::open(&db_path) {
         Ok(d) => d,
         Err(_) => return,
     };
@@ -59,7 +58,7 @@ fuzz_target!(|data: &[u8]| {
                             .take(8)
                             .collect::<String>()
                     );
-                    let _ = db.insert_issue_rebuild(&fuzz_issue(
+                    let _ = db.insert_issue(&fuzz_issue(
                         &id,
                         title,
                         desc.map(str::to_string),
@@ -71,21 +70,9 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // Verify database is still functional after import attempt
-    let _ = db.list_issues(None, None, None);
+    let _ = db.list_issues(None, None);
 });
 
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
-    let now = chrono::Utc::now();
-    Issue {
-        id: id.to_string(),
-        title: title.to_string(),
-        description,
-        status: "todo".to_string(),
-        issue_type: "task".to_string(),
-        priority: priority.to_string(),
-        parent_id: None,
-        created_at: now,
-        updated_at: now,
-        closed_at: None,
-    }
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
+    ProjectionIssue::new(id, title, description, priority)
 }

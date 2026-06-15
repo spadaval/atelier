@@ -10,8 +10,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier::db::Database;
-use atelier::models::Issue;
+use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
 
 #[derive(Arbitrary, Debug)]
 struct CliOutputInput {
@@ -33,7 +32,7 @@ fuzz_target!(|input: CliOutputInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match Database::open(&db_path) {
+    let db = match ProjectionIndex::open(&db_path) {
         Ok(d) => d,
         Err(_) => return,
     };
@@ -49,7 +48,7 @@ fuzz_target!(|input: CliOutputInput| {
 
         let id = format!("atelier-fuzz-{i}");
         if db
-            .insert_issue_rebuild(&fuzz_issue(
+            .insert_issue(&fuzz_issue(
                 &id,
                 &title,
                 input.description.clone(),
@@ -62,9 +61,9 @@ fuzz_target!(|input: CliOutputInput| {
     }
 
     // Test list_issues - this exercises truncation
-    let _ = db.list_issues(None, None, None);
-    let _ = db.list_issues(Some("open"), None, None);
-    let _ = db.list_issues(None, None, Some("medium"));
+    let _ = db.list_issues(None, None);
+    let _ = db.list_issues(Some("open"), None);
+    let _ = db.list_issues(None, Some("medium"));
 
     // Test get_issue - exercises show output
     for id in &created_ids {
@@ -89,7 +88,7 @@ fuzz_target!(|input: CliOutputInput| {
     // Test comments with Unicode
     if let Some(id) = created_ids.first() {
         if let Some(desc) = &input.description {
-            let _ = db.add_comment_at(id, desc, "note", &chrono::Utc::now().to_rfc3339());
+            let _ = db.add_comment(id, desc);
         }
         let _ = db.get_comments(id);
     }
@@ -102,18 +101,6 @@ fuzz_target!(|input: CliOutputInput| {
     }
 });
 
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
-    let now = chrono::Utc::now();
-    Issue {
-        id: id.to_string(),
-        title: title.to_string(),
-        description,
-        status: "todo".to_string(),
-        issue_type: "task".to_string(),
-        priority: priority.to_string(),
-        parent_id: None,
-        created_at: now,
-        updated_at: now,
-        closed_at: None,
-    }
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
+    ProjectionIssue::new(id, title, description, priority)
 }

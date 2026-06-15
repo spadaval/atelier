@@ -4,8 +4,7 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use tempfile::tempdir;
 
-use atelier::db::Database;
-use atelier::models::Issue;
+use atelier_sqlite::{ProjectionIndex, ProjectionIssue};
 
 #[derive(Arbitrary, Debug, Clone)]
 enum DependencyOp {
@@ -30,7 +29,7 @@ fuzz_target!(|input: DependencyGraphInput| {
     };
     let db_path = dir.path().join("state.db");
 
-    let db = match Database::open(&db_path) {
+    let db = match ProjectionIndex::open(&db_path) {
         Ok(d) => d,
         Err(_) => return,
     };
@@ -44,7 +43,7 @@ fuzz_target!(|input: DependencyGraphInput| {
             DependencyOp::CreateIssue { title } => {
                 let id = format!("atelier-fuzz-{}", issue_ids.len());
                 if db
-                    .insert_issue_rebuild(&fuzz_issue(&id, title, None, "medium"))
+                    .insert_issue(&fuzz_issue(&id, title, None, "medium"))
                     .is_ok()
                 {
                     issue_ids.push(id);
@@ -97,21 +96,9 @@ fuzz_target!(|input: DependencyGraphInput| {
     // Final verification - these should never panic
     let _ = db.list_ready_issues();
     let _ = db.list_blocked_issues();
-    let _ = db.list_issues(None, None, None);
+    let _ = db.list_issues(None, None);
 });
 
-fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> Issue {
-    let now = chrono::Utc::now();
-    Issue {
-        id: id.to_string(),
-        title: title.to_string(),
-        description,
-        status: "todo".to_string(),
-        issue_type: "task".to_string(),
-        priority: priority.to_string(),
-        parent_id: None,
-        created_at: now,
-        updated_at: now,
-        closed_at: None,
-    }
+fn fuzz_issue(id: &str, title: &str, description: Option<String>, priority: &str) -> ProjectionIssue {
+    ProjectionIssue::new(id, title, description, priority)
 }
