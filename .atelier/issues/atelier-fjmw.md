@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-15T07:40:52.931963674+00:00"
+status: "done"
 title: "Extract workflow policy into atelier-workflow"
-updated_at: "2026-06-15T07:22:55.603340110+00:00"
+updated_at: "2026-06-15T07:40:52.931963674+00:00"
 ---
 
 ## Description
