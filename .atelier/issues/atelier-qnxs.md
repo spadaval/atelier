@@ -3,6 +3,7 @@ created_at: "2026-06-14T05:58:17.057323117+00:00"
 id: "atelier-qnxs"
 issue_type: "task"
 labels:
+- "assignee:root"
 - "cli"
 priority: "P1"
 relationships:
@@ -12,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Add explicit mission close command"
-updated_at: "2026-06-14T05:58:17.057323117+00:00"
+updated_at: "2026-06-14T07:45:16.123888257+00:00"
 ---
 
 ## Description
