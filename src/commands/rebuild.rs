@@ -1013,7 +1013,7 @@ mod tests {
                 "Plan",
                 "open",
                 Some("Plan body"),
-                r#"{"revision":1,"revisions":[]}"#,
+                r#"{"revision":1,"revisions":[{"revision":1,"reason":"initial","body":"Plan body"}]}"#,
             )
             .unwrap();
         let evidence_id = db
@@ -1022,7 +1022,7 @@ mod tests {
                 "Evidence",
                 "pass",
                 Some("Evidence body"),
-                r#"{"kind":"test","result":"pass"}"#,
+                r#"{"evidence_type":"test","captured_at":"2026-06-10T00:00:00Z","command":null,"path":null,"uri":null,"producer":null,"proof_scope":null,"agent_identity":null,"independence_level":null,"residual_risks":[],"follow_up_ids":[],"exit_code":null,"exit_status":null,"success":null,"spawn_error":null,"output":null,"target":null}"#,
             )
             .unwrap();
         db.add_record_link("mission", &mission_id, "plan", &plan_id, "planned_by")

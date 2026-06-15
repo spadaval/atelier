@@ -63,7 +63,8 @@ impl SmokeHarness {
 
     /// Run an Atelier CLI command and return the full result.
     pub fn run(&self, args: &[&str]) -> CmdResult {
-        let translated_args = self.translate_issue_refs_owned(args);
+        let current_surface_args = translate_legacy_fixture_command(args);
+        let translated_args = self.translate_issue_refs_owned(&current_surface_args);
         let output = Command::new(&self.atelier_bin)
             .current_dir(self.temp_dir.path())
             .args(&translated_args)
@@ -303,6 +304,61 @@ impl SmokeHarness {
     }
 }
 
+fn translate_legacy_fixture_command(args: &[&str]) -> Vec<String> {
+    match args {
+        ["issue", "subissue", parent, title, rest @ ..] => {
+            let mut translated = vec![
+                "issue".to_string(),
+                "create".to_string(),
+                (*title).to_string(),
+                "--parent".to_string(),
+                (*parent).to_string(),
+            ];
+            translated.extend(rest.iter().map(|value| match *value {
+                "-d" => "--description".to_string(),
+                "-p" => "--priority".to_string(),
+                other => other.to_string(),
+            }));
+            translated
+        }
+        ["issue", "label", issue, label] => vec![
+            "issue".to_string(),
+            "update".to_string(),
+            (*issue).to_string(),
+            "--label".to_string(),
+            (*label).to_string(),
+        ],
+        ["issue", "unlabel", issue, label] => vec![
+            "issue".to_string(),
+            "update".to_string(),
+            (*issue).to_string(),
+            "--remove-label".to_string(),
+            (*label).to_string(),
+        ],
+        ["issue", "comment", issue, body] => vec![
+            "issue".to_string(),
+            "note".to_string(),
+            (*issue).to_string(),
+            (*body).to_string(),
+        ],
+        ["issue", "search", query] => vec!["search".to_string(), (*query).to_string()],
+        ["issue", "tree", rest @ ..] => {
+            let mut translated = vec!["graph".to_string(), "tree".to_string()];
+            translated.extend(rest.iter().map(|value| match *value {
+                "-s" => "--status".to_string(),
+                other => other.to_string(),
+            }));
+            translated
+        }
+        ["issue", "next"] => vec![
+            "issue".to_string(),
+            "list".to_string(),
+            "--ready".to_string(),
+        ],
+        _ => args.iter().map(|value| (*value).to_string()).collect(),
+    }
+}
+
 fn first_record_id(value: &str) -> Option<String> {
     let bytes = value.as_bytes();
     let mut index = 0;
@@ -357,22 +413,34 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
         ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
             index == offset + 1
         }
-        ["label" | "unlabel" | "comment", ..] => index == offset + 1,
+        ["label" | "unlabel" | "comment" | "note", ..] => index == offset + 1,
         ["block" | "unblock" | "relate" | "unrelate", ..] => {
             index == offset + 1 || index == offset + 2
         }
         ["subissue", ..] => index == offset + 1,
+        ["create", ..] => {
+            index > offset + 1
+                && args
+                    .get(index - 1)
+                    .is_some_and(|arg| arg.as_ref() == "--parent")
+        }
         ["session", "work", ..] => index == offset + 2,
         ["archive", "add" | "remove", ..] => index == offset + 2,
         ["milestone", "add" | "remove", ..] => index > offset + 2,
         ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
             index == offset + 2
         }
-        ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
+        ["issue", "label" | "unlabel" | "comment" | "note", ..] => index == offset + 2,
         ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
             index == offset + 2 || index == offset + 3
         }
         ["issue", "subissue", ..] => index == offset + 2,
+        ["issue", "create", ..] => {
+            index > offset + 2
+                && args
+                    .get(index - 1)
+                    .is_some_and(|arg| arg.as_ref() == "--parent")
+        }
         ["dep", "list", ..] => index == offset + 2,
         ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
         _ => false,
