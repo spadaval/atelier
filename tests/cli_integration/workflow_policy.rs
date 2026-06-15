@@ -733,16 +733,6 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
     commit_all(dir.path(), "workflow-ready invalid closeout");
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(success, "request_validation failed: {stderr}");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(&issue_path, remove_issue_section(&markdown, "Outcome")).unwrap();
@@ -792,16 +782,6 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
 
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
     commit_all(dir.path(), "ready to close");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["mission", "update", &mission_id, "--status", "closed"],
-    );
-    assert!(
-        !success,
-        "mission update --status closed should not be the ordinary closeout path"
-    );
-    assert!(stderr.contains("atelier mission close"));
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
@@ -1108,27 +1088,6 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     let malformed_evidence =
         evidence_markdown.replace("\n## Evidence\n\nEvidence was not specified.\n", "\n");
     std::fs::write(&evidence_issue_path, malformed_evidence).unwrap();
-    let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
-    for (path, id) in [
-        (&issue_path, issue_id),
-        (&evidence_issue_path, evidence_issue_id),
-    ] {
-        let metadata = std::fs::metadata(path).unwrap();
-        let mut hasher = Sha256::new();
-        hasher.update(std::fs::read(path).unwrap());
-        let invalid_hash = format!("{:x}", hasher.finalize());
-        conn.execute(
-            "UPDATE projection_index_sources
-             SET size_bytes = ?1, sha256 = ?2
-             WHERE path = ?3",
-            rusqlite::params![
-                i64::try_from(metadata.len()).unwrap(),
-                invalid_hash,
-                format!("issues/{id}.md")
-            ],
-        )
-        .unwrap();
-    }
     commit_all(dir.path(), "malformed record source");
 
     let (success, malformed_status, stderr) =

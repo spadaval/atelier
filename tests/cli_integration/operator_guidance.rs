@@ -828,7 +828,7 @@ fn test_diagnostics_json_docs_define_local_operator_boundary() {
     assert!(diagnostics.contains("stable for local diagnostic tooling"));
     assert!(diagnostics.contains("must not appear in ordinary Agent Factory or"));
     assert!(diagnostics.contains("operator recipes for mission selection"));
-    assert!(cli_surface.contains("Stable local-only diagnostic output"));
+    assert!(cli_surface.contains("diagnostics commands is an Atelier-maintenance interface"));
     assert!(cli_surface.contains("not an automation contract for selecting work"));
     assert!(
         validation.contains("Diagnostics JSON from commands such as `atelier diagnostics slow`")

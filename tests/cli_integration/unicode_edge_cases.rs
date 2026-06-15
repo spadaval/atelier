@@ -233,9 +233,9 @@ fn test_unicode_in_descriptions_and_comments() {
     );
 }
 
-/// Test search with Unicode queries
+/// Test Unicode survives current list and show surfaces
 #[test]
-fn test_unicode_search() {
+fn test_unicode_list_and_show() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -243,17 +243,16 @@ fn test_unicode_search() {
     run_atelier(dir.path(), &["issue", "create", "Test with arrows ← →"]);
     run_atelier(dir.path(), &["issue", "create", "Emoji test 🎉"]);
 
-    // Search for Japanese
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "日本"]);
-    assert!(success);
+    let (success, list_out, stderr) =
+        run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
+    assert!(success, "issue list failed: {stderr}");
+    assert!(list_out.contains("日本語のテスト"), "{list_out}");
+    assert!(list_out.contains("Test with arrows ← →"), "{list_out}");
+    assert!(list_out.contains("Emoji test 🎉"), "{list_out}");
 
-    // Search for emoji
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "🎉"]);
-    assert!(success);
-
-    // Search for arrow
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "←"]);
-    assert!(success);
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show_out.contains("日本語のテスト"), "{show_out}");
 }
 
 /// Test very long Unicode strings (stress test truncation)

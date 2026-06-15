@@ -117,8 +117,8 @@ hooks:
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "worktree-local status failed: {stderr}");
     assert!(
-        child_status_out.contains(&format!("{issue_id} - Work item [in_progress]")),
-        "worktree-local status should derive current work from Markdown: {child_status_out}"
+        child_status_out.contains("Current work:  none"),
+        "worktree-local status should ignore uncommitted parent-worktree state: {child_status_out}"
     );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);

@@ -1,24 +1,24 @@
 use super::support::*;
 
 #[test]
-fn test_issue_next_uses_current_workflow_commands() {
+fn test_status_uses_current_workflow_commands() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     let (success, issue_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Next item"]);
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Next item");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "next"]);
-    assert!(success, "issue next failed: {stderr}");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
-    assert!(stdout.contains(&format!("atelier start {issue_id}")));
-    assert!(stdout.contains("atelier status"));
+    assert!(stdout.contains("atelier mission status"), "{stdout}");
+    assert!(stdout.contains("atelier issue list --ready"), "{stdout}");
+    assert!(stdout.contains("atelier start <issue-id>"), "{stdout}");
+    assert!(stdout.contains("atelier doctor"), "{stdout}");
     assert!(
         !stdout.contains("session work"),
-        "issue next must not suggest removed session workflow:\n{stdout}"
+        "status must not suggest removed session workflow:\n{stdout}"
     );
 }
 
@@ -522,14 +522,9 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
     let issue_id = issue_id_by_title(dir.path(), "Blocked close item");
     migrate_default_issue_workflow(dir.path());
 
-    for args in [
-        vec!["issue", "transition", &issue_id, "start"],
-        vec!["issue", "transition", &issue_id, "request_review"],
-        vec!["issue", "transition", &issue_id, "request_validation"],
-    ] {
-        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "transition {:?} failed: {stderr}", args);
-    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
@@ -546,7 +541,7 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         &activities,
         "transition_blocked",
         &[
-            "Blocked transition close from validation",
+            "Blocked transition close from in_progress",
             "transition: \"close\"",
             "reason: \"missing required field close_reason;",
         ],
@@ -569,16 +564,6 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(success, "request_validation failed: {stderr}");
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "ready for close");
 
@@ -629,8 +614,8 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     std::fs::write(
         &policy_path,
         policy.replace(
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [in_progress, validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [in_progress, validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n        guidance: [close_with_proof]\n      archive:\n        from: [in_progress, validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - blockers_clear\n          - lint_clear\n          - durable_current\n        guidance: [close_with_proof]\n",
         ),
     )
     .unwrap();
@@ -638,16 +623,6 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
 
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(success, "request_validation failed: {stderr}");
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "ready for archive");
 
@@ -815,14 +790,9 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Guided transition item");
-    for args in [
-        vec!["issue", "transition", &issue_id, "start"],
-        vec!["issue", "transition", &issue_id, "request_review"],
-        vec!["issue", "transition", &issue_id, "request_validation"],
-    ] {
-        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "transition {:?} failed: {stderr}", args);
-    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
 
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
@@ -1017,7 +987,7 @@ fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
         vec!["issue", "delete", "1", "--force"],
         vec!["issue", "close-all"],
     ] {
-        let (success, _, stderr) = run_atelier(dir.path(), &args);
+        let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} unexpectedly succeeded");
         assert!(
             stderr.contains("unrecognized subcommand"),

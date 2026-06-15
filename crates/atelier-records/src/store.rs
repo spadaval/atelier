@@ -3181,6 +3181,10 @@ fn is_local_atelier_path(relative_path: &Path) -> bool {
     };
     file_name.ends_with(".tmp")
         || file_name.ends_with(".lock")
+        || file_name.ends_with(".journal")
+        || file_name.ends_with("-journal")
+        || file_name.ends_with("-wal")
+        || file_name.ends_with("-shm")
         || file_name == "state.db"
         || relative_path.starts_with("runtime")
         || relative_path.starts_with("cache")

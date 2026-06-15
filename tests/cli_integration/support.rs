@@ -753,6 +753,12 @@ pub(crate) fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> boo
             index == offset + 1 || index == offset + 2
         }
         ["subissue", ..] => index == offset + 1,
+        ["create", ..] => {
+            index > offset + 1
+                && args
+                    .get(index - 1)
+                    .is_some_and(|arg| arg.as_ref() == "--parent")
+        }
         ["session", "work", ..] => index == offset + 2,
         ["archive", "add" | "remove", ..] => index == offset + 2,
         ["milestone", "add" | "remove", ..] => index > offset + 2,
@@ -760,11 +766,17 @@ pub(crate) fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> boo
             index == offset + 2
         }
         ["issue", "blocked", ..] => index == offset + 2,
-        ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
+        ["issue", "label" | "unlabel" | "comment" | "note", ..] => index == offset + 2,
         ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
             index == offset + 2 || index == offset + 3
         }
         ["issue", "subissue", ..] => index == offset + 2,
+        ["issue", "create", ..] => {
+            index > offset + 2
+                && args
+                    .get(index - 1)
+                    .is_some_and(|arg| arg.as_ref() == "--parent")
+        }
         ["graph", "impact", ..] => index == offset + 2,
         ["note", "add", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
         ["maintenance", "delete", target_kind, ..] => {
