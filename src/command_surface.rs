@@ -19,6 +19,7 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "evidence",
     "graph",
     "issue",
+    "branch",
     "maintenance",
     "mission",
     "note",
@@ -609,6 +610,9 @@ fn removed_or_deferred_context(section: &str, line: &str) -> bool {
                 || line.contains("replacement")
                 || line.contains("unsupported")
                 || line.contains("transitional"))
+        || section.contains("planned target")
+        || line.contains("planned target state")
+        || line.contains("future command target")
         || line.contains("there is no `atelier")
         || line.contains("no `atelier")
         || line.contains("not part of the normal")

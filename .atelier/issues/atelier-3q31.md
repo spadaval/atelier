@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:29:19.348796986+00:00"
+status: "done"
 title: "Implement mission worktree lifecycle commands"
-updated_at: "2026-06-14T21:45:06.223542241+00:00"
+updated_at: "2026-06-14T22:29:19.348796986+00:00"
 ---
 
 ## Description

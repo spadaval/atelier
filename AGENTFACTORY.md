@@ -67,14 +67,16 @@ repository's tactical operator guidance.
   and audit report missing proof, missing validation/closeout work, stale
   closeout checks, and parent coverage gaps instead of restating those rules in
   this binding.
-- Handoffs that include validation must say whether proof ran from the root
-  checkout or an issue worktree, and which checkout now owns follow-up
-  validation or cleanup.
-- Mutating subagents should use isolated issue worktrees unless the
-  assignment explicitly explains why a shared checkout is safer. Worktree
-  setup, interruption recovery, and stale association handling belong to
-  Atelier-owned worktree status/help and product docs; do not edit runtime
-  state by hand.
+- Handoffs that include validation must say whether proof ran from the mission
+  workspace, an epic branch checkout, the root checkout, or an explicitly
+  isolated issue worktree, and which checkout now owns follow-up validation or
+  cleanup.
+- Mutating subagents should use the mission workspace and parent epic branch by
+  default. Use an isolated issue worktree only when the assignment explicitly
+  justifies extra isolation for contention, dirty state, high-risk work, or
+  cross-epic separation. Worktree setup, interruption recovery, and stale
+  association handling belong to Atelier-owned worktree status/help and product
+  docs; do not edit runtime state by hand.
 - Hidden workflow diagnostics are not normal planning, implementation, or
   closeout commands. Use them only when a binding, assignment, workflow policy,
   or closeout contract explicitly names the diagnostic command; they do not

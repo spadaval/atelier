@@ -1,0 +1,35 @@
+---
+created_at: "2026-06-15T01:21:41.371194499+00:00"
+id: "atelier-axbf"
+evidence_type: "validation"
+captured_at: "2026-06-15T01:21:41.371069536+00:00"
+command: null
+exit_status: null
+path: null
+uri: null
+proof_scope: "scoped to the attached target or summary"
+agent_identity: null
+independence_level: "unspecified"
+target:
+  kind: "issue"
+  id: "atelier-1zfd"
+  role: "validates"
+follow_up_ids: []
+residual_risks: []
+output: null
+relationships:
+  blocks: []
+  children: []
+  attachments:
+  - kind: "issue"
+    id: "atelier-1zfd"
+    role: "validates"
+  relates: []
+schema: "atelier.evidence"
+schema_version: 1
+status: "pass"
+title: "Docs define lightweight mission closeout: docs/product/zen.md, docs/product/work-model.md, and docs/architecture/quality/validation.md now say mission closeout synthesizes linked work, blockers, tracker health, configured gates, and explicit mission-scoped risks without duplicate direct mission evidence; target/debug/atelier lint and git diff --check -- '*.md' passed."
+updated_at: "2026-06-15T01:21:44.351383474+00:00"
+---
+
+Docs define lightweight mission closeout: docs/product/zen.md, docs/product/work-model.md, and docs/architecture/quality/validation.md now say mission closeout synthesizes linked work, blockers, tracker health, configured gates, and explicit mission-scoped risks without duplicate direct mission evidence; target/debug/atelier lint and git diff --check -- '*.md' passed.

@@ -493,11 +493,18 @@ fn ensure_all_issue_closeout_sections(dir: &Path) {
 fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
     migrate_default_issue_workflow(dir);
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
-    for (transition, label) in [
-        ("start", "start"),
-        ("request_review", "request_review"),
-        ("request_validation", "request_validation"),
-    ] {
+    let issue_markdown = std::fs::read_to_string(canonical_issue_path(dir, &issue_id)).unwrap();
+    let review_gated = !issue_markdown.contains("issue_type: \"task\"");
+    let transitions = if review_gated {
+        vec![
+            ("start", "start"),
+            ("request_review", "request_review"),
+            ("request_validation", "request_validation"),
+        ]
+    } else {
+        vec![("start", "start")]
+    };
+    for (transition, label) in transitions {
         let (success, _, stderr) =
             run_atelier(dir, &["issue", "transition", &issue_id, transition]);
         assert!(success, "{label} failed for {issue_id}: {stderr}");
@@ -1970,8 +1977,16 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
     init_git_repo(dir.path());
     init_atelier(dir.path());
 
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Options read-only item"]);
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Options read-only item",
+            "--issue-type",
+            "epic",
+        ],
+    );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Options read-only item");
@@ -2302,8 +2317,16 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, issue_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Validator blocked item"]);
+    let (success, issue_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Validator blocked item",
+            "--issue-type",
+            "epic",
+        ],
+    );
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Validator blocked item");

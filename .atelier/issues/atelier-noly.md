@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:29:30.117087047+00:00"
+status: "done"
 title: "Implement epic branch lifecycle commands"
-updated_at: "2026-06-14T21:45:07.965981249+00:00"
+updated_at: "2026-06-14T22:29:30.117087047+00:00"
 ---
 
 ## Description

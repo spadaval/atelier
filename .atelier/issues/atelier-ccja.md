@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:31:55.219617652+00:00"
+status: "done"
 title: "Remove issue-worktree default behavior from public workflow"
-updated_at: "2026-06-14T21:45:09.697720927+00:00"
+updated_at: "2026-06-14T22:31:55.219617652+00:00"
 ---
 
 ## Description

@@ -26,6 +26,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "durable_state_current",
     "evidence_attached",
     "review_complete",
+    "epic_child_proof_complete",
     "validation_criteria_satisfied",
     "no_open_blockers",
     "no_blocking_lints",
@@ -122,7 +123,7 @@ issue_types:
   epic: standard_review_proof
   feature: standard_review_proof
   spike: lightweight_spike
-  task: standard_review_proof
+  task: standard_proof
   validation: standard_review_proof
 
 statuses:
@@ -152,6 +153,8 @@ validators:
       min_count: 1
   blockers_clear:
     builtin: no_open_blockers
+  epic_child_proof:
+    builtin: epic_child_proof_complete
   lint_clear:
     builtin: no_blocking_lints
   closeout_clean:
@@ -169,6 +172,28 @@ guidance_templates:
       and what follow-up work remains.
 
 workflows:
+  standard_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, validation]
+        to: blocked
+      close:
+        from: [in_progress, validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - epic_child_proof
+          - blockers_clear
+          - lint_clear
+          - durable_current
+        guidance: [close_with_proof]
+
   standard_review_proof:
     initial_status: todo
     done_statuses: [done, archived]
@@ -1529,6 +1554,10 @@ mod tests {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             policy.issue_types.get("task").map(String::as_str),
+            Some("standard_proof")
+        );
+        assert_eq!(
+            policy.issue_types.get("epic").map(String::as_str),
             Some("standard_review_proof")
         );
         assert_eq!(

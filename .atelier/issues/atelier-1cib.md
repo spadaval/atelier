@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:24:43.140008945+00:00"
+status: "done"
 title: "Update subagent assignment template for epic branch review"
-updated_at: "2026-06-14T21:45:23.780062904+00:00"
+updated_at: "2026-06-14T22:24:43.140008945+00:00"
 ---
 
 ## Description

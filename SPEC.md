@@ -142,13 +142,24 @@ to be an issue.
 A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain intent, constraints,
 active milestones, linked plans, status, validation expectations, and current
-health.
+health. A mission is also the normal shared background workspace boundary: one
+mission owns one shared Git worktree or equivalent background checkout where
+coordinated agents can operate on related epics without creating a new checkout
+for every implementation issue.
 
 Missions should be focused on the goal or end state, not on a specific task.
 They are the right shape when the objective is large enough to require at least
 one epic of accountable work beneath it. Smaller work should stay as an issue,
 while mission execution should be split into epics, tasks, validation, review,
 documentation, or closeout issues linked back to the mission.
+
+### Epic
+
+An epic is the normal branch and review boundary beneath a mission. It groups a
+coherent changeset that can be reviewed, validated, and merged as a unit, often
+mapping directly to a PR-equivalent branch. Epic review and validation gates
+own the parent judgment for the grouped change; child issues contribute local
+proof rather than each carrying an independent review requirement by default.
 
 ### Milestone
 
@@ -171,7 +182,10 @@ milestone's criteria. The milestone itself should remain a target-state record.
 An issue is a durable accountability unit. It may be small enough for one agent
 run, but the system must not require one issue to equal one run. Issues can be
 tasks, bugs, research items, implementation slices, review items, validation
-items, or custom configured types.
+items, or custom configured types. Under the mission/epic model, an ordinary
+implementation issue is a local slice on its parent epic branch. It closes with
+the proof named by its `Evidence` section unless the issue itself is a review,
+validation, closeout, migration, or other explicitly risk-escalated item.
 
 ### Plan
 
@@ -271,7 +285,7 @@ issue_types:
   epic: standard_review_proof
   feature: standard_review_proof
   spike: lightweight_spike
-  task: standard_review_proof
+  task: standard_proof
   validation: standard_review_proof
 
 statuses:
@@ -287,6 +301,21 @@ statuses:
     category: done
 
 workflows:
+  standard_proof:
+    initial_status: open
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [open]
+        to: in_progress
+      close:
+        from: [in_progress]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - durable_current
+
   standard_review_proof:
     initial_status: open
     done_statuses: [done]
@@ -310,9 +339,10 @@ workflows:
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
-ceremony unless policy says so. The starter contract uses a standard
-review/proof workflow for most issue types and a lighter reviewed spike
-workflow that still records an inspectable close reason without requiring
+ceremony unless policy says so. The starter contract uses proof-first closure
+for ordinary implementation tasks, keeps review/proof workflows for epics,
+validation, closeout, and other risk-bearing issue types, and keeps a lighter
+spike workflow that records an inspectable close reason without requiring
 first-class evidence.
 
 ## Rules, Lint, And Guidance
@@ -360,14 +390,16 @@ waivers, they need an explicit contract and visibility model.
 
 ## Branches And Worktrees
 
-Atelier should preserve Braid's agent worktree ergonomics.
+Atelier should preserve Braid's agent worktree ergonomics while moving the
+default isolation boundary from issue to mission.
 
 Desired commands:
 
 ```text
 atelier agent init <name>
 atelier start atelier-z1p8
-atelier worktree for atelier-z1p8
+atelier worktree for-mission atelier-k7mq
+atelier branch for-epic atelier-4p7q
 atelier issue close atelier-z1p8 --reason "done"
 atelier abandon atelier-z1p8 --reason "handoff"
 atelier worktree merge
@@ -379,21 +411,21 @@ The default branch model should be opinionated but configurable:
 main
   integration branch
 
-work/atelier-z1p8-short-slug
-  normal issue implementation branch
-
 mission/atelier-k7mq-short-slug
-  optional coordinated mission branch
+  normal shared mission worktree
 
-agent/<agent-id>
-  optional long-lived agent branch/worktree
+epic/atelier-4p7q-short-slug
+  normal reviewable epic branch
+
+issue/atelier-z1p8-short-slug
+  exceptional isolation branch only when a slice needs separate containment
 ```
 
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
 - Refuse claim when the worktree is dirty unless overridden.
-- Record branch/worktree association.
+- Record mission worktree, epic branch, and active issue association.
 - Refuse `done` when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
@@ -401,8 +433,11 @@ The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
 Normal tracked work uses explicit work association rather than inherited
-Chainlink lock sync. The default workflow is Git branch/worktree state plus
-local Atelier runtime association and canonical export freshness checks.
+Chainlink lock sync. The default workflow is one mission worktree, one
+reviewable branch per epic, local Atelier runtime association for the active
+issue slice, and canonical export freshness checks. Per-issue worktrees or
+branches are exceptional isolation tools for risky, dirty, conflicting, or
+cross-epic work, not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 

@@ -31,9 +31,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:22:02.247006383+00:00"
+status: "done"
 title: "Define command and migration target state for the new model"
-updated_at: "2026-06-14T21:44:40.239656525+00:00"
+updated_at: "2026-06-14T22:22:02.247006383+00:00"
 ---
 
 ## Description

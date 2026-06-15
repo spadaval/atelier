@@ -57,7 +57,7 @@ issue_types:
   epic: standard_review_proof
   feature: standard_review_proof
   spike: lightweight_spike
-  task: standard_review_proof
+  task: standard_proof
   validation: standard_review_proof
 
 statuses:
@@ -87,6 +87,8 @@ validators:
       min_count: 1
   blockers_clear:
     builtin: no_open_blockers
+  epic_child_proof:
+    builtin: epic_child_proof_complete
   lint_clear:
     builtin: no_blocking_lints
   closeout_clean:
@@ -104,6 +106,28 @@ guidance_templates:
       and what follow-up work remains.
 
 workflows:
+  standard_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress]
+        to: blocked
+      close:
+        from: [in_progress]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - epic_child_proof
+          - blockers_clear
+          - lint_clear
+          - durable_current
+        guidance: [close_with_proof]
+
   standard_review_proof:
     initial_status: todo
     done_statuses: [done, archived]
@@ -212,7 +236,7 @@ The starter policy is:
 | `epic` | `standard_review_proof` |
 | `feature` | `standard_review_proof` |
 | `spike` | `lightweight_spike` |
-| `task` | `standard_review_proof` |
+| `task` | `standard_proof` |
 | `validation` | `standard_review_proof` |
 
 ## Workflows And Transitions
@@ -263,7 +287,8 @@ Version 1 built-in validator names are fixed:
 | --- | --- | --- |
 | `durable_state_current` | none | Fails when canonical tracker state or required export freshness is stale for the transition. |
 | `evidence_attached` | `min_count` (required integer >= 1), `kind` (optional evidence kind) | Fails when the issue does not have enough attached evidence records matching the params. |
-| `review_complete` | none | Fails when the issue has not gone through the expected review path for the transition. |
+| `review_complete` | none | Fails when an epic, review, validation, closeout, or explicitly review-gated issue has not gone through the expected review path for the transition. It is not the default close gate for ordinary implementation tasks. |
+| `epic_child_proof_complete` | none | For epic issues, fails when a child issue is still open or lacks passing linked proof. For non-epic targets, passes without effect. |
 | `validation_criteria_satisfied` | none | For mission closeout, checks configured workflow approval on explicit linked validation or closeout work when parent-level judgment is required. Mission validation prose remains human guidance and is not parsed as a coded evidence contract. For other targets, reports that no parent closeout criteria apply. |
 | `no_open_blockers` | none | Fails when blocking issue dependencies remain open. |
 | `no_blocking_lints` | none | Fails when tracker lint reports blocking defects for the issue or transition. |
@@ -321,9 +346,53 @@ change, but these names are the contract for diagnostics and validation proof.
 Error payloads should include `path`, `error`, and `message`, plus `line`,
 `column`, `field`, or `reference` when that detail is available.
 
+## Standard Proof Workflow Example
+
+The standard proof workflow is the default contract for ordinary implementation
+tasks. It requires local proof before `done` without requiring a separate
+review transition for every issue. It keeps `archived` available as a terminal
+legacy-migration status:
+
+```yaml
+workflows:
+  standard_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress]
+        to: blocked
+      close:
+        from: [in_progress]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - epic_child_proof
+          - blockers_clear
+          - lint_clear
+          - durable_current
+        guidance: [close_with_proof]
+```
+
+This workflow is intentionally strict about proof and light about ceremony:
+
+- `close_reason` must be recorded;
+- at least one evidence record must be attached when configured;
+- blockers and blocking lints must be clear; and
+- durable tracker state must be current enough for closeout.
+
+It does not require `request_review` or `request_validation` for an ordinary
+implementation slice. The parent epic branch carries the normal review and
+validation boundary for the coherent changeset.
+
 ## Standard Review/Proof Workflow Example
 
-The standard starter workflow is the contract for most issue types. It makes
+The standard review/proof workflow is the contract for epics, validation,
+closeout, and issue types that explicitly require review before close. It makes
 review and proof explicit before `done`, and it keeps `archived` available as a
 terminal legacy-migration status:
 
@@ -361,7 +430,7 @@ workflows:
 
 This workflow is intentionally strict at close:
 
-- work must pass through review and validation/proof states;
+- review-gated work must pass through review and validation/proof states;
 - `close_reason` must be recorded;
 - at least one evidence record must be attached;
 - blockers and blocking lints must be clear; and
@@ -375,8 +444,9 @@ verbose status keeps the raw validator name available for advanced diagnostics.
 
 ## Lightweight Spike Workflow Example
 
-The lightweight spike workflow is deliberately smaller. It still uses the review
-path, but it does not require first-class evidence for low-risk closure:
+The lightweight spike workflow is deliberately smaller. It records an
+inspectable close reason and current durable state, but it does not require
+review or first-class evidence for low-risk closure:
 
 ```yaml
 workflows:
@@ -388,30 +458,22 @@ workflows:
         from: [todo, blocked]
         to: in_progress
       block:
-        from: [todo, in_progress, review]
+        from: [todo, in_progress]
         to: blocked
-      request_review:
-        from: [in_progress]
-        to: review
-      revise:
-        from: [review]
-        to: in_progress
       close:
-        from: [review]
+        from: [in_progress]
         to: done
         required_fields: [close_reason]
         validators:
-          - review_ready
           - durable_current
         guidance: [record_spike_outcome]
 ```
 
 This example makes the intended trade-off explicit:
 
-- spikes still move through review before they close;
 - spikes still record an inspectable `close_reason`; and
-- spikes do not require attached evidence unless a repository intentionally maps
-  them to a stricter workflow.
+- spikes do not require attached evidence or review unless a repository
+  intentionally maps them to a stricter workflow.
 
 ## Diagnostics
 

@@ -56,7 +56,8 @@ Records:
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
-  worktree      Create, inspect, merge, and remove issue worktrees
+  worktree      Create, inspect, merge, and remove mission or issue worktrees
+  branch        Create, inspect, and merge epic review branches
 
 Maintenance:
   maintenance   Run explicit destructive maintenance commands
@@ -256,6 +257,12 @@ enum Commands {
     Worktree {
         #[command(subcommand)]
         action: WorktreeCommands,
+    },
+
+    /// Git branch helpers for epic review branches
+    Branch {
+        #[command(subcommand)]
+        action: BranchCommands,
     },
 
     /// Advanced local command diagnostics; JSON is local-only telemetry, not workflow state
@@ -662,6 +669,12 @@ enum WorkflowCommands {
 
 #[derive(Subcommand)]
 enum WorktreeCommands {
+    /// Create or locate a worktree for a mission
+    ForMission {
+        id: String,
+        #[arg(long)]
+        path: Option<String>,
+    },
     /// Create or locate a worktree for an issue
     For {
         id: String,
@@ -680,6 +693,16 @@ enum WorktreeCommands {
     },
     /// Clear a stale local worktree association after interrupted setup/removal
     Repair { id: String },
+}
+
+#[derive(Subcommand)]
+enum BranchCommands {
+    /// Create or switch to the review branch for an epic
+    ForEpic { id: String },
+    /// Show local epic review branches
+    Status,
+    /// Merge the review branch for an epic into the current branch
+    Merge { id: String },
 }
 
 #[derive(Subcommand)]
@@ -1558,6 +1581,9 @@ fn run() -> Result<()> {
         Commands::Worktree { action } => {
             let db = runtime_db()?;
             match action {
+                WorktreeCommands::ForMission { id, path } => {
+                    commands::work::worktree_for_mission(&db, &id, path.as_deref())
+                }
                 WorktreeCommands::For { id, path } => {
                     let id = resolve_issue_arg(&db, &id)?;
                     commands::work::worktree_for(&db, &id, path.as_deref())
@@ -1574,6 +1600,21 @@ fn run() -> Result<()> {
                 WorktreeCommands::Repair { id } => {
                     let id = resolve_issue_arg(&db, &id)?;
                     commands::work::worktree_repair(&db, &id)
+                }
+            }
+        }
+
+        Commands::Branch { action } => {
+            let db = runtime_db()?;
+            match action {
+                BranchCommands::ForEpic { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::branch_for_epic(&db, &id)
+                }
+                BranchCommands::Status => commands::work::branch_status(&db),
+                BranchCommands::Merge { id } => {
+                    let id = resolve_issue_arg(&db, &id)?;
+                    commands::work::branch_merge(&db, &id)
                 }
             }
         }
@@ -1789,11 +1830,17 @@ fn command_identity(command: &Commands) -> &'static str {
             WorkflowCommands::Check => "workflow check",
         },
         Commands::Worktree { action } => match action {
+            WorktreeCommands::ForMission { .. } => "worktree for-mission",
             WorktreeCommands::For { .. } => "worktree for",
             WorktreeCommands::Status => "worktree status",
             WorktreeCommands::Merge { .. } => "worktree merge",
             WorktreeCommands::Remove { .. } => "worktree remove",
             WorktreeCommands::Repair { .. } => "worktree repair",
+        },
+        Commands::Branch { action } => match action {
+            BranchCommands::ForEpic { .. } => "branch for-epic",
+            BranchCommands::Status => "branch status",
+            BranchCommands::Merge { .. } => "branch merge",
         },
         Commands::Diagnostics { action } => match action {
             DiagnosticsCommands::Slow { .. } => "diagnostics slow",

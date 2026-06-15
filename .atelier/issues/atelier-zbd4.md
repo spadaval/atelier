@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:32:51.029117349+00:00"
+status: "done"
 title: "Classify existing issue worktrees and branches"
-updated_at: "2026-06-14T21:45:34.212318406+00:00"
+updated_at: "2026-06-14T22:32:51.029117349+00:00"
 ---
 
 ## Description

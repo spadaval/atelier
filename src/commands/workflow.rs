@@ -829,8 +829,68 @@ fn evaluate_builtin_with_params(
             validation_criteria_satisfied(db, target_kind, target_id)
         }
         "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
+        "epic_child_proof_complete" => {
+            epic_child_proof_complete(db, policy, target_kind, target_id)
+        }
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
+}
+
+fn epic_child_proof_complete(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("epic child proof does not apply to {target_kind} records"),
+        ));
+    }
+    let issue = db.require_issue(target_id)?;
+    if issue.issue_type != "epic" {
+        return Ok((
+            true,
+            "epic child proof does not apply to non-epic issues".to_string(),
+        ));
+    }
+    let mut missing = Vec::new();
+    for child in db.get_subissues(target_id)? {
+        collect_missing_child_proof(db, policy, &child.id, &mut missing)?;
+    }
+    if missing.is_empty() {
+        Ok((
+            true,
+            "all epic child issues are closed with passing proof".to_string(),
+        ))
+    } else {
+        Ok((
+            false,
+            format!("epic child proof incomplete: {}", missing.join(", ")),
+        ))
+    }
+}
+
+fn collect_missing_child_proof(
+    db: &Database,
+    policy: &crate::workflow_policy::WorkflowPolicy,
+    issue_id: &str,
+    missing: &mut Vec<String>,
+) -> Result<()> {
+    let issue = db.require_issue(issue_id)?;
+    if issue_is_open_for_workflow(policy, &issue)? {
+        missing.push(format!("{issue_id} open"));
+    } else if !linked_evidence_records(db, issue_id, None)?
+        .iter()
+        .any(|record| record.status == "pass")
+    {
+        missing.push(format!("{issue_id} missing passing proof"));
+    }
+    for child in db.get_subissues(issue_id)? {
+        collect_missing_child_proof(db, policy, &child.id, missing)?;
+    }
+    Ok(())
 }
 
 fn validation_criteria_satisfied(

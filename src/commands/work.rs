@@ -11,6 +11,7 @@ struct WorktreeStatus {
     path: String,
     branch: Option<String>,
     head: Option<String>,
+    mission_id: Option<String>,
     dirty: bool,
     dirty_paths: Vec<String>,
     ahead: Option<i64>,
@@ -149,6 +150,9 @@ pub fn worktree_status(db: &Database) -> Result<()> {
         let branch = status.branch.as_deref().unwrap_or("(detached)");
         print_heading(&status.path);
         println!("Branch:   {branch}");
+        if let Some(mission_id) = status.mission_id.as_deref() {
+            println!("Mission:  {mission_id}");
+        }
         println!("State:    {dirty}");
         println!(
             "Head:     {}",
@@ -329,6 +333,122 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+pub fn worktree_for_mission(db: &Database, mission_id: &str, path: Option<&str>) -> Result<()> {
+    let mission = db.require_record("mission", mission_id)?;
+    let root = repo_root()?;
+    let branch = format!("mission/{}", mission.id);
+    let worktree_path = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join(".atelier-worktrees").join(&mission.id));
+    if !worktree_path.exists() {
+        let output = Command::new("git")
+            .current_dir(&root)
+            .args(["worktree", "add", "-B", &branch])
+            .arg(&worktree_path)
+            .arg("HEAD")
+            .output()
+            .context("failed to run git worktree add")?;
+        if !output.status.success() {
+            bail!(
+                "git worktree add failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+    }
+    ensure_git_worktree(&worktree_path)?;
+    let layout = crate::storage_layout::StorageLayout::new(&worktree_path);
+    if !layout.canonical_dir().is_dir() {
+        bail!(
+            "mission worktree setup failed because {} does not contain .atelier",
+            worktree_path.display()
+        );
+    }
+    std::fs::create_dir_all(layout.target_runtime_dir())
+        .context("mission worktree setup failed while creating runtime directory")?;
+    let exe = env::current_exe().context("failed to locate current atelier executable")?;
+    let status = Command::new(exe)
+        .current_dir(&worktree_path)
+        .arg("rebuild")
+        .status()
+        .context("mission worktree setup failed while rebuilding runtime projection")?;
+    if !status.success() {
+        bail!("mission worktree setup failed while rebuilding runtime projection");
+    }
+    println!("{}", worktree_path.display());
+    println!("Mission: {}", mission.id);
+    println!("Branch: {branch}");
+    Ok(())
+}
+
+pub fn branch_for_epic(db: &Database, epic_id: &str) -> Result<()> {
+    let epic = db.require_issue(epic_id)?;
+    if epic.issue_type != "epic" {
+        bail!(
+            "{} is issue_type '{}'; epic branch commands require issue_type 'epic'",
+            epic.id,
+            epic.issue_type
+        );
+    }
+    ensure_clean_worktree()?;
+    let branch = format!("epic/{}", epic.id);
+    if branch_exists(&branch)? {
+        git_switch(&branch)?;
+    } else {
+        let status = Command::new("git")
+            .args(["switch", "-c", &branch])
+            .status()
+            .context("failed to run git switch")?;
+        if !status.success() {
+            bail!("git switch -c failed for {branch}");
+        }
+    }
+    println!("Switched to {branch}");
+    println!("Epic: {} {}", epic.id, epic.title);
+    Ok(())
+}
+
+pub fn branch_status(db: &Database) -> Result<()> {
+    let current = current_branch().unwrap_or_else(|_| "(detached)".to_string());
+    println!("Epic Branch Status");
+    println!("==================");
+    println!("Current: {current}");
+    for issue in db.list_issues(None, None, None)? {
+        if issue.issue_type != "epic" {
+            continue;
+        }
+        let branch = format!("epic/{}", issue.id);
+        if branch_exists(&branch)? {
+            println!("  {branch} - {} [{}]", issue.title, issue.status);
+        }
+    }
+    Ok(())
+}
+
+pub fn branch_merge(db: &Database, epic_id: &str) -> Result<()> {
+    let epic = db.require_issue(epic_id)?;
+    if epic.issue_type != "epic" {
+        bail!(
+            "{} is issue_type '{}'; epic branch commands require issue_type 'epic'",
+            epic.id,
+            epic.issue_type
+        );
+    }
+    ensure_clean_worktree()?;
+    let branch = format!("epic/{}", epic.id);
+    if !branch_exists(&branch)? {
+        bail!("No epic branch found for {}: {branch}", epic.id);
+    }
+    let status = Command::new("git")
+        .args(["merge", "--no-ff", &branch])
+        .status()
+        .context("failed to run git merge")?;
+    if !status.success() {
+        bail!("git merge failed; resolve conflicts with Git, then rerun validation");
+    }
+    println!("Merged {branch}");
+    Ok(())
+}
+
 fn recover_incomplete_worktree_setup(root: &Path, worktree_path: &Path) -> Result<()> {
     ensure_clean_path(worktree_path)?;
     let output = Command::new("git")
@@ -466,11 +586,24 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
     let associations = db.list_work_associations()?;
     let mut statuses = Vec::new();
     for mut worktree in worktrees {
-        let dirty_paths = dirty_paths(&worktree.path)?;
-        let (ahead, behind) = ahead_behind(&worktree.path).unwrap_or((None, None));
-        let export_errors = export_errors(&worktree.path);
+        let path_exists = worktree.path.exists();
+        let dirty_paths = if path_exists {
+            dirty_paths(&worktree.path)?
+        } else {
+            vec!["missing git worktree path; inspect `git worktree prune`".to_string()]
+        };
+        let (ahead, behind) = if path_exists {
+            ahead_behind(&worktree.path).unwrap_or((None, None))
+        } else {
+            (None, None)
+        };
+        let export_errors = if path_exists {
+            export_errors(&worktree.path)
+        } else {
+            Vec::new()
+        };
         let state_dir = crate::storage_layout::StorageLayout::new(&worktree.path).canonical_dir();
-        let export_fresh = if state_dir.is_dir() {
+        let export_fresh = if path_exists && state_dir.is_dir() {
             Some(export_errors.is_empty())
         } else {
             None
@@ -485,6 +618,7 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
             path: path_string,
             branch: worktree.branch.take(),
             head: worktree.head.take(),
+            mission_id: worktree_mission_id(db, &worktree.path)?,
             dirty: !dirty_paths.is_empty(),
             dirty_paths,
             ahead,
@@ -496,6 +630,35 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
         });
     }
     Ok(statuses)
+}
+
+fn worktree_mission_id(db: &Database, path: &Path) -> Result<Option<String>> {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return Ok(None);
+    };
+    if db.get_record("mission", name)?.is_some() {
+        return Ok(Some(name.to_string()));
+    }
+    Ok(None)
+}
+
+fn branch_exists(branch: &str) -> Result<bool> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", branch])
+        .output()
+        .context("failed to inspect git branch")?;
+    Ok(output.status.success())
+}
+
+fn git_switch(branch: &str) -> Result<()> {
+    let status = Command::new("git")
+        .args(["switch", branch])
+        .status()
+        .context("failed to run git switch")?;
+    if !status.success() {
+        bail!("git switch failed for {branch}");
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

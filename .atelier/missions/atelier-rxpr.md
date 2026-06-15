@@ -15,6 +15,9 @@ relationships:
     id: "atelier-9sni"
     type: "advances"
   - kind: "issue"
+    id: "atelier-fb61"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-l8r9"
     type: "advances"
   - kind: "issue"
@@ -27,7 +30,7 @@ schema: "atelier.mission"
 schema_version: 1
 status: "ready"
 title: "Adopt mission worktrees and epic review branches"
-updated_at: "2026-06-14T21:47:18.890623871+00:00"
+updated_at: "2026-06-15T01:16:24.849052905+00:00"
 ---
 
 ## Intent

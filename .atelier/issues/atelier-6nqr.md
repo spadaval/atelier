@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:24:23.809423745+00:00"
+status: "done"
 title: "Update Agent Factory portable workflow guidance"
-updated_at: "2026-06-14T21:45:20.152643432+00:00"
+updated_at: "2026-06-14T22:24:23.809423745+00:00"
 ---
 
 ## Description

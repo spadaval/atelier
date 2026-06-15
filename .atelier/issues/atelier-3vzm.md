@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:33:16.192924663+00:00"
+status: "done"
 title: "Update workflow help and tests for issue proof versus epic review"
-updated_at: "2026-06-14T21:44:54.240353912+00:00"
+updated_at: "2026-06-14T22:33:16.192924663+00:00"
 ---
 
 ## Description

@@ -52,15 +52,20 @@
   a transition can proceed and returns an actionable failure reason.
 - Guidance: advisory workflow text rendered near an action, status, or failure
   to explain the next operator move. Guidance informs; validators decide.
-- Issue: a durable accountability unit. It does not have to map one-to-one to an
-  agent run.
+- Mission: a high-level objective that may span multiple epics, issues,
+  milestones, plans, agents, and runs. It is also the shared background
+  workspace boundary: one mission normally owns one shared worktree for
+  coordinated agent work.
+- Epic: the normal branch and review boundary beneath a mission. One epic
+  normally owns one reviewable branch or PR-equivalent changeset.
+- Issue: a durable accountability unit and implementation slice. It does not
+  have to map one-to-one to an agent run, worktree, branch, or independent
+  review.
 - Blocking relationship: an issue-owned relationship where one issue prevents
   another issue from being ready.
 - Milestone: a validated intermediate checkpoint state with scope boundaries,
   validation criteria, accepted evidence, and completion state. It is not a
   work container or super-epic.
-- Mission: a high-level objective that may span multiple issues, milestones,
-  plans, agents, and runs.
 - Mission Control: the target projection or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
@@ -69,9 +74,9 @@
   of product planning.
 - Graph: the cross-record relationship shape among missions, issues, blockers,
   plans, evidence, and other first-class records.
-- Active work: the local runtime association between an agent, an issue, and
-  the current branch/worktree for in-progress execution. It is coordination
-  state, not the durable workflow status of the issue.
+- Active work: the local runtime association between an agent, an issue, the
+  mission worktree, and the epic branch for in-progress execution. It is
+  coordination state, not the durable workflow status of the issue.
 - Abandon: an explicit action that clears active work without claiming
   completion or changing issue workflow status.
 - SQLite state: fast local projection and runtime state, currently inherited
@@ -113,3 +118,7 @@
 - Durable claim/assignment and active local work are easy to confuse. Until a
   distinct assignment policy is justified, normal work should use active work
   rather than a parallel claim system.
+- Workspace, branch, and review boundaries are distinct. Missions own shared
+  worktrees/background checkouts, epics own reviewable branches, and ordinary
+  issues own local implementation proof. Per-issue worktrees or branches are
+  exceptional isolation tools, not the default assignment model.

@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:24:53.099818533+00:00"
+status: "done"
 title: "Update Atelier repo Agent Factory binding"
-updated_at: "2026-06-14T21:45:22.040859165+00:00"
+updated_at: "2026-06-14T22:24:53.099818533+00:00"
 ---
 
 ## Description

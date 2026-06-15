@@ -6,13 +6,17 @@ proof. These concepts should not collapse into one issue hierarchy.
 ## Concepts
 
 - Mission: a long-running objective with intent, scope, constraints, current
-  health, linked milestones, active epics, plans, risks, and evidence.
+  health, linked milestones, active epics, plans, risks, and evidence. It is
+  also the default shared background workspace boundary: one mission normally
+  owns one shared worktree or equivalent checkout.
 - Milestone: a validated checkpoint state inside a mission. A milestone defines
   desired state, scope boundaries, validation criteria, accepted evidence, and
   completion state. It is not a work container or super-epic.
-- Epic: a coordinated work package. Epics group implementation, documentation,
-  review, validation, and closeout tasks that deliver a coherent change.
-- Issue: the actual accountability unit for work. Tasks, bugs, reviews,
+- Epic: a coordinated work package and the normal branch/review boundary.
+  Epics group implementation, documentation, review, validation, and closeout
+  tasks that deliver a coherent change on one reviewable branch.
+- Issue: the actual accountability unit for work. Ordinary implementation
+  issues are local slices on an epic branch; tasks, bugs, reviews,
   validations, closeouts, and artifact updates are issue-shaped until a more
   specific first-class record exists.
 - Workflow: the policy for how records move between states.
@@ -60,7 +64,9 @@ manual review fills `summary`, `proof_scope`, `independence_level`, and
 Atelier routes proof by risk and scope. Ordinary executable issues prove their
 own Outcome on the issue: the `Evidence` section names the proof, the worker
 runs the narrowest checks that support the claim, and the result is recorded
-before closeout.
+before closeout. Ordinary implementation issues do not require a separate
+independent review by default; the parent epic supplies the review and
+validation boundary for the coherent changeset.
 
 Durable issue notes are for handoff context, caveats, skipped optional checks,
 and trivial proof that does not need a separate artifact. First-class evidence
@@ -72,7 +78,9 @@ future workers must inspect.
 Separate validation or closeout issues are required when the implementer should
 not validate the claim alone: migrations, public command or API contracts,
 docs/help parity, stale-test risk, cross-cutting workflow or persistence
-behavior, Agent Factory process changes, and all epic or mission closeouts.
+behavior, Agent Factory process changes, explicitly risk-escalated issue
+slices, epic closeouts, and explicit mission-level closeout or validation
+claims.
 
 Missions are coordination shells by default, not work logs. A mission may
 retain direct evidence links only for legacy imports, migration notes, or an
@@ -151,7 +159,8 @@ artifact, or independent reviewer identity.
 Missions are goal records, not task records. A mission should describe the
 desired end state and the durable context needed to coordinate work toward that
 state: intent, constraints, risks, checkpoint milestones, plans, validation
-expectations, and evidence.
+expectations, evidence, and the shared workspace/background checkout where the
+mission is executed.
 
 A mission is large enough to require at least one epic. If the work can be
 planned, claimed, implemented, validated, and closed as a single accountable
@@ -180,10 +189,29 @@ mission atelier-hy2i
 ```
 
 In this shape, the mission carries objective scope and validation expectations,
-epics group accountable work packages, and child issues execute under their
-epic. Mission status should count each unique issue once even when a deliberate
-duplicate path exists, but planners should avoid duplicate mission links by
-default because they make readiness and closeout harder to scan.
+epics group accountable work packages on reviewable branches, and child issues
+execute as implementation slices under their epic. Mission status should count
+each unique issue once even when a deliberate duplicate path exists, but
+planners should avoid duplicate mission links by default because they make
+readiness and closeout harder to scan.
+
+## Workspace, Branch, And Review Boundaries
+
+The default operating model separates three concerns:
+
+- Mission: one shared worktree or background checkout for coordinated work.
+- Epic: one reviewable branch or PR-equivalent changeset under that mission.
+- Issue: one implementation, documentation, review, validation, closeout, or
+  artifact-update slice with local proof.
+
+Per-issue worktrees and per-issue branches are exceptional isolation tools. Use
+them for dirty or high-risk experiments, cross-epic conflicts, destructive
+migration trials, or an explicitly assigned validation/review context. They are
+not the default for every mutating subagent or every ordinary child issue.
+
+Independent review moves to the epic by default. Ordinary implementation issues
+close with their own proof, while epic closeout maps child issue proof to the
+parent outcome and records the review or validation judgment for the branch.
 
 ## Relationships
 
@@ -335,21 +363,26 @@ missing after interrupted cleanup; it refuses to clear an association whose path
 still exists, so intentional context switches still use `abandon`.
 
 Each checkout has at most one active issue association. Running `atelier start
-<issue-id>` again for the same issue refreshes the local branch/path metadata;
-starting a different issue in the same checkout is rejected until the operator
-runs `atelier abandon <active-id> --reason "..."`. Parallel active work uses
-separate Git worktrees, each with its own local runtime state.
+<issue-id>` again for the same issue refreshes the local workspace and branch
+metadata; starting a different issue in the same checkout is rejected until the
+operator runs `atelier abandon <active-id> --reason "..."`. Parallel active
+work within one mission uses the shared mission worktree and epic branches as
+the coordination boundary. Separate issue worktrees are exceptional containment
+for conflicting, dirty, high-risk, or explicitly isolated slices.
 
-`atelier worktree for <issue-id>` creates or locates a Git worktree using the
-configured branch/path policy, rebuilds local SQLite state from
-tracked `.atelier/` records, and records the issue/branch/worktree association
-in local runtime state. Workflow-defined hooks are deferred in v1 and are not
-part of the current worktree contract.
+`atelier worktree for-mission <mission-id>` creates or locates a mission
+worktree using the configured path policy, rebuilds local SQLite state from
+tracked `.atelier/` records, and reports the mission workspace association.
+`atelier branch for-epic <epic-id>` creates or locates the reviewable epic
+branch inside the current checkout and records the branch boundary in Git.
+Workflow-defined hooks are deferred in v1 and are not part of the current
+worktree contract.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
-an upstream exists, unpushed commit count, associated work, and canonical export
-freshness when available. `atelier worktree merge` and
+an upstream exists, unpushed commit count, associated mission/epic/issue work,
+and canonical export freshness when available. `atelier worktree merge` and
 `atelier worktree remove` are thin Git wrappers for merging an associated branch
-and cleaning up the associated worktree.
+and cleaning up the associated mission worktree after branch review and cleanup
+are complete.
 
 ## Milestones And Validators
 

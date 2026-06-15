@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:22:37.312568569+00:00"
+status: "done"
 title: "Split issue and epic workflow policies"
-updated_at: "2026-06-14T21:44:50.565785538+00:00"
+updated_at: "2026-06-14T22:22:37.312568569+00:00"
 ---
 
 ## Description

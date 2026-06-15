@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-14T22:20:17.688612611+00:00"
+status: "done"
 title: "Document mission worktree and epic branch operating model"
-updated_at: "2026-06-14T21:44:36.916839256+00:00"
+updated_at: "2026-06-14T22:20:17.688612611+00:00"
 ---
 
 ## Description
