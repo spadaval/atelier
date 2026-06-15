@@ -52,6 +52,14 @@ editor integration files, hook scaffolding, and UI caches are not project
 tracker state unless a future contract explicitly promotes a file into the
 tracked config surface.
 
+## Project Config
+
+`.atelier/config.toml` is tracked project state. It identifies the Atelier
+project config schema, project slug, canonical state root, local runtime
+directory, runtime SQLite path, cache directory, and compatibility read/migrate
+state root. Runtime and cache paths named by the config remain local-only and
+must stay ignored; the config records where they live, not their contents.
+
 ## Schema Identity
 
 Every exported file has a `schema` string and `schema_version` integer.

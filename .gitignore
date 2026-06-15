@@ -1,18 +1,20 @@
 /target/
-/.atelier/.gitignore
+
+# Atelier project state under .atelier/ is tracked intentionally.
+# Keep canonical records and .atelier/config.toml visible to git; ignore only
+# local runtime, projection, cache, identity, lock, and generated integration
+# artifacts.
 /.atelier/.locks-cache/
 /.atelier/state.db
+/.atelier/state.db-shm
+/.atelier/state.db-wal
+/.atelier/agent.json
 /.atelier/hook-config.json
-/.atelier/rules/
+/.atelier/hook-config.local.json
+/.atelier/.cache/
 /.atelier/rules.local/
 /.atelier/runtime/
 /.atelier/cache/
-/.atelier/**/*.db
-/.atelier/**/*.db-shm
-/.atelier/**/*.db-wal
 /.atelier-state/cache/
 .dolt/
 .beads-credential-key
-*.db
-*.db-shm
-*.db-wal
