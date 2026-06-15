@@ -38,9 +38,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Remove active issue and legacy claim systems"
-updated_at: "2026-06-15T05:22:48.695501224+00:00"
+updated_at: "2026-06-15T16:08:12.786201425+00:00"
 ---
 
 ## Description
