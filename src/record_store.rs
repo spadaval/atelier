@@ -1870,7 +1870,7 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
                 .strip_prefix(root)
                 .context("Failed to relativize canonical issue path")?
                 .to_path_buf();
-            if is_transient_record_path(&relative) {
+            if crate::storage_layout::is_local_atelier_path(&relative) {
                 continue;
             }
             if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
@@ -1883,13 +1883,6 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
         }
     }
     Ok(())
-}
-
-fn is_transient_record_path(relative: &Path) -> bool {
-    relative
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with('.') && name.ends_with(".tmp"))
 }
 
 fn split_front_matter<'a>(

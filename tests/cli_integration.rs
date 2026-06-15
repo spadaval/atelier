@@ -221,6 +221,32 @@ fn edit_canonical_issue(dir: &Path, issue_id: &str, edit: impl FnOnce(String) ->
     edit_canonical_record(dir, "issues", issue_id, edit);
 }
 
+fn write_ignored_canonical_artifacts(dir: &Path, issue_id: &str) {
+    let runtime_dir = dir.join(".atelier/runtime");
+    std::fs::create_dir_all(&runtime_dir).unwrap();
+    std::fs::write(
+        runtime_dir.join(".state.db.123.456.rebuild-tmp"),
+        "partial sqlite rebuild",
+    )
+    .unwrap();
+    std::fs::write(
+        runtime_dir.join(".state.db.123.456.rebuild-tmp-journal"),
+        "partial sqlite rebuild journal",
+    )
+    .unwrap();
+    let cache_dir = dir.join(".atelier/cache");
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::write(cache_dir.join("projection.lock"), "cache lock").unwrap();
+    let issue_dir = dir.join(".atelier/issues");
+    std::fs::write(issue_dir.join(format!("{issue_id}.md.lock")), "lock").unwrap();
+    std::fs::write(issue_dir.join(format!("{issue_id}.md-journal")), "journal").unwrap();
+    std::fs::write(
+        issue_dir.join(format!(".{issue_id}.md.123.456.tmp")),
+        "partial canonical write",
+    )
+    .unwrap();
+}
+
 fn corrupt_issue_title_yaml(dir: &Path, issue_id: &str, title: &str) {
     edit_canonical_issue(dir, issue_id, |markdown| {
         markdown.replace(&format!("title: {title:?}"), &format!("title: [{title}"))
@@ -9835,15 +9861,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
     ensure_issue_closeout_sections(dir.path(), &issue_id);
-
-    let temp_path = dir
-        .path()
-        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp");
-    std::fs::write(&temp_path, "partial sqlite rebuild").unwrap();
-    let temp_journal_path = dir
-        .path()
-        .join(".atelier/runtime/.state.db.123.456.rebuild-tmp-journal");
-    std::fs::write(&temp_journal_path, "partial sqlite rebuild journal").unwrap();
+    write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
         markdown.replace("Temp rebuild filter", "Temp rebuild filter changed")
@@ -9866,8 +9884,11 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
         );
         let combined = format!("{stdout}\n{stderr}");
         assert!(
-            !combined.contains("rebuild-tmp"),
-            "{args:?} diagnostics must not report rebuild tmp path: {combined}"
+            !combined.contains("rebuild-tmp")
+                && !combined.contains(".md.lock")
+                && !combined.contains(".md-journal")
+                && !combined.contains("projection.lock"),
+            "{args:?} diagnostics must not report ignored local artifacts: {combined}"
         );
     }
 }
@@ -9952,6 +9973,7 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
         "title: [Lint canonical source",
     );
     write_canonical_record(dir.path(), "issues", &issue_id, invalid_markdown.clone());
+    write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     let metadata = std::fs::metadata(&issue_path).unwrap();
     let mut hasher = Sha256::new();
@@ -9979,6 +10001,14 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
         stdout.contains("Invalid YAML front matter")
             && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected lint output: {stdout}\nstderr: {stderr}"
+    );
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        !transcript.contains("rebuild-tmp")
+            && !transcript.contains(".md.lock")
+            && !transcript.contains(".md-journal")
+            && !transcript.contains("projection.lock"),
+        "lint must ignore local artifacts while reporting malformed committed Markdown: {transcript}"
     );
     assert!(stderr.contains("Lint failed"));
     assert!(

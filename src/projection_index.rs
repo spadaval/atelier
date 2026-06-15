@@ -9,6 +9,7 @@ use std::time::UNIX_EPOCH;
 
 use crate::db::Database;
 use crate::record_store;
+use crate::storage_layout;
 
 const MAX_PROBLEM_SAMPLES: usize = 5;
 
@@ -278,6 +279,12 @@ fn collect_source_files(root: &Path, dir: &Path, entries: &mut Vec<SourceEntry>)
             }
             collect_source_files(root, &path, entries)?;
         } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize source file")?;
+            if storage_layout::is_local_atelier_path(relative) {
+                continue;
+            }
             entries.push(source_entry(root, &path)?);
         }
     }

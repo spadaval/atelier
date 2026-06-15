@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Filter runtime cache and temp files from canonical diagnostics"
-updated_at: "2026-06-14T02:52:40.095978862+00:00"
+updated_at: "2026-06-14T06:31:21.341737297+00:00"
 ---
 
 ## Description
