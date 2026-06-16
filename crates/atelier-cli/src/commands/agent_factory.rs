@@ -670,34 +670,6 @@ pub(crate) struct EvidenceGateStatus {
     pub reason: String,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProofCoverageStatus {
-    Covered,
-    Missing,
-    Failed,
-    Blocked,
-    Deferred,
-    NotApplicable,
-}
-
-impl ProofCoverageStatus {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Covered => "covered",
-            Self::Missing => "missing",
-            Self::Failed => "failed",
-            Self::Blocked => "blocked",
-            Self::Deferred => "deferred",
-            Self::NotApplicable => "not-applicable",
-        }
-    }
-
-    pub(crate) fn satisfies_closeout(self) -> bool {
-        matches!(self, Self::Covered | Self::NotApplicable)
-    }
-}
-
 pub(crate) fn issue_evidence_gate_status(
     db: &Database,
     issue: &Issue,

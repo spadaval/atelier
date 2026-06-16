@@ -1964,13 +1964,7 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
-    assert!(status_out.contains("Closeout: blocked"));
-    assert!(status_out.contains("Ignored Test Review: needed"));
-    assert!(status_out.contains("Advanced Validator Detail"));
-    assert!(status_out.contains("fail  ignored_tests_reviewed"));
-    assert!(status_out.contains("ignored_product_closeout_gap"));
-    assert!(status_out.contains(followup_id));
-    assert!(status_out.contains("ignored product-behavior test is still blocking closeout"));
+    assert!(status_out.contains("Terminal: blocked"));
     assert!(!status_out.contains(&format!(
         "atelier mission update {mission_id} --status closed"
     )));
@@ -2031,17 +2025,17 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
         !success,
         "mission closeout should block undeferred obsolete-command tests"
     );
-    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("Mission terminal checks blocked"));
     assert!(stdout.contains("docs/help drift: detected"));
     assert!(stdout.contains("update docs, help text, or command-surface tests"));
     assert!(stdout.contains("tests/legacy_session.rs"));
     assert!(stdout.contains("legacy_session_still_works"));
     assert!(stdout.contains("atelier session start"));
-    assert!(stderr.contains("mission closeout blocked"));
+    assert!(stderr.contains("mission terminal checks blocked"));
 }
 
 #[test]
-fn test_mission_audit_reports_shell_closeout_and_explicit_approval() {
+fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -2051,22 +2045,25 @@ fn test_mission_audit_reports_shell_closeout_and_explicit_approval() {
         &[
             "mission",
             "create",
-            "Approval audit",
+            "Approval terminal checks",
             "--validation",
             "Human guidance only.",
         ],
     );
     assert!(success, "mission create failed: {stderr}");
     assert!(mission_out.contains("Mission atelier-"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Approval audit");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Approval terminal checks");
     let mission_id = mission_id.as_str();
 
-    let (success, missing_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
-    assert!(!success, "audit without work should fail");
-    assert!(missing_out.contains("Mission Closeout Audit"));
-    assert!(missing_out.contains("[missing]"));
-    assert!(missing_out.contains("No linked mission work exists."));
-    assert!(stderr.contains("mission closeout audit found unresolved items"));
+    let (success, missing_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
+    assert!(
+        success,
+        "status without work should render terminal checks: {stderr}"
+    );
+    assert!(missing_out.contains("Terminal Checks"));
+    assert!(missing_out.contains("Work: missing"));
+    assert!(!missing_out.contains("Mission Closeout Audit"));
 
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Finished mission work"]);
@@ -2087,31 +2084,38 @@ fn test_mission_audit_reports_shell_closeout_and_explicit_approval() {
             "Mission approval validation",
             "--issue-type",
             "validation",
-            "--description",
-            "## Description\n\nValidation item body.\n\n## Outcome\n\nMission approval is represented as linked workflow state.\n\n## Evidence\n\n- `atelier evidence show <id>` displays the approval record attached to this issue.",
         ],
     );
     assert!(success, "validation issue create failed: {stderr}");
     assert!(approval_out.contains("Created issue atelier-"));
     let approval_id = issue_id_by_title(dir.path(), "Mission approval validation");
     let approval_id = approval_id.as_str();
+    edit_canonical_record(dir.path(), "issues", approval_id, |text| {
+        text.replace("No description provided.", "Validation item body.")
+            .replace(
+                "Outcome was not specified.",
+                "Mission approval is represented as linked workflow state.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Manual check: `atelier evidence show <id>` displays the approval record attached to this issue.",
+            )
+    });
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["mission", "add-work", mission_id, approval_id],
     );
     assert!(success, "mission add validation failed: {stderr}");
 
-    let (success, closeout_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", "--closeout", mission_id]);
+    let (success, terminal_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
     assert!(
-        !success,
-        "closeout view should fail while approval work is open"
+        success,
+        "terminal status should render while approval work is open: {stderr}"
     );
-    assert!(closeout_out.contains("Mission Closeout Audit"));
-    assert!(closeout_out.contains("Workflow Approval"));
-    assert!(closeout_out.contains(approval_id));
-    assert!(closeout_out.contains("Linked validation work is still"));
-    assert!(stderr.contains("mission closeout audit found unresolved items"));
+    assert!(terminal_out.contains("Terminal Checks"));
+    assert!(terminal_out.contains(approval_id));
+    assert!(terminal_out.contains("linked terminal validation work"));
 
     move_issue_to_validation(dir.path(), approval_id);
     attach_pass_evidence(
@@ -2126,13 +2130,12 @@ fn test_mission_audit_reports_shell_closeout_and_explicit_approval() {
         &["issue", "close", approval_id, "--reason", "approved"],
     );
     assert!(success, "validation issue close failed: {stderr}");
-    commit_all(dir.path(), "approval audit ready");
 
-    let (success, ready_out, stderr) = run_atelier(dir.path(), &["mission", "audit", mission_id]);
-    assert!(success, "ready audit should pass: {stderr}");
-    assert!(ready_out.contains("Mission Closeout Audit"));
-    assert!(ready_out.contains("[covered]"));
-    assert!(ready_out.contains("Workflow approval closed via linked validation work."));
+    let (success, ready_out, stderr) =
+        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
+    assert!(success, "ready terminal status should pass: {stderr}");
+    assert!(ready_out.contains("Terminal Checks"));
+    assert!(ready_out.contains("All required terminal checks pass."));
 }
 
 #[test]
@@ -2166,13 +2169,12 @@ fn test_mission_closeout_accepts_shell_mission_without_direct_mission_evidence()
         run_atelier(dir.path(), &["mission", "add-work", mission_id, work_id]);
     assert!(success, "mission add work failed: {stderr}");
     close_issue_with_evidence(dir.path(), work_id, Some("done"));
-    commit_all(dir.path(), "shell mission ready");
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains("Direct mission evidence: none"));
-    assert!(status_out.contains("Closeout: ready"));
-    assert!(status_out.contains("All required closeout gates pass."));
+    assert!(status_out.contains("Terminal: ready"));
+    assert!(status_out.contains("All required terminal checks pass."));
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),

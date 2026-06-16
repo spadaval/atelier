@@ -267,7 +267,7 @@ fn print_not_usually(role: Role) {
             );
         }
         Role::Admin => {
-            println!("  ordinary issue implementation, evidence capture for feature proof, mission closeout judgment");
+            println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");
         }
     }
 }

@@ -469,9 +469,9 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         &["mission", "close", &mission_id, "--reason", "done"],
     );
     assert!(!success, "mission close should fail with open work");
-    assert!(closeout_blocked_out.contains("Mission closeout blocked"));
+    assert!(closeout_blocked_out.contains("Mission terminal checks blocked"));
     assert!(closeout_blocked_out.contains("open mission work"));
-    assert!(stderr.contains("mission closeout blocked"));
+    assert!(stderr.contains("mission terminal checks blocked"));
 
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
 
@@ -543,11 +543,11 @@ fn test_dirty_worktree_blocks_mission_closeout() {
         &["mission", "close", &mission_id, "--reason", "done"],
     );
     assert!(!success, "dirty worktree must block mission closeout");
-    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("Mission terminal checks blocked"));
     assert!(stdout.contains("worktree: dirty"));
     assert!(stdout.contains("commit or remove untracked worktree changes"));
     assert!(stdout.contains("untracked-closeout.txt"));
-    assert!(stderr.contains("mission closeout blocked"));
+    assert!(stderr.contains("mission terminal checks blocked"));
 }
 
 #[test]
@@ -595,10 +595,10 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
         success,
         "mission status should tolerate tracker bookkeeping: {stderr}"
     );
-    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Terminal Checks"));
     assert!(
-        status_out.contains("Closeout: ready")
-            && status_out.contains("All required closeout gates pass."),
+        status_out.contains("Terminal: ready")
+            && status_out.contains("All required terminal checks pass."),
         "mission status should be ready after issue close commits bookkeeping:\n{status_out}"
     );
 
@@ -662,10 +662,10 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
         !success,
         "hand-edited canonical issue markdown must block closeout"
     );
-    assert!(stdout.contains("Mission closeout blocked"));
+    assert!(stdout.contains("Mission terminal checks blocked"));
     assert!(stdout.contains("worktree: dirty"));
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
-    assert!(stderr.contains("mission closeout blocked"));
+    assert!(stderr.contains("mission terminal checks blocked"));
 }
 
 #[test]
@@ -699,7 +699,7 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     let (success, status_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
-    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Terminal Checks"));
     assert!(status_out.contains("Work: open"));
     assert!(status_out.contains(&work_id));
     assert!(status_out.contains("Blockers: open"));
@@ -707,13 +707,13 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(status_out.contains("Worktree: dirty"));
     assert!(status_out.contains("status-dirty.txt"));
     assert!(!status_out.contains("Advanced Validator Detail"));
-    assert!(!status_out.contains("advanced closeout validator failure"));
+    assert!(!status_out.contains("advanced terminal validator failure"));
 
     let (success, verbose_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", "--verbose", &mission_id]);
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_out.contains("Advanced Validator Detail"));
-    assert!(verbose_out.contains("advanced closeout validator failure"));
+    assert!(verbose_out.contains("advanced terminal validator failure"));
     assert!(verbose_out.contains("git_worktree_clean"));
 }
 
@@ -1350,23 +1350,23 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Missing Evidence Sections: none"));
     assert!(status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
-    assert!(status_out.contains(&format!("atelier mission status --closeout {mission_id}")));
+    assert!(status_out.contains(&format!("atelier mission status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
     assert!(status_out.contains("atelier doctor"));
-    assert!(status_out.contains("Closeout Gates"));
+    assert!(status_out.contains("Terminal Checks"));
     assert!(!status_out.contains("Advanced Validator Detail"));
-    assert!(!status_out.contains("advanced closeout validator failure detected."));
+    assert!(!status_out.contains("advanced terminal validator failure detected."));
     let (success, verbose_status_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_status_out.contains("Advanced Validator Detail"));
-    assert!(verbose_status_out.contains("advanced closeout validator failure detected."));
+    assert!(verbose_status_out.contains("advanced terminal validator failure detected."));
     assert!(status_out.contains("Next Commands"));
     assert!(status_out.contains(&format!(
         "Inspect mission record (durable intent and linked work): atelier mission show {mission_id}"
     )));
     assert!(status_out.contains(&format!(
-        "Refresh mission status (current blockers and closeout gates): atelier mission status {mission_id}"
+        "Refresh mission status (current blockers and terminal checks): atelier mission status {mission_id}"
     )));
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
@@ -1443,9 +1443,9 @@ fn test_mission_status_cli_reports_control_state() {
     let (success, closeout_status, stderr) =
         run_atelier(dir.path(), &["mission", "status", closeout_mission]);
     assert!(success, "closeout mission status failed: {stderr}");
-    assert!(closeout_status.contains("Health:   closeout"));
+    assert!(closeout_status.contains("Health:   terminal"));
     assert!(
-        closeout_status.contains("Closeout: ready"),
+        closeout_status.contains("Terminal: ready"),
         "unexpected closeout mission status:\n{closeout_status}"
     );
     assert!(closeout_status.contains("Reliability"));
@@ -1454,7 +1454,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(closeout_status.contains("Ignored Test Review: current"));
     assert!(closeout_status.contains("Open Blockers: none"));
     assert!(closeout_status.contains(&format!(
-        "Close mission (all closeout gates pass): atelier mission close {closeout_mission} --reason \"...\""
+        "Close mission (all terminal checks pass): atelier mission close {closeout_mission} --reason \"...\""
     )));
 
     let mission_path = dir
@@ -1474,7 +1474,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(stale_status.contains("Autonomy status stale"));
     assert!(stale_status.contains("Tracker:  ok"));
     assert!(stale_status.contains("Worktree: dirty"));
-    assert!(!stale_status.contains("advanced closeout validator failure detected."));
+    assert!(!stale_status.contains("advanced terminal validator failure detected."));
 }
 
 #[test]

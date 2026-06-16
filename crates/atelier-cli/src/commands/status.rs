@@ -244,7 +244,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else {
                 println!(
-                    "  Review active mission closeout (no ready work is available): atelier mission status {}",
+                    "  Review active mission terminal state (no ready work is available): atelier mission status {}",
                     mission.id
                 );
             }
@@ -314,7 +314,7 @@ impl MissionSnapshot {
         } else if self.ready > 0 {
             "ready"
         } else if self.done > 0 {
-            "closeout"
+            "terminal"
         } else {
             "steady"
         }

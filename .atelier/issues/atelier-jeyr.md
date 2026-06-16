@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove closeout command vocabulary from mission surfaces"
-updated_at: "2026-06-15T21:31:14.386519884+00:00"
+updated_at: "2026-06-16T19:54:03.253577623+00:00"
 ---
 
 ## Description

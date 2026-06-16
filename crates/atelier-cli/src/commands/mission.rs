@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::commands::agent_factory::ProofCoverageStatus;
 use crate::commands::work_order::WorkOrderRow;
 use atelier_core::{DomainRecord, Issue, RecordLink};
 use atelier_records as record_store;
@@ -93,15 +92,8 @@ pub fn status(
     state_dir: &Path,
     id: Option<&str>,
     quiet: bool,
-    closeout: bool,
     verbose: bool,
 ) -> Result<()> {
-    if closeout {
-        let Some(id) = id else {
-            bail!("mission status --closeout requires a mission id");
-        };
-        return audit(db, state_dir, id, quiet);
-    }
     match id {
         Some(id) => status_one(db, state_dir, id, quiet, verbose),
         None => match active_mission(db)? {
@@ -127,13 +119,13 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
 
     if quiet {
         println!(
-            "missions={} blocked={} closeout_needed={} tracker={}",
+            "missions={} blocked={} terminal_ready={} tracker={}",
             rows.len(),
             rows.iter()
                 .filter(|row| row.summary.open_blockers > 0 || row.summary.total_work().blocked > 0)
                 .count(),
             rows.iter()
-                .filter(|row| row.summary.closeout_needed())
+                .filter(|row| row.summary.terminal_ready())
                 .count(),
             tracker.status_token()
         );
@@ -164,15 +156,15 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
             let work = row.summary.total_work();
             let health = mission_health(&row.summary);
             println!(
-                "  {} [{}] {} - {} | {} | evidence gaps {} | closeout {}",
+                "  {} [{}] {} - {} | {} | evidence gaps {} | terminal {}",
                 row.record.id,
                 health,
                 mission_focus_label(&row.record),
                 row.record.title,
                 work.to_compact_text(),
                 row.summary.evidence_gap_count(),
-                if row.summary.closeout_needed() {
-                    "needed"
+                if row.summary.terminal_ready() {
+                    "ready"
                 } else {
                     "not ready"
                 }
@@ -200,7 +192,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     if quiet {
         let work = summary.total_work();
         println!(
-            "{} health={} ready={} blocked={} done={} backlog={} blockers={} evidence_gaps={} validator_failures={} tracker={} closeout_needed={}",
+            "{} health={} ready={} blocked={} done={} backlog={} blockers={} evidence_gaps={} validator_failures={} tracker={} terminal_ready={}",
             mission.id,
             mission_health_for(&mission, &summary),
             work.ready,
@@ -233,7 +225,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     println!("Health:   {}", mission_health_for(&mission, &summary));
     println!("Tracker:  {}", tracker.status_text());
     println!(
-        "Closeout: {}",
+        "Terminal: {}",
         if mission_lifecycle_status(&mission) == "closed" {
             "complete"
         } else if terminal.ready() {
@@ -321,7 +313,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     print_mission_heading("Reliability");
     print_reliability_summary(db, state_dir, &mission, &summary, &tracker, &terminal)?;
 
-    print_mission_heading("Closeout Gates");
+    print_mission_heading("Terminal Checks");
     if mission_lifecycle_status(&mission) == "closed" {
         println!("Mission is closed.");
     } else {
@@ -336,10 +328,10 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     if show_advanced_validator_detail {
         print_mission_heading("Advanced Validator Detail");
         if validator_failures == 0 {
-            println!("All advanced closeout validators passed.");
+            println!("All advanced terminal validators passed.");
         } else {
             println!(
-                "{} advanced closeout validator failure detected.",
+                "{} advanced terminal validator failure detected.",
                 validator_failures
             );
             for result in terminal
@@ -482,10 +474,6 @@ fn print_status_next_commands(
     match lifecycle.as_str() {
         "closed" => {
             println!(
-                "  Inspect closeout audit history: atelier mission status --closeout {}",
-                mission.id
-            );
-            println!(
                 "  Inspect mission history: atelier history --mission {}",
                 mission.id
             );
@@ -499,19 +487,19 @@ fn print_status_next_commands(
         }
         _ => {
             println!(
-                "  Refresh mission status (current blockers and closeout gates): atelier mission status {}",
+                "  Refresh mission status (current blockers and terminal checks): atelier mission status {}",
                 mission.id
             );
         }
     }
     if terminal.ready() {
         println!(
-            "  Close mission (all closeout gates pass): atelier mission close {} --reason \"...\"",
+            "  Close mission (all terminal checks pass): atelier mission close {} --reason \"...\"",
             mission.id
         );
     } else {
         println!(
-            "  Inspect closeout gate detail: atelier mission status --closeout {}",
+            "  Inspect terminal check detail: atelier mission status {} --verbose",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -754,7 +742,7 @@ pub fn update(
         let status = normalize_mission_status(status)?;
         if status == "closed" && current.record.status != "closed" {
             bail!(
-                "Mission closeout uses `atelier mission close {id} --reason \"...\"`; `mission update --status closed` is not the ordinary closeout path."
+                "Mission terminal checks use `atelier mission close {id} --reason \"...\"`; `mission update --status closed` is not the ordinary terminal path."
             );
         }
         current.record.status = status.to_string();
@@ -838,130 +826,12 @@ pub fn unlink(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Res
     Ok(())
 }
 
-pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<()> {
-    let mission = db.require_record(KIND, id)?;
-    let audit = mission_contract_audit(db, state_dir, &mission)?;
-    if quiet {
-        println!(
-            "{} audit={} items={} failures={}",
-            mission.id,
-            if audit.passed() { "pass" } else { "fail" },
-            audit.items.len(),
-            audit.failure_count()
-        );
-    } else {
-        audit.print_human(&mission);
-    }
-    if audit.passed() {
-        Ok(())
-    } else {
-        bail!(
-            "mission closeout audit found unresolved items for {}",
-            mission.id
-        )
-    }
-}
-
 struct MissionTerminalStatus {
     mission_id: String,
     has_work: bool,
     open_work: Vec<String>,
     open_blockers: Vec<String>,
     validator_results: Vec<crate::commands::workflow::ValidatorResult>,
-}
-
-#[derive(Debug, Clone)]
-struct MissionContractAudit {
-    items: Vec<MissionContractAuditItem>,
-}
-
-#[derive(Debug, Clone)]
-struct MissionContractAuditItem {
-    group: String,
-    target: String,
-    text: String,
-    coverage_status: ProofCoverageStatus,
-    reason: String,
-}
-
-impl MissionContractAudit {
-    pub(crate) fn passed(&self) -> bool {
-        self.items
-            .iter()
-            .all(|item| item.coverage_status.satisfies_closeout())
-    }
-
-    pub(crate) fn failure_count(&self) -> usize {
-        self.items
-            .iter()
-            .filter(|item| !item.coverage_status.satisfies_closeout())
-            .count()
-    }
-
-    pub(crate) fn pass_count(&self) -> usize {
-        self.items
-            .iter()
-            .filter(|item| item.coverage_status.satisfies_closeout())
-            .count()
-    }
-
-    fn print_human(&self, mission: &DomainRecord) {
-        let status = if self.passed() { "pass" } else { "fail" };
-        let identity = format!(
-            "Mission Closeout Audit {} [{}] - {}",
-            mission.id, status, mission.title
-        );
-        println!("{identity}");
-        println!("{}", "=".repeat(identity.len()));
-        println!(
-            "Summary: {} pass, {} fail, {} total",
-            self.pass_count(),
-            self.failure_count(),
-            self.items.len()
-        );
-        if self.items.is_empty() {
-            println!("No closeout audit items.");
-        }
-
-        let groups = self
-            .items
-            .iter()
-            .map(|item| item.group.as_str())
-            .collect::<BTreeSet<_>>();
-        for group in groups {
-            println!();
-            println!("{group}");
-            println!("{}", "-".repeat(group.len()));
-            for item in self.items.iter().filter(|item| item.group == group) {
-                println!(
-                    "  [{}] {} - {}",
-                    item.coverage_status.label(),
-                    item.target,
-                    item.text
-                );
-                println!("    {}", item.reason);
-            }
-        }
-
-        println!();
-        println!("Next Commands");
-        println!("-------------");
-        if self.passed() {
-            println!(
-                "  Close mission when other gates pass: atelier mission close {} --reason \"...\"",
-                mission.id
-            );
-        } else {
-            println!(
-                "  Inspect closeout gates: atelier mission status {}",
-                mission.id
-            );
-            println!(
-                "  Inspect closeout audit detail: atelier mission audit {}",
-                mission.id
-            );
-        }
-    }
 }
 
 impl MissionTerminalStatus {
@@ -983,18 +853,18 @@ impl MissionTerminalStatus {
         let mut messages = Vec::new();
         if !self.has_work {
             messages.push(
-                "no linked mission work: add accountable work before mission closeout".to_string(),
+                "no linked mission work: add accountable work before mission close".to_string(),
             );
         }
         if !self.open_work.is_empty() {
             messages.push(format!(
-                "open mission work: {}; close or defer linked work before mission closeout",
+                "open mission work: {}; close or defer linked work before mission close",
                 compact_strings(&self.open_work)
             ));
         }
         if !self.open_blockers.is_empty() {
             messages.push(format!(
-                "open blockers: {}; close or remove blocker links before mission closeout",
+                "open blockers: {}; close or remove blocker links before mission close",
                 compact_strings(&self.open_blockers)
             ));
         }
@@ -1012,7 +882,7 @@ impl MissionTerminalStatus {
 
     fn print_human(&self) {
         if self.ready() {
-            println!("All required closeout gates pass.");
+            println!("All required terminal checks pass.");
             for result in &self.validator_results {
                 if let Some(line) = terminal_validator_status_line(result, &self.mission_id) {
                     if line.summary.contains(" - ") {
@@ -1134,7 +1004,7 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier mission audit {}", mission.id);
+    println!("  atelier mission status {} --verbose", mission.id);
     println!("  atelier lint");
     println!("  atelier doctor");
     Ok(())
@@ -1329,7 +1199,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier mission audit {mission}",
+            "atelier mission status {mission} --verbose",
         )),
         "git_worktree_clean" => Some((
             "Worktree",
@@ -1339,118 +1209,12 @@ fn terminal_validator_user_text(
         )),
         "no_open_work" | "no_open_blockers" | "evidence_attached" => None,
         _ => Some((
-            "Additional Closeout Check",
+            "Additional Terminal Check",
             "passed",
             "failed",
             "atelier mission status {mission}",
         )),
     }
-}
-
-fn mission_contract_audit(
-    db: &Database,
-    _state_dir: &Path,
-    mission: &DomainRecord,
-) -> Result<MissionContractAudit> {
-    let mut items = Vec::new();
-    let mission_work = mission_issue_ids(db, &mission.id)?;
-    let open_work = open_mission_work(db, &mission.id)?;
-    let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let approval = mission_workflow_approval(db, &mission.id)?;
-
-    let (work_status, work_reason) = if mission_work.is_empty() {
-        (
-            ProofCoverageStatus::Missing,
-            "No linked mission work exists.".to_string(),
-        )
-    } else if !open_work.is_empty() {
-        (
-            ProofCoverageStatus::Missing,
-            format!("Open linked work remains: {}", compact_strings(&open_work)),
-        )
-    } else {
-        (
-            ProofCoverageStatus::Covered,
-            format!("All {} linked work item(s) are closed.", mission_work.len()),
-        )
-    };
-    items.push(MissionContractAuditItem {
-        group: "Mission Shell".to_string(),
-        target: mission.id.clone(),
-        text: "Linked work is closed.".to_string(),
-        coverage_status: work_status,
-        reason: work_reason,
-    });
-
-    let (blocker_status, blocker_reason) = if open_blockers.is_empty() {
-        (
-            ProofCoverageStatus::Covered,
-            "No mission blockers are open.".to_string(),
-        )
-    } else {
-        (
-            ProofCoverageStatus::Blocked,
-            format!("Open blockers remain: {}", compact_strings(&open_blockers)),
-        )
-    };
-    items.push(MissionContractAuditItem {
-        group: "Mission Shell".to_string(),
-        target: mission.id.clone(),
-        text: "Mission blockers are clear.".to_string(),
-        coverage_status: blocker_status,
-        reason: blocker_reason,
-    });
-
-    if approval.is_empty() {
-        items.push(MissionContractAuditItem {
-            group: "Workflow Approval".to_string(),
-            target: mission.id.clone(),
-            text: "No explicit linked validation or closeout work is required.".to_string(),
-            coverage_status: ProofCoverageStatus::Covered,
-            reason: "Mission closeout relies on linked work, blockers, and configured health gates unless linked validation or closeout work makes parent-level approval explicit.".to_string(),
-        });
-    } else {
-        for issue in &approval.done {
-            items.push(MissionContractAuditItem {
-                group: "Workflow Approval".to_string(),
-                target: issue.id.clone(),
-                text: issue.title.clone(),
-                coverage_status: ProofCoverageStatus::Covered,
-                reason: format!(
-                    "Workflow approval closed via linked {} work.",
-                    issue.issue_type
-                ),
-            });
-        }
-        for issue in &approval.open {
-            items.push(MissionContractAuditItem {
-                group: "Workflow Approval".to_string(),
-                target: issue.id.clone(),
-                text: issue.title.clone(),
-                coverage_status: ProofCoverageStatus::Missing,
-                reason: format!(
-                    "Linked {} work is still {}.",
-                    issue.issue_type,
-                    approval_issue_status_label(issue)?
-                ),
-            });
-        }
-        for issue in &approval.blocked {
-            items.push(MissionContractAuditItem {
-                group: "Workflow Approval".to_string(),
-                target: issue.id.clone(),
-                text: issue.title.clone(),
-                coverage_status: ProofCoverageStatus::Blocked,
-                reason: format!(
-                    "Linked {} work is blocked: {}.",
-                    issue.issue_type,
-                    approval_issue_status_label(issue)?
-                ),
-            });
-        }
-    }
-
-    Ok(MissionContractAudit { items })
 }
 
 pub(crate) fn mission_validation_criteria_gate(
@@ -1461,14 +1225,14 @@ pub(crate) fn mission_validation_criteria_gate(
     if approval.is_empty() {
         return Ok((
             true,
-            "no explicit linked validation or closeout work requires workflow approval".to_string(),
+            "no explicit linked terminal validation work requires workflow approval".to_string(),
         ));
     }
     if approval.open.is_empty() && approval.blocked.is_empty() {
         return Ok((
             true,
             format!(
-                "workflow approval complete via linked validation/closeout work: {}",
+                "workflow approval complete via linked terminal validation work: {}",
                 compact_strings(&approval.issue_ids())
             ),
         ));
@@ -1483,7 +1247,7 @@ pub(crate) fn mission_validation_criteria_gate(
     Ok((
         false,
         format!(
-            "workflow approval is still pending on linked validation/closeout work: {}",
+            "workflow approval is still pending on linked terminal validation work: {}",
             compact_strings(&pending)
         ),
     ))
@@ -1575,14 +1339,6 @@ fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionW
     Ok(approval)
 }
 
-fn approval_issue_status_label(issue: &Issue) -> Result<String> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    Ok(crate::commands::issue_workflow::issue_status_label(
-        workflow_policy.as_ref(),
-        &issue.status,
-    ))
-}
-
 fn compact_strings(values: &[String]) -> String {
     const LIMIT: usize = 8;
     if values.len() <= LIMIT {
@@ -1615,13 +1371,13 @@ fn enforce_mission_terminal_checks(
     if terminal.ready() {
         return Ok(());
     }
-    println!("Mission closeout blocked: {mission_id}");
-    println!("Closeout blockers");
-    println!("-----------------");
+    println!("Mission terminal checks blocked: {mission_id}");
+    println!("Terminal check blockers");
+    println!("-----------------------");
     for message in terminal.blocking_messages() {
         println!("  - {message}");
     }
-    bail!("mission closeout blocked; run `atelier mission status {mission_id}` for next commands")
+    bail!("mission terminal checks blocked; run `atelier mission status {mission_id}` for next commands")
 }
 
 fn mission_terminal_status(
@@ -1891,7 +1647,7 @@ impl MissionListSummary {
         self.issue_proof_gap_count
     }
 
-    fn closeout_needed(&self) -> bool {
+    fn terminal_ready(&self) -> bool {
         let work = self.total_work();
         work.done > 0
             && work.ready == 0
@@ -2114,8 +1870,8 @@ fn print_mission_list_open_work(row: &MissionListRow) {
     if row.summary.evidence_gap_count() > 0 {
         println!("    Evidence gaps: {}", row.summary.evidence_gap_count());
     }
-    if row.summary.closeout_needed() {
-        println!("    Closeout: needed");
+    if row.summary.terminal_ready() {
+        println!("    Terminal: ready");
     }
 }
 
@@ -2299,8 +2055,8 @@ fn mission_health(summary: &MissionListSummary) -> &'static str {
     let work = summary.total_work();
     if summary.open_blockers > 0 || work.blocked > 0 {
         "blocked"
-    } else if summary.closeout_needed() {
-        "closeout"
+    } else if summary.terminal_ready() {
+        "terminal"
     } else if work.ready > 0 {
         "ready"
     } else if summary.evidence_gap_count() > 0 || summary.approval_pending_count > 0 {

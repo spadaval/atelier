@@ -871,13 +871,15 @@ fn test_mission_create_help_names_generated_sections() {
 }
 
 #[test]
-fn test_mission_status_help_exposes_closeout_drilldown() {
+fn test_mission_status_help_exposes_verbose_terminal_detail() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);
     assert!(success, "mission status help failed: {stderr}");
 
-    assert!(stdout.contains("--closeout"));
-    assert!(stdout.contains("Show closeout audit detail"));
+    assert!(stdout.contains("--verbose"));
+    assert!(stdout.contains("Show verbose validator detail in the status summary"));
+    assert!(!stdout.contains("--closeout"));
+    assert!(!stdout.contains("closeout audit"));
 }
 
 #[test]
@@ -887,12 +889,15 @@ fn test_mission_help_exposes_close_with_reason() {
     assert!(success, "mission help failed: {stderr}");
 
     assert!(stdout.contains("close"));
-    assert!(stdout.contains("Close a mission after all closeout gates pass"));
+    assert!(stdout.contains("Close a mission after terminal checks pass"));
+    assert!(!stdout.contains("audit"));
+    assert!(!stdout.contains("closeout"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "close", "--help"]);
     assert!(success, "mission close help failed: {stderr}");
     assert!(stdout.contains("--reason <REASON>"));
-    assert!(stdout.contains("Mission closeout reason recorded in the mission closeout notes"));
+    assert!(stdout.contains("Mission close reason recorded in the mission terminal notes"));
+    assert!(!stdout.contains("closeout"));
 }
 
 #[test]

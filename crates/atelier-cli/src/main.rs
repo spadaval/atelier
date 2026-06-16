@@ -459,20 +459,15 @@ enum MissionCommands {
     },
     /// Show mission-control status for one mission or all current missions
     Status {
-        /// Show closeout audit detail for the mission
-        #[arg(long)]
-        closeout: bool,
         /// Show verbose validator detail in the status summary
         #[arg(long)]
         verbose: bool,
         id: Option<String>,
     },
-    /// Audit mission shell closeout and explicit workflow approval
-    Audit { id: String },
-    /// Close a mission after all closeout gates pass
+    /// Close a mission after terminal checks pass
     Close {
         id: String,
-        /// Mission closeout reason recorded in the mission closeout notes
+        /// Mission close reason recorded in the mission terminal notes
         #[arg(long)]
         reason: String,
     },
@@ -1138,11 +1133,7 @@ fn run() -> Result<()> {
                 let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
-            MissionCommands::Status {
-                id,
-                closeout,
-                verbose,
-            } => {
+            MissionCommands::Status { id, verbose } => {
                 let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
                 let id = resolve_optional_record_arg(storage.db(), "mission", id)?;
                 commands::mission::status(
@@ -1150,14 +1141,8 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     id.as_deref(),
                     quiet,
-                    closeout,
                     verbose,
                 )
-            }
-            MissionCommands::Audit { id } => {
-                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
             }
             MissionCommands::Close { id, reason } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
@@ -1597,7 +1582,6 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Show { .. } => "mission show",
             MissionCommands::Start { .. } => "mission start",
             MissionCommands::Status { .. } => "mission status",
-            MissionCommands::Audit { .. } => "mission audit",
             MissionCommands::Close { .. } => "mission close",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",
