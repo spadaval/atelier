@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-12T00:59:35.502405832+00:00"
 id: "atelier-zjua"
-issue_type: "closeout"
+issue_type: "validation"
 labels:
 - "cli"
 priority: "P1"

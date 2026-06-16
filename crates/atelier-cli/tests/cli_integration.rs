@@ -373,7 +373,6 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier issue note`
 - `atelier mission note`
 - `atelier mission create/show/list/status/update`
-- `atelier mission audit`
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier plan create/show/list/revise/link/apply`
 - `atelier evidence record/show/list/attach`
@@ -404,7 +403,7 @@ fn write_valid_command_guidance(dir: &Path) {
     .unwrap();
     fs::write(
         dir.join("AGENTFACTORY.md"),
-        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission audit <id>`\n- `atelier issue show <id>`\n",
+        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission status <id> --verbose`\n- `atelier issue show <id>`\n",
     )
     .unwrap();
 }
@@ -453,11 +452,11 @@ fn attach_evidence(
     dir: &Path,
     target_kind: &str,
     target_id: &str,
-    result: &str,
+    _result: &str,
     summary: &str,
 ) -> String {
     if target_kind == "issue" {
-        ensure_all_issue_closeout_sections(dir);
+        ensure_all_issue_completion_sections(dir);
     }
     let (success, evidence_out, stderr) = run_atelier(
         dir,
@@ -466,8 +465,6 @@ fn attach_evidence(
             "record",
             "--kind",
             "validation",
-            "--result",
-            result,
             "--target",
             &format!("{target_kind}/{target_id}"),
             summary,
@@ -475,7 +472,7 @@ fn attach_evidence(
     );
     assert!(success, "evidence record failed: {stderr}");
     assert!(
-        evidence_out.contains(&format!("[evidence] {result}")),
+        evidence_out.contains("[evidence] recorded"),
         "{evidence_out}"
     );
     record_id_by_title(dir, "evidence", summary)
@@ -497,7 +494,7 @@ fn attach_non_pass_evidence(
 }
 
 fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
-    ensure_all_issue_closeout_sections(dir);
+    ensure_all_issue_completion_sections(dir);
     attach_pass_evidence(
         dir,
         "issue",
@@ -506,20 +503,20 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
     )
 }
 
-fn ensure_issue_closeout_sections(dir: &Path, issue_id: &str) {
+fn ensure_issue_completion_sections(dir: &Path, issue_id: &str) {
     edit_canonical_issue(dir, issue_id, |mut markdown| {
         markdown = markdown.replace(
             "Outcome was not specified.",
-            "The issue outcome is complete and ready for closeout.",
+            "The issue outcome is complete and ready for terminal checks.",
         );
         markdown.replace(
             "Evidence was not specified.",
-            &format!("- Evidence record attached to issue/{issue_id} validates closeout."),
+            &format!("- Evidence record attached to issue/{issue_id} validates completion."),
         )
     });
 }
 
-fn ensure_all_issue_closeout_sections(dir: &Path) {
+fn ensure_all_issue_completion_sections(dir: &Path) {
     let issues_dir = dir.join(".atelier").join("issues");
     if !issues_dir.exists() {
         return;
@@ -532,7 +529,7 @@ fn ensure_all_issue_closeout_sections(dir: &Path) {
             continue;
         }
         if let Some(issue_id) = path.file_stem().and_then(|value| value.to_str()) {
-            ensure_issue_closeout_sections(dir, issue_id);
+            ensure_issue_completion_sections(dir, issue_id);
         }
     }
 }
@@ -563,7 +560,7 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
 fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     move_issue_to_validation(dir, &issue_id);
-    ensure_all_issue_closeout_sections(dir);
+    ensure_all_issue_completion_sections(dir);
     attach_issue_pass_evidence(dir, &issue_id);
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));

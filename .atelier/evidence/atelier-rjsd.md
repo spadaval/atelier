@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:21:52.062298369+00:00"
 command: "cargo nextest run test_epic_closeout_requires_closed_children_and_parent_evidence test_closed_children_alone_do_not_close_epic_parent test_mission_closeout_uses_contract_audit"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Independent epic and mission closeout audit focused tests"
 updated_at: "2026-06-12T23:21:56.895304240+00:00"
 ---

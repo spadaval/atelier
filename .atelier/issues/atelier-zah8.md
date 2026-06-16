@@ -1,9 +1,9 @@
 ---
 created_at: "2026-06-14T02:53:35.063454258+00:00"
 id: "atelier-zah8"
-issue_type: "closeout"
+issue_type: "validation"
 labels:
-- "closeout"
+- "validation"
 priority: "P1"
 relationships:
   blocks: []

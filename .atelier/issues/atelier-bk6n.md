@@ -1,10 +1,9 @@
 ---
 created_at: "2026-06-13T20:37:18.342077260+00:00"
 id: "atelier-bk6n"
-issue_type: "closeout"
+issue_type: "validation"
 labels:
 - "assignee:root"
-- "closeout"
 - "validation"
 priority: "P2"
 relationships:

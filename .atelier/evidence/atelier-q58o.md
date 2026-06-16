@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:59:24.562290551+00:00"
 command: "bash -lc 'cargo nextest run test_workflow_validate_fails_without_required_evidence test_lint_rejects_vague_evidence_even_when_notes_name_a_command test_issue_closeout_rejects_evidence_attached_to_another_issue test_closed_children_alone_do_not_close_epic_parent test_mission_audit_reports_missing_partial_and_ready_proof test_mission_closeout_uses_contract_audit test_workflow_validate_reports_docs_help_root_surface_drift test_workflow_validate_reports_agent_factory_command_drift test_mission_closeout_blocks_undeferred_obsolete_command_test test_workflow_validate_reports_ignored_tests_without_owner test_mission_status_shows_ignored_product_behavior_closeout_blocker test_evidence_capture_rejects_failed_commands_as_pass_proof test_epic_closeout_requires_closed_children_and_parent_evidence && atelier issue show atelier-v6nd && atelier issue show atelier-hah9 && atelier issue show atelier-v9id'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Validation failure scenario matrix for atelier-9pkx: missing proof, vague Evidence text, unrelated attached evidence, closed children with unproven parent outcomes, broad green checks that miss contract/docs/stale-test failures, docs/help drift, and implementer-only high-risk validation are all covered or guarded by tests, Agent Factory proof protocol, and the still-blocking independent mission validation item atelier-v9id; no follow-up items are needed from this matrix."
 updated_at: "2026-06-12T23:59:30.384236321+00:00"
 ---

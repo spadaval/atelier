@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:20:45.920883258+00:00"
 command: "bash -lc 'set -euo pipefail\ngit -C /root/.agents log -1 --oneline\nrg -n \"Verify every relevant Outcome|Capture command transcripts|ignored, skipped|docs/help consistency|pass.*fail.*blocked|evidence attach|Handoff names\" /root/.agents/skills/agent-factory/procedures/validate.md\nrg -n \"Validation Items|Proof Rule|docs/help parity|stale-test|mission claims\" /root/.agents/skills/agent-factory/standards/work-item-authoring.md\ntarget/debug/atelier issue show atelier-hah9 | sed -n \"1,130p\"\ntarget/debug/atelier issue transition atelier-hah9 --options | sed -n \"1,120p\"\ntarget/debug/atelier mission status atelier-tcmr | sed -n \"1,120p\"\ntarget/debug/atelier issue show atelier-g18z | sed -n \"1,120p\"\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-hah9'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Validation subagent proof protocol reviewed against mission proof gaps"
 updated_at: "2026-06-12T22:20:48.989553845+00:00"
 ---

@@ -1191,17 +1191,7 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
             "no_open_blockers",
             "evidence_attached",
         ],
-        ("mission", "close") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_work",
-            "no_open_blockers",
-            "validation_criteria_satisfied",
-            "no_blocking_lints",
-            "command_surface_current",
-            "ignored_tests_reviewed",
-            "git_worktree_clean",
-        ],
+        ("mission", "close") => mission_terminal_validators(),
         ("mission", _) => &[
             "durable_state_current",
             "issue_sections_parseable",
@@ -1218,6 +1208,20 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
         _ => &["durable_state_current"],
     };
     names.iter().map(|name| (*name).to_string()).collect()
+}
+
+pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
+    &[
+        "durable_state_current",
+        "issue_sections_parseable",
+        "no_open_work",
+        "no_open_blockers",
+        "validation_criteria_satisfied",
+        "no_blocking_lints",
+        "command_surface_current",
+        "ignored_tests_reviewed",
+        "git_worktree_clean",
+    ]
 }
 
 fn print_heading(title: &str) {
@@ -1406,20 +1410,17 @@ fn evaluate_builtin_with_params(
                 }) = params
                 {
                     let linked = linked_evidence_records(db, target_id, kind.as_deref())?;
-                    let passing_count = linked
-                        .iter()
-                        .filter(|record| record.status == "pass")
-                        .count();
-                    if passing_count < *min_count as usize {
+                    let validating_count = linked.len();
+                    if validating_count < *min_count as usize {
                         return Ok((
                             false,
                             format!(
-                                "expected at least {} passing evidence record(s){}; found {}",
+                                "expected at least {} validating evidence record(s){}; found {}",
                                 min_count,
                                 kind.as_deref()
                                     .map(|value| format!(" of kind {}", value))
                                     .unwrap_or_default(),
-                                passing_count
+                                validating_count
                             ),
                         ));
                     }
@@ -1506,7 +1507,7 @@ fn epic_child_proof_complete(
     if missing.is_empty() {
         Ok((
             true,
-            "all epic child issues are closed with passing proof".to_string(),
+            "all epic child issues are closed with validating proof".to_string(),
         ))
     } else {
         Ok((
@@ -1525,11 +1526,8 @@ fn collect_missing_child_proof(
     let issue = db.require_issue(issue_id)?;
     if issue_is_open_for_workflow(policy, &issue)? {
         missing.push(format!("{issue_id} open"));
-    } else if !linked_evidence_records(db, issue_id, None)?
-        .iter()
-        .any(|record| record.status == "pass")
-    {
-        missing.push(format!("{issue_id} missing passing proof"));
+    } else if linked_evidence_records(db, issue_id, None)?.is_empty() {
+        missing.push(format!("{issue_id} missing validating proof"));
     }
     for child in db.get_subissues(issue_id)? {
         collect_missing_child_proof(db, policy, &child.id, missing)?;
@@ -2201,17 +2199,10 @@ mod tests {
         );
         assert_eq!(
             default_validators("mission", "close"),
-            vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_work",
-                "no_open_blockers",
-                "validation_criteria_satisfied",
-                "no_blocking_lints",
-                "command_surface_current",
-                "ignored_tests_reviewed",
-                "git_worktree_clean"
-            ]
+            mission_terminal_validators()
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             default_validators("evidence", "attach"),

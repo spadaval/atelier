@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:27:23.343261485+00:00"
 command: "bash -lc '\nset -euo pipefail\ncargo nextest run --status-level fail --final-status-level pass --success-output never --failure-output final \\\n  mission_record_renders_and_parses_deterministically_without_data_blob \\\n  mission_render_normalizes_legacy_evidence_attachments \\\n  legacy_mission_data_record_loads_into_typed_sections_and_relationships \\\n  rebuild_round_trips_canonical_domain_records \\\n  test_first_class_detail_views_read_payloads_from_record_store \\\n  test_first_class_records_export_rebuild_and_validate \\\n  test_mission_relationship_filtering_keeps_supporting_records_out_of_work\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Focused mission record parsing rendering migration rebuild relationship tests"
 updated_at: "2026-06-12T22:27:29.420316608+00:00"
 ---

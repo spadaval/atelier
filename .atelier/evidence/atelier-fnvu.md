@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:10:44.926525581+00:00"
 command: "bash -lc 'cargo nextest run default_validators_are_target_and_transition_aware && cargo build --quiet && target/debug/atelier rebuild && target/debug/atelier lint atelier-wvpb && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Workflow validator default expectations match command-surface freshness contracts"
 updated_at: "2026-06-13T01:10:54.013840405+00:00"
 ---

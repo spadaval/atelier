@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T15:56:43.380965813+00:00"
 command: "cargo nextest run test_projection_query_distinguishes_schema_drift_from_malformed_records"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "stale installed binary diagnostic and malformed-record negative path"
 updated_at: "2026-06-13T15:56:48.846586818+00:00"
 ---

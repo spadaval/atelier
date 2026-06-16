@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T16:16:52.368171899+00:00"
 command: "sh -c 'cargo fmt -- --check && cargo nextest run && cargo nextest run --profile extended --run-ignored=only && git diff --check && target/debug/atelier export --check && target/debug/atelier lint && target/debug/atelier doctor && printf '\"'\"'%s\\n'\"'\"' '\"'\"'Mission contract audit line-by-line classification maps each atelier-19mc mission outcome to linked epic proof.'\"'\"' '\"'\"'PASS: durable strong-proof contract mapped to atelier-qf35 evidence atelier-vrv9 and atelier-8r9k.'\"'\"' '\"'\"'PASS: validation placement and anti-red-tape guidance mapped to atelier-qf35 closed outcomes.'\"'\"' '\"'\"'PASS: accountable evidence model mapped to atelier-bfuv evidence atelier-q8a0 and atelier-cz17.'\"'\"' '\"'\"'PASS: simple evidence recording workflow mapped to atelier-bfuv focused tests and validation.'\"'\"' '\"'\"'PASS: compact mission/operator CLI mapped to atelier-2wbz evidence atelier-8mka and atelier-2f5d.'\"'\"' '\"'\"'PASS: command consolidation mapped to atelier-sv98 evidence atelier-c1v1 and atelier-nbtc.'\"'\"' '\"'\"'PASS: Agent Factory delegation/model routing mapped to atelier-ey4y evidence atelier-b2wt and atelier-u7bd.'\"'\"' '\"'\"'PASS: focused tests, docs/help parity, lint/export/doctor, and independent closeout validations are recorded across child, epic, and mission evidence.'\"'\"''"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "mission closeout validation for atelier-19mc"
 updated_at: "2026-06-13T16:19:42.433069152+00:00"
 ---

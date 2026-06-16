@@ -48,7 +48,7 @@ repository's tactical operator guidance.
   `atelier mission status <mission-id>`. Routine issue work starts with
   `atelier start <id>`, which owns branch preparation. Move work through issue
   transitions, durable notes, evidence records, and explicit issue or mission
-  closeout surfaces rather than through hidden runtime state.
+  completion surfaces rather than through hidden runtime state.
 - Missions are durable active-focus records. Link executable issues to missions
   and use `atelier status` or `atelier mission status <mission-id>` to select
   worker issues from the active mission or epic graph.
@@ -65,12 +65,12 @@ repository's tactical operator guidance.
   normal tracker read reports invalid canonical state, stale projections, or
   unreadable tracker data, stop workflow mutation and repair state through
   Atelier-owned status, lint, doctor, and help surfaces before continuing.
-- Use Atelier-owned proof, closeout, health, and transition surfaces through
+- Use Atelier-owned proof, health, terminal-check, and transition surfaces through
   the destinations named in the validation router and product command docs.
 - Record handoff context in durable issue notes and non-trivial proof as
   first-class evidence on the accountable issue-shaped work. Let mission status
-  and audit report missing proof, missing validation/closeout work, stale
-  closeout checks, and parent coverage gaps instead of restating those rules in
+  and audit report missing proof, pending validation work, stale terminal
+  checks, and parent coverage gaps instead of restating those rules in
   this binding.
 - Handoffs that include validation must say whether proof ran from the mission
   workspace, an epic branch checkout, the root checkout, or an explicitly
@@ -84,8 +84,8 @@ repository's tactical operator guidance.
   belong to Atelier-owned status/help and product docs; do not edit runtime
   state by hand.
 - Hidden workflow diagnostics are not normal planning, implementation, or
-  closeout commands. Use them only when a binding, assignment, workflow policy,
-  or closeout contract explicitly names the diagnostic command; they do not
+  terminal-check commands. Use them only when a binding, assignment, workflow policy,
+  or completion contract explicitly names the diagnostic command; they do not
   replace attached Outcome proof.
 - Orchestrator prompts must name the model choice and a short rationale based
   on task complexity, ambiguity, risk, review depth, and proof needs.
@@ -97,7 +97,7 @@ repository's tactical operator guidance.
 - Do not route to 5.4 Mini when the work requires complex open-ended
   implementation, complex review, ambiguous architecture, cross-cutting
   refactors, hard debugging, security or data-loss judgment, public-contract
-  redesign, or final adversarial closeout. Use a higher-reasoning model for
+  redesign, or final adversarial completion. Use a higher-reasoning model for
   those cases.
 - When a Mini model is selected, the prompt must say why the scope is small
   enough, what boundaries make the work low risk, and what observable proof
@@ -110,7 +110,7 @@ repository's tactical operator guidance.
 - After the first clear unrecognized command or wrong command-family error,
   stop probing neighboring names. Consult Atelier-owned help or product docs
   to recover the command surface before continuing.
-- Closeout proof must quote or paraphrase the specific `Outcome` or `Evidence`
+- Completion proof must quote or paraphrase the specific `Outcome` or `Evidence`
   line being proved. Broad "tests passed" summaries are not enough for
   parent-level, process-policy, or other non-trivial claims.
 - Role assignment, subskill selection, model routing, and independent-review
@@ -132,12 +132,12 @@ restating the full command or policy contract here.
 | Normal command purposes, public command families, and removed-command policy | `atelier --help`, `docs/product/cli-surface.md` |
 | Workflow transitions, policy diagnostics, and command-specific readiness | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition <id> --options` |
 | Mission and work selection, blocker explanation, proof gaps, and next actions | `atelier status`, `atelier mission status [<id>]`, `atelier mission show <id>` |
-| Closeout drill-down and parent-proof mapping | `atelier mission status [<id>]`, explicit validation or closeout issue evidence, `docs/architecture/quality/validation.md` |
+| Completion checks and parent-proof mapping | `atelier mission status [<id>]`, explicit validation issue evidence, `docs/architecture/quality/validation.md` |
 | Evidence routing, proof placement, and independent-validation triggers | `docs/architecture/quality/validation.md`, `atelier evidence record --target issue/<id> ...` |
 | Tracker health, derived-state freshness, and runtime diagnostics | `atelier lint`, `atelier doctor`, `atelier status`, `atelier mission status` |
 | Onboarding and recovery signposts for normal tracker work | `atelier man <role>`, `atelier status`, `docs/product/cli-surface.md` |
 | Validation command recipes and shell hygiene | `docs/architecture/quality/validation.md` |
-| Validation and handoff check selection | `docs/architecture/quality/validation.md`, `atelier lint`, `atelier issue transition <id> --options`, issue Evidence sections, explicit mission validation or closeout work |
+| Validation and handoff check selection | `docs/architecture/quality/validation.md`, `atelier lint`, `atelier issue transition <id> --options`, issue Evidence sections, explicit mission validation work |
 
 Do not preserve old command names, status aliases, output shims, or fallback
 readers unless a human explicitly asks for a compatibility window. Public
@@ -145,7 +145,7 @@ compatibility decisions belong to Atelier help, product docs, workflow policy,
 or validators rather than to this binding.
 For Atelier, current work is derived from canonical issue status plus checkout
 context. Normal workflow lives on the status, transition, note, evidence, and
-closeout surfaces listed above rather than in local runtime associations.
+terminal-check surfaces listed above rather than in local runtime associations.
 For issue queues, `--status` means an exact workflow status (or `all`) and
 `--category` means an exact derived workflow category; do not use or document
 category aliases such as `in_progress`.
@@ -153,7 +153,7 @@ category aliases such as `in_progress`.
 ## Validation Routing
 
 Use `docs/architecture/quality/validation.md`, the assigned issue Evidence
-section, and explicit mission validation or closeout work to choose checks for
+section, and explicit mission validation work to choose checks for
 the current slice.
 The binding may name the readiness entrypoint, but the durable check contract
 belongs to Atelier-owned validation guidance, product docs, workflow policy,

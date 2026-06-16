@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:10:02.539300232+00:00"
 command: "bash -lc 'set -euo pipefail\ntarget/debug/atelier issue transition atelier-cany --options\ntarget/debug/atelier issue show atelier-cany\ntarget/debug/atelier issue --help\ncargo test --test cli_integration test_root_start_finish_and_issue_transition_surface -- --nocapture\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-cany\ntarget/debug/atelier workflow validate issue atelier-cany'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-cany transition surface validation"
 updated_at: "2026-06-12T22:10:08.150077165+00:00"
 ---

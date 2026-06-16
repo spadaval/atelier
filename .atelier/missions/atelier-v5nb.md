@@ -67,6 +67,6 @@ Finish the migration by making the layered workspace the only architecture, not 
 - Independent validation covers CLI/help/docs parity, Markdown round trips, projection rebuild, missing or stale DB recovery, active-work removal, root crate deletion, ordinary Clap rejection for removed commands, and representative mission, issue, and evidence workflows.
 - Repository checks pass: `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo fmt -- --check`, `cargo nextest run`, relevant extended ignored tests, `cargo check --manifest-path fuzz/Cargo.toml --bins`, `target/debug/atelier lint`, `target/debug/atelier export --check`, `target/debug/atelier doctor`, and `git diff --check`.
 
-## Closeout Notes
+## Terminal Notes
 
 - Close reason: All crate rewrite mission work, epics, validations, and closeout gates are complete.

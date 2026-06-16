@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:18:59.252740273+00:00"
 command: "target/debug/atelier workflow validate issue atelier-7yen --validator durable_state_current --validator issue_sections_parseable --validator evidence_attached --validator no_open_blockers --validator no_blocking_lints"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier workflow validate issue atelier-7yen passed"
 updated_at: "2026-06-12T21:19:01.229085066+00:00"
 ---

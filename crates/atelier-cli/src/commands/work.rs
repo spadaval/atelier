@@ -54,7 +54,7 @@ fn print_started_work(
         println!("  Inspect mission selection and blockers: atelier mission status {mission_id}");
     }
     println!("  Inspect work transitions: atelier issue transition {id} --options");
-    println!("  Record proof: atelier evidence record --target issue/{id} --kind test --result pass \"...\"");
+    println!("  Record proof: atelier evidence record --target issue/{id} --kind test \"...\"");
     Ok(())
 }
 

@@ -3,16 +3,6 @@ created_at: "2026-06-12T21:24:27.610515853+00:00"
 id: "atelier-p9ir"
 evidence_type: "validation"
 captured_at: "2026-06-12T21:24:27.610499765+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +13,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "fail"
+status: "recorded"
 title: "Sectioned issue workflow validation did not close: manual CLI behavior and individual focused tests pass, but the broad focused command cargo test --test cli_integration section -- --nocapture fails in test_work_start_reports_shared_section_diagnostic_without_blocking, which still expects warning-only malformed start behavior."
 updated_at: "2026-06-12T21:24:32.377838229+00:00"
 ---

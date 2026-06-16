@@ -13,15 +13,7 @@ pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
 const WORKFLOW_SCHEMA_VERSION: i64 = 1;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "review", "validation", "done"];
-const BUILTIN_ISSUE_TYPES: &[&str] = &[
-    "bug",
-    "closeout",
-    "epic",
-    "feature",
-    "spike",
-    "task",
-    "validation",
-];
+const BUILTIN_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "durable_state_current",
     "evidence_attached",

@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:26:52.929448232+00:00"
 command: "bash -lc '\nset -euo pipefail\nA=/root/atelier/target/debug/atelier\nTMP=$(mktemp -d /tmp/atelier-6aor-health.XXXXXX)\ncleanup() { rm -rf \"$TMP\"; }\ntrap cleanup EXIT\ncd \"$TMP\"\ngit init -q\n\"$A\" init >/dev/null\n\"$A\" mission create \"Readable mission validation\" --body \"Readable mission intent\" --constraint \"Keep mission records reviewable\" --risk \"Projection drift\" --validation \"Run rebuild export lint doctor\" >/dev/null\nMID=$(basename .atelier/missions/*.md .md)\nprintf \"\\n$ %s mission show %s\\n\" \"$A\" \"$MID\"\n\"$A\" mission show \"$MID\" | sed -n \"1,42p\"\nprintf \"\\n$ %s mission status %s\\n\" \"$A\" \"$MID\"\n\"$A\" mission status \"$MID\" | sed -n \"1,32p\"\nprintf \"\\n$ %s rebuild\\n\" \"$A\"\n\"$A\" rebuild\nprintf \"\\n$ %s export --check\\n\" \"$A\"\n\"$A\" export --check\nprintf \"\\n$ %s lint\\n\" \"$A\"\n\"$A\" lint\nprintf \"\\n$ %s doctor\\n\" \"$A\"\n\"$A\" doctor | sed -n \"1,28p\"\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Positive mission show status rebuild export lint doctor transcript"
 updated_at: "2026-06-12T22:26:54.664417116+00:00"
 ---

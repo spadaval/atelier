@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:33:59.268215097+00:00"
 command: "bash -lc 'target/debug/atelier issue --help && target/debug/atelier --help && cargo test --test cli_integration test_issue_help_uses_reduced_lifecycle_surface -- --nocapture && cargo test --test cli_integration test_non_lifecycle_issue_flows_use_explicit_homes -- --nocapture && cargo test --test cli_integration test_hidden_issue_helpers_print_replacement_guidance -- --nocapture && cargo test --test cli_integration test_update_issue_remove_label_replaces_unlabel_helper -- --nocapture && cargo test --test cli_integration test_issue_list_blocked_replaces_blocked_helper -- --nocapture'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-auqt reduced issue command surface validation"
 updated_at: "2026-06-12T21:34:15.197155190+00:00"
 ---

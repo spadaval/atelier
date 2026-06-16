@@ -90,7 +90,7 @@ drill-down commands for related records instead of dumping every field:
 | `description` | String or `null`; maps Beads description. |
 | `acceptance_criteria` | String or array preserving imported acceptance text. |
 | `status` | Stable status string such as `open`, `in_progress`, or `closed`. |
-| `issue_type` | Stable type string such as `epic`, `task`, `feature`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `issue_type` | Stable type string such as `epic`, `task`, `feature`, `bug`, `validation`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 | `priority` | Stable priority value comparable for ready ordering. |
 | `labels` | Sorted array of strings. |
 | `parent` | Parent ID or `null`. |
@@ -160,8 +160,8 @@ commands:
 3. Implementation handoff: notes, close, `atelier lint`, `atelier doctor`,
    claim-specific proof, and Git status must produce enough durable evidence for
    the next agent to resume.
-4. Closeout: a closeout worker must be able to classify parent criteria in
-   durable notes and close the parent or child without using Beads.
+4. Terminal validation: a validation worker must be able to classify parent
+   criteria in durable notes and close the parent or child without using Beads.
 5. Recovery: from a clean checkout-like state, `atelier doctor --fix` must
    repair ignored local projection/runtime state from `.atelier/`, after which
    show/list/ready/lint commands behave the same as before repair.

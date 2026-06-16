@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T19:46:47.886166271+00:00"
+status: "done"
 title: "Surface evidence requirements in status commands"
-updated_at: "2026-06-15T21:37:24.795700733+00:00"
+updated_at: "2026-06-16T19:46:47.886166271+00:00"
 ---
 
 ## Description

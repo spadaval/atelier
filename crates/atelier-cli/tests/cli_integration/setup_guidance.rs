@@ -806,12 +806,9 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "record", "--help"]);
     assert!(success, "evidence record help failed: {stderr}");
     assert!(stdout.contains("issue/<id>"));
-    assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind validation --result pass \"summary\""
-    ));
-    assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind test --result pass -- <command>"
-    ));
+    assert!(stdout
+        .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""));
+    assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
 }
 
@@ -871,13 +868,15 @@ fn test_mission_create_help_names_generated_sections() {
 }
 
 #[test]
-fn test_mission_status_help_exposes_closeout_drilldown() {
+fn test_mission_status_help_exposes_verbose_terminal_detail() {
     let dir = tempdir().unwrap();
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "status", "--help"]);
     assert!(success, "mission status help failed: {stderr}");
 
-    assert!(stdout.contains("--closeout"));
-    assert!(stdout.contains("Show closeout audit detail"));
+    assert!(stdout.contains("--verbose"));
+    assert!(stdout.contains("Show verbose validator detail in the status summary"));
+    assert!(!stdout.contains("--closeout"));
+    assert!(!stdout.contains("closeout audit"));
 }
 
 #[test]
@@ -887,12 +886,15 @@ fn test_mission_help_exposes_close_with_reason() {
     assert!(success, "mission help failed: {stderr}");
 
     assert!(stdout.contains("close"));
-    assert!(stdout.contains("Close a mission after all closeout gates pass"));
+    assert!(stdout.contains("Close a mission after terminal checks pass"));
+    assert!(!stdout.contains("audit"));
+    assert!(!stdout.contains("closeout"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["mission", "close", "--help"]);
     assert!(success, "mission close help failed: {stderr}");
     assert!(stdout.contains("--reason <REASON>"));
-    assert!(stdout.contains("Mission closeout reason recorded in the mission closeout notes"));
+    assert!(stdout.contains("Mission close reason recorded in the mission terminal notes"));
+    assert!(!stdout.contains("closeout"));
 }
 
 #[test]
@@ -982,6 +984,15 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Worktree: dirty"));
     assert!(stdout.contains("status-dirty.txt"));
     assert!(stdout.contains("Branch:"));
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout
+        .contains("Attached Proof: missing - 2 issue(s) without validating evidence; 0 attached"));
+    assert!(stdout.contains(&format!("  Missing: {blocker_id}")));
+    assert!(stdout.contains(&format!("  Missing: {ready_id}")));
+    assert!(
+        stdout.contains("atelier evidence record --target issue/<id> --kind validation \"...\"")
+    );
+    assert!(stdout.contains("atelier evidence attach <evidence-id> issue <issue-id>"));
     assert!(stdout.contains("Active Mission"));
     assert!(stdout.contains(&format!("{mission_id} - Status focus")));
     assert!(stdout.contains("Health:   blocked"));
@@ -1100,6 +1111,8 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: irrelevant - no current or ready work"));
     assert!(stdout.contains(
         "Inspect blocked work (no ready work is available): atelier issue list --blocked"
     ));
@@ -1160,9 +1173,8 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(spec.contains("atelier status"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
-    assert!(spec.contains(
-        "atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>"
-    ));
+    assert!(spec
+        .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
 }
 
 #[test]

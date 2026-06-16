@@ -146,9 +146,9 @@ categories, not alternate stored tokens.
 | Required front matter | Common fields only. Mission semantics do not own extra scalar or JSON payload keys in front matter. |
 | Optional front matter | None in V1 beyond record-generic labels and relationships. |
 | Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
-| Optional body | `## Closeout Notes` and `## Notes`. |
+| Optional body | `## Terminal Notes` and `## Notes`. |
 | Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
-| Compatibility-only | Escaped mission `data` payloads and front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `closeout_notes`. |
+| Compatibility-only | Escaped mission `data` payloads and front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`. |
 | Forbidden | Any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose must not become a shadow graph. |
 
 Mission status is mission-lifecycle state, not issue workflow state. The current

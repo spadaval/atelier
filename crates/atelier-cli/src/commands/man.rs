@@ -177,7 +177,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 .unwrap_or(false)
             {
                 println!("  1. atelier status - Review the checkout's current-work set.");
-                println!("  2. atelier evidence record --target issue/<id> --kind test --result pass -- <command> - Attach proof.");
+                println!("  2. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
                 println!("  3. atelier issue transition <id> --options - Inspect allowed next workflow steps.");
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
@@ -220,14 +220,16 @@ fn print_normal_loop(role: Role) {
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
             println!("  atelier start <id>");
-            println!("  atelier evidence record --target issue/<id> --kind test --result pass -- <command>");
+            println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
             println!("  atelier issue close <id> --reason \"...\"");
         }
         Role::Reviewer => {
             println!("  atelier mission status");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
-            println!("  atelier evidence record --target issue/<id> --kind validation --result pass -- <command>");
+            println!(
+                "  atelier evidence record --target issue/<id> --kind validation -- <command>"
+            );
             println!("  atelier history --issue <id>");
         }
         Role::Manager => {
@@ -265,7 +267,7 @@ fn print_not_usually(role: Role) {
             );
         }
         Role::Admin => {
-            println!("  ordinary issue implementation, evidence capture for feature proof, mission closeout judgment");
+            println!("  ordinary issue implementation, evidence capture for feature proof, mission terminal judgment");
         }
     }
 }

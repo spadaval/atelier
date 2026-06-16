@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:27:10.747639656+00:00"
 command: "bash -lc '\nset -euo pipefail\nA=/root/atelier/target/debug/atelier\nTMP=$(mktemp -d /tmp/atelier-6aor-negative.XXXXXX)\ncleanup() { rm -rf \"$TMP\"; }\ntrap cleanup EXIT\ncd \"$TMP\"\ngit init -q\n\"$A\" init >/dev/null\n\"$A\" mission create \"Readable mission validation\" --body \"Readable mission intent\" --constraint \"Keep mission records reviewable\" --risk \"Projection drift\" --validation \"Run rebuild export lint doctor\" >/dev/null\nMID=$(basename .atelier/missions/*.md .md)\nprintf \"\\n$ rg ^data: .atelier/missions -g *.md\\n\"\nif rg \"^data:\" .atelier/missions -g \"*.md\"; then\n  echo \"unexpected stale mission data JSON\"\n  exit 1\nelse\n  echo \"No mission data front matter found after create.\"\nfi\nprintf \"\\n$ remove required Validation section from .atelier/missions/%s.md\\n\" \"$MID\"\nperl -0pi -e \"s/\\n## Validation\\n\\n- Run rebuild export lint doctor\\n?//s\" \".atelier/missions/$MID.md\"\nprintf \"\\n$ %s rebuild (expect failure)\\n\" \"$A\"\nif \"$A\" rebuild >invalid-rebuild.out 2>invalid-rebuild.err; then\n  cat invalid-rebuild.out\n  cat invalid-rebuild.err >&2\n  echo \"unexpected rebuild success for invalid mission record\"\n  exit 1\nelse\n  cat invalid-rebuild.err >&2\nfi\nprintf \"\\n$ %s export --check (expect failure)\\n\" \"$A\"\nif \"$A\" export --check >invalid-export.out 2>invalid-export.err; then\n  cat invalid-export.out\n  cat invalid-export.err >&2\n  echo \"unexpected export --check success for invalid mission record\"\n  exit 1\nelse\n  cat invalid-export.err >&2\nfi\nprintf \"\\n$ %s lint (observed residual: projection lint passes before rebuild)\\n\" \"$A\"\n\"$A\" lint\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Negative invalid mission record and stale data emission transcript"
 updated_at: "2026-06-12T22:27:12.516307088+00:00"
 ---

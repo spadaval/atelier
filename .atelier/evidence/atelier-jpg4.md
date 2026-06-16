@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:14:48.192975901+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet test_boundary_desc_exact_64k test_boundary_desc_over_64k issue_record_renders_and_parses_deterministically issue_parser_contract_accepts_sectioned_body_without_legacy_arrays test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor && target/debug/atelier rebuild && target/debug/atelier lint atelier-qqey && target/debug/atelier lint atelier-6vsb && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Description boundary and rebuild temp-file fixtures pass focused validation"
 updated_at: "2026-06-13T01:15:02.035928599+00:00"
 ---

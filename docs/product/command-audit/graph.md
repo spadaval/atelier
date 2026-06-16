@@ -19,5 +19,5 @@ fit together?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or closeout. | Good. |
+| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Good. |
 | `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Good. `--compact` should be the role-guide default. |

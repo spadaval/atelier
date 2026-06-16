@@ -44,7 +44,7 @@ atelier issue list --ready
 atelier issue show <id>
 atelier start <id>
 atelier issue note <id> "..."
-atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+atelier evidence record --target issue/<id> --kind test -- <command>
 atelier issue transition <id> --options
 atelier issue close <id> --reason "..."
 ```
@@ -64,10 +64,10 @@ Core loop:
 atelier issue show <id>
 atelier issue transition <id> --options
 atelier evidence show <evidence-id>
-atelier evidence record --target issue/<id> --kind validation --result pass -- <command>
+atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
 atelier lint <id>
-atelier mission status <id> --closeout --verbose
+atelier mission status <id> --verbose
 ```
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;

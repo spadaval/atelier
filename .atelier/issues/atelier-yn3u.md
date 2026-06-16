@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T19:28:17.574107223+00:00"
+status: "done"
 title: "Simplify evidence records around validating attachments"
-updated_at: "2026-06-16T15:24:20.201646073+00:00"
+updated_at: "2026-06-16T19:28:17.574107223+00:00"
 ---
 
 ## Description

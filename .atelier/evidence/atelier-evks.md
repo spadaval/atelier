@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:42:11.835302813+00:00"
 command: "bash -lc 'set -euo pipefail\ncargo test --quiet --test cli_integration test_lint_rejects_missing_evidence_section\ncargo test --quiet --test cli_integration test_lint_rejects_empty_evidence_section\ncargo test --quiet --test cli_integration test_lint_rejects_vague_evidence_even_when_notes_name_a_command\ncargo test --quiet --test cli_integration test_lint_accepts_concrete_evidence_without_optional_notes\ncargo test --quiet --test cli_integration lint\ncargo fmt -- --check\ngit diff --check\ntarget/debug/atelier lint atelier-u6ax\ntarget/debug/atelier lint\ntarget/debug/atelier export --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Concrete issue Evidence lint enforced"
 updated_at: "2026-06-12T22:42:29.080237340+00:00"
 ---

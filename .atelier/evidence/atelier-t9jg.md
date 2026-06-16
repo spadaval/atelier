@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:49:04.069875631+00:00"
 command: "cargo nextest run access_modes_declare_projection_freshness_policy test_orientation_commands_enter_degraded_mode_for_malformed_records test_doctor_reports_runtime_health_without_becoming_canonical_lint test_projection_index_rejects_invalid_markdown_without_rebuild test_start_refuses_shared_section_diagnostic test_mission_status_names_stale_and_malformed_record_blockers"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Malformed record degraded orientation tests"
 updated_at: "2026-06-12T23:49:08.844592744+00:00"
 ---

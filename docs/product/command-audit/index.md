@@ -12,7 +12,7 @@ the root command file when the root command serves more than one role.
 The product surface uses four command categories:
 
 - Normal workflow: visible operator commands for orientation, work lifecycle,
-  proof, closeout readiness, and ordinary health.
+  proof, terminal readiness, and ordinary health.
 - Admin maintenance: visible setup, explicit repair, destructive maintenance,
   and manual owner-branch/worktree recovery.
 - Hidden debug diagnostics: raw policy, telemetry, projection, or

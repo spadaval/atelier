@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:08:42.721512963+00:00"
 command: "bash -lc 'set -euo pipefail\ncargo test --lib test_inventory -- --nocapture\ncargo test --test cli_integration ignored -- --nocapture\ntarget/debug/atelier mission status atelier-tcmr | tee /tmp/atelier-tcmr-status-after-jqds.txt\nrg \"Validator ignored_tests_reviewed: pass\" /tmp/atelier-tcmr-status-after-jqds.txt\n! rg \"ignored product-behavior test is still blocking closeout\" /tmp/atelier-tcmr-status-after-jqds.txt\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-jqds\ntarget/debug/atelier workflow validate issue atelier-jqds'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-jqds ignored legacy test inventory cleanup"
 updated_at: "2026-06-12T22:08:51.059964560+00:00"
 ---

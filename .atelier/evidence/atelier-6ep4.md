@@ -3,16 +3,7 @@ created_at: "2026-06-12T00:29:04.726457184+00:00"
 id: "atelier-6ep4"
 evidence_type: "validation"
 captured_at: "2026-06-12T00:29:04.726408042+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
-proof_scope: null
 agent_identity: "codex"
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +14,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-gye2 closeout validation: cargo fmt -- --check passed; cargo nextest run passed with 650 tests run, 650 passed, 67 skipped; cargo nextest run --profile extended --run-ignored=only passed with 8 tests run, 8 passed, 709 skipped; atelier export --check passed; atelier lint passed; atelier doctor passed; workflow validate issue atelier-gye2 passed; workflow validate mission atelier-ufgn passed."
 updated_at: "2026-06-12T00:29:09.534700953+00:00"
 ---

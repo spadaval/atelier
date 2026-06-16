@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:58:54.781615132+00:00"
 command: "bash -lc 'set -euo pipefail\nbin=/root/atelier/target/debug/atelier\ntmp=$(mktemp -d)\ncd \"$tmp\"\n\"$bin\" init\n\"$bin\" mission create \"Readable mission proof\" --body \"Readable intent\" --constraint \"Use typed sections\" --risk \"Relationship drift\" --validation \"Run focused checks\"\nmission=$(basename .atelier/missions/*.md .md)\n\"$bin\" mission update \"$mission\" --body \"Updated readable intent\" --constraint \"Updated typed constraint\" --risk \"Updated relationship drift\" --validation \"Run mission status\"\n\"$bin\" mission show \"$mission\"\n\"$bin\" mission status \"$mission\"\n\"$bin\" export --check\n\"$bin\" lint\nif grep -q \"^data:\" \".atelier/missions/$mission.md\"; then\n  echo \"unexpected mission data front matter\"\n  sed -n \"1,80p\" \".atelier/missions/$mission.md\"\n  exit 1\nfi\necho \"no escaped mission data front matter\"\nsed -n \"1,90p\" \".atelier/missions/$mission.md\"\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Mission readable record CLI transcript: create update show status export lint and no data writer"
 updated_at: "2026-06-12T21:59:40.415348216+00:00"
 ---

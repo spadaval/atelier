@@ -103,6 +103,17 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("----------------");
     print_branch_lifecycle_state(db, &active_issues)?;
 
+    println!();
+    println!("Evidence Status");
+    println!("---------------");
+    print_evidence_status(
+        db,
+        &active_issues,
+        active_mission.as_ref(),
+        mission_snapshot.as_ref(),
+        &ready,
+    )?;
+
     if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
         println!();
         println!("Active Mission");
@@ -233,7 +244,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else {
                 println!(
-                    "  Review active mission closeout (no ready work is available): atelier mission status {}",
+                    "  Review active mission terminal state (no ready work is available): atelier mission status {}",
                     mission.id
                 );
             }
@@ -303,7 +314,7 @@ impl MissionSnapshot {
         } else if self.ready > 0 {
             "ready"
         } else if self.done > 0 {
-            "closeout"
+            "terminal"
         } else {
             "steady"
         }
@@ -495,6 +506,66 @@ fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
     } else {
         Ok("proof missing")
     }
+}
+
+fn print_evidence_status(
+    db: &Database,
+    active_issues: &[Issue],
+    active_mission: Option<&DomainRecord>,
+    mission_snapshot: Option<&MissionSnapshot>,
+    ready: &[Issue],
+) -> Result<()> {
+    let proof_issue_ids = if let Some(snapshot) = mission_snapshot {
+        active_issues
+            .iter()
+            .chain(snapshot.selectable_issues.iter())
+            .map(|issue| issue.id.as_str())
+            .collect::<BTreeSet<_>>()
+    } else {
+        active_issues
+            .iter()
+            .chain(ready.iter())
+            .map(|issue| issue.id.as_str())
+            .collect::<BTreeSet<_>>()
+    };
+
+    if proof_issue_ids.is_empty() {
+        if active_mission.is_some() {
+            println!("Attached Proof: irrelevant - no current or selectable mission work");
+        } else {
+            println!("Attached Proof: irrelevant - no current or ready work");
+        }
+        return Ok(());
+    }
+
+    let mut attached = 0usize;
+    let mut missing = Vec::new();
+    for issue_id in &proof_issue_ids {
+        if has_validating_evidence(db, issue_id)? {
+            attached += 1;
+        } else {
+            missing.push((*issue_id).to_string());
+        }
+    }
+
+    if missing.is_empty() {
+        println!("Attached Proof: attached - {attached} issue(s) have validating evidence");
+    } else {
+        println!(
+            "Attached Proof: missing - {} issue(s) without validating evidence; {attached} attached",
+            missing.len()
+        );
+        for issue_id in missing.iter().take(3) {
+            println!("  Missing: {issue_id}");
+        }
+        if missing.len() > 3 {
+            println!("  Missing: {} more issue(s)", missing.len() - 3);
+        }
+        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
+        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
+    }
+
+    Ok(())
 }
 
 fn plural_suffix(count: usize) -> &'static str {

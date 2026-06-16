@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:26:35.216778258+00:00"
 command: "bash -lc '\nset -euo pipefail\nA=/root/atelier/target/debug/atelier\nTMP=$(mktemp -d /tmp/atelier-6aor-create.XXXXXX)\ncleanup() { rm -rf \"$TMP\"; }\ntrap cleanup EXIT\ncd \"$TMP\"\ngit init -q\nprintf \"\\n$ %s init\\n\" \"$A\"\n\"$A\" init | sed -n \"1,6p\"\nprintf \"\\n$ %s mission create ...\\n\" \"$A\"\n\"$A\" mission create \"Readable mission validation\" --body \"Readable mission intent\" --constraint \"Keep mission records reviewable\" --risk \"Regression could reintroduce escaped data\" --validation \"Run focused validation transcript\" | sed -n \"1,24p\"\nMID=$(basename .atelier/missions/*.md .md)\nprintf \"\\n$ %s mission update %s ...\\n\" \"$A\" \"$MID\"\n\"$A\" mission update \"$MID\" --body \"Updated readable mission intent\" --constraint \"Keep mission records reviewable after update\" --risk \"Projection drift\" --validation \"Run rebuild export lint doctor\" | sed -n \"1,24p\"\nprintf \"\\n$ sed -n 1,56p .atelier/missions/%s.md\\n\" \"$MID\"\nsed -n \"1,56p\" \".atelier/missions/$MID.md\"\nprintf \"\\n$ rg ^data: .atelier/missions -g *.md\\n\"\nif rg \"^data:\" .atelier/missions -g \"*.md\"; then\n  echo \"unexpected stale mission data JSON\"\n  exit 1\nelse\n  echo \"No mission data front matter found.\"\nfi\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Positive mission create/update writes readable records without data front matter"
 updated_at: "2026-06-12T22:26:36.923380458+00:00"
 ---

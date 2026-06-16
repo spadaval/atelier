@@ -30,9 +30,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T19:09:38.582041956+00:00"
+status: "done"
 title: "Define mission completion model without closeout"
-updated_at: "2026-06-15T21:30:54.557186845+00:00"
+updated_at: "2026-06-16T19:09:38.582041956+00:00"
 ---
 
 ## Description

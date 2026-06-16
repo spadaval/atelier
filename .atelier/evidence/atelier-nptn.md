@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:41:25.840651705+00:00"
 command: "cargo nextest run test_mission_status_cli_reports_control_state test_mission_status_names_stale_and_malformed_record_blockers test_mission_status_names_concrete_closeout_blockers test_mission_status_shows_ignored_product_behavior_closeout_blocker test_workflow_validate_reports_docs_help_root_surface_drift"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Mission reliability status summary transcript tests"
 updated_at: "2026-06-12T23:41:31.598210519+00:00"
 ---

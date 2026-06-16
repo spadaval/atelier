@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T19:53:41.818990129+00:00"
+status: "done"
 title: "Move mission terminal checks into shared policy without mission workflow graphs"
-updated_at: "2026-06-15T21:31:24.649072855+00:00"
+updated_at: "2026-06-16T19:53:41.818990129+00:00"
 ---
 
 ## Description

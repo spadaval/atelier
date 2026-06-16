@@ -5,14 +5,6 @@ evidence_type: "transcript"
 captured_at: "2026-06-13T19:41:28.371004647+00:00"
 command: "bash -lc '\nset -u\nAT=/root/atelier/target/debug/atelier\nTMP=$(mktemp -d)\nrun() { printf \"\\n$ %s\\n\" \"$*\"; \"$@\" 2>&1; printf \"[exit %s]\\n\" \"$?\"; }\nissue_by_title() { rg -l \"title: \\\"$1\\\"\" .atelier/issues | head -1 | xargs -r basename | sed \"s/.md$//\"; }\ncommit_all() { git add . >/dev/null 2>&1; git commit -q -m \"$1\" >/dev/null 2>&1 || true; }\nmkdir -p \"$TMP/main\" && cd \"$TMP/main\"\ngit init -q && git config user.email validator@example.com && git config user.name Validator\nrun \"$AT\" init >/dev/null\nrun \"$AT\" issue create \"Main workflow item\"\nISS=$(issue_by_title \"Main workflow item\")\nrun \"$AT\" workflow init\nrun \"$AT\" workflow migrate-statuses\nrun \"$AT\" workflow check\ncommit_all baseline\nrun \"$AT\" issue transition \"$ISS\" --options\nrun \"$AT\" start \"$ISS\"\nrun \"$AT\" issue transition \"$ISS\" request_review\nrun \"$AT\" issue transition \"$ISS\" request_validation\nrun \"$AT\" issue transition \"$ISS\" close\nrun \"$AT\" evidence record --target \"issue/$ISS\" --kind validation --result pass \"temp close proof\"\ncommit_all proof\nrun \"$AT\" issue close \"$ISS\" --reason \"validated close\"\nrun \"$AT\" issue create \"Post migration issue\"\nPOST=$(issue_by_title \"Post migration issue\")\nrun \"$AT\" issue transition \"$POST\" --options\nmkdir -p \"$TMP/migration\" && cd \"$TMP/migration\"\ngit init -q && git config user.email validator@example.com && git config user.name Validator\nrun \"$AT\" init >/dev/null\nrun \"$AT\" issue create \"Legacy open\"\nrun \"$AT\" issue create \"Legacy closed\"\nrun \"$AT\" issue create \"Legacy archived\"\nperl -0pi -e \"s/status: \\\\\\\"open\\\\\\\"/closed_at: \\\\\\\"2026-06-13T00:00:00+00:00\\\\\\\"\\nstatus: \\\\\\\"closed\\\\\\\"/\" $(rg -l \"Legacy closed\" .atelier/issues)\nperl -0pi -e \"s/status: \\\\\\\"open\\\\\\\"/closed_at: \\\\\\\"2026-06-13T00:00:00+00:00\\\\\\\"\\nstatus: \\\\\\\"archived\\\\\\\"/\" $(rg -l \"Legacy archived\" .atelier/issues)\nrun \"$AT\" workflow init\nrun \"$AT\" workflow migrate-statuses\nrun \"$AT\" workflow check\nrg -n \"title: \\\\\\\"Legacy|status: \\\\\\\"(todo|done|archived)\\\\\\\"|closed_at:\" .atelier/issues\nmkdir -p \"$TMP/missing\" && cd \"$TMP/missing\"\ngit init -q && git config user.email validator@example.com && git config user.name Validator\nrun \"$AT\" init >/dev/null\nrun \"$AT\" issue create \"Missing policy item\"\nMISS=$(issue_by_title \"Missing policy item\")\nrun \"$AT\" workflow init\nrm .atelier/workflow.yaml\nrun \"$AT\" issue transition \"$MISS\" --options\nmkdir -p \"$TMP/unmigrated\" && cd \"$TMP/unmigrated\"\ngit init -q && git config user.email validator@example.com && git config user.name Validator\nrun \"$AT\" init >/dev/null\nrun \"$AT\" issue create \"Unmigrated item\"\nUNMIG=$(issue_by_title \"Unmigrated item\")\nrun \"$AT\" workflow init\nrun \"$AT\" issue transition \"$UNMIG\" --options\ncd \"$TMP/main\"\nrun \"$AT\" workflow --help\nrun \"$AT\" status\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "fail"
+status: "recorded"
 title: "Bounded workflow validation transcript for atelier-fyms; result is fail because new issue creation still emits legacy open status after workflow migration."
 updated_at: "2026-06-13T19:41:33.287649697+00:00"
 ---

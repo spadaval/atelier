@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:15:49.697218881+00:00"
 command: "bash -lc 'cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet && target/debug/atelier rebuild && target/debug/atelier lint && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -50,7 +42,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Broad default nextest suite passes after all repair blockers"
 updated_at: "2026-06-13T01:16:46.443674916+00:00"
 ---

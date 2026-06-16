@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:18:00.438377236+00:00"
 command: "bash -lc 'set -euo pipefail\n! rg \"^data:\" .atelier/missions -g \"*.md\"\nrg \"## Intent|## Constraints|## Risks|## Validation\" .atelier/missions/atelier-tcmr.md\ngit diff -- .atelier/missions/atelier-tcmr.md | sed -n \"1,140p\"\ncargo test record_store::tests::legacy_mission_data_record_loads_into_typed_sections_and_relationships -- --nocapture\ncargo test record_store::tests::mission_render_normalizes_legacy_evidence_attachments -- --nocapture\ntarget/debug/atelier rebuild\ntarget/debug/atelier export --check\ntarget/debug/atelier lint\ntarget/debug/atelier doctor\ntarget/debug/atelier lint atelier-ys5p'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Mission records migrated from escaped data JSON to typed sections"
 updated_at: "2026-06-12T22:18:09.250521939+00:00"
 ---

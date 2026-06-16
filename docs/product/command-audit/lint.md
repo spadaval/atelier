@@ -18,5 +18,5 @@ valid?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `lint` | Reviewer | Validate committed tracker state before handoff or closeout. | Good. |
+| `lint` | Reviewer | Validate committed tracker state before handoff or terminal validation. | Good. |
 | `lint <id>` | Reviewer | Validate a focused record. | Good. |

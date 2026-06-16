@@ -115,7 +115,7 @@ Required fields:
 | --- | --- | --- |
 | `client_ref` | string | Unique local reference. |
 | `title` | string | Non-empty human title. |
-| `issue_type` | string | `epic`, `task`, `feature`, `bug`, `validation`, `closeout`, `spike`, or repository-configured value. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `issue_type` | string | `epic`, `task`, `feature`, `bug`, `validation`, `spike`, or repository-configured value. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 | `priority` | string | Stable priority value accepted by `atelier issue`, such as `high`, `medium`, `low`, or `P1`. |
 
 Optional fields:
@@ -171,7 +171,7 @@ Milestone records follow the first-class checkpoint model in
 | `scope` | array of strings | Included, excluded, or deferred boundaries in author order. |
 | `validation_criteria` | array of strings | Ordered acceptance criteria for the checkpoint. |
 | `missions` | array of references | Missions this checkpoint advances. |
-| `contributing_work` | array of references | Issues, epics, reviews, validations, or closeouts that contribute. |
+| `contributing_work` | array of references | Issues, epics, reviews, or validations that contribute. |
 
 Milestones are not parent work queues. Use hierarchy for issue ownership and
 mission `work`, plan `applies_to`, evidence `validates`, or milestone

@@ -5,27 +5,10 @@ evidence_type: "validation"
 captured_at: "2026-06-14T22:11:46.071710392+00:00"
 command: "bash -lc '\nset -eu\nclassify_branch() {\n  branch=\"$1\"\n  issue=${branch#codex/}\n  wt=\"/root/atelier/.atelier-worktrees/${issue}\"\n  if [ -d \"$wt/.git\" ] || [ -f \"$wt/.git\" ]; then\n    dirty=$(git -C \"$wt\" status --porcelain | wc -l | tr -d \" \")\n    if git merge-base --is-ancestor \"$branch\" master; then contained_master=yes; else contained_master=no; fi\n    if [ \"$dirty\" != 0 ]; then printf preserve; elif [ \"$contained_master\" = yes ]; then printf delete; else printf \"fold into epic branch\"; fi\n  else\n    printf investigate\n  fi\n}\n\necho \"# git status --short --branch\"\ngit status --short --branch\n\necho \"# git worktree list --porcelain\"\ngit worktree list --porcelain\n\necho \"# .atelier-worktrees directories\"\nfind /root/atelier/.atelier-worktrees -mindepth 1 -maxdepth 1 -type d -print | sort\n\necho \"# du -sh /root/atelier/.atelier-worktrees/*\"\ndu -sh /root/atelier/.atelier-worktrees/*\n\necho \"# branch containment and classification table\"\nprintf \"| branch | worktree | head | dirty_count | unique_vs_master | unique_vs_origin_master | contained_in_master | contained_in_origin_master | disk | classification |\\n\"\nprintf \"| --- | --- | --- | ---: | ---: | ---: | --- | --- | ---: | --- |\\n\"\nfor branch in $(git for-each-ref --format=\"%(refname:short)\" \"refs/heads/codex/atelier-*\" | sort); do\n  issue=${branch#codex/}\n  wt=\"/root/atelier/.atelier-worktrees/${issue}\"\n  head=$(git rev-parse --short \"$branch\")\n  if [ -d \"$wt/.git\" ] || [ -f \"$wt/.git\" ]; then\n    dirty=$(git -C \"$wt\" status --porcelain | wc -l | tr -d \" \")\n    disk=$(du -sh \"$wt\" | awk \"{print \\$1}\")\n    wt_state=present\n  else\n    dirty=NA\n    disk=NA\n    wt_state=missing\n  fi\n  unique_master=$(git rev-list --count \"master..$branch\")\n  unique_origin=$(git rev-list --count \"origin/master..$branch\")\n  if git merge-base --is-ancestor \"$branch\" master; then contained_master=yes; else contained_master=no; fi\n  if git merge-base --is-ancestor \"$branch\" origin/master; then contained_origin=yes; else contained_origin=no; fi\n  if [ \"$wt_state\" = missing ]; then class=investigate; elif [ \"$dirty\" != 0 ]; then class=preserve; elif [ \"$contained_master\" = yes ]; then class=delete; else class=\"fold into epic branch\"; fi\n  printf \"| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\\n\" \"$branch\" \"$wt_state\" \"$head\" \"$dirty\" \"$unique_master\" \"$unique_origin\" \"$contained_master\" \"$contained_origin\" \"$disk\" \"$class\"\ndone\n\necho \"# classification totals\"\nfor class in delete preserve \"fold into epic branch\" investigate; do\n  count=0\n  for branch in $(git for-each-ref --format=\"%(refname:short)\" \"refs/heads/codex/atelier-*\" | sort); do\n    c=$(classify_branch \"$branch\")\n    [ \"$c\" = \"$class\" ] && count=$((count+1))\n  done\n  printf \"%s: %s\\n\" \"$class\" \"$count\"\ndone\nprintf \"stale registrations: \"\ngit worktree list --porcelain | awk \"BEGIN{c=0} /^prunable/ {c++} END{print c}\"\n\necho \"# duplicate codex/atelier-* heads\"\ngit for-each-ref --format=\"%(objectname:short) %(refname:short)\" \"refs/heads/codex/atelier-*\" | sort | awk \"{heads[\\$1]=heads[\\$1] \\\" \\\" \\$2; count[\\$1]++} END {for (sha in count) if (count[sha] > 1) print sha heads[sha]}\" | sort\n\necho \"# stale/prunable Git worktree registrations\"\ngit worktree list --porcelain | awk '\"'\"'/^worktree / {path=$2; prunable=0; reason=\"\"} /^prunable/ {prunable=1; reason=$0} /^$/ {if (prunable) print path \" | \" reason; prunable=0; reason=\"\"} END {if (prunable) print path \" | \" reason}'\"'\"'\n\necho \"# branches without matching worktree directory\"\nfor branch in $(git for-each-ref --format=\"%(refname:short)\" \"refs/heads/codex/atelier-*\" | sort); do\n  issue=${branch#codex/}\n  wt=\"/root/atelier/.atelier-worktrees/${issue}\"\n  [ -d \"$wt\" ] || printf \"%s missing %s\\n\" \"$branch\" \"$wt\"\ndone\n\necho \"# worktree directories without matching codex branch\"\nfor wt in /root/atelier/.atelier-worktrees/*; do\n  [ -d \"$wt\" ] || continue\n  issue=${wt##*/}\n  git show-ref --verify --quiet \"refs/heads/codex/${issue}\" || printf \"%s has no codex/%s branch\\n\" \"$wt\" \"$issue\"\ndone\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
 target:
   kind: "issue"
   id: "atelier-zbd4"
   role: "validates"
-follow_up_ids: []
-residual_risks: []
-output:
-  limit_bytes_per_stream: 4096
-  stdout:
-    bytes: 20530
-    summary: "# git status --short --branch\n## master...origin/master [ahead 514]\n M .atelier/issues/atelier-kybc.md\n M .atelier/issues/atelier-xzco.md\n M .atelier/issues/atelier-zbd4.md\n M CONTEXT.md\n M SPEC.md\n?? .atelier/issues/atelier-kybc.activity/\n?? .atelier/issues/atelier-xzco.activity/\n?? .atelier/issues/atelier-zbd4.activity/\n# git worktree list --porcelain\nworktree /root/atelier\nHEAD 30ed464eea69fc5293b1d0175bbbc15119976af7\nbranch refs/heads/master\n\nworktree /root/atelier/.atelier-worktrees/atelier-10qm\nHEAD 8594a8cddf8f0eb4335535c3dce5584dc82baa8f\nbranch refs/heads/codex/atelier-10qm\n\nworktree /root/atelier/.atelier-worktrees/atelier-3iom\nHEAD fff34e59005cc8b1a041910c6bdd7a18d6492866\nbranch refs/heads/codex/atelier-3iom\n\nworktree /root/atelier/.atelier-worktrees/atelier-3z35\nHEAD 9b2a5a74428a475f035f1419e1ce0f4704c9ca4c\nbranch refs/heads/codex/atelier-3z35\n\nworktree /root/atelier/.atelier-worktrees/atelier-4eot\nHEAD 97fd3730e39c7debbd5eb9448810c09e7b756b5c\nbranch refs/heads/codex/atelier-4eot\n\nworktree /root/atelier/.atelier-worktrees/atelier-4u5h\nHEAD cf488fb29fc83de8625b6585f8ade5773c940d72\nbranch refs/heads/codex/atelier-4u5h\n\nworktree /root/atelier/.atelier-worktrees/atelier-613f\nHEAD aad3551ca5148a439217e96d440c3fab3c004f38\nbranch refs/heads/codex/atelier-613f\n\nworktree /root/atelier/.atelier-worktrees/atelier-6w0u\nHEAD be3f4a0a6306a0d7a9362acec0172abe232e047e\nbranch refs/heads/codex/atelier-6w0u\n\nworktree /root/atelier/.atelier-worktrees/atelier-7r55\nHEAD c05f8e26dd4a0641c847ffcbe1d48d3757afe4c7\nbranch refs/heads/codex/atelier-7r55\n\nworktree /root/atelier/.atelier-worktrees/atelier-7yen\nHEAD 3277a4600548786b493981015408fdeb187b2350\nbranch refs/heads/codex/atelier-7yen\n\nworktree /root/atelier/.atelier-worktrees/atelier-9soq\nHEAD e8ad446dd494fc5cf59c395b9d14c0410a725a4e\nbranch refs/heads/codex/atelier-9soq\n\nworktree /root/atelier/.atelier-worktrees/atelier-b2vi\nHEAD 05c15330ca5812d942de0a729d65296e81ddef53\nbranch refs/heads/codex/atelier-b2vi\n\nworktree /root/atelier/.atelier-worktrees/atelier-c4uz\nHEAD 11c2d6e8e38fe990a72b56855297d738b26bbe53\nbranch refs/heads/codex/atelier-c4uz\n\nworktree /root/atelier/.atelier-worktrees/atelier-c64h\nHEAD ca0301fd577ecd20f4d7bfd5d6f84520854bd8ac\nbranch refs/heads/codex/atelier-c64h\n\nworktree /root/atelier/.atelier-worktrees/atelier-ca32\nHEAD 0badd6fac554d9e6a58d2fe4d7e5972c94f9feab\nbranch refs/heads/codex/atelier-ca32\n\nworktree /root/atelier/.atelier-worktrees/atelier-cbru\nHEAD 05c15330ca5812d942de0a729d65296e81ddef53\nbranch refs/heads/codex/atelier-cbru\n\nworktree /root/atelier/.atelier-worktrees/atelier-exz1\nHEAD 76dbc4b2c9c078970d7095c2e9f23cbd306e2d38\nbranch refs/heads/codex/atelier-exz1\n\nworktree /root/atelier/.atelier-worktrees/atelier-fx9r\nHEAD 748a1037b5026ccb98dd5fc1cd71ae44b4592038\nbranch refs/heads/codex/atelier-fx9r\n\nworktree /root/atelier/.atelier-worktrees/atelier-ggls\nHEAD 1eb1d748977f47e0ba162991421b3858eeaf1cfc\nbranch refs/heads/codex/atelier-ggls\n\nworktree /root/atelier/.atelier-worktrees/atelier-gzel\nHEAD 586929821ac8650102ee7de8e094926d0f9b59a9\nbranch refs/heads/codex/atelier-gzel\n\nworktree /root/atelier/.atelier-worktrees/atelier-h184\nHEAD be4171d11c92775255bd198bcfe03e7b07de0356\nbranch refs/heads/codex/atelier-h184\n\nworktree /root/atelier/.atelier-worktrees/atelier-i9ob\nHEAD a19109a945a3881ceac8865ba26e4af4ac286b38\nbranch refs/heads/codex/atelier-i9ob\n\nworktree /root/atelier/.atelier-worktrees/atelier-j01c\nHEAD b28959eca78d61796840307a92e7fb24505804dd\nbranch refs/heads/codex/atelier-j01c\n\nworktree /root/atelier/.atelier-worktrees/atelier-ja3o\nHEAD ce1642e0bdff6e26af99503a81e3d2c48c98c027\nbranch refs/heads/codex/atelier-ja3o\n\nworktree /root/atelier/.atelier-worktrees/atelier-jarw\nHEAD 97c485168a86b8933702ce17ed4b5fa36c8cec8c\nbranch refs/heads/codex/atelier-jarw\n\nworktree /root/atelier/.atelier-worktrees/atelier-kpm8\nHEAD 2be83a134417018c6ad6c9d4a3c9c167e6accc04\nbranch refs/heads/codex/atelier-kpm8\n\nworktree /root/atelier/.atelier-worktrees/atelier-l0yk\nHEAD c05f8e26dd4a0641c847ffcbe1d48d3757afe4c7\nbranch refs/heads/codex/atelier-l0yk\n\nworktree /root/atelier/.atelier"
-    truncated: true
-  stderr:
-    bytes: 0
-    summary: ""
-    truncated: false
 relationships:
   blocks: []
   children: []
@@ -36,14 +19,19 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Classification transcript for current issue worktrees and codex atelier branches"
 updated_at: "2026-06-14T22:11:59.850828708+00:00"
 ---
 
+## Summary
+
 Classification transcript for current issue worktrees and codex atelier branches
 
-Command: bash -lc '
+## Command
+
+```console
+bash -lc '
 set -eu
 classify_branch() {
   branch="$1"
@@ -126,9 +114,16 @@ for wt in /root/atelier/.atelier-worktrees/*; do
   git show-ref --verify --quiet "refs/heads/codex/${issue}" || printf "%s has no codex/%s branch\n" "$wt" "$issue"
 done
 '
+```
+
 Exit status: 0
 
-Stdout summary (truncated):
+## Stdout
+
+Bytes: 20530
+Truncated: yes
+
+```text
 # git status --short --branch
 ## master...origin/master [ahead 514]
  M .atelier/issues/atelier-kybc.md
@@ -249,7 +244,12 @@ HEAD c05f8e26dd4a0641c847ffcbe1d48d3757afe4c7
 branch refs/heads/codex/atelier-l0yk
 
 worktree /root/atelier/.atelier
+```
 
-Stderr summary:
-(none)
+## Stderr
 
+Bytes: 0
+Truncated: no
+
+```text
+```

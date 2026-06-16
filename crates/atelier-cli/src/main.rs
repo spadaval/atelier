@@ -268,9 +268,6 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
-        /// Issue description
-        #[arg(short, long)]
-        description: Option<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
@@ -280,7 +277,7 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
-        /// Explicit work type (bug, closeout, epic, feature, spike, task, validation)
+        /// Explicit work type (bug, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Parent issue ID or imported source ID
@@ -340,7 +337,7 @@ enum IssueCommands {
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// New issue type (bug, closeout, epic, feature, spike, task, validation)
+        /// New issue type (bug, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Add labels to the issue
@@ -462,20 +459,15 @@ enum MissionCommands {
     },
     /// Show mission-control status for one mission or all current missions
     Status {
-        /// Show closeout audit detail for the mission
-        #[arg(long)]
-        closeout: bool,
         /// Show verbose validator detail in the status summary
         #[arg(long)]
         verbose: bool,
         id: Option<String>,
     },
-    /// Audit mission shell closeout and explicit workflow approval
-    Audit { id: String },
-    /// Close a mission after all closeout gates pass
+    /// Close a mission after terminal checks pass
     Close {
         id: String,
-        /// Mission closeout reason recorded in the mission closeout notes
+        /// Mission close reason recorded in the mission terminal notes
         #[arg(long)]
         reason: String,
     },
@@ -563,16 +555,14 @@ enum PlanCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"
-  atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+  atelier evidence record --target issue/<id> --kind validation \"summary\"
+  atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
 another target.")]
     Record {
         #[arg(long = "kind")]
         evidence_kind: String,
-        #[arg(long)]
-        result: String,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
@@ -604,7 +594,7 @@ another target.")]
     /// List evidence records
     List {
         #[arg(long)]
-        result: Option<String>,
+        status: Option<String>,
     },
 }
 
@@ -671,7 +661,6 @@ enum DiagnosticsCommands {
 
 fn issue_create_parts(
     priority: &str,
-    description: Option<&str>,
     template: Option<&str>,
     labels: &[String],
     issue_type: Option<&str>,
@@ -694,20 +683,13 @@ fn issue_create_parts(
             } else {
                 template.priority
             };
-            let description = match (template.description_prefix, description) {
-                (Some(prefix), Some(user_description)) => {
-                    Some(format!("{prefix}\n\n{user_description}"))
-                }
-                (Some(prefix), None) => Some(prefix.to_string()),
-                (None, description) => description.map(str::to_string),
-            };
             (
                 priority.to_string(),
-                description,
+                template.description_prefix.map(str::to_string),
                 Some(template_default_issue_type(template_name)),
             )
         } else {
-            (priority.to_string(), description.map(str::to_string), None)
+            (priority.to_string(), None, None)
         };
 
     if !commands::create::validate_priority(&final_priority) {
@@ -851,7 +833,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
     match action {
         IssueCommands::Create {
             title,
-            description,
             priority,
             template,
             label,
@@ -861,7 +842,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let (state_dir, db_path) = state_and_db_paths()?;
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
-                description.as_deref(),
                 template.as_deref(),
                 &label,
                 issue_type.as_deref(),
@@ -1153,11 +1133,7 @@ fn run() -> Result<()> {
                 let id = resolve_record_arg(storage.db(), "mission", &id)?;
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
-            MissionCommands::Status {
-                id,
-                closeout,
-                verbose,
-            } => {
+            MissionCommands::Status { id, verbose } => {
                 let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
                 let id = resolve_optional_record_arg(storage.db(), "mission", id)?;
                 commands::mission::status(
@@ -1165,14 +1141,8 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     id.as_deref(),
                     quiet,
-                    closeout,
                     verbose,
                 )
-            }
-            MissionCommands::Audit { id } => {
-                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                commands::mission::audit(storage.db(), &storage.state_dir(), &id, quiet)
             }
             MissionCommands::Close { id, reason } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
@@ -1313,7 +1283,6 @@ fn run() -> Result<()> {
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record {
                 evidence_kind,
-                result,
                 target,
                 role,
                 summary,
@@ -1346,7 +1315,6 @@ fn run() -> Result<()> {
                         &storage.state_dir(),
                         &storage.db_path(),
                         &evidence_kind,
-                        &result,
                         summary,
                         path.as_deref(),
                         uri.as_deref(),
@@ -1385,7 +1353,6 @@ fn run() -> Result<()> {
                         &storage.db_path(),
                         commands::evidence::CaptureOptions {
                             evidence_kind: &evidence_kind,
-                            result: &result,
                             summary: command_summary,
                             path: path.as_deref(),
                             uri: uri.as_deref(),
@@ -1420,9 +1387,9 @@ fn run() -> Result<()> {
                     &role,
                 )
             }
-            EvidenceCommands::List { result } => {
+            EvidenceCommands::List { status } => {
                 let db = projection_query_db()?;
-                commands::evidence::list(&db, result.as_deref())
+                commands::evidence::list(&db, status.as_deref())
             }
         },
 
@@ -1615,7 +1582,6 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Show { .. } => "mission show",
             MissionCommands::Start { .. } => "mission start",
             MissionCommands::Status { .. } => "mission status",
-            MissionCommands::Audit { .. } => "mission audit",
             MissionCommands::Close { .. } => "mission close",
             MissionCommands::List { .. } => "mission list",
             MissionCommands::Update { .. } => "mission update",

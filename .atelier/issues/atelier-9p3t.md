@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T20:51:12.832713136+00:00"
+status: "done"
 title: "Validate removal of live closeout surfaces"
-updated_at: "2026-06-15T21:31:47.708866087+00:00"
+updated_at: "2026-06-16T20:51:12.832713136+00:00"
 ---
 
 ## Description

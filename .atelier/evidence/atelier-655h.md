@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:32:30.377638295+00:00"
 command: "cargo nextest run test_root_start_finish_and_issue_transition_surface test_dirty_worktree_blocks_mission_closeout test_mission_status_names_concrete_closeout_blockers test_mission_status_names_stale_and_malformed_record_blockers test_mission_status_cli_reports_control_state test_mission_closeout_enforces_gates_and_reopen_skips_close_validators test_workflow_validate_reports_docs_help_root_surface_drift"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Closeout proof surface transcript tests"
 updated_at: "2026-06-12T23:32:36.210134754+00:00"
 ---

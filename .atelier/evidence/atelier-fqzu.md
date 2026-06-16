@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:18:28.605634372+00:00"
 command: "cargo nextest run evidence"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "cargo nextest run evidence passed"
 updated_at: "2026-06-12T21:18:33.483428451+00:00"
 ---

@@ -318,7 +318,7 @@ Issue front matter adds:
 | Field | Type | Rule |
 | --- | --- | --- |
 | `priority` | string | Stable issue priority token. Version 1 uses `P0`, `P1`, `P2`, and `P3`; human labels such as `critical`, `high`, `medium`, and `low` are derived display text. |
-| `issue_type` | string | `task`, `feature`, `epic`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `issue_type` | string | `task`, `feature`, `epic`, `bug`, `validation`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 
 Issue front matter does not carry large human-authored acceptance or proof
 text. The canonical issue schema removes the legacy `acceptance` and
@@ -389,7 +389,7 @@ Allowed mission front matter:
 No mission-specific scalar, array, or escaped structured field is allowed in
 front matter. In particular, `data`, `constraints`, `risks`, `validation`,
 `validation_expectations`, `current_risks`, `work`, `plans`, `milestones`,
-`evidence`, `blockers`, and `closeout_notes` are rejected as mission front
+`evidence`, `blockers`, and `terminal_notes` are rejected as mission front
 matter keys. Writers must not serialize mission semantics as quoted JSON.
 
 Mission body sections are exact, case-sensitive level-two Markdown headings.
@@ -403,8 +403,8 @@ They render in this deterministic order:
    are no known risks.
 4. `## Validation` (required): ordered mission validation expectations and
    closeout proof requirements.
-5. `## Closeout Notes` (optional): final audit notes, waivers, residual risks,
-   or closure rationale. Closed missions should include it when the closeout
+5. `## Terminal Notes` (optional): final audit notes, waivers, residual risks,
+   or closure rationale. Closed missions should include it when the terminal
    context is not fully captured by evidence records.
 6. `## Notes` (optional): handoff context or non-contract background that does
    not belong in constraints, risks, validation, or closeout.
@@ -425,7 +425,7 @@ Mission relationship semantics are explicit:
 | Plans | Mission `relationships.attachments[]` entries with `kind: plan` and `role: planned_by`. |
 | Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission with a `relationships.attachments[]` entry using `kind: mission`, the mission ID, and `role: validates`. Mission status derives incoming evidence links instead of storing evidence summaries in the mission body. |
 | Supporting records that are not mission work, blockers, checkpoints, plans, or evidence | Mission `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
-| Closeout notes | The optional `## Closeout Notes` section; closeout proof remains evidence records plus workflow validation output. |
+| Terminal notes | The optional `## Terminal Notes` section; terminal proof remains evidence records plus workflow validation output. |
 
 For mission records, `relationships.children` is reserved and should be `[]`.
 Mission work is not issue hierarchy. `relationships.blocks` keeps its common

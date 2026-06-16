@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:34:28.620609048+00:00"
 command: "bash -lc 'set -euo pipefail\ntarget/debug/atelier --help | rg \"prime|history|atelier prime|history --mission|history --issue\"\nrg -n \"atelier prime|atelier history|history --mission|history --issue\" docs/product/cli-surface.md\ntarget/debug/atelier issue show atelier-hggl | rg \"repo-wide and scoped history|Event sources|Ordering and filtering|Output shape|Empty states|Proof expectations|history --mission|history --issue\"\ntarget/debug/atelier issue show atelier-bzts | rg \"atelier prime|Context Recovery|Essential Commands|concrete reason|mostly static guidance|active mission\"\ntarget/debug/atelier prime | rg \"Atelier Prime|Context Recovery|Active mission|Active work|Essential Commands|history --issue|Check active work\"\ntarget/debug/atelier history --limit 3 | rg \"History|Scope:|Source:|Ordering:|Showing:|Next Commands\"\ntarget/debug/atelier history --issue atelier-u4nx --limit 5 | rg \"Scope:.*issue atelier-u4nx|Next Commands|atelier history --issue atelier-u4nx\"\ntarget/debug/atelier history --mission atelier-tcmr --event-kind evidence_attached --limit 2 | rg \"Scope:.*mission atelier-tcmr|evidence_attached|Next Commands\"\ntarget/debug/atelier issue show atelier-u4nx | rg \"Show full activity: atelier history --issue atelier-u4nx\"\ntarget/debug/atelier mission show atelier-tcmr | rg \"atelier history --mission atelier-tcmr\"\ncargo test --quiet --test cli_integration history\ncargo test --quiet --test cli_integration prime\ncargo test --quiet --test cli_integration test_top_level_help_only_shows_core_commands\ncargo test --quiet --test cli_integration test_show_issue_prefers_activity_sidecars_for_recent_activity\ncargo fmt -- --check\ngit diff --check\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-u4nx'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "History and prime signpost surfaces implemented and validated"
 updated_at: "2026-06-12T22:34:43.319682089+00:00"
 ---

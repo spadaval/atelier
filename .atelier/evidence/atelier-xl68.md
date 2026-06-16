@@ -5,27 +5,10 @@ evidence_type: "validation"
 captured_at: "2026-06-15T17:04:09.533030277+00:00"
 command: "cargo nextest run -p atelier-cli test_worktree_setup_failure_does_not_associate_and_can_retry test_work_lifecycle_human_output_and_guards test_root_repair_is_removed_and_does_not_clear_runtime_association test_separate_worktrees_can_have_different_active_issues"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
 target:
   kind: "issue"
   id: "atelier-rjua"
   role: "validates"
-follow_up_ids: []
-residual_risks: []
-output:
-  limit_bytes_per_stream: 4096
-  stdout:
-    bytes: 0
-    summary: ""
-    truncated: false
-  stderr:
-    bytes: 885
-    summary: "   Compiling atelier-cli v0.2.0 (/root/atelier/crates/atelier-cli)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.21s\n────────────\n Nextest run ID dc36b1d0-2e7e-4934-8ea1-22adb730648a with nextest profile: default\n    Starting 4 tests across 4 binaries (673 tests skipped)\n        PASS [   0.256s] (1/4) atelier-cli::cli_integration test_root_repair_is_removed_and_does_not_clear_runtime_association\n        PASS [   0.842s] (2/4) atelier-cli::cli_integration test_worktree_setup_failure_does_not_associate_and_can_retry\n        PASS [   1.688s] (3/4) atelier-cli::cli_integration test_work_lifecycle_human_output_and_guards\n        PASS [   1.766s] (4/4) atelier-cli::cli_integration test_separate_worktrees_can_have_different_active_issues\n────────────\n     Summary [   1.768s] 4 tests run: 4 passed, 673 skipped\n"
-    truncated: false
 relationships:
   blocks: []
   children: []
@@ -36,20 +19,37 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Worktree flow no longer uses runtime work_associations as source of truth: worktree status derives associated issues from codex/<issue-id> branch plus canonical issue status, worktree setup activates canonical issue state, and focused worktree tests pass."
 updated_at: "2026-06-15T17:04:16.043987117+00:00"
 ---
 
+## Summary
+
 Worktree flow no longer uses runtime work_associations as source of truth: worktree status derives associated issues from codex/<issue-id> branch plus canonical issue status, worktree setup activates canonical issue state, and focused worktree tests pass.
 
-Command: cargo nextest run -p atelier-cli test_worktree_setup_failure_does_not_associate_and_can_retry test_work_lifecycle_human_output_and_guards test_root_repair_is_removed_and_does_not_clear_runtime_association test_separate_worktrees_can_have_different_active_issues
+## Command
+
+```console
+cargo nextest run -p atelier-cli test_worktree_setup_failure_does_not_associate_and_can_retry test_work_lifecycle_human_output_and_guards test_root_repair_is_removed_and_does_not_clear_runtime_association test_separate_worktrees_can_have_different_active_issues
+```
+
 Exit status: 0
 
-Stdout summary:
-(none)
+## Stdout
 
-Stderr summary:
+Bytes: 0
+Truncated: no
+
+```text
+```
+
+## Stderr
+
+Bytes: 885
+Truncated: no
+
+```text
    Compiling atelier-cli v0.2.0 (/root/atelier/crates/atelier-cli)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 2.21s
 ────────────
@@ -61,4 +61,4 @@ Stderr summary:
         PASS [   1.766s] (4/4) atelier-cli::cli_integration test_separate_worktrees_can_have_different_active_issues
 ────────────
      Summary [   1.768s] 4 tests run: 4 passed, 673 skipped
-
+```

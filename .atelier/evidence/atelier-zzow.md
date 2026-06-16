@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:15:27.251672622+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet rebuild_rejects_global_id_collision_across_record_kinds && target/debug/atelier rebuild && target/debug/atelier lint atelier-bpm0 && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Rebuild ID-collision fixture uses valid sectioned mission body"
 updated_at: "2026-06-13T01:15:34.089671696+00:00"
 ---

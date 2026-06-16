@@ -18,6 +18,18 @@ fn test_create_issue() {
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
     assert!(stdout.contains(&format!("atelier lint {issue_id}")));
+    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
+    let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(issue_text.contains("## Description\n\nNo description provided."));
+    assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
+    assert!(issue_text.contains("## Evidence\n\nEvidence was not specified."));
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "placeholder scaffold should be under-specified");
+    assert!(stderr.contains("Lint failed"));
+    assert!(lint_out.contains("Issue section Description must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Outcome must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Evidence must be present and non-empty"));
 }
 
 #[test]
@@ -38,11 +50,11 @@ fn test_create_issue_with_priority() {
 }
 
 #[test]
-fn test_create_issue_with_description() {
+fn test_create_issue_with_description_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, _) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
@@ -53,11 +65,56 @@ fn test_create_issue_with_description() {
         ],
     );
 
-    assert!(success);
+    assert!(!success, "issue create -d should be removed");
+    assert!(stderr.contains("unexpected argument") || stderr.contains("Usage:"));
+}
 
-    // Verify description in show
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
-    assert!(show_out.contains("Detailed description"));
+#[test]
+fn test_issue_create_help_is_markdown_first() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(!stdout.contains("--description"), "{stdout}");
+    assert!(stdout.contains("--template"), "{stdout}");
+}
+
+#[test]
+fn test_issue_create_scaffold_edit_lint_show_flow() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Markdown first issue"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Markdown first issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
+
+    let path = canonical_issue_path(dir.path(), &issue_id);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let text = text
+        .replace(
+            "No description provided.",
+            "Describe the markdown-first issue.",
+        )
+        .replace(
+            "Outcome was not specified.",
+            "Issue sections are populated by editing canonical Markdown.",
+        )
+        .replace(
+            "Evidence was not specified.",
+            "- `atelier lint <id>` passes after section edits.",
+        );
+    std::fs::write(&path, text).unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(success, "lint after markdown edit failed: {stderr}");
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show.contains("Describe the markdown-first issue."));
+    assert!(show.contains("Issue sections are populated by editing canonical Markdown."));
+    assert!(show.contains("atelier lint <id>"));
 }
 
 #[test]
@@ -321,9 +378,20 @@ fn test_list_filter_by_label() {
 fn test_show_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nThe issue show command renders parsed sections.\n\n## Evidence\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.";
 
-    run_atelier(dir.path(), &["issue", "create", "Test issue", "-d", body]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Test issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "Description")
+            .replace(
+                "Outcome was not specified.",
+                "The issue show command renders parsed sections.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
+            )
+    });
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -337,6 +405,78 @@ fn test_show_issue() {
     assert!(stdout.contains("Notes"));
     assert!(stdout.contains("CLI display context."));
     assert!(!stdout.contains("Acceptance Criteria"));
+}
+
+#[test]
+fn test_issue_show_surfaces_evidence_status() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Evidence status issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Evidence status issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace(
+            "No description provided.",
+            "Exercise issue show evidence state.",
+        )
+        .replace(
+            "Outcome was not specified.",
+            "Issue show renders attached proof state and next commands.",
+        )
+        .replace(
+            "Evidence was not specified.",
+            "- Manual check: issue show and transition options report missing and attached validation evidence.",
+        )
+    });
+    commit_all(dir.path(), "evidence status issue setup");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show without evidence failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: missing - no validating evidence link found"));
+    assert!(stdout.contains(&format!(
+        "atelier evidence record --target issue/{issue_id} --kind validation"
+    )));
+    assert!(stdout.contains(&format!(
+        "atelier evidence attach <evidence-id> issue {issue_id}"
+    )));
+
+    move_issue_to_validation(dir.path(), &issue_id);
+    let (success, transitions, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(
+        success,
+        "transition options without evidence failed: {stderr}"
+    );
+    assert!(transitions.contains("close"));
+    assert!(transitions.contains("fail  proof_attached"));
+    assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "--kind",
+            "validation",
+            "Issue show evidence status validated",
+        ],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+    commit_all(dir.path(), "attach validation evidence");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show with evidence failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: attached - validating evidence is linked"));
+
+    let (success, transitions, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options with evidence failed: {stderr}");
+    assert!(transitions.contains("pass  proof_attached"));
 }
 
 #[test]
@@ -498,10 +638,11 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &["issue", "create", "JSON issue", "-d", "JSON description"],
-    );
+    run_atelier(dir.path(), &["issue", "create", "JSON issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "JSON issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "JSON description")
+    });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -520,17 +661,11 @@ fn test_issue_show_reads_detail_body_from_record_store() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Canonical detail issue",
-            "-d",
-            "Canonical Markdown body",
-        ],
-    );
+    run_atelier(dir.path(), &["issue", "create", "Canonical detail issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Canonical detail issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "Canonical Markdown body")
+    });
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE issues SET description = 'SQLite shadow body' WHERE id = ?1",
@@ -550,16 +685,7 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Canonical section source",
-            "-d",
-            "Original section text",
-        ],
-    );
+    run_atelier(dir.path(), &["issue", "create", "Canonical section source"]);
     let issue_id = issue_id_by_title(dir.path(), "Canonical section source");
     let issue_path = dir
         .path()
@@ -571,7 +697,7 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     let edited_evidence = "- `atelier rebuild` refreshes derived search text.";
     let issue_text = std::fs::read_to_string(&issue_path)
         .unwrap()
-        .replace("Original section text", edited_body)
+        .replace("No description provided.", edited_body)
         .replace("Outcome was not specified.", edited_outcome)
         .replace("Evidence was not specified.", edited_evidence);
     std::fs::write(&issue_path, issue_text).unwrap();
@@ -643,8 +769,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
             "record",
             "--kind",
             "test",
-            "--result",
-            "pass",
             "Canonical evidence summary",
         ],
     );
@@ -916,15 +1040,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     );
     let (success, _evidence_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "Cargo test passed",
-        ],
+        &["evidence", "record", "--kind", "test", "Cargo test passed"],
     );
     assert!(success, "evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Cargo test passed");
@@ -1901,20 +2017,38 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
 fn test_removed_issue_type_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutable task"]);
+    assert!(success, "baseline issue create failed: {stderr}");
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Artifact task",
-            "--issue-type",
-            "decision",
-        ],
-    );
+    for removed_type in ["decision", "closeout"] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "Artifact task",
+                "--issue-type",
+                removed_type,
+            ],
+        );
 
-    assert!(!success, "removed issue type should be rejected");
-    assert!(stderr.contains("Invalid issue_type 'decision'"));
+        assert!(
+            !success,
+            "removed issue type {removed_type} should be rejected"
+        );
+        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "update", "1", "--issue-type", removed_type],
+        );
+
+        assert!(
+            !success,
+            "removed issue type {removed_type} should be rejected on update"
+        );
+        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+    }
 }
 
 // ==================== Session Tests ====================

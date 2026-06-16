@@ -85,15 +85,7 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
 ];
 
 pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
-pub const VALID_ISSUE_TYPES: &[&str] = &[
-    "bug",
-    "closeout",
-    "epic",
-    "feature",
-    "spike",
-    "task",
-    "validation",
-];
+pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 pub const MAX_LABEL_LEN: usize = 128;
 
 pub fn validate_status(status: &str) -> Result<()> {
@@ -316,7 +308,7 @@ pub struct MissionSections {
     pub constraints: String,
     pub risks: String,
     pub validation: String,
-    pub closeout_notes: Option<String>,
+    pub terminal_notes: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -326,7 +318,7 @@ pub enum MissionSectionName {
     Constraints,
     Risks,
     Validation,
-    CloseoutNotes,
+    TerminalNotes,
     Notes,
 }
 
@@ -336,7 +328,7 @@ impl MissionSections {
         MissionSectionName::Constraints,
         MissionSectionName::Risks,
         MissionSectionName::Validation,
-        MissionSectionName::CloseoutNotes,
+        MissionSectionName::TerminalNotes,
         MissionSectionName::Notes,
     ];
 }
@@ -348,7 +340,7 @@ impl MissionSectionName {
             MissionSectionName::Constraints => "Constraints",
             MissionSectionName::Risks => "Risks",
             MissionSectionName::Validation => "Validation",
-            MissionSectionName::CloseoutNotes => "Closeout Notes",
+            MissionSectionName::TerminalNotes => "Terminal Notes",
             MissionSectionName::Notes => "Notes",
         }
     }
@@ -1335,6 +1327,7 @@ fn render_evidence_record(
     spec: &RecordKindSpec,
 ) -> Result<String> {
     let data = normalized_evidence_data(&record.record.data_json)?;
+    let body = render_evidence_body(record.record.body.as_deref(), &data);
 
     let mut output = String::new();
     output.push_str("---\n");
@@ -1350,29 +1343,32 @@ fn render_evidence_record(
         "captured_at",
         Some(&data.captured_at.to_rfc3339()),
     )?;
-    write_yaml_scalar(&mut output, "command", data.command.as_deref())?;
-    write_yaml_scalar(&mut output, "exit_status", data.exit_status.as_deref())?;
-    write_yaml_scalar(&mut output, "path", data.path.as_deref())?;
-    write_yaml_scalar(&mut output, "uri", data.uri.as_deref())?;
-    write_yaml_scalar(&mut output, "proof_scope", data.proof_scope.as_deref())?;
-    write_yaml_scalar(
+    write_yaml_scalar_if_some(&mut output, "command", data.command.as_deref())?;
+    write_yaml_scalar_if_some(&mut output, "exit_status", data.exit_status.as_deref())?;
+    write_yaml_scalar_if_some(&mut output, "path", data.path.as_deref())?;
+    write_yaml_scalar_if_some(&mut output, "uri", data.uri.as_deref())?;
+    write_yaml_scalar_if_some(&mut output, "proof_scope", data.proof_scope.as_deref())?;
+    write_yaml_scalar_if_some(
         &mut output,
         "agent_identity",
         data.agent_identity.as_deref().or(data.producer.as_deref()),
     )?;
-    write_yaml_scalar(
+    write_yaml_scalar_if_some(
         &mut output,
         "independence_level",
         data.independence_level.as_deref(),
     )?;
-    write_evidence_target(&mut output, data.target.as_ref())?;
-    write_yaml_array(&mut output, "follow_up_ids", &data.follow_up_ids)?;
-    write_yaml_array(&mut output, "residual_risks", &data.residual_risks)?;
-    write_evidence_output_summary(&mut output, data.output.as_ref())?;
+    write_evidence_target_if_some(&mut output, data.target.as_ref())?;
+    write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
+    write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
     write_yaml_relationships(&mut output, relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
+    write_yaml_scalar(
+        &mut output,
+        "status",
+        Some(normalized_evidence_status(&record.record.status)),
+    )?;
     write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
     write_yaml_scalar(
         &mut output,
@@ -1380,7 +1376,7 @@ fn render_evidence_record(
         Some(&record.record.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push_str(&body);
     output.push('\n');
     Ok(output)
 }
@@ -1395,7 +1391,8 @@ fn parse_evidence_domain_record(
     let relationships =
         normalize_legacy_evidence_relationships(parse_relationships(&front_matter, relative)?);
     let title = require_scalar(&front_matter, "title", relative)?;
-    let status = require_scalar(&front_matter, "status", relative)?;
+    let status =
+        normalized_evidence_status(&require_scalar(&front_matter, "status", relative)?).to_string();
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
 
@@ -1403,7 +1400,7 @@ fn parse_evidence_domain_record(
         let data_json = require_scalar(&front_matter, "data", relative)?;
         serde_json::to_string(&normalized_evidence_data(&data_json)?)?
     } else {
-        let data = EvidenceRecordData {
+        let mut data = EvidenceRecordData {
             evidence_type: require_scalar(&front_matter, "evidence_type", relative)?,
             captured_at: require_datetime(&front_matter, "captured_at", relative)?,
             command: optional_scalar(&front_matter, "command")?,
@@ -1428,6 +1425,7 @@ fn parse_evidence_domain_record(
                 relative,
             )?,
         };
+        apply_evidence_body_sections(&mut data, body);
         serde_json::to_string(&data)?
     };
     let body = if body.is_empty() {
@@ -1873,8 +1871,24 @@ fn normalized_evidence_data(data_json: &str) -> Result<EvidenceRecordData> {
     if data.agent_identity.is_none() {
         data.agent_identity = data.producer.clone();
     }
+    if matches!(
+        data.proof_scope.as_deref(),
+        Some("scoped to the attached target or summary")
+    ) {
+        data.proof_scope = None;
+    }
+    if matches!(data.independence_level.as_deref(), Some("unspecified")) {
+        data.independence_level = None;
+    }
     data.follow_up_ids.sort();
     Ok(data)
+}
+
+fn normalized_evidence_status(status: &str) -> &str {
+    match status {
+        "pass" | "fail" | "blocked" | "deferred" => "recorded",
+        other => other,
+    }
 }
 
 fn normalized_milestone_data(data_json: &str) -> Result<MilestoneRecordData> {
@@ -1906,7 +1920,7 @@ pub fn mission_sections_from_inputs(
         constraints: mission_list_section(constraints, "- None."),
         risks: mission_list_section(risks, "- None."),
         validation: mission_list_section(validation, "- Validation was not specified."),
-        closeout_notes: None,
+        terminal_notes: None,
         notes: None,
     }
 }
@@ -1934,14 +1948,14 @@ pub fn render_mission_sections(sections: &MissionSections) -> String {
         sections.risks.trim(),
         sections.validation.trim()
     );
-    if let Some(closeout_notes) = sections
-        .closeout_notes
+    if let Some(terminal_notes) = sections
+        .terminal_notes
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        body.push_str("\n\n## Closeout Notes\n\n");
-        body.push_str(closeout_notes);
+        body.push_str("\n\n## Terminal Notes\n\n");
+        body.push_str(terminal_notes);
     }
     if let Some(notes) = sections
         .notes
@@ -2014,8 +2028,8 @@ pub fn parse_mission_sections(body: &str, relative: &Path) -> Result<MissionSect
         )?,
         risks: required_mission_section(&sections, MissionSectionName::Risks, relative)?,
         validation: required_mission_section(&sections, MissionSectionName::Validation, relative)?,
-        closeout_notes: sections
-            .get(MissionSectionName::CloseoutNotes.title())
+        terminal_notes: sections
+            .get(MissionSectionName::TerminalNotes.title())
             .cloned(),
         notes: sections.get(MissionSectionName::Notes.title()).cloned(),
     })
@@ -2077,7 +2091,7 @@ fn legacy_mission_sections(
             value_string_array(&data, "validation"),
             "- Validation was not specified.",
         ),
-        closeout_notes: value_string_array(&data, "closeout_notes")
+        terminal_notes: value_string_array(&data, "terminal_notes")
             .into_iter()
             .next()
             .filter(|value| !value.trim().is_empty()),
@@ -2902,6 +2916,13 @@ fn write_yaml_scalar(output: &mut String, key: &str, value: Option<&str>) -> Res
     Ok(())
 }
 
+fn write_yaml_scalar_if_some(output: &mut String, key: &str, value: Option<&str>) -> Result<()> {
+    if let Some(value) = value {
+        write_yaml_scalar(output, key, Some(value))?;
+    }
+    Ok(())
+}
+
 fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> {
     let _: Value = serde_json::from_str(value)?;
     output.push_str(key);
@@ -2933,6 +2954,13 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
     Ok(())
 }
 
+fn write_yaml_array_if_not_empty(output: &mut String, key: &str, values: &[String]) -> Result<()> {
+    if !values.is_empty() {
+        write_yaml_array(output, key, values)?;
+    }
+    Ok(())
+}
+
 fn write_plan_revisions(
     output: &mut String,
     revisions: &[atelier_core::PlanRevision],
@@ -2957,45 +2985,7 @@ fn write_plan_revisions(
     Ok(())
 }
 
-fn write_evidence_output_summary(
-    output: &mut String,
-    summary: Option<&EvidenceOutputSummary>,
-) -> Result<()> {
-    let Some(summary) = summary else {
-        output.push_str("output: null\n");
-        return Ok(());
-    };
-    output.push_str("output:\n");
-    output.push_str(&format!(
-        "  limit_bytes_per_stream: {}\n",
-        summary.limit_bytes_per_stream
-    ));
-    write_evidence_stream_summary(output, "stdout", &summary.stdout)?;
-    write_evidence_stream_summary(output, "stderr", &summary.stderr)?;
-    Ok(())
-}
-
-fn write_evidence_stream_summary(
-    output: &mut String,
-    key: &str,
-    stream: &atelier_core::EvidenceStreamSummary,
-) -> Result<()> {
-    output.push_str("  ");
-    output.push_str(key);
-    output.push_str(":\n");
-    output.push_str(&format!("    bytes: {}\n", stream.bytes));
-    output.push_str("    summary: ");
-    output.push_str(&serde_json::to_string(&stream.summary)?);
-    output.push('\n');
-    output.push_str(&format!("    truncated: {}\n", stream.truncated));
-    Ok(())
-}
-
-fn write_evidence_target(output: &mut String, target: Option<&EvidenceTarget>) -> Result<()> {
-    let Some(target) = target else {
-        output.push_str("target: null\n");
-        return Ok(());
-    };
+fn write_evidence_target(output: &mut String, target: &EvidenceTarget) -> Result<()> {
     output.push_str("target:\n");
     output.push_str("  kind: ");
     output.push_str(&serde_json::to_string(&target.kind)?);
@@ -3007,6 +2997,222 @@ fn write_evidence_target(output: &mut String, target: Option<&EvidenceTarget>) -
     output.push_str(&serde_json::to_string(&target.role)?);
     output.push('\n');
     Ok(())
+}
+
+fn write_evidence_target_if_some(
+    output: &mut String,
+    target: Option<&EvidenceTarget>,
+) -> Result<()> {
+    if let Some(target) = target {
+        write_evidence_target(output, target)?;
+    }
+    Ok(())
+}
+
+fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String {
+    let normalized = normalize_body(body.unwrap_or(""));
+    if data.output.is_none() || evidence_body_has_transcript_sections(&normalized) {
+        return normalized;
+    }
+
+    let summary = evidence_summary_from_legacy_body(&normalized).unwrap_or(&data.evidence_type);
+    let mut output = String::new();
+    output.push_str("## Summary\n\n");
+    output.push_str(summary);
+    output.push_str("\n\n");
+    if let Some(command) = data.command.as_deref() {
+        output.push_str("## Command\n\n");
+        output.push_str("```console\n");
+        output.push_str(command.trim_end());
+        output.push_str("\n```\n");
+        if let Some(exit_status) = data.exit_status.as_deref() {
+            output.push_str("\nExit status: ");
+            output.push_str(exit_status);
+            output.push('\n');
+        }
+        if let Some(error) = data.spawn_error.as_deref() {
+            output.push_str("Spawn error: ");
+            output.push_str(error);
+            output.push('\n');
+        }
+        output.push('\n');
+    }
+    if let Some(summary) = data.output.as_ref() {
+        push_evidence_stream_section(&mut output, "Stdout", &summary.stdout);
+        output.push('\n');
+        push_evidence_stream_section(&mut output, "Stderr", &summary.stderr);
+    }
+    if !data.residual_risks.is_empty() {
+        output.push_str("\n## Residual Risks\n\n");
+        for risk in &data.residual_risks {
+            output.push_str("- ");
+            output.push_str(risk);
+            output.push('\n');
+        }
+    }
+    output.trim_end().to_string()
+}
+
+fn evidence_body_has_transcript_sections(body: &str) -> bool {
+    body.lines()
+        .any(|line| matches!(line.trim(), "## Command" | "## Stdout" | "## Stderr"))
+}
+
+fn evidence_summary_from_legacy_body(body: &str) -> Option<&str> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut end = trimmed.len();
+    for marker in [
+        "\n\nCommand:",
+        "\nCommand:",
+        "\nExit status:",
+        "\n\nStdout summary",
+        "\nStdout summary",
+        "\n\nStderr summary",
+        "\nStderr summary",
+    ] {
+        if let Some(index) = trimmed.find(marker) {
+            end = end.min(index);
+        }
+    }
+    Some(trimmed[..end].trim())
+}
+
+fn push_evidence_stream_section(
+    output: &mut String,
+    title: &str,
+    stream: &atelier_core::EvidenceStreamSummary,
+) {
+    output.push_str("## ");
+    output.push_str(title);
+    output.push_str("\n\n");
+    output.push_str(&format!("Bytes: {}\n", stream.bytes));
+    output.push_str(&format!(
+        "Truncated: {}\n\n",
+        if stream.truncated { "yes" } else { "no" }
+    ));
+    output.push_str("```text\n");
+    if !stream.summary.is_empty() {
+        output.push_str(stream.summary.trim_end());
+        output.push('\n');
+    }
+    output.push_str("```\n");
+}
+
+fn apply_evidence_body_sections(data: &mut EvidenceRecordData, body: &str) {
+    let sections = markdown_sections(body);
+    if data.command.is_none() {
+        data.command = sections
+            .iter()
+            .find(|(title, _)| title == "Command")
+            .and_then(|(_, content)| {
+                first_fenced_block(content).or_else(|| first_non_empty_line(content))
+            })
+            .map(str::to_string);
+    }
+    if data.exit_status.is_none() {
+        if let Some((_, command)) = sections.iter().find(|(title, _)| title == "Command") {
+            data.exit_status = command
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("Exit status:").map(str::trim))
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+        }
+    }
+    if data.output.is_none() {
+        let stdout = sections
+            .iter()
+            .find(|(title, _)| title == "Stdout")
+            .map(|(_, content)| evidence_stream_from_section(content))
+            .unwrap_or_else(empty_evidence_stream);
+        let stderr = sections
+            .iter()
+            .find(|(title, _)| title == "Stderr")
+            .map(|(_, content)| evidence_stream_from_section(content))
+            .unwrap_or_else(empty_evidence_stream);
+        if stdout.bytes > 0
+            || !stdout.summary.is_empty()
+            || stderr.bytes > 0
+            || !stderr.summary.is_empty()
+        {
+            data.output = Some(EvidenceOutputSummary {
+                limit_bytes_per_stream: 4096,
+                stdout,
+                stderr,
+            });
+        }
+    }
+}
+
+fn markdown_sections(body: &str) -> Vec<(String, String)> {
+    let mut sections = Vec::new();
+    let mut current_title: Option<String> = None;
+    let mut current_body = String::new();
+    for line in body.lines() {
+        if let Some(title) = line.strip_prefix("## ") {
+            if let Some(title) = current_title.replace(title.trim().to_string()) {
+                sections.push((title, current_body.trim().to_string()));
+                current_body.clear();
+            }
+        } else if current_title.is_some() {
+            current_body.push_str(line);
+            current_body.push('\n');
+        }
+    }
+    if let Some(title) = current_title {
+        sections.push((title, current_body.trim().to_string()));
+    }
+    sections
+}
+
+fn first_fenced_block(content: &str) -> Option<&str> {
+    let mut fence_start = None;
+    let mut line_start = 0;
+    for line in content.split_inclusive('\n') {
+        let line_end = line_start + line.len();
+        let line_text = line.trim_end_matches('\n');
+        if line_text.trim_start().starts_with("```") {
+            if let Some(start) = fence_start {
+                return Some(content[start..line_start].trim_end());
+            }
+            fence_start = Some(line_end);
+        }
+        line_start = line_end;
+    }
+    None
+}
+
+fn first_non_empty_line(content: &str) -> Option<&str> {
+    content.lines().map(str::trim).find(|line| !line.is_empty())
+}
+
+fn evidence_stream_from_section(content: &str) -> atelier_core::EvidenceStreamSummary {
+    let summary = first_fenced_block(content).unwrap_or("").to_string();
+    let bytes = content
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Bytes:"))
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or_else(|| summary.len());
+    let truncated = content
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Truncated:"))
+        .map(|value| matches!(value.trim(), "yes" | "true"))
+        .unwrap_or(false);
+    atelier_core::EvidenceStreamSummary {
+        summary,
+        bytes,
+        truncated,
+    }
+}
+
+fn empty_evidence_stream() -> atelier_core::EvidenceStreamSummary {
+    atelier_core::EvidenceStreamSummary {
+        summary: String::new(),
+        bytes: 0,
+        truncated: false,
+    }
 }
 
 pub fn write_yaml_relationships(output: &mut String, relationships: &Relationships) -> Result<()> {
@@ -3166,7 +3372,7 @@ mod tests {
             constraints: "- Keep command output readable.".to_string(),
             risks: "- Relationship buckets can drift.".to_string(),
             validation: "- `cargo test record_store` passes.".to_string(),
-            closeout_notes: Some("Closed with validation evidence.".to_string()),
+            terminal_notes: Some("Closed with validation evidence.".to_string()),
             notes: Some("Handoff context.".to_string()),
         };
         CanonicalDomainRecord {
@@ -3242,7 +3448,7 @@ mod tests {
                 id: id.to_string(),
                 kind: "evidence".to_string(),
                 title: "RecordStore evidence proof".to_string(),
-                status: "pass".to_string(),
+                status: "recorded".to_string(),
                 body: Some("RecordStore evidence proof summary.".to_string()),
                 data_json: serde_json::to_string(&data).unwrap(),
                 created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
@@ -3501,7 +3707,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("## Intent\n\nRepair mission records."));
         assert!(text.contains("## Constraints\n\n- Keep command output readable."));
-        assert!(text.contains("## Closeout Notes\n\nClosed with validation evidence."));
+        assert!(text.contains("## Terminal Notes\n\nClosed with validation evidence."));
         assert!(text.contains(
             "  relates:\n  - kind: \"issue\"\n    id: \"atelier-blok\"\n    type: \"blocked_by\"\n"
         ));
@@ -3527,6 +3733,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("agent_identity: \"gpt-5.4 implementer\""));
         assert!(text.contains("follow_up_ids:\n- \"atelier-follow\"\n"));
         assert!(text.contains("RecordStore evidence proof summary."));
+        assert!(!text.contains("output:"));
+        assert!(!text.contains(&format!("{}: null", "target")));
     }
 
     #[test]
@@ -3643,7 +3851,7 @@ relationships:
     type: "validates"
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Legacy evidence proof"
 updated_at: "2026-06-10T13:00:00+00:00"
 ---
@@ -3661,8 +3869,10 @@ Legacy evidence summary.
                 && attachment.id == "atelier-proof"
                 && attachment.role == "validates"));
         assert!(!rendered.contains("\ndata: "));
+        assert!(!rendered.contains("\noutput:"));
         assert!(rendered.contains("evidence_type: \"validation\""));
         assert!(rendered.contains("agent_identity: \"legacy agent\""));
+        assert!(rendered.contains("## Stdout\n\nBytes: 25\nTruncated: no"));
         assert!(!rendered.contains("type: \"validates\""));
         assert!(parse_domain_record(&rendered, &path, spec).is_ok());
     }

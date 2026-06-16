@@ -1,19 +1,14 @@
 ---
-created_at: "2026-06-13T23:50:13.622831Z"
+created_at: "2026-06-13T23:50:13.622831+00:00"
 id: "atelier-w7mf"
 evidence_type: "audit"
-captured_at: "2026-06-13T23:50:13.622831Z"
-command: null
-exit_status: null
+captured_at: "2026-06-13T23:50:13.622831+00:00"
 path: "docs/product/human-cli-output.md"
-uri: null
 proof_scope: "atelier-rgd1 operator-output audit and narrow fixes"
 agent_identity: "root"
 independence_level: "implementer"
-follow_up_ids: []
 residual_risks:
 - "Global tracker lint/export remains blocked by pre-existing invalid evidence .atelier/evidence/atelier-06rb.md outside atelier-rgd1 scope."
-output: null
 relationships:
   blocks: []
   children: []
@@ -24,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Operator-output audit completed for atelier-rgd1; init next steps now route through workflow setup before issue creation, product docs classify the audit, focused output/help tests passed, and global tracker lint/export blockage is documented as unrelated pre-existing evidence drift."
-updated_at: "2026-06-13T23:50:13.622831Z"
+updated_at: "2026-06-13T23:50:13.622831+00:00"
 ---
 
 Operator-output audit completed for `atelier-rgd1`.

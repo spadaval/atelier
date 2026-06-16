@@ -3,16 +3,6 @@ created_at: "2026-06-13T04:18:41.293399805+00:00"
 id: "atelier-5rat"
 evidence_type: "review"
 captured_at: "2026-06-13T04:18:41.293368705+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +13,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Agent Factory bounded-proof delegation template review"
 updated_at: "2026-06-13T04:19:14.951592497+00:00"
 ---
