@@ -16,12 +16,15 @@ relationships:
   - kind: "issue"
     id: "atelier-9p3t"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-rrmq"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "Successful closeout-removal validation transcript"
-updated_at: "2026-06-16T20:48:45.678708398+00:00"
+updated_at: "2026-06-16T20:51:36.627084083+00:00"
 ---
 
 ## Summary
