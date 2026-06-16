@@ -22,27 +22,30 @@ and skill bindings were updated.
   removed the edge; a follow-up `show` displayed no blockers.
 - Close workflow: `atelier issue close 44 --reason ...` closed the dependency
   fixture task; `atelier issue close 43 --reason ...` closed the docs task.
-- Health checks: `atelier lint atelier-z1p.6`, `atelier export --check`, and
-  `atelier doctor` passed. The historical `atelier sync` proof is superseded by
-  Git plus canonical export/rebuild checks.
+- Historical health checks: `atelier lint atelier-z1p.6`,
+  `atelier export --check`, and `atelier doctor` passed during the original
+  validation. Current normal proof uses `atelier lint`, `atelier doctor`, and
+  claim-specific tests; export/rebuild diagnostics are storage-rendering or
+  migration/debug proof only.
 - Current Agent Factory validation should inspect and close work through human
   command output, quiet acknowledgements where a command naturally returns a
   single result, and explicit drill-down commands such as `atelier issue show
   <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
-  `atelier export --check`, `atelier lint`, and `atelier doctor`. Do not use
-  command-result `--json` as the workflow proof.
-- Clean rebuild: `/tmp/atelier-rebuild-check` was populated with
+  `atelier lint` and `atelier doctor`. Do not use command-result `--json` as
+  the workflow proof.
+- Historical storage-rendering check: `/tmp/atelier-rebuild-check` was populated with
   `.atelier` and an empty `.atelier`; from that directory, `atelier
   rebuild --input .atelier` rebuilt `/tmp/atelier-rebuild-check/.atelier/runtime/state.db`,
   and `atelier export --check` confirmed freshness.
-- Final freshness recovery: after closing `atelier-z1p.6`, `atelier export
+- Historical final freshness recovery: after closing `atelier-z1p.6`, `atelier export
   --check` reported stale `ISS-0041.md` and `manifest.json`; `atelier export`
   refreshed the canonical projection.
 
 ## Failure Classifications
 
-- Fixed in validation scope: stale canonical projection after closing
-  `atelier-z1p.6`; refreshed with `atelier export` and rechecked.
+- Fixed in validation scope at the time: stale canonical projection after
+  closing `atelier-z1p.6`; refreshed with the then-current export diagnostic and
+  rechecked. Current normal local repair is `atelier doctor --fix`.
 - Deferred with owner: `atelier` was not on PATH in the shell; validation used
   `/root/atelier/target/debug` on PATH. Owner: repository operator or install
   story follow-up.

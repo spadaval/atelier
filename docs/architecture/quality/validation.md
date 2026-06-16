@@ -65,7 +65,7 @@ public behavior, or workflow gate can be reproduced before the fix.
 
 | Work | Strong proof | Weak proof |
 | --- | --- | --- |
-| Docs-first workflow policy | Documentation diff shows the new policy, a review artifact maps the policy to example work items, and tracker lint/export pass. | "Updated docs" plus a broad lint run with no mapping to the policy claim. |
+| Docs-first workflow policy | Documentation diff shows the new policy, a review artifact maps the policy to example work items, and tracker lint/doctor plus a focused transcript or search prove the affected guidance. | "Updated docs" plus a broad lint run with no mapping to the policy claim. |
 | Test-first CLI rejection | A failing-before/passing-after test or transcript shows the rejected command and error text, with docs/help parity when public help changes. | Full test suite passes without showing the rejected command path. |
 | Canonical write or projection refresh | Round-trip or rebuild transcript, concurrency or scenario proof, and attached evidence show canonical files remain source of truth. | End-of-mission audit only, with no early proof of the write or refresh path. |
 
@@ -99,10 +99,10 @@ lint, doctor, export, and workflow-policy surfaces.
 ## Stale-State Preflight
 
 Before mutating workflow state, trust normal Atelier-owned health surfaces
-first. If `atelier lint`, `atelier export --check`, `atelier status`,
-`atelier mission status`, or another normal tracker read reports invalid
-canonical Markdown, stale projections, or unreadable tracker state, stop
-workflow mutation until the state is repaired.
+first. If `atelier lint`, `atelier status`, `atelier mission status`,
+`atelier doctor`, or another normal tracker read reports invalid canonical
+Markdown, stale projections, or unreadable tracker state, stop workflow
+mutation until the state is repaired.
 
 Use this recovery order:
 
@@ -220,7 +220,7 @@ than "make mission status faster."
 | --- | --- | --- | --- |
 | Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier lint <id>` or repo-wide `atelier lint` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, closeout, public contracts, docs/help parity, or epic/mission review boundaries. |
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
-| Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export check, and degraded-state or recovery transcript when relevant. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
+| Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
 | Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, closeout, mission orchestration, or future worker behavior. |
 | Crate migration root-deletion closeout | `python3 scripts/check_crate_migration_closeout.py`, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before the root is deleted, use `python3 scripts/check_crate_migration_closeout.py --self-test` to prove the guard detects representative regressions. | First-class evidence attached to the root-deletion or closeout issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission closeout. |
 | Epic closeout | Closeout issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured closeout check, and records residual risks. | First-class evidence attached to the closeout issue; the epic derives readiness from that linked closeout plus child evidence. | Always required, performed by a closeout or validation worker that did not implement the bulk of the children. |
@@ -306,8 +306,8 @@ route to when a worker needs concrete command forms:
 | Search with literal shell metacharacters | `rg -n 'cargo test|cargo nextest run -E|python3' docs/architecture/quality/validation.md` |
 | Formatting check | `cargo fmt -- --check` |
 | Tracker lint | `atelier lint` |
-| Tracker export check | `atelier export --check` |
 | Tracker health check | `atelier doctor` |
+| Deterministic export/projection diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
 | Python invocation | `python3 -c 'print("validation ok")'` |
 | Crate migration closeout guard | `python3 scripts/check_crate_migration_closeout.py` |
 | Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_closeout.py --self-test` |

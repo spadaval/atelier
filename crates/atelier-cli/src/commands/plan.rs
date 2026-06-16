@@ -1057,12 +1057,14 @@ fn print_apply_summary(summary: Value) -> Result<()> {
         println!("Next Commands");
         println!("-------------");
         println!("  atelier mission show {id}");
-        println!("  atelier export --check");
+        println!("  atelier lint");
+        println!("  atelier doctor");
     } else if !validate_only && !dry_run {
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier export --check");
+        println!("  atelier lint");
+        println!("  atelier doctor");
     }
     Ok(())
 }

@@ -26,9 +26,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:58:39.876764341+00:00"
+status: "done"
 title: "Epic: Clean up low-level command surfaces"
-updated_at: "2026-06-16T16:18:26.360127183+00:00"
+updated_at: "2026-06-16T17:58:39.876764341+00:00"
 ---
 
 ## Description

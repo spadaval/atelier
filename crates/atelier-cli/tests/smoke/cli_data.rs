@@ -130,6 +130,20 @@ fn test_canonical_export_check_cli() {
         "expected ordered stale projection recovery, got stderr: {}",
         result.stderr
     );
+
+    let rewrite_result = h.run_err(&["export"]);
+    assert!(
+        rewrite_result
+            .stderr
+            .contains("Refusing to write canonical tracker records from the local projection"),
+        "expected export write refusal, got stderr: {}",
+        rewrite_result.stderr
+    );
+    assert!(
+        h.read_canonical_record("issues", &issue_id)
+            .contains("Markdown canonical issue"),
+        "export should not rewrite tracked canonical Markdown"
+    );
 }
 
 #[test]

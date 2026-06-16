@@ -7,6 +7,23 @@ documented, and shaped for that role.
 The audit is organized by root command surface. Subcommands are classified inside
 the root command file when the root command serves more than one role.
 
+## Category Contract
+
+The product surface uses four command categories:
+
+- Normal workflow: visible operator commands for orientation, work lifecycle,
+  proof, closeout readiness, and ordinary health.
+- Admin maintenance: visible setup, explicit repair, destructive maintenance,
+  and manual owner-branch/worktree recovery.
+- Hidden debug diagnostics: raw policy, telemetry, projection, or
+  deterministic-renderer probes that are callable only for targeted diagnostics,
+  tests, or migration work.
+- Temporary migration: transitional inherited-state or deterministic-rendering
+  helpers that must not become compatibility promises or normal workflow gates.
+
+See [category review](category-review.md) for examples, excluded non-examples,
+and boundary decisions.
+
 ## Roles
 
 - Worker: implements assigned work and leaves durable handoff context.
@@ -20,10 +37,12 @@ the root command file when the root command serves more than one role.
 
 - [abandon](abandon.md)
 - [branch](branch.md)
+- [category review](category-review.md)
 - [diagnostics](diagnostics.md)
 - [doctor](doctor.md)
 - [evidence](evidence.md)
 - [export](export.md)
+- [export check reference classification](export-check-reference-classification.md)
 - [graph](graph.md)
 - [history](history.md)
 - [import-beads](import-beads.md)

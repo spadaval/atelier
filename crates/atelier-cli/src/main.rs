@@ -137,17 +137,19 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Export canonical state
+    /// Advanced deterministic-renderer diagnostic; normal health uses lint and doctor
+    #[command(hide = true)]
     Export {
-        /// State directory for canonical export
+        /// State directory for canonical export diagnostics
         #[arg(short, long)]
         output: Option<String>,
-        /// Check whether canonical tracker records are current
+        /// Check deterministic renderer/projection freshness without writing tracked records
         #[arg(long)]
         check: bool,
     },
 
-    /// Rebuild local SQLite runtime state from canonical tracker records
+    /// Advanced projection diagnostic; normal local repair uses doctor --fix
+    #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from
         #[arg(short, long)]

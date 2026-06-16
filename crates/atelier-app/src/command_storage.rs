@@ -126,7 +126,7 @@ fn ensure_fresh_projection_db(
                     tracing::warn!(
                         "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
                     );
-                    tracing::warn!("Recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun the blocked command before closing or mutating work.");
+                    tracing::warn!("Recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor --fix`; 4. rerun the blocked command before closing or mutating work.");
                     tracing::warn!(
                         "Projection freshness: {}",
                         report.problem_messages().join("; ")
@@ -167,7 +167,7 @@ fn projection_validation_error(error: anyhow::Error, prefix: &str) -> anyhow::Er
         ))
     } else {
         error.context(format!(
-            "{prefix}; recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun the blocked command."
+            "{prefix}; recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor --fix`; 4. rerun the blocked command."
         ))
     }
 }

@@ -74,10 +74,11 @@ migration keeps the same responsibilities while moving the target path to
 schema and front matter parsing, deterministic rendering, ID collision checks
 across canonical directories, and atomic issue file replacement.
 
-`atelier export` remains a compatibility and repair command during migration.
-Its target role is to re-render canonical records, remove obsolete derived files,
-and check deterministic output, not to be the normal path that makes a mutation
-durable.
+Hidden/admin `atelier export` remains a compatibility and
+deterministic-rendering command during migration. Its target role is to
+re-render canonical records, remove obsolete derived files, and check
+deterministic output, not to be the normal path that makes a mutation durable
+or to own ignored runtime/projection repair.
 
 ## Canonical Field Ownership
 
@@ -451,9 +452,10 @@ canonical write, the canonical files remain durable and ordinary query commands
 can recover through the transparent projection repair path once the reported
 record or workflow problem is fixed.
 
-`atelier export` remains available as an explicit repair/sync command. New
-durable mutation paths must not use export as the normal step that makes command
-output recoverable.
+Hidden/admin `atelier export` remains available for migration compatibility and
+deterministic-renderer testing. New durable mutation paths must not use export
+as the normal step that makes command output recoverable, and normal ignored
+runtime/projection repair belongs to `doctor --fix`.
 
 The explicit one-off migration path for old local SQLite comments is
 `scripts/migrate_sqlite_comments_to_activity.py`. Operators run it manually with
@@ -515,12 +517,14 @@ The migration proceeded in small slices:
    surfaces land.
 7. Retire the compatibility requirement that normal mutations write SQLite first
    and then call export to become durable. This is complete for normal public
-   durable commands; export remains an explicit repair/sync surface and imports
-   may still use export as an import bridge.
+   durable commands; export remains a hidden/admin migration or deterministic
+   rendering surface, and imports may still use export as an import bridge.
 
-Each slice must preserve `atelier rebuild`, `atelier export --check`,
-`atelier lint`, `atelier doctor`, and the agent-facing issue workflow, or state
-the temporary breakage and the reconnect item that owns it.
+Each slice that touches storage internals must preserve `atelier lint`,
+`atelier doctor`, the agent-facing issue workflow, and any explicitly retained
+hidden/admin projection diagnostics such as `atelier rebuild` or
+`atelier export --check`; otherwise it must state the temporary breakage and the
+reconnect item that owns it.
 
 ## Non-Goals
 

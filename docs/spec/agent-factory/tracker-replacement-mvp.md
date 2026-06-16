@@ -157,13 +157,14 @@ commands:
 2. Planning/orchestration: `atelier issue list --ready`, `atelier issue create`,
    parent updates, and dependency operations must let an orchestrator create and
    sequence child work without `bd`.
-3. Implementation handoff: notes, close, `atelier export --check`, lint, and
-   Git status must produce enough durable evidence for the next agent to resume.
+3. Implementation handoff: notes, close, `atelier lint`, `atelier doctor`,
+   claim-specific proof, and Git status must produce enough durable evidence for
+   the next agent to resume.
 4. Closeout: a closeout worker must be able to classify parent criteria in
    durable notes and close the parent or child without using Beads.
-5. Recovery: from a clean checkout-like state, `atelier rebuild` must recreate
-   local SQLite state from `.atelier/`, after which show/list/ready/lint
-   commands behave the same as before rebuild.
+5. Recovery: from a clean checkout-like state, `atelier doctor --fix` must
+   repair ignored local projection/runtime state from `.atelier/`, after which
+   show/list/ready/lint commands behave the same as before repair.
 
 ## Historical Command Mappings
 

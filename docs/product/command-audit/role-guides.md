@@ -115,13 +115,12 @@ atelier init
 atelier lint
 atelier doctor
 atelier doctor --fix
-atelier export --check
-atelier rebuild
 atelier maintenance delete <kind> <id> --force
 ```
 
 Admin guide should name hidden diagnostics only when they are explicitly useful:
-`workflow check`, `diagnostics slow`, and `import-beads`.
+`workflow check`, `diagnostics slow`, `import-beads`, hidden/admin `export`,
+and hidden/admin `rebuild`.
 
 ## Resolved Design
 

@@ -58,14 +58,13 @@ repository's tactical operator guidance.
 - Important unresolved choices become artifact-update tasks. Block dependent
   implementation on those tasks when needed.
 - Validation criteria must name observable completion behavior: command output,
-  rejected commands, help text, file contents, tests, lint/export checks, or
-  evidence records.
+  rejected commands, help text, file contents, tests, lint, doctor health,
+  focused transcripts, or evidence records.
 - Start each slice with a stale-state preflight. If `atelier lint`,
-  `atelier export --check`, `atelier status`, `atelier mission status`, or
-  another normal tracker read reports invalid canonical state, stale
-  projections, or unreadable tracker data, stop workflow mutation and repair
-  state through Atelier-owned status, lint, doctor, and help surfaces before
-  continuing.
+  `atelier status`, `atelier mission status`, `atelier doctor`, or another
+  normal tracker read reports invalid canonical state, stale projections, or
+  unreadable tracker data, stop workflow mutation and repair state through
+  Atelier-owned status, lint, doctor, and help surfaces before continuing.
 - Use Atelier-owned proof, closeout, health, and transition surfaces through
   the destinations named in the validation router and product command docs.
 - Record handoff context in durable issue notes and non-trivial proof as

@@ -915,10 +915,10 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(
         stdout.contains("Inspect mission readiness (no mission is active): atelier mission status")
     );
-    assert!(stdout
-        .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
-    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
-    assert!(stdout.contains("Check runtime health (tracker export is current): atelier doctor"));
+    assert!(stdout.contains(
+        "Inspect blocked work (no ready work is available): atelier issue list --blocked"
+    ));
+    assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
     assert!(!stdout.contains("session"));

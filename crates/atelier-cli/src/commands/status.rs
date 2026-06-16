@@ -249,13 +249,13 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Start selected work (ready work exists): atelier start <issue-id>");
     }
     if export_stale.is_empty() {
-        println!("  Check runtime health (tracker export is current): atelier doctor");
+        println!("  Check runtime health (tracker records are current): atelier doctor");
     } else {
         println!(
-            "  Refresh canonical export ({} stale record(s)): atelier export",
+            "  Repair ignored projection state ({} stale record(s)): atelier doctor --fix",
             export_stale.len()
         );
-        println!("  Check tracker records (export is stale): atelier lint");
+        println!("  Check tracker records (projection is stale): atelier lint");
     }
     Ok(())
 }

@@ -1302,12 +1302,7 @@ fn closeout_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "durable_state_current" => Some((
-            "Tracker State",
-            "current",
-            "stale",
-            "atelier export --check",
-        )),
+        "durable_state_current" => Some(("Tracker State", "current", "stale", "atelier doctor")),
         "issue_sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",

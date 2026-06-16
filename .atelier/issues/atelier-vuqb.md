@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:43:00.545738571+00:00"
+status: "done"
 title: "Demote or remove export as a public command"
-updated_at: "2026-06-16T16:18:17.780900877+00:00"
+updated_at: "2026-06-16T17:43:00.545738571+00:00"
 ---
 
 ## Description

@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:49:31.880035338+00:00"
+status: "done"
 title: "Audit remaining low-level command surfaces"
-updated_at: "2026-06-16T16:18:24.260498038+00:00"
+updated_at: "2026-06-16T17:49:31.880035338+00:00"
 ---
 
 ## Description

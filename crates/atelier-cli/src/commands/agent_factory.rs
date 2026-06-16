@@ -1976,7 +1976,8 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         println!();
         println!("Next Commands");
         println!("-------------");
-        println!("  atelier export --check");
+        println!("  atelier lint");
+        println!("  atelier doctor");
         Ok(())
     }
 }
@@ -1990,7 +1991,7 @@ pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
     println!("Next Commands");
     println!("-------------");
     println!("  atelier doctor");
-    println!("  atelier export --check");
+    println!("  atelier lint");
     Ok(())
 }
 

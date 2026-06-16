@@ -46,9 +46,10 @@ Query commands may use SQLite after freshness checks. When a query would read a
 stale projection, it must refresh/reindex when safe or fail with an actionable
 rebuild or repair command.
 
-`atelier export` and `atelier export --check` remain compatibility, repair, and
-determinism-check commands during migration. Their target role is not to be the
-ordinary step that makes successful mutations durable.
+Hidden/admin `atelier export` and `atelier export --check` remain compatibility
+and determinism-check commands during migration. `doctor --fix` owns explicit
+ignored-state repair for normal operators. Export's target role is not to be
+the ordinary step that makes successful mutations durable.
 
 ## Consequences
 

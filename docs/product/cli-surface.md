@@ -38,6 +38,28 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier lint`
 - `atelier doctor`
 
+## Command Categories
+
+Atelier commands fall into four product categories. The category determines
+where the command may appear, which operator should reach for it, and whether it
+may be cited as ordinary workflow proof.
+
+| Category | Definition | Examples | Excluded non-examples |
+| --- | --- | --- | --- |
+| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect closeout readiness, and check ordinary health. They may appear in root help, role guides, issue next actions, mission status, and Agent Factory workflow guidance. | `status`, `start`, `issue show`, `issue transition --options`, `issue close`, `mission status`, `evidence record`, `lint`, `doctor`, `worktree for-mission` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
+| Admin maintenance | Visible but specialized commands for setup, explicit repair, destructive record surgery, or manual owner-branch/worktree recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor --fix`, `maintenance delete ... --force`, `branch status`, `branch merge`, `worktree repair` | `issue close`, `mission status`, hidden `workflow check`, hidden `diagnostics slow` |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `mission status`, `issue transition --options` |
+| Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
+
+Tracked Markdown under `.atelier/` is authoritative. Local SQLite projection
+state, runtime tables, locks, diagnostics, and cache files are repairable
+checkout state. Normal commands should refresh or mark projections stale safely
+when possible; `atelier doctor` reports local health; `atelier doctor --fix` is
+the explicit repair path for ignored runtime/cache/projection state and must not
+edit tracked canonical Markdown. If an `export`-style deterministic renderer is
+retained, it is hidden/admin migration or test infrastructure, not a normal
+health, handoff, validation, or closeout command.
+
 `atelier init` is core tracker setup only. It creates `.atelier/` records,
 `.atelier/config.toml`, `.atelier/workflow.yaml`, local runtime storage, and
 root ignore rules. It does not install editor or assistant hooks. When
@@ -102,6 +124,22 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
+
+Adjacent command placements that still need confirmation or cleanup are tracked
+in the command audit:
+
+- `rebuild`: hidden debug diagnostic or admin repair primitive only if
+  `doctor --fix` delegates to it; not normal workflow.
+- `workflow check`: hidden raw policy diagnostic; normal readiness uses
+  `issue transition --options`, `lint`, and `mission status`.
+- `diagnostics slow`: hidden local telemetry; not an automation contract.
+- `import-beads`: temporary migration surface; normal setup uses
+  `init --import-beads`.
+- `maintenance`: visible admin danger zone; never a routine next action.
+- `branch`: advanced/manual owner-branch recovery; `start` owns routine branch
+  preparation.
+- `worktree`: normal for mission workspace setup and status; admin/advanced for
+  repair, merge, removal, or exceptional issue isolation.
 
 Hidden advanced diagnostics probes may remain callable for local performance
 analysis, but they are not visible root-help surfaces and must not appear as
