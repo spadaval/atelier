@@ -224,6 +224,65 @@ fn test_issue_list_ready_excludes_blocked_and_quiet_matches_human_order() {
 }
 
 #[test]
+fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Implementation child"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Contract child"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "External blocked child"],
+    );
+    run_atelier(dir.path(), &["issue", "create", "External blocker"]);
+    let parent_id = issue_ref(dir.path(), 1);
+    let implementation_id = issue_ref(dir.path(), 2);
+    let contract_id = issue_ref(dir.path(), 3);
+    let external_child_id = issue_ref(dir.path(), 4);
+    let external_blocker_id = issue_ref(dir.path(), 5);
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &implementation_id, &contract_id],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &external_child_id, &external_blocker_id],
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
+    assert!(success, "issue show failed: {stderr}");
+    let contract_pos = stdout.find("Contract child").unwrap_or(usize::MAX);
+    let implementation_pos = stdout.find("Implementation child").unwrap_or(usize::MAX);
+    assert!(
+        contract_pos < implementation_pos,
+        "visible blocker child should appear before dependent child:\n{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("ready {contract_id} [todo]")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("blocked {implementation_id} [todo]")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker; details: atelier issue blocked {external_child_id})"
+        )),
+        "{stdout}"
+    );
+    assert!(!stdout.contains(&external_blocker_id), "{stdout}");
+    assert!(stdout.contains("Next Commands"));
+}
+
+#[test]
 fn test_list_filter_by_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

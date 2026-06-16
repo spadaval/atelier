@@ -798,6 +798,7 @@ fn dependency_rows_for_text(
 
 fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
     let mut subissues = db.get_subissues(canonical_id)?;
+    let workflow_policy = load_issue_workflow_policy()?;
     println!("\nSubissues");
     println!("---------");
     if subissues.is_empty() {
@@ -806,23 +807,51 @@ fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
     }
 
     println!("{}", subissue_summary(&subissues));
-    subissues.sort_by(|a, b| {
-        status_rank(&a.status)
-            .cmp(&status_rank(&b.status))
-            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-            .then(a.id.cmp(&b.id))
-            .then(a.title.cmp(&b.title))
-    });
+    subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
     for subissue in subissues {
+        let row = work_order_row_for_issue(db, workflow_policy.as_ref(), &subissue)?;
+        let blockers = blocker_suffix(&subissue.id, &row.open_blockers);
         println!(
-            "  {} [{}] {} - {}",
+            "  {} {} [{}] {} - {}{}",
+            row.state().label(),
             format_issue_id(&subissue.id),
             subissue.status,
             subissue.priority,
-            subissue.title
+            subissue.title,
+            blockers
         );
     }
     Ok(())
+}
+
+fn order_issues_by_work(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issues: Vec<Issue>,
+) -> Result<Vec<Issue>> {
+    let rows = issues
+        .iter()
+        .map(|issue| work_order_row_for_issue(db, workflow_policy, issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn work_order_row_for_issue(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<WorkOrderRow> {
+    Ok(WorkOrderRow {
+        id: format_issue_id(&issue.id),
+        status_category: issue_status_category(workflow_policy, &issue.status),
+        priority: issue.priority.clone(),
+        updated_at: issue.updated_at,
+        open_blockers: open_blocker_ids_with_policy(db, workflow_policy, &issue.id)?,
+    })
 }
 
 fn subissue_summary(subissues: &[Issue]) -> String {
