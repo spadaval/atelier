@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:12:31.292703249+00:00"
+status: "done"
 title: "Surface branch lifecycle state in status and transition output"
-updated_at: "2026-06-16T15:47:26.736815316+00:00"
+updated_at: "2026-06-16T17:12:31.292703249+00:00"
 ---
 
 ## Description

@@ -27,9 +27,8 @@ not need a remote lock-sync protocol as the default coordination mechanism.
 Normal tracked work uses canonical issue workflow status and checkout context,
 not inherited lock sync and not ignored runtime active-work association.
 
-Root `atelier start`, `atelier issue close`, root `atelier status`,
-`atelier worktree for-mission`, and `atelier branch for-epic` own the default
-ergonomic path:
+Root `atelier start`, `atelier issue close`, root `atelier status`, and
+`atelier worktree for-mission` own the default ergonomic path:
 
 - record current work by moving issue records through workflow status, with
   `in_progress` records forming the current-work set for that tracker copy;
@@ -38,6 +37,9 @@ ergonomic path:
   repository;
 - check canonical export freshness before closeout;
 - never launch or supervise coding agents.
+
+Explicit branch helpers are advanced diagnostics and repair surfaces. They do
+not own routine branch preparation, which belongs to `atelier start`.
 
 Ignored runtime tables may cache diagnostics or projection state, but runtime
 `work_associations`, hidden claims, sessions, and active pointers are not

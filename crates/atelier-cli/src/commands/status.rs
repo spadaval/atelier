@@ -99,6 +99,11 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     print_git_state();
     println!("Tracker:  {tracker_state}");
 
+    println!();
+    println!("Branch Lifecycle");
+    println!("----------------");
+    print_branch_lifecycle_state(db, &active_issues)?;
+
     if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
         println!();
         println!("Active Mission");
@@ -527,6 +532,58 @@ fn print_git_state() {
         }
         Err(error) => println!("Worktree: unavailable - {error}"),
     }
+}
+
+fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Result<()> {
+    let current_branch = commands::workflow::current_git_branch()?;
+    let base_branch = commands::workflow::configured_base_branch()?;
+    println!(
+        "Current branch: {}",
+        current_branch.as_deref().unwrap_or("(detached)")
+    );
+    println!("Base branch:    {base_branch}");
+    match current_branch.as_deref() {
+        Some(branch) => match commands::workflow::known_branch_owner(db, branch)? {
+            Some(owner) => println!(
+                "Branch owner:   {} {} ({})",
+                commands::workflow::branch_owner_label(&owner.owner_kind),
+                owner.owner_id,
+                owner.owner_issue_type
+            ),
+            None => println!("Branch owner:   (unknown)"),
+        },
+        None => println!("Branch owner:   (unknown)"),
+    }
+
+    if active_issues.is_empty() {
+        println!("Active work:    none");
+        return Ok(());
+    }
+
+    println!("Active work:");
+    for issue in active_issues {
+        match commands::workflow::branch_lifecycle_context(db, &issue.id) {
+            Ok(context) => {
+                let state = if context.current_branch.as_deref()
+                    == Some(context.resolution.expected_branch.as_str())
+                {
+                    "ok".to_string()
+                } else {
+                    format!("mismatch; run `atelier start {}`", issue.id)
+                };
+                println!(
+                    "  {} - owner {} {} ({}) | expected {} | {state}",
+                    issue.id,
+                    commands::workflow::branch_owner_label(&context.resolution.owner_kind),
+                    context.resolution.owner_id,
+                    context.resolution.owner_issue_type,
+                    context.resolution.expected_branch
+                );
+            }
+            Err(error) => println!("  {} - branch context unavailable: {error}", issue.id),
+        }
+    }
+    Ok(())
 }
 
 struct GitState {

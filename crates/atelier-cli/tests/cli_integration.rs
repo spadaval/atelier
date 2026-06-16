@@ -104,6 +104,12 @@ fn init_git_repo(dir: &Path) {
         .status()
         .unwrap();
     assert!(status.success(), "git init failed");
+    let status = Command::new("git")
+        .current_dir(dir)
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git branch -M main failed");
     for args in [
         ["config", "user.email", "atelier-test@example.com"],
         ["config", "user.name", "Atelier Test"],
@@ -162,6 +168,34 @@ fn git_current_branch(dir: &Path) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn git_rev_parse(dir: &Path, rev: &str) -> String {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", rev])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git rev-parse {rev} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn git_log_oneline(dir: &Path, rev: &str, count: usize) -> String {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["log", "--oneline", &format!("-{count}"), rev])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git log failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).to_string()
 }
 
 fn init_atelier_with_telemetry_disabled(dir: &Path) {
@@ -345,10 +379,13 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
-- `atelier branch for-epic/status/merge`
 - `atelier maintenance delete`
 - `atelier lint`
 - `atelier doctor`
+
+## Advanced Repair
+
+- `atelier branch for-epic/status/merge`
 "#
 }
 
