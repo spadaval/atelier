@@ -378,9 +378,20 @@ fn test_list_filter_by_label() {
 fn test_show_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let body = "## Description\n\nDescription\n\n## Outcome\n\nThe issue show command renders parsed sections.\n\n## Evidence\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.";
 
-    run_atelier(dir.path(), &["issue", "create", "Test issue", "-d", body]);
+    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Test issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "Description")
+            .replace(
+                "Outcome was not specified.",
+                "The issue show command renders parsed sections.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
+            )
+    });
 
     let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -394,6 +405,78 @@ fn test_show_issue() {
     assert!(stdout.contains("Notes"));
     assert!(stdout.contains("CLI display context."));
     assert!(!stdout.contains("Acceptance Criteria"));
+}
+
+#[test]
+fn test_issue_show_surfaces_evidence_status() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Evidence status issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "Evidence status issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace(
+            "No description provided.",
+            "Exercise issue show evidence state.",
+        )
+        .replace(
+            "Outcome was not specified.",
+            "Issue show renders attached proof state and next commands.",
+        )
+        .replace(
+            "Evidence was not specified.",
+            "- Manual check: issue show and transition options report missing and attached validation evidence.",
+        )
+    });
+    commit_all(dir.path(), "evidence status issue setup");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show without evidence failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: missing - no validating evidence link found"));
+    assert!(stdout.contains(&format!(
+        "atelier evidence record --target issue/{issue_id} --kind validation"
+    )));
+    assert!(stdout.contains(&format!(
+        "atelier evidence attach <evidence-id> issue {issue_id}"
+    )));
+
+    move_issue_to_validation(dir.path(), &issue_id);
+    let (success, transitions, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(
+        success,
+        "transition options without evidence failed: {stderr}"
+    );
+    assert!(transitions.contains("close"));
+    assert!(transitions.contains("fail  proof_attached"));
+    assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "--kind",
+            "validation",
+            "Issue show evidence status validated",
+        ],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+    commit_all(dir.path(), "attach validation evidence");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show with evidence failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: attached - validating evidence is linked"));
+
+    let (success, transitions, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options with evidence failed: {stderr}");
+    assert!(transitions.contains("pass  proof_attached"));
 }
 
 #[test]
@@ -555,10 +638,11 @@ fn test_issue_show_human_shape_exposes_actionable_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &["issue", "create", "JSON issue", "-d", "JSON description"],
-    );
+    run_atelier(dir.path(), &["issue", "create", "JSON issue"]);
+    let issue_id = issue_id_by_title(dir.path(), "JSON issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "JSON description")
+    });
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
 
@@ -577,17 +661,11 @@ fn test_issue_show_reads_detail_body_from_record_store() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Canonical detail issue",
-            "-d",
-            "Canonical Markdown body",
-        ],
-    );
+    run_atelier(dir.path(), &["issue", "create", "Canonical detail issue"]);
     let issue_id = issue_id_by_title(dir.path(), "Canonical detail issue");
+    edit_canonical_record(dir.path(), "issues", &issue_id, |text| {
+        text.replace("No description provided.", "Canonical Markdown body")
+    });
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
         "UPDATE issues SET description = 'SQLite shadow body' WHERE id = ?1",
@@ -607,16 +685,7 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Canonical section source",
-            "-d",
-            "Original section text",
-        ],
-    );
+    run_atelier(dir.path(), &["issue", "create", "Canonical section source"]);
     let issue_id = issue_id_by_title(dir.path(), "Canonical section source");
     let issue_path = dir
         .path()
@@ -628,7 +697,7 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     let edited_evidence = "- `atelier rebuild` refreshes derived search text.";
     let issue_text = std::fs::read_to_string(&issue_path)
         .unwrap()
-        .replace("Original section text", edited_body)
+        .replace("No description provided.", edited_body)
         .replace("Outcome was not specified.", edited_outcome)
         .replace("Evidence was not specified.", edited_evidence);
     std::fs::write(&issue_path, issue_text).unwrap();

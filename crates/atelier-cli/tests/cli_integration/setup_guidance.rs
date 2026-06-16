@@ -982,6 +982,15 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Worktree: dirty"));
     assert!(stdout.contains("status-dirty.txt"));
     assert!(stdout.contains("Branch:"));
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout
+        .contains("Attached Proof: missing - 2 issue(s) without validating evidence; 0 attached"));
+    assert!(stdout.contains(&format!("  Missing: {blocker_id}")));
+    assert!(stdout.contains(&format!("  Missing: {ready_id}")));
+    assert!(
+        stdout.contains("atelier evidence record --target issue/<id> --kind validation \"...\"")
+    );
+    assert!(stdout.contains("atelier evidence attach <evidence-id> issue <issue-id>"));
     assert!(stdout.contains("Active Mission"));
     assert!(stdout.contains(&format!("{mission_id} - Status focus")));
     assert!(stdout.contains("Health:   blocked"));
@@ -1100,6 +1109,8 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
+    assert!(stdout.contains("Evidence Status"));
+    assert!(stdout.contains("Attached Proof: irrelevant - no current or ready work"));
     assert!(stdout.contains(
         "Inspect blocked work (no ready work is available): atelier issue list --blocked"
     ));
