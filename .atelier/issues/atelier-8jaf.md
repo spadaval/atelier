@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-16T17:17:55.955823235+00:00"
+status: "done"
 title: "Demote explicit branch commands from normal workflow docs and help"
-updated_at: "2026-06-16T17:14:06.235931651+00:00"
+updated_at: "2026-06-16T17:17:55.955823235+00:00"
 ---
 
 ## Description
