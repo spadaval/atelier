@@ -42,6 +42,7 @@ and boundary decisions.
 - [doctor](doctor.md)
 - [evidence](evidence.md)
 - [export](export.md)
+- [export check reference classification](export-check-reference-classification.md)
 - [graph](graph.md)
 - [history](history.md)
 - [import-beads](import-beads.md)
