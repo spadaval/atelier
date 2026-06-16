@@ -138,6 +138,9 @@ fn canonical_rewrite_risk_entries(db: &Database, state_dir: &Path) -> Result<Vec
     }
 
     for relative_path in canonical_files_under(state_dir)? {
+        if !is_renderer_owned_path(&relative_path) {
+            continue;
+        }
         if !expected.contains(&relative_path) {
             risks.push(format!(
                 "would remove tracked canonical record from local projection: {}",
@@ -148,6 +151,21 @@ fn canonical_rewrite_risk_entries(db: &Database, state_dir: &Path) -> Result<Vec
 
     risks.sort();
     Ok(risks)
+}
+
+fn is_renderer_owned_path(relative: &Path) -> bool {
+    if relative == Path::new("manifest.json") || relative == Path::new("graph.json") {
+        return true;
+    }
+    if is_activity_path(relative) {
+        return true;
+    }
+    relative.components().next().is_some_and(|component| {
+        let name = component.as_os_str().to_string_lossy();
+        atelier_records::canonical_record_dirs()
+            .iter()
+            .any(|directory| name == *directory)
+    })
 }
 
 fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<ProjectionFile>> {
@@ -284,6 +302,9 @@ fn remove_stale_canonical_files(state_dir: &Path, expected: &BTreeSet<PathBuf>) 
     }
 
     for relative_path in canonical_files_under(state_dir)? {
+        if !is_renderer_owned_path(&relative_path) {
+            continue;
+        }
         if !expected.contains(&relative_path) {
             let path = state_dir.join(relative_path);
             fs::remove_file(&path)

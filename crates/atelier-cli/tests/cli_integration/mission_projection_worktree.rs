@@ -2093,10 +2093,11 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     );
     assert!(
         stderr.contains("canonical tracker Markdown is invalid")
-            && stderr.contains("while running `atelier export --check`")
+            && stderr.contains("while running a deterministic export diagnostic")
             && stderr.contains("atelier lint")
             && stderr.contains("2. fix the named canonical Markdown record")
-            && stderr.contains("4. rerun `atelier export --check`")
+            && stderr.contains("3. run `atelier doctor --fix`")
+            && stderr.contains("4. rerun the blocked command")
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "unexpected invalid export error: {stderr}"
     );

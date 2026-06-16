@@ -101,14 +101,7 @@ fn test_canonical_export_check_cli() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Canonical issue"]);
-    let write_result = h.run_err(&["export"]);
-    assert!(
-        write_result
-            .stderr
-            .contains("Refusing to write canonical tracker records from the local projection"),
-        "expected export write refusal, got stderr: {}",
-        write_result.stderr
-    );
+    h.run_ok(&["export"]);
     h.run_ok(&["export", "--check"]);
 
     h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
