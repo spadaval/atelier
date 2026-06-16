@@ -2938,6 +2938,219 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
 }
 
 #[test]
+fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission_status() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Lifecycle epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Lifecycle epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Lifecycle child", "--parent", &epic_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Lifecycle child");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Lifecycle solo"]);
+    assert!(success, "standalone create failed: {stderr}");
+    let standalone_id = issue_id_by_title(dir.path(), "Lifecycle solo");
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Lifecycle mission"]);
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Lifecycle mission");
+    for id in [&epic_id, &standalone_id] {
+        let (success, _, stderr) =
+            run_atelier(dir.path(), &["mission", "add-work", &mission_id, id]);
+        assert!(success, "mission add-work failed for {id}: {stderr}");
+    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["mission", "start", &mission_id, "--switch"]);
+    assert!(success, "mission start failed: {stderr}");
+    commit_all(dir.path(), "initial lifecycle context tracker state");
+
+    let (success, base_status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "base status failed: {stderr}");
+    assert!(base_status.contains("Branch Lifecycle"), "{base_status}");
+    assert!(
+        base_status.contains("Current branch: main"),
+        "{base_status}"
+    );
+    assert!(
+        base_status.contains("Base branch:    main"),
+        "{base_status}"
+    );
+    assert!(
+        base_status.contains("Branch owner:   (unknown)"),
+        "{base_status}"
+    );
+    assert!(!base_status.contains("branch for-epic"), "{base_status}");
+
+    for (id, owner, expected, scope) in [
+        (
+            child_id.as_str(),
+            format!("Owner:    epic {epic_id} (epic)"),
+            format!("Expected: epic/{epic_id}"),
+            "Scope:    nested under epic; merge is deferred to epic close",
+        ),
+        (
+            standalone_id.as_str(),
+            format!("Owner:    issue {standalone_id} (task)"),
+            format!("Expected: codex/{standalone_id}"),
+            "Scope:    owns its merge branch",
+        ),
+        (
+            epic_id.as_str(),
+            format!("Owner:    epic {epic_id} (epic)"),
+            format!("Expected: epic/{epic_id}"),
+            "Scope:    owns its merge branch",
+        ),
+    ] {
+        let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", id]);
+        assert!(success, "issue show failed for {id}: {stderr}");
+        assert!(show_out.contains("Branch Lifecycle"), "{show_out}");
+        assert!(show_out.contains(&owner), "{show_out}");
+        assert!(show_out.contains(&expected), "{show_out}");
+        assert!(show_out.contains(scope), "{show_out}");
+        assert!(
+            show_out.contains(&format!("Next:     atelier start {id}")),
+            "{show_out}"
+        );
+        assert!(
+            show_out.contains(&format!(
+                "Close:    atelier issue close {id} --reason \"...\""
+            )),
+            "{show_out}"
+        );
+        assert!(!show_out.contains("branch for-epic"), "{show_out}");
+
+        let (success, options_out, stderr) =
+            run_atelier(dir.path(), &["issue", "transition", id, "--options"]);
+        assert!(success, "transition options failed for {id}: {stderr}");
+        assert!(options_out.contains("Branch Context"), "{options_out}");
+        assert!(options_out.contains(&owner), "{options_out}");
+        assert!(options_out.contains(&expected), "{options_out}");
+        assert!(
+            options_out.contains(&format!("Corrective lifecycle command: atelier start {id}")),
+            "{options_out}"
+        );
+        assert!(!options_out.contains("branch for-epic"), "{options_out}");
+    }
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+    assert!(success, "child start failed: {stderr}");
+    let (success, epic_status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "epic branch status failed: {stderr}");
+    assert!(
+        epic_status.contains(&format!("Current branch: epic/{epic_id}")),
+        "{epic_status}"
+    );
+    assert!(
+        epic_status.contains(&format!("Branch owner:   epic {epic_id} (epic)")),
+        "{epic_status}"
+    );
+    assert!(
+        epic_status.contains(&format!(
+            "{child_id} - owner epic {epic_id} (epic) | expected epic/{epic_id} | ok"
+        )),
+        "{epic_status}"
+    );
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch to main failed");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &standalone_id]);
+    assert!(success, "standalone start failed: {stderr}");
+    let (success, issue_status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "issue branch status failed: {stderr}");
+    assert!(
+        issue_status.contains(&format!("Current branch: codex/{standalone_id}")),
+        "{issue_status}"
+    );
+    assert!(
+        issue_status.contains(&format!("Branch owner:   issue {standalone_id} (task)")),
+        "{issue_status}"
+    );
+    assert!(
+        issue_status.contains(&format!(
+            "{standalone_id} - owner issue {standalone_id} (task) | expected codex/{standalone_id} | ok"
+        )),
+        "{issue_status}"
+    );
+    assert!(
+        issue_status.contains(&format!("{child_id} - owner epic {epic_id} (epic)"))
+            && issue_status.contains(&format!("mismatch; run `atelier start {child_id}`")),
+        "{issue_status}"
+    );
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch to wrong branch failed");
+    let (success, wrong_status, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "wrong branch status failed: {stderr}");
+    assert!(
+        wrong_status.contains("Current branch: main"),
+        "{wrong_status}"
+    );
+    assert!(
+        wrong_status.contains(&format!("mismatch; run `atelier start {child_id}`")),
+        "{wrong_status}"
+    );
+    assert!(
+        wrong_status.contains(&format!("mismatch; run `atelier start {standalone_id}`")),
+        "{wrong_status}"
+    );
+
+    let (success, mission_status, stderr) =
+        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(
+        mission_status.contains("Branch Lifecycle"),
+        "{mission_status}"
+    );
+    assert!(
+        mission_status.contains(&format!("epic {epic_id} (epic) -> epic/{epic_id}")),
+        "{mission_status}"
+    );
+    assert!(
+        mission_status.contains(&format!(
+            "issue {standalone_id} (task) -> codex/{standalone_id}"
+        )),
+        "{mission_status}"
+    );
+    assert!(mission_status.contains("Dirty state:"), "{mission_status}");
+    assert!(
+        mission_status.contains(&format!(
+            "{child_id} expected epic/{epic_id}; run `atelier start {child_id}`"
+        )),
+        "{mission_status}"
+    );
+    assert!(
+        mission_status.contains(&format!(
+            "{standalone_id} expected codex/{standalone_id}; run `atelier start {standalone_id}`"
+        )),
+        "{mission_status}"
+    );
+    assert!(
+        !mission_status.contains("branch for-epic"),
+        "{mission_status}"
+    );
+}
+
+#[test]
 fn test_start_dirty_worktree_leaves_tracker_state_unchanged() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());

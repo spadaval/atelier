@@ -18,9 +18,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Surface branch lifecycle state in status and transition output"
-updated_at: "2026-06-16T15:47:26.736815316+00:00"
+updated_at: "2026-06-16T17:05:41.493036989+00:00"
 ---
 
 ## Description

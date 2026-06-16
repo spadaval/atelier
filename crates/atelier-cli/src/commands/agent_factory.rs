@@ -499,6 +499,7 @@ fn render_issue_show_human(
     }
 
     render_parent_context(db, canonical_id)?;
+    render_branch_lifecycle_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
 
     if let Some(sections) = &object.sections {
@@ -519,11 +520,48 @@ fn render_issue_show_human(
     Ok(())
 }
 
+fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<()> {
+    println!("\nBranch Lifecycle");
+    println!("----------------");
+    match crate::commands::workflow::branch_lifecycle_context(db, canonical_id) {
+        Ok(context) => {
+            let resolution = &context.resolution;
+            println!(
+                "Owner:    {} {} ({})",
+                crate::commands::workflow::branch_owner_label(&resolution.owner_kind),
+                resolution.owner_id,
+                resolution.owner_issue_type
+            );
+            println!("Expected: {}", resolution.expected_branch);
+            println!("Base:     {}", resolution.base_branch);
+            println!(
+                "Scope:    {}",
+                crate::commands::workflow::branch_lifecycle_scope_line(&context)
+            );
+            println!(
+                "Current:  {}",
+                context.current_branch.as_deref().unwrap_or("(detached)")
+            );
+            println!(
+                "State:    {}",
+                crate::commands::workflow::branch_lifecycle_state_line(&context)
+            );
+            println!("Next:     atelier start {canonical_id}");
+            println!("Close:    atelier issue close {canonical_id} --reason \"...\"");
+        }
+        Err(error) => {
+            println!("State:    unavailable - {error}");
+            println!("Next:     atelier lint {canonical_id}");
+        }
+    }
+    Ok(())
+}
+
 pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
-    crate::commands::workflow::print_issue_transition_options(&issue, &options);
+    crate::commands::workflow::print_issue_transition_options(db, &issue, &options);
     Ok(())
 }
 

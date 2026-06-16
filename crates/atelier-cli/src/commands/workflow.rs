@@ -36,6 +36,15 @@ pub struct IssueTransitionOption {
     pub command: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct BranchLifecycleContext {
+    pub resolution: BranchLifecycleResolution,
+    pub current_branch: Option<String>,
+    pub expected_branch_exists: bool,
+    pub base_branch_exists: bool,
+    pub dirty_entries: Vec<String>,
+}
+
 pub fn check(db: &Database) -> Result<()> {
     let repo_root = repo_root()?;
     let report = atelier_app::workflow_policy::check(db, &repo_root)?;
@@ -84,6 +93,7 @@ pub fn issue_transition_options(
             continue;
         }
         let mut blockers = required_field_failures(&record, transition, None)?;
+        blockers.extend(branch_context_blockers(db, &issue, name, transition)?);
         let validator_results = evaluate_policy_transition(
             db,
             &policy,
@@ -98,7 +108,8 @@ pub fn issue_transition_options(
                 .filter(|result| !result.passed)
                 .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
         );
-        let guidance = render_transition_guidance(&policy, &issue, name, transition)?;
+        let mut guidance = render_transition_guidance(&policy, &issue, name, transition)?;
+        guidance.extend(branch_context_guidance(db, &issue, name, transition)?);
         options.push(IssueTransitionOption {
             name: name.clone(),
             from: transition.from.clone(),
@@ -120,6 +131,181 @@ pub fn issue_transition_options(
     }
 
     Ok(options)
+}
+
+pub(crate) fn branch_lifecycle_context(
+    db: &Database,
+    issue_id: &str,
+) -> Result<BranchLifecycleContext> {
+    let repo_root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    let resolution = policy.resolve_branch_lifecycle(db, issue_id)?;
+    Ok(BranchLifecycleContext {
+        expected_branch_exists: branch_exists_at(&repo_root, &resolution.expected_branch)?,
+        base_branch_exists: branch_exists_at(&repo_root, &resolution.base_branch)?,
+        current_branch: git_current_branch(&repo_root)
+            .ok()
+            .filter(|branch| !branch.is_empty()),
+        dirty_entries: git_dirty_entries(&repo_root)?,
+        resolution,
+    })
+}
+
+pub(crate) fn known_branch_owner(
+    db: &Database,
+    branch: &str,
+) -> Result<Option<BranchLifecycleResolution>> {
+    let repo_root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    let mut owner_ids = BTreeSet::new();
+    for issue in db.list_issues(Some("all"), None, None)? {
+        let resolution = policy.resolve_branch_lifecycle(db, &issue.id)?;
+        if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
+            return Ok(Some(resolution));
+        }
+    }
+    Ok(None)
+}
+
+pub(crate) fn configured_base_branch() -> Result<String> {
+    Ok(atelier_app::workflow_policy::load(&repo_root()?)?
+        .branch_lifecycle
+        .base_branch)
+}
+
+pub(crate) fn current_git_branch() -> Result<Option<String>> {
+    Ok(git_current_branch(&repo_root()?)
+        .ok()
+        .filter(|branch| !branch.is_empty()))
+}
+
+pub(crate) fn branch_ahead_count(branch: &str, base_branch: &str) -> Result<Option<usize>> {
+    let repo_root = repo_root()?;
+    if !branch_exists_at(&repo_root, branch)? || !branch_exists_at(&repo_root, base_branch)? {
+        return Ok(None);
+    }
+    let output = git_stdout(
+        &repo_root,
+        &["rev-list", "--count", &format!("{base_branch}..{branch}")],
+        "count branch commits ahead of base",
+    )?;
+    Ok(output.trim().parse::<usize>().ok())
+}
+
+pub(crate) fn branch_owner_label(
+    owner_kind: &atelier_app::workflow_policy::BranchOwnerKind,
+) -> &'static str {
+    match owner_kind {
+        atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
+        atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
+    }
+}
+
+pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> String {
+    match context.current_branch.as_deref() {
+        Some(current) if current == context.resolution.expected_branch => {
+            "current branch matches expected branch".to_string()
+        }
+        Some(current) => format!(
+            "mismatch - current branch {current}; run `atelier start {}` before continuing work",
+            context.resolution.issue_id
+        ),
+        None => format!(
+            "detached or unknown - run `atelier start {}` before continuing work",
+            context.resolution.issue_id
+        ),
+    }
+}
+
+pub(crate) fn branch_lifecycle_scope_line(context: &BranchLifecycleContext) -> &'static str {
+    if context.resolution.nested_under_epic {
+        "nested under epic; merge is deferred to epic close"
+    } else {
+        "owns its merge branch"
+    }
+}
+
+fn branch_context_blockers(
+    db: &Database,
+    issue: &Issue,
+    transition_name: &str,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+) -> Result<Vec<String>> {
+    let policy = atelier_app::workflow_policy::load(&repo_root()?)?;
+    let is_start = transition_name == "start";
+    let is_close = policy.status_category(&transition.to) == Some("done");
+    if !is_start && !is_close {
+        return Ok(Vec::new());
+    }
+
+    let context = branch_lifecycle_context(db, &issue.id)?;
+    let mut blockers = Vec::new();
+    if is_start {
+        if !context.dirty_entries.is_empty() {
+            blockers.push(format!(
+                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier start {}`",
+                issue.id
+            ));
+        }
+        if context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str())
+            && !context.expected_branch_exists
+            && !context.base_branch_exists
+        {
+            blockers.push(format!(
+                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier start {}`",
+                context.resolution.base_branch, issue.id
+            ));
+        }
+    }
+    if is_close && context.resolution.merge_owned && !context.base_branch_exists {
+        blockers.push(format!(
+            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue close {} --reason \"...\"`",
+            context.resolution.base_branch, issue.id
+        ));
+    }
+    Ok(blockers)
+}
+
+fn branch_context_guidance(
+    db: &Database,
+    issue: &Issue,
+    transition_name: &str,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+) -> Result<Vec<String>> {
+    let policy = atelier_app::workflow_policy::load(&repo_root()?)?;
+    let is_start = transition_name == "start";
+    let is_close = policy.status_category(&transition.to) == Some("done");
+    if !is_start && !is_close {
+        return Ok(Vec::new());
+    }
+
+    let context = branch_lifecycle_context(db, &issue.id)?;
+    let mut guidance = Vec::new();
+    guidance.push(format!(
+        "Branch owner: {} {} ({})",
+        branch_owner_label(&context.resolution.owner_kind),
+        context.resolution.owner_id,
+        context.resolution.owner_issue_type
+    ));
+    guidance.push(format!(
+        "Expected branch: {}",
+        context.resolution.expected_branch
+    ));
+    guidance.push(format!("Base branch: {}", context.resolution.base_branch));
+    guidance.push(branch_lifecycle_state_line(&context));
+    if is_start {
+        guidance.push(format!(
+            "Corrective lifecycle command: atelier start {}",
+            issue.id
+        ));
+    }
+    if is_close {
+        guidance.push(format!(
+            "Close lifecycle command: atelier issue close {} --reason \"...\"",
+            issue.id
+        ));
+    }
+    Ok(guidance)
 }
 
 pub fn transition_issue(
@@ -709,13 +895,6 @@ impl CloseGitIntegration {
     }
 }
 
-fn branch_owner_label(owner_kind: &atelier_app::workflow_policy::BranchOwnerKind) -> &'static str {
-    match owner_kind {
-        atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
-        atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
-    }
-}
-
 fn is_git_repo(root: &Path) -> Result<bool> {
     let output = Command::new("git")
         .current_dir(root)
@@ -746,12 +925,11 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
 }
 
 fn ensure_branch_exists(root: &Path, branch: &str) -> Result<()> {
-    git_checked(
-        root,
-        &["rev-parse", "--verify", "--quiet", branch],
-        "inspect branch",
-    )
-    .map(|_| ())
+    if branch_exists_at(root, branch)? {
+        Ok(())
+    } else {
+        bail!("branch '{}' does not exist", branch)
+    }
 }
 
 fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
@@ -787,6 +965,34 @@ fn git_status_path(line: &str) -> Option<String> {
 fn git_current_branch(root: &Path) -> Result<String> {
     git_stdout(root, &["branch", "--show-current"], "read current branch")
         .map(|value| value.trim().to_string())
+}
+
+fn branch_exists_at(root: &Path, branch: &str) -> Result<bool> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["rev-parse", "--verify", "--quiet", branch])
+        .output()
+        .with_context(|| format!("failed to inspect git branch {branch}"))?;
+    Ok(output.status.success())
+}
+
+fn git_dirty_entries(root: &Path) -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["status", "--short", "--untracked-files=all"])
+        .output()
+        .context("failed to inspect git dirty state")?;
+    if !output.status.success() {
+        bail!(
+            "git dirty state failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(ToString::to_string)
+        .collect())
 }
 
 fn git_checked(root: &Path, args: &[&str], action: &str) -> Result<()> {
@@ -842,13 +1048,33 @@ fn git_binary_stdout(root: &Path, args: &[&str], action: &str) -> Result<Vec<u8>
     )
 }
 
-pub fn print_issue_transition_options(issue: &Issue, options: &[IssueTransitionOption]) {
+pub fn print_issue_transition_options(
+    db: &Database,
+    issue: &Issue,
+    options: &[IssueTransitionOption],
+) {
     println!("Issue Transitions {} - {}", issue.id, issue.title);
     println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 21));
     print_heading("State");
     println!("Status:   {}", issue.status);
     println!("Type:     {}", issue.issue_type);
     println!("Options:  {}", options.len());
+    if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
+        print_heading("Branch Context");
+        println!(
+            "Owner:    {} {} ({})",
+            branch_owner_label(&context.resolution.owner_kind),
+            context.resolution.owner_id,
+            context.resolution.owner_issue_type
+        );
+        println!("Expected: {}", context.resolution.expected_branch);
+        println!("Base:     {}", context.resolution.base_branch);
+        println!(
+            "Current:  {}",
+            context.current_branch.as_deref().unwrap_or("(detached)")
+        );
+        println!("State:    {}", branch_lifecycle_state_line(&context));
+    }
     for option in options {
         println!();
         println!(
