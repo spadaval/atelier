@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define shared blocker-aware work ordering"
-updated_at: "2026-06-16T15:59:29.434936279+00:00"
+updated_at: "2026-06-16T17:59:15.673687157+00:00"
 ---
 
 ## Description

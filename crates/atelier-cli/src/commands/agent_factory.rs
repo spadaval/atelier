@@ -9,6 +9,7 @@ use crate::commands::issue_workflow::{
     issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
     IssueStartReadiness,
 };
+use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
@@ -24,6 +25,7 @@ pub struct IssueSummary {
     pub issue_type: String,
     pub priority: String,
     pub parent: Option<String>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +39,7 @@ struct QueueRow {
     parent: Option<String>,
     open_blockers: Vec<String>,
     depth: usize,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,22 @@ struct QueueGroup {
     priority: Option<String>,
     external_blockers: Vec<String>,
     rows: Vec<QueueRow>,
+}
+
+impl QueueRow {
+    fn work_order_row(&self) -> WorkOrderRow {
+        WorkOrderRow {
+            id: self.id.clone(),
+            status_category: self.status_category.clone(),
+            priority: self.priority.clone(),
+            updated_at: self.updated_at,
+            open_blockers: self.open_blockers.clone(),
+        }
+    }
+
+    fn state_label(&self) -> &'static str {
+        self.work_order_row().state().label()
+    }
 }
 
 struct DependencyListRow {
@@ -425,6 +444,7 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
             .parent_id
             .map(|id| dependency_summary(db, &id).map(|summary| summary.id))
             .transpose()?,
+        updated_at: issue.updated_at,
     })
 }
 
@@ -1082,15 +1102,7 @@ fn render_issue_queue_human(
     items: Vec<QueueRow>,
     show_status: bool,
 ) -> Result<()> {
-    let mut rows = items;
-    rows.sort_by(|a, b| {
-        status_rank(&a.status)
-            .cmp(&status_rank(&b.status))
-            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-            .then(a.issue_type.cmp(&b.issue_type))
-            .then(a.parent.cmp(&b.parent))
-            .then(a.id.cmp(&b.id))
-    });
+    let rows = order_queue_rows(items);
 
     println!("{title}");
     println!("{}", "=".repeat(title.len()));
@@ -1128,7 +1140,12 @@ fn queue_row(
         parent: item.parent,
         open_blockers,
         depth,
+        updated_at: item.updated_at,
     })
+}
+
+fn order_queue_rows(rows: Vec<QueueRow>) -> Vec<QueueRow> {
+    order_work_rows(rows, QueueRow::work_order_row)
 }
 
 fn filter_ready_rows(
@@ -1186,13 +1203,7 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
 
     let mut groups = Vec::new();
     for (group_id, mut rows) in grouped {
-        rows.sort_by(|a, b| {
-            ancestry_depth(db, &a.id)
-                .unwrap_or(0)
-                .cmp(&ancestry_depth(db, &b.id).unwrap_or(0))
-                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-                .then(a.id.cmp(&b.id))
-        });
+        rows = order_queue_rows(rows);
         let issue = db.require_issue(&group_id)?;
         let workflow_policy = load_issue_workflow_policy()?;
         let external_blockers =
@@ -1212,12 +1223,7 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
     }
 
     if !standalone.is_empty() {
-        standalone.sort_by(|a, b| {
-            status_rank(&a.status)
-                .cmp(&status_rank(&b.status))
-                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-                .then(a.id.cmp(&b.id))
-        });
+        standalone = order_queue_rows(standalone);
         groups.push(QueueGroup {
             id: None,
             title: "Standalone".to_string(),
@@ -1349,10 +1355,7 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
     for row in group.rows {
         let status_text = if show_status {
-            format!(
-                "{} ",
-                format_status_with_category(row.status_category.as_deref(), &row.status)
-            )
+            format!("{} ", row.state_label())
         } else {
             String::new()
         };
