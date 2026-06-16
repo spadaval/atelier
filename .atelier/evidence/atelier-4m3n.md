@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:36:21.791687258+00:00"
 command: "cargo nextest run test_top_level_help_only_shows_core_commands test_workflow_help_is_scoped_as_advanced_internal_diagnostic test_agent_factory_guidance_avoids_raw_workflow_validate_commands test_root_status_summarizes_checkout_orientation test_root_status_no_ready_work_suggests_valid_blocked_list test_mission_status_cli_reports_control_state test_workflow_validate_reports_agent_factory_command_drift test_workflow_validate_reports_docs_help_root_surface_drift"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Workflow validate hidden from normal workflow tests"
 updated_at: "2026-06-12T23:36:27.531779477+00:00"
 ---

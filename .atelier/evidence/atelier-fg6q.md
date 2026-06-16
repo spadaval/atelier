@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:59:26.735691738+00:00"
 command: "bash -lc 'set -euo pipefail\nbin=/root/atelier/target/debug/atelier\ntmp=$(mktemp -d)\ncd \"$tmp\"\ngit init -q\n\"$bin\" init\n\"$bin\" mission create \"Relationship proof\" --body \"Typed relationship intent\" --constraint \"Use explicit relationship buckets\" --validation \"Show filtered mission output\"\nmission=$(basename .atelier/missions/*.md .md)\n\"$bin\" issue create \"Counted work\" --issue-type task\nwork=$(basename .atelier/issues/*.md .md)\n\"$bin\" issue create \"Validation work\" --issue-type validation\nvalidation=$(ls .atelier/issues/*.md | xargs -n1 basename | sed \"s/.md$//\" | grep -v \"^$work$\" | head -1)\n\"$bin\" issue create \"Supporting reference\" --issue-type task\nsupport=$(ls .atelier/issues/*.md | xargs -n1 basename | sed \"s/.md$//\" | grep -v \"^$work$\" | grep -v \"^$validation$\" | head -1)\n\"$bin\" issue create \"Direct blocker\" --issue-type task\nblocker=$(ls .atelier/issues/*.md | xargs -n1 basename | sed \"s/.md$//\" | grep -v \"^$work$\" | grep -v \"^$validation$\" | grep -v \"^$support$\" | head -1)\n\"$bin\" mission add-work \"$mission\" \"$work\"\n\"$bin\" mission add-work \"$mission\" \"$validation\"\n\"$bin\" mission add-blocker \"$mission\" \"$blocker\"\n\"$bin\" evidence add --kind validation --result pass \"relationship evidence proof\"\nevidence=$(basename .atelier/evidence/*.md .md)\n\"$bin\" evidence attach \"$evidence\" mission \"$mission\"\nmission_file=\".atelier/missions/$mission.md\"\nawk -v id=\"$support\" '\"'\"'{ if ($0 == \"schema: \\\"atelier.mission\\\"\") { print \"  - kind: \\\"issue\\\"\"; print \"    id: \\\"\" id \"\\\"\"; print \"    type: \\\"related\\\"\" } print }'\"'\"' \"$mission_file\" > \"$mission_file.tmp\"\nmv \"$mission_file.tmp\" \"$mission_file\"\n\"$bin\" rebuild\n\"$bin\" export --check\n\"$bin\" lint\ngrep -q \"type: \\\"advances\\\"\" \"$mission_file\"\ngrep -q \"type: \\\"blocked_by\\\"\" \"$mission_file\"\ngrep -q \"type: \\\"related\\\"\" \"$mission_file\"\ngrep -q \"role: \\\"validates\\\"\" \".atelier/evidence/$evidence.md\"\n\"$bin\" mission show \"$mission\" | tee show.out\ngrep -q \"Records: plans=0 milestones=0 evidence=1\" show.out\ngrep -q \"Work: ready=2 blocked=0 done=0 backlog=0\" show.out\ngrep -q \"Mission Blockers: 1\" show.out\ngrep -q \"Supporting Records\" show.out\ngrep -q \"Supporting reference (related)\" show.out\nlinked_work=$(sed -n \"/Linked Work/,/Supporting Records/p\" show.out)\nif printf \"%s\" \"$linked_work\" | grep -q \"Supporting reference\"; then\n  echo \"supporting reference leaked into linked work\"\n  exit 1\nfi\n\"$bin\" mission status \"$mission\" | tee status.out\ngrep -q \"Total: 2 ready\" status.out\ngrep -q \"Mission blockers: 1 open\" status.out\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Mission relationship semantics CLI transcript: advances blocked_by supporting records and evidence validates"
 updated_at: "2026-06-12T21:59:58.823475335+00:00"
 ---

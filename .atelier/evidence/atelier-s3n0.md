@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:41:27.189248603+00:00"
 command: "bash -lc 'cargo nextest run --profile extended --run-ignored=only --cargo-quiet && atelier export --check && atelier lint && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Extended ignored-test profile passed for mission closeout"
 updated_at: "2026-06-13T01:43:46.946545578+00:00"
 ---

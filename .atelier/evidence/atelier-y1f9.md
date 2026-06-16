@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:10:09.553106593+00:00"
 command: "bash -lc 'set -euo pipefail\ntarget/debug/atelier status\ntarget/debug/atelier mission status atelier-tcmr\ntarget/debug/atelier mission show atelier-tcmr\ncargo test --test cli_integration test_root_status_summarizes_checkout_orientation -- --nocapture\ncargo test --test cli_integration test_mission_status_names_concrete_closeout_blockers -- --nocapture\ncargo test --test cli_integration test_mission_status_cli_reports_control_state -- --nocapture\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-sckq\ntarget/debug/atelier workflow validate issue atelier-sckq'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-sckq status signpost validation"
 updated_at: "2026-06-12T22:10:22.755880031+00:00"
 ---

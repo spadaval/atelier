@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:18:27.428428570+00:00"
 command: "cargo nextest run test_mission_audit_reports_missing_partial_and_ready_proof test_mission_closeout_uses_contract_audit test_mission_status_cli_reports_control_state test_workflow_validate_reports_agent_factory_command_drift"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Mission contract audit focused tests"
 updated_at: "2026-06-12T23:18:33.403327180+00:00"
 ---

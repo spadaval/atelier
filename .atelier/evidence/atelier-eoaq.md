@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:53:13.733721104+00:00"
 command: "target/debug/atelier workflow validate mission atelier-tcmr --validator ignored_tests_reviewed"
 exit_status: "1"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "blocked"
+status: "recorded"
 title: "ignored test inventory captured linked stale blockers"
 updated_at: "2026-06-12T21:53:21.974039125+00:00"
 ---

@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T00:19:46.522696481+00:00"
 command: "bash -lc 'target/debug/atelier status && target/debug/atelier lint atelier-a4rz && target/debug/atelier export --check && git diff --check && cargo nextest run test_root_status_guides_active_work_to_finish_not_start test_root_status_reports_active_mission_contract_fields test_root_status_summarizes_checkout_orientation test_root_status_no_ready_work_suggests_valid_blocked_list test_root_start_finish_and_issue_transition_surface test_workflow_help_is_scoped_as_advanced_internal_diagnostic test_agent_factory_guidance_avoids_raw_workflow_validate_commands'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Active-work root status repair: target debug status shows active mission active bucket, ready work excludes active issue, finish next action replaces start; focused tests, lint, export check, and diff check pass."
 updated_at: "2026-06-13T00:19:53.611267815+00:00"
 ---

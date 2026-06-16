@@ -5,14 +5,6 @@ evidence_type: "test"
 captured_at: "2026-06-13T23:01:38.889783015+00:00"
 command: "cargo clippy --all-targets -- -A warnings -D dead_code -D unused_variables -D unused_imports -D unused_mut"
 exit_status: "101"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "fail"
+status: "recorded"
 title: "cargo clippy --all-targets -- -A warnings -D dead_code -D unused_variables -D unused_imports -D unused_mut"
 updated_at: "2026-06-13T23:01:49.430786517+00:00"
 ---

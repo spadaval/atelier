@@ -772,8 +772,6 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
             "record",
             "--kind",
             "test",
-            "--result",
-            "pass",
             "wrong-kind fixture evidence",
         ],
     );
@@ -927,18 +925,10 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "cargo test passed",
-        ],
+        &["evidence", "record", "--kind", "test", "cargo test passed"],
     );
     assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - cargo test passed"));
+    assert!(evidence_out.contains("[evidence] recorded - cargo test passed"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "cargo test passed");
     let evidence_id = evidence_id.as_str();
 
@@ -1130,9 +1120,9 @@ fn test_first_class_records_export_rebuild_and_validate() {
         run_atelier(dir.path(), &["evidence", "show", evidence_id]);
     assert!(success, "human evidence show failed: {stderr}");
     assert!(evidence_show.contains(&format!(
-        "{evidence_id} [evidence] pass - cargo test passed"
+        "{evidence_id} [evidence] recorded - cargo test passed"
     )));
-    assert!(evidence_show.contains("Result:"));
+    assert!(evidence_show.contains("Status:"));
     assert!(evidence_show.contains("Kind:"));
     assert!(evidence_show.contains("Summary"));
 
@@ -1308,8 +1298,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--summary",
             "issue command proof",
             "--target",
@@ -1321,7 +1309,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "issue command record failed: {stderr}");
-    assert!(issue_capture.contains("[evidence] pass - issue command proof"));
+    assert!(issue_capture.contains("[evidence] recorded - issue command proof"));
     assert!(issue_capture.contains("Command:     sh -c"));
     assert!(issue_capture.contains("Exit Status: 0"));
     assert!(issue_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
@@ -1331,37 +1319,22 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
     let issue_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &issue_evidence_id);
-    assert_eq!(
-        issue_evidence_front_matter["proof_scope"],
-        "scoped to the attached target or summary"
-    );
-    assert_eq!(
-        issue_evidence_front_matter["independence_level"],
-        "unspecified"
-    );
-    assert_eq!(
-        issue_evidence_front_matter["agent_identity"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        issue_evidence_front_matter["residual_risks"]
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
-    assert_eq!(
-        issue_evidence_front_matter["follow_up_ids"]
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
+    assert!(issue_evidence_front_matter["proof_scope"].is_null());
+    assert!(issue_evidence_front_matter["independence_level"].is_null());
+    assert!(issue_evidence_front_matter["agent_identity"].is_null());
+    assert!(issue_evidence_front_matter["residual_risks"].is_null());
+    assert!(issue_evidence_front_matter["follow_up_ids"].is_null());
     assert_eq!(issue_evidence_front_matter["evidence_type"], "validation");
+    assert_eq!(issue_evidence_front_matter["status"], "recorded");
     assert!(issue_evidence_front_matter["command"]
         .as_str()
         .unwrap()
         .starts_with("sh -c"));
+    let issue_evidence_markdown = read_canonical_record(dir.path(), "evidence", &issue_evidence_id);
+    assert!(!issue_evidence_markdown.contains("\noutput:"));
+    assert!(issue_evidence_markdown.contains("## Command\n\n```console\nsh -c"));
+    assert!(issue_evidence_markdown.contains("## Stdout\n\nBytes: 12\nTruncated: no"));
+    assert!(issue_evidence_markdown.contains("## Stderr\n\nBytes: 12\nTruncated: no"));
 
     let (success, record_capture, stderr) = run_atelier(
         dir.path(),
@@ -1370,8 +1343,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--summary",
             "unified command proof",
             "--target",
@@ -1383,7 +1354,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified command record failed: {stderr}");
-    assert!(record_capture.contains("[evidence] pass - unified command proof"));
+    assert!(record_capture.contains("[evidence] recorded - unified command proof"));
     assert!(record_capture.contains("Command:     sh -c"));
     assert!(record_capture.contains("Exit Status: 0"));
     assert!(record_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
@@ -1397,15 +1368,13 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "deferred",
             "--target",
             &format!("issue/{issue_id}"),
             positional_summary,
         ],
     );
     assert!(success, "positional manual record failed: {stderr}");
-    assert!(positional_record_out.contains("[evidence] deferred - unified positional manual proof"));
+    assert!(positional_record_out.contains("[evidence] recorded - unified positional manual proof"));
     assert!(positional_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
     let positional_evidence_id = record_id_by_title(dir.path(), "evidence", positional_summary);
     let positional_evidence_front_matter =
@@ -1414,33 +1383,19 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         positional_evidence_front_matter["evidence_type"],
         "validation"
     );
-    assert_eq!(
-        positional_evidence_front_matter["proof_scope"],
-        "scoped to the attached target or summary"
-    );
-    assert_eq!(
-        positional_evidence_front_matter["independence_level"],
-        "unspecified"
-    );
-    assert_eq!(
-        positional_evidence_front_matter["agent_identity"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        positional_evidence_front_matter["residual_risks"]
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
-    assert_eq!(
-        positional_evidence_front_matter["follow_up_ids"]
-            .as_array()
-            .unwrap()
-            .len(),
-        0
-    );
-    assert_eq!(positional_evidence_front_matter["status"], "deferred");
+    assert!(positional_evidence_front_matter["proof_scope"].is_null());
+    assert!(positional_evidence_front_matter["independence_level"].is_null());
+    assert!(positional_evidence_front_matter["agent_identity"].is_null());
+    assert!(positional_evidence_front_matter["residual_risks"].is_null());
+    assert!(positional_evidence_front_matter["follow_up_ids"].is_null());
+    assert_eq!(positional_evidence_front_matter["status"], "recorded");
+    let positional_markdown =
+        read_canonical_record(dir.path(), "evidence", &positional_evidence_id);
+    assert!(!positional_markdown.contains("command: null"));
+    assert!(!positional_markdown.contains("path: null"));
+    assert!(!positional_markdown.contains("uri: null"));
+    assert!(!positional_markdown.contains("target: null"));
+    assert!(!positional_markdown.contains("output:"));
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1449,8 +1404,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--summary",
             "flag summary",
             "positional summary",
@@ -1469,8 +1422,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "fail",
             "--summary",
             "epic failing command proof",
             "--target",
@@ -1486,7 +1437,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &epic_evidence_id]);
     assert!(success, "epic evidence show failed: {stderr}");
-    assert!(epic_show.contains("Result:      fail"));
+    assert!(epic_show.contains("Status:      recorded"));
     assert!(epic_show.contains("Exit Status: 7"));
     assert!(epic_show.contains(&format!("Target:      epic/{epic_id} (validates)")));
     assert!(epic_show.contains("failing stdout"));
@@ -1501,8 +1452,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             manual_epic_summary,
         ],
     );
@@ -1532,8 +1481,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--summary",
             manual_issue_summary,
             "--target",
@@ -1541,7 +1488,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified manual record failed: {stderr}");
-    assert!(manual_record_out.contains("[evidence] pass - unified manual issue proof"));
+    assert!(manual_record_out.contains("[evidence] recorded - unified manual issue proof"));
     assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
     let manual_issue_evidence_id = record_id_by_title(dir.path(), "evidence", manual_issue_summary);
     let manual_issue_front_matter =
@@ -1557,8 +1504,6 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "blocked",
             "--summary",
             "mission blocked command proof",
             "--target",
@@ -1575,7 +1520,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, mission_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &mission_evidence_id]);
     assert!(success, "mission evidence show failed: {stderr}");
-    assert!(mission_show.contains("Result:      blocked"));
+    assert!(mission_show.contains("Status:      recorded"));
     assert!(mission_show.contains("Exit Status: 2"));
     assert!(mission_show.contains(&format!("Target:      mission/{mission_id} (validates)")));
     assert!(mission_show.contains("blocked-line-000"));
@@ -1618,8 +1563,6 @@ fn test_evidence_relation_role_errors_are_corrective() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--target",
             &format!("issue/{target_id}"),
             "--role",
@@ -1644,8 +1587,6 @@ fn test_evidence_relation_role_errors_are_corrective() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--target",
             &format!("issue/{target_id}"),
             "accepted target proof",
@@ -1705,9 +1646,8 @@ fn assert_corrective_evidence_role_error(stderr: &str) {
         "error should distinguish evidence kind from relation role: {stderr}"
     );
     assert!(
-        stderr.contains(
-            "atelier evidence record --target issue/<id> --kind validation --result pass \"summary\""
-        ),
+        stderr
+            .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""),
         "error should name normal targeted record flow: {stderr}"
     );
     assert!(
@@ -1717,9 +1657,22 @@ fn assert_corrective_evidence_role_error(stderr: &str) {
 }
 
 #[test]
-fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
+fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Rejected invalid input",
+            "--issue-type",
+            "validation",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Rejected invalid input");
+    let issue_id = issue_id.as_str();
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -1728,22 +1681,29 @@ fn test_evidence_capture_rejects_failed_commands_as_pass_proof() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--summary",
-            "bad pass proof",
+            "invalid input is rejected",
+            "--target",
+            &format!("issue/{issue_id}"),
             "--",
             "sh",
             "-c",
-            "printf 'not a pass\\n'; exit 3",
+            "printf 'rejected\\n'; exit 3",
         ],
     );
-    assert!(!success, "nonzero command cannot become pass evidence");
-    assert!(stderr.contains("cannot record pass evidence"));
+    assert!(
+        success,
+        "nonzero command should still record evidence: {stderr}"
+    );
+    assert!(stdout.contains("[evidence] recorded - invalid input is rejected"));
+    assert!(stdout.contains("Exit Status: 3"));
+    assert!(stdout.contains(&format!("Target:      issue/{issue_id} (validates)")));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains("(none)"));
+    assert!(evidence_list.contains("recorded"));
+    assert!(evidence_list.contains("exit=3"));
+    assert!(evidence_list.contains("invalid input is rejected"));
 }
 
 #[test]
@@ -1988,13 +1948,11 @@ fn test_mission_status_shows_ignored_product_behavior_closeout_blocker() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "ignored blocker evidence",
         ],
     );
     assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - ignored blocker evidence"));
+    assert!(evidence_out.contains("[evidence] recorded - ignored blocker evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "ignored blocker evidence");
     let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(
@@ -2051,13 +2009,11 @@ fn test_mission_closeout_blocks_undeferred_obsolete_command_test() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "stale test evidence",
         ],
     );
     assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - stale test evidence"));
+    assert!(evidence_out.contains("[evidence] recorded - stale test evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "stale test evidence");
     let (success, _, stderr) = run_atelier(
         dir.path(),

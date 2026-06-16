@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:13:57.830593883+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet test_full_issue_lifecycle && target/debug/atelier rebuild && target/debug/atelier lint atelier-r9o5 && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Full issue lifecycle fixture closes only after proof and passes tracker checks"
 updated_at: "2026-06-13T01:14:05.193680773+00:00"
 ---

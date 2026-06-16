@@ -5,27 +5,10 @@ evidence_type: "validation"
 captured_at: "2026-06-15T18:51:24.159326190+00:00"
 command: "bash -lc 'rg \"derive\\(Parser\\)|derive\\(Subcommand\\)|fn init_tracing|record_command_event|try_parse|std::process::exit\" crates/atelier-cli/src/main.rs -n; rg \"atelier_app::(command_storage|init|lint|health|man|export|rebuild|projection|storage_layout|workflow_policy)::\" crates/atelier-cli/src -n; rg \"println!|eprintln!\" crates/atelier-app/src -n; test $? -eq 1'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
 target:
   kind: "issue"
   id: "atelier-zwna"
   role: "validates"
-follow_up_ids: []
-residual_risks: []
-output:
-  limit_bytes_per_stream: 4096
-  stdout:
-    bytes: 11549
-    summary: "14:#[derive(Parser)]\n98:#[derive(Subcommand)]\n263:#[derive(Subcommand)]\n404:#[derive(Subcommand)]\n422:#[derive(Subcommand)]\n434:#[derive(Subcommand)]\n518:#[derive(Subcommand)]\n560:#[derive(Subcommand)]\n609:#[derive(Subcommand)]\n615:#[derive(Subcommand)]\n643:#[derive(Subcommand)]\n653:#[derive(Subcommand)]\n828:fn init_tracing(log_level: &str, log_format: &str) {\n1556:    telemetry::record_command_event(\n1567:    match Cli::try_parse() {\n1574:            std::process::exit(exit_code);\ncrates/atelier-cli/src/main.rs:3:use atelier_app::command_storage::{\ncrates/atelier-cli/src/main.rs:1004:            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)\ncrates/atelier-cli/src/main.rs:1013:            atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)\ncrates/atelier-cli/src/telemetry.rs:144:        let layout = atelier_app::storage_layout::StorageLayout::new(root);\ncrates/atelier-cli/src/telemetry.rs:152:                .unwrap_or(atelier_app::storage_layout::ATELIER_DIR)\ncrates/atelier-cli/src/telemetry.rs:297:            .join(atelier_app::storage_layout::ATELIER_DIR)\ncrates/atelier-cli/src/commands/plan.rs:126:    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)\ncrates/atelier-cli/src/commands/plan.rs:165:            atelier_app::rebuild::validate_canonical_state(state_dir)?;\ncrates/atelier-cli/src/commands/plan.rs:1109:    atelier_app::storage_layout::find_canonical_dir_from_cwd()\ncrates/atelier-cli/src/commands/activity_log.rs:156:    let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;\ncrates/atelier-cli/src/commands/activity_log.rs:162:    let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;\ncrates/atelier-cli/src/commands/man.rs:4:use atelier_app::command_storage::{command_storage, CommandStorageAccess};\ncrates/atelier-cli/src/commands/man.rs:90:    let stale_count = atelier_app::export::canonical_stale_entries(db, state_dir)?.len();\ncrates/atelier-cli/src/commands/mission.rs:593:    atelier_app::storage_layout::find_canonical_dir_from_cwd()\ncrates/atelier-cli/src/commands/mission.rs:1615:    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)\ncrates/atelier-cli/src/commands/mission.rs:2163:    let stale_entries = atelier_app::export::canonical_stale_entries(db, state_dir)\ncrates/atelier-cli/src/commands/evidence.rs:298:    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)\ncrates/atelier-cli/src/commands/evidence.rs:628:    atelier_app::storage_layout::find_canonical_dir_from_cwd()\ncrates/atelier-cli/src/commands/issue_workflow.rs:4:use atelier_app::workflow_policy::WorkflowPolicy;\ncrates/atelier-cli/src/commands/issue_workflow.rs:16:    let repo_root = atelier_app::storage_layout::find_repo_root()?;\ncrates/atelier-cli/src/commands/issue_workflow.rs:17:    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);\ncrates/atelier-cli/src/commands/issue_workflow.rs:21:    atelier_app::workflow_policy::load(&repo_root).map(Some)\ncrates/atelier-cli/src/commands/workflow.rs:40:    let report = atelier_app::workflow_policy::check(db, &repo_root)?;\ncrates/atelier-cli/src/commands/workflow.rs:45:        atelier_app::workflow_policy::WORKFLOW_POLICY_PATH\ncrates/atelier-cli/src/commands/workflow.rs:72:    let policy = atelier_app::workflow_policy::load(&repo_root)?;\ncrates/atelier-cli/src/commands/workflow.rs:76:    let state_dir = atelier_app::storage_layout::StorageLayout::new(&repo_root).canonical_dir();\ncrates/atelier-cli/src/commands/workflow.rs:134:    let policy = atelier_app::workflow_policy::load(&repo_root)?;\ncrates/atelier-cli/src/commands/workflow.rs:165:    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;\ncrates/atelier-cli/src/commands/workflow.rs:178:    workflow: &'a atelier_app::workflow_policy::WorkflowDefinition,\ncrates/atelier-cli/src/commands/workflow.rs:181:) -> Result<&'a atelier_app::workflow_policy::TransitionDefinition> {\ncrates/atelier-cli/src/commands/workflow.rs:211"
-    truncated: true
-  stderr:
-    bytes: 0
-    summary: ""
-    truncated: false
 relationships:
   blocks: []
   children: []
@@ -36,17 +19,29 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "CLI shell owns Clap telemetry rendering and delegates migrated use cases through atelier-app APIs"
 updated_at: "2026-06-15T18:51:27.922104822+00:00"
 ---
 
+## Summary
+
 CLI shell owns Clap telemetry rendering and delegates migrated use cases through atelier-app APIs
 
-Command: bash -lc 'rg "derive\(Parser\)|derive\(Subcommand\)|fn init_tracing|record_command_event|try_parse|std::process::exit" crates/atelier-cli/src/main.rs -n; rg "atelier_app::(command_storage|init|lint|health|man|export|rebuild|projection|storage_layout|workflow_policy)::" crates/atelier-cli/src -n; rg "println!|eprintln!" crates/atelier-app/src -n; test $? -eq 1'
+## Command
+
+```console
+bash -lc 'rg "derive\(Parser\)|derive\(Subcommand\)|fn init_tracing|record_command_event|try_parse|std::process::exit" crates/atelier-cli/src/main.rs -n; rg "atelier_app::(command_storage|init|lint|health|man|export|rebuild|projection|storage_layout|workflow_policy)::" crates/atelier-cli/src -n; rg "println!|eprintln!" crates/atelier-app/src -n; test $? -eq 1'
+```
+
 Exit status: 0
 
-Stdout summary (truncated):
+## Stdout
+
+Bytes: 11549
+Truncated: yes
+
+```text
 14:#[derive(Parser)]
 98:#[derive(Subcommand)]
 263:#[derive(Subcommand)]
@@ -94,7 +89,12 @@ crates/atelier-cli/src/commands/workflow.rs:165:    atelier_app::projection::ref
 crates/atelier-cli/src/commands/workflow.rs:178:    workflow: &'a atelier_app::workflow_policy::WorkflowDefinition,
 crates/atelier-cli/src/commands/workflow.rs:181:) -> Result<&'a atelier_app::workflow_policy::TransitionDefinition> {
 crates/atelier-cli/src/commands/workflow.rs:211
+```
 
-Stderr summary:
-(none)
+## Stderr
 
+Bytes: 0
+Truncated: no
+
+```text
+```

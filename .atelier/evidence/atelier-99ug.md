@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:14:14.528826144+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet test_dependency_chain test_list_filter_by_status test_list_all_statuses test_tree_with_status_filter test_next_with_subissue_progress test_next_only_subissues_ready test_stress_rapid_operations test_issue_mutations_are_durable_without_manual_export test_issue_mutations_create_activity_sidecars test_issue_show_json_recovers_activity_fields_after_rebuild test_mission_list_human_overview_orders_and_summarizes test_mission_list_default_current_empty_state test_issue_tree_status_filter test_dependency_chain_and_ready && target/debug/atelier rebuild && target/debug/atelier lint atelier-jspo && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Success-close fixtures attach proof before close across integration and smoke flows"
 updated_at: "2026-06-13T01:14:38.959832159+00:00"
 ---

@@ -3,18 +3,12 @@ created_at: "2026-06-13T23:46:33.499971+00:00"
 id: "atelier-q9zz"
 evidence_type: "validation"
 captured_at: "2026-06-13T23:46:33.499971+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
 proof_scope: "Agent Factory command recipe replacement for atelier-4ykl"
 agent_identity: "root"
 independence_level: "implementer"
-follow_up_ids: []
 residual_risks:
 - "Repository-level atelier lint/export/workflow checks are blocked by unrelated malformed .atelier/evidence/atelier-06rb.md missing required front matter."
 - "A later focused nextest rerun is blocked by concurrent unstaged source changes in src/record_store.rs that reference missing normalized_milestone_data, normalized_plan_data, write_yaml_i64, and write_plan_revisions functions."
-output: null
 relationships:
   blocks: []
   children: []
@@ -25,7 +19,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "blocked"
+status: "recorded"
 title: "Agent Factory command recipe replacement implemented; focused command-surface tests passed before concurrent source edits, but final repo checks are blocked by unrelated tracker and compile failures."
 updated_at: "2026-06-13T23:47:23.787685+00:00"
 ---

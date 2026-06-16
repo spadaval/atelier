@@ -524,7 +524,7 @@ fn print_status_next_commands(
         }
         if summary.evidence_gap_count() > 0 {
             println!(
-                "  Record validation proof ({} evidence gap(s)): atelier evidence record --target issue/<id> --kind validation --result pass \"...\"",
+                "  Record validation proof ({} evidence gap(s)): atelier evidence record --target issue/<id> --kind validation \"...\"",
                 summary.evidence_gap_count()
             );
         }
@@ -1100,9 +1100,7 @@ fn print_reliability_summary(
             "Attached Proof: missing - issue proof gaps: {}",
             compact_strings(&issue_proof_gaps)
         );
-        println!(
-            "  Next: atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
-        );
+        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
         println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
     }
 

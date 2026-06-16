@@ -3,16 +3,6 @@ created_at: "2026-06-12T05:18:05.670111945+00:00"
 id: "atelier-nw8j"
 evidence_type: "validation"
 captured_at: "2026-06-12T05:18:05.670056404+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +13,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Migrated issue canonical records: no legacy acceptance/evidence_required keys; required Description/Outcome/Evidence sections present; target/debug/atelier lint atelier-uibk and export --check pass."
 updated_at: "2026-06-12T05:18:13.766408716+00:00"
 ---

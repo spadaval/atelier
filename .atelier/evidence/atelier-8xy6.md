@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T00:27:14.686440840+00:00"
 command: "bash -lc 'atelier issue show atelier-ymfl && atelier history --issue atelier-ymfl --include-descendants --limit 40 && atelier evidence show atelier-4itj && atelier evidence show atelier-8fc1 && rg -n \"ordinary work closes with proof|parent-level|independent validation|new repair issues|raw workflow validators\" AGENTFACTORY.md /root/.agents/skills/agent-factory/procedures /root/.agents/skills/agent-factory/standards && ! rg -n \"atelier workflow validate issue|atelier workflow validate mission\" AGENTFACTORY.md /root/.agents/skills/agent-factory/procedures /root/.agents/skills/agent-factory/standards && cargo nextest run test_agent_factory_guidance_avoids_raw_workflow_validate_commands test_spec_representative_commands_match_signpost_surfaces test_workflow_configuration_docs_describe_internal_diagnostics test_workflow_help_is_scoped_as_advanced_internal_diagnostic && atelier lint atelier-ymfl && atelier export --check && atelier doctor && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Process and docs epic closeout pass: Agent Factory proof escalation guidance, authoring/validation/review/orchestration updates, repair-issue guidance, raw workflow-validator non-normal guidance, and ignored-test ownership are covered by child evidence; lint, export check, doctor, and diff check pass."
 updated_at: "2026-06-13T00:27:19.763950452+00:00"
 ---

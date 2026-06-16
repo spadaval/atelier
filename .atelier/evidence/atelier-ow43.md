@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:13:13.675916119+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet test_close_all_is_durable_without_manual_export test_import_beads_jsonl_fixture_round_trip test_imported_beads_description_uses_current_issue_sections test_import_beads_fixture_preserves_counts_and_links test_imported_beads_records_can_be_shown_updated_and_closed test_import_beads_writes_canonical_state && target/debug/atelier rebuild && target/debug/atelier lint atelier-33hj && target/debug/atelier lint atelier-jk6c && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Close-all helper and Beads import section repairs pass focused validation"
 updated_at: "2026-06-13T01:13:30.242756232+00:00"
 ---

@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:53:18.943788050+00:00"
 command: "cargo nextest run test_issue_closeout_refuses_structurally_invalid_issue test_mission_closeout_enforces_gates_and_reopen_skips_close_validators test_dirty_worktree_blocks_mission_closeout test_mission_status_names_concrete_closeout_blockers test_mission_status_names_stale_and_malformed_record_blockers test_orientation_commands_enter_degraded_mode_for_malformed_records test_workflow_validate_defaults_are_target_and_transition_aware test_mission_audit_reports_missing_partial_and_ready_proof test_mission_closeout_uses_contract_audit test_epic_closeout_requires_closed_children_and_parent_evidence test_lint_rejects_vague_evidence_even_when_notes_name_a_command test_lint_rejects_missing_evidence_section test_lint_accepts_concrete_evidence_without_optional_notes"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -26,7 +18,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Closeout proof gate scenario matrix: issue closeout rejects malformed/missing proof; mission closeout rejects open work, missing mission proof, contract-audit gaps, dirty worktree, stale/malformed records; attached evidence satisfies issue and mission proof; domain status and closeout surfaces name the same blocker classes and normal recovery commands without requiring raw workflow validation."
 updated_at: "2026-06-12T23:54:56.406451975+00:00"
 ---

@@ -696,25 +696,9 @@ fn issue_evidence_gate_status_from_records(
         return evidence_gate(false, "no validating evidence link found");
     }
 
-    let passing = evidence
-        .iter()
-        .filter(|record| record.status == "pass")
-        .collect::<Vec<_>>();
-    if passing.is_empty() {
-        let statuses = evidence
-            .iter()
-            .map(|record| format!("{} [{}]", record.id, record.status))
-            .collect::<Vec<_>>()
-            .join(", ");
-        return evidence_gate(
-            false,
-            format!("linked validating evidence is not passing: {statuses}"),
-        );
-    }
-
     let _ = issue;
     let _ = sections;
-    evidence_gate(true, "passing validating evidence is linked")
+    evidence_gate(true, "validating evidence is linked")
 }
 
 fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {

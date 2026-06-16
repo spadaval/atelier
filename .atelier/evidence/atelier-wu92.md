@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T00:26:31.397411680+00:00"
 command: "bash -lc 'atelier issue show atelier-wpyb && atelier history --issue atelier-wpyb --include-descendants --limit 60 && atelier evidence show atelier-bxjl && atelier evidence show atelier-0c13 && atelier evidence show atelier-x23c && cargo nextest run test_spec_representative_commands_match_signpost_surfaces test_workflow_configuration_docs_describe_internal_diagnostics test_workflow_help_is_scoped_as_advanced_internal_diagnostic test_agent_factory_guidance_avoids_raw_workflow_validate_commands test_root_status_guides_active_work_to_finish_not_start test_root_status_reports_active_mission_contract_fields test_root_status_summarizes_checkout_orientation test_root_status_no_ready_work_suggests_valid_blocked_list test_root_start_finish_and_issue_transition_surface test_prime_guides_empty_checkout_without_repeating_status test_prime_names_active_mission test_prime_names_active_work test_history_repo_wide_supports_filters_bounded_output_and_drill_downs test_history_mission_scope_includes_linked_work_descendants_and_evidence test_history_issue_scope_defaults_single_issue_and_can_include_descendants test_history_empty_states_and_invalid_limit test_mission_status_cli_reports_control_state test_active_mission_focus_guides_status_and_work test_mission_help_uses_show_not_view && atelier lint atelier-wpyb && atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Signpost epic closeout pass: all wpyb children are closed; trr2 validation evidence verifies root status, start finish/current-work, transition, history, prime, docs/help/SPEC/Agent Factory parity, and raw validator hiding; focused signpost tests, lint, export check, and diff check pass."
 updated_at: "2026-06-13T00:26:38.711503035+00:00"
 ---

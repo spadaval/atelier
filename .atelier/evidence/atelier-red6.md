@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T16:03:39.175037236+00:00"
 command: "cargo nextest run test_issue_create_unifies_type_and_template_defaults test_create_with_template test_template_with_priority_override test_template_with_user_description"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "unified issue create type and template defaults"
 updated_at: "2026-06-13T16:03:44.154698548+00:00"
 ---

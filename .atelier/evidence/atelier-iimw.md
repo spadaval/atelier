@@ -3,16 +3,7 @@ created_at: "2026-06-11T23:35:28.944625367+00:00"
 id: "atelier-iimw"
 evidence_type: "validation"
 captured_at: "2026-06-11T23:35:28.944580352+00:00"
-command: null
-exit_status: null
-path: null
-uri: null
-proof_scope: null
 agent_identity: "codex"
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +14,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-29oi parent validation: storage layout, init/gitignore behavior, markdown-first migration, and read-only legacy compatibility are implemented through closed children atelier-3es3, atelier-kxko, atelier-pgkd, and atelier-ru15. Passed: atelier export --check; atelier lint; atelier doctor; atelier workflow validate issue atelier-29oi."
 updated_at: "2026-06-11T23:35:33.572104470+00:00"
 ---

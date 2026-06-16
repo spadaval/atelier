@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:50:28.265736883+00:00"
 command: "bash -lc 'set -euo pipefail\ncargo test --quiet workflow::tests\ncargo test --quiet --test cli_integration workflow_validate\ncargo test --quiet --test cli_integration mission_closeout\ncargo test --quiet --test cli_integration mission_status\ncargo fmt -- --check\ngit diff --check\ntarget/debug/atelier lint atelier-8o34\ntarget/debug/atelier lint\ntarget/debug/atelier export --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Target-aware validator defaults implemented"
 updated_at: "2026-06-12T22:50:44.767209751+00:00"
 ---

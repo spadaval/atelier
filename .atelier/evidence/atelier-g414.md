@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:36:25.241824837+00:00"
 command: "bash -lc 'cargo fmt -- --check && cargo nextest run --cargo-quiet test_validation_issue_closeout_requires_contract_audit_evidence test_issue_closeout_rejects_evidence_attached_to_another_issue test_workflow_validate_fails_without_required_evidence test_workflow_validate_defaults_are_target_and_transition_aware test_closed_children_alone_do_not_close_epic_parent test_epic_closeout_requires_closed_children_and_parent_evidence test_evidence_capture_records_command_metadata_and_attaches_targets test_root_start_finish_and_issue_transition_surface && cargo nextest run --status-level fail --final-status-level fail --failure-output final --max-fail 1:immediate --cargo-quiet && cargo build --quiet && target/debug/atelier rebuild && target/debug/atelier lint atelier-xala && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Validation closeout gate requires contract-audit proof for high-risk issues"
 updated_at: "2026-06-13T01:37:07.568305784+00:00"
 ---

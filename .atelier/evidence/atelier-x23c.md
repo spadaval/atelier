@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T00:22:42.163924206+00:00"
 command: "bash -lc '! rg -n \"atelier work start|atelier work finish|atelier workflow validate\" SPEC.md && rg -n \"atelier start atelier-z1p8|atelier finish atelier-z1p8|atelier status|atelier issue transition atelier-z1p8 --options|atelier evidence capture -- <command>\" SPEC.md && cargo nextest run test_spec_representative_commands_match_signpost_surfaces test_workflow_configuration_docs_describe_internal_diagnostics test_workflow_help_is_scoped_as_advanced_internal_diagnostic test_agent_factory_guidance_avoids_raw_workflow_validate_commands test_root_status_guides_active_work_to_finish_not_start test_root_start_finish_and_issue_transition_surface && target/debug/atelier lint atelier-ywe6 && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "SPEC workflow command drift repair: stale normal work and workflow validator examples are absent, current status start finish transition and evidence capture examples are present; focused docs tests, lint, export check, and diff check pass."
 updated_at: "2026-06-13T00:22:48.229190131+00:00"
 ---

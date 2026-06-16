@@ -5,27 +5,10 @@ evidence_type: "validation"
 captured_at: "2026-06-14T17:14:32.633670503+00:00"
 command: "cargo test --test cli_integration closeout"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
 target:
   kind: "issue"
   id: "atelier-mllk"
   role: "validates"
-follow_up_ids: []
-residual_risks: []
-output:
-  limit_bytes_per_stream: 4096
-  stdout:
-    bytes: 1080
-    summary: "\nrunning 13 tests\ntest test_mission_status_help_exposes_closeout_drilldown ... ok\ntest test_issue_closeout_refuses_structurally_invalid_issue ... ok\ntest test_mission_closeout_blocks_undeferred_obsolete_command_test ... ok\ntest test_issue_closeout_requires_passing_evidence_records ... ok\ntest test_mission_status_names_concrete_closeout_blockers ... ok\ntest test_issue_closeout_uses_attached_pass_evidence_not_evidence_text ... ok\ntest test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_terms ... ok\ntest test_issue_closeout_rejects_evidence_attached_to_another_issue ... ok\ntest test_dirty_worktree_blocks_mission_closeout ... ok\ntest test_mission_closeout_accepts_shell_mission_without_direct_mission_evidence ... ok\ntest test_mission_closeout_enforces_gates_and_reopen_skips_close_validators ... ok\ntest test_mission_status_shows_ignored_product_behavior_closeout_blocker ... ok\ntest test_mission_audit_reports_shell_closeout_and_explicit_approval ... ok\n\ntest result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 299 filtered out; finished in 2.65s\n\n"
-    truncated: false
-  stderr:
-    bytes: 8980
-    summary: "   Compiling atelier-tracker v0.2.0 (/root/atelier/.atelier-worktrees/atelier-c4uz)\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2311:23\n     |\n2311 |         let (success, stdout, stderr) = run_atelier(dir.path(), &args);\n     |                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n     |\n     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2435:19\n     |\n2435 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2488:19\n     |\n2488 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"abandon\", &issue_id]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2529:19\n     |\n2529 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2552:19\n     |\n2552 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2583:19\n     |\n2583 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2609:23\n     |\n2609 |         let (success, stdout, stderr) = run_atelier(dir.path(), &args);\n     |                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:4602:19\n     |\n4602 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"issue\", \"ready\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:4632:19\n     |\n4632 |     let (success, stdout, _stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8257:19\n     |\n8257 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8300:19\n     |\n8300 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8408:19\n     |\n8408 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8819:19\n     |\n8819 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"workflow\", \"check\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8962:19\n     |\n8962 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"workflow\", \"check\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n     --> tests/cli_integration.rs:10692:19\n      |\n10692 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"export\", \"--check\"]);\n      |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n     --> tests/cli_integration.rs:10947:19\n      |\n10947 |"
-    truncated: true
 relationships:
   blocks: []
   children: []
@@ -42,17 +25,29 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "focused closeout regression suite passes for shell mission and workflow approval paths"
 updated_at: "2026-06-14T17:14:48.380230997+00:00"
 ---
 
+## Summary
+
 focused closeout regression suite passes for shell mission and workflow approval paths
 
-Command: cargo test --test cli_integration closeout
+## Command
+
+```console
+cargo test --test cli_integration closeout
+```
+
 Exit status: 0
 
-Stdout summary:
+## Stdout
+
+Bytes: 1080
+Truncated: no
+
+```text
 
 running 13 tests
 test test_mission_status_help_exposes_closeout_drilldown ... ok
@@ -70,8 +65,14 @@ test test_mission_status_shows_ignored_product_behavior_closeout_blocker ... ok
 test test_mission_audit_reports_shell_closeout_and_explicit_approval ... ok
 
 test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 299 filtered out; finished in 2.65s
+```
 
-Stderr summary (truncated):
+## Stderr
+
+Bytes: 8980
+Truncated: yes
+
+```text
    Compiling atelier-tracker v0.2.0 (/root/atelier/.atelier-worktrees/atelier-c4uz)
 warning: unused variable: `stdout`
     --> tests/cli_integration.rs:2311:23
@@ -169,4 +170,4 @@ warning: unused variable: `stdout`
      --> tests/cli_integration.rs:10947:19
       |
 10947 |
-
+```

@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:18:40.995998479+00:00"
 command: "target/debug/atelier lint atelier-7yen"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier lint atelier-7yen passed"
 updated_at: "2026-06-12T21:18:42.083960665+00:00"
 ---

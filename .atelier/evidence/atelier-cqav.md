@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:38:22.072230395+00:00"
 command: "bash -lc 'set -euo pipefail\ntarget/debug/atelier issue --help\ntarget/debug/atelier --help\ntarget/debug/atelier issue show atelier-efpk | tee /tmp/atelier-efpk-show.txt\nrg \"atelier note add issue\" /tmp/atelier-efpk-show.txt\n! rg \"atelier issue comment\" /tmp/atelier-efpk-show.txt\ncargo test --test cli_integration test_issue_help_uses_reduced_lifecycle_surface -- --nocapture\ncargo test --test cli_integration test_non_lifecycle_issue_flows_use_explicit_homes -- --nocapture\ncargo test --test cli_integration test_hidden_issue_helpers_print_replacement_guidance -- --nocapture\ncargo test --test cli_integration test_update_issue_remove_label_replaces_unlabel_helper -- --nocapture\ncargo test --test cli_integration test_issue_list_blocked_replaces_blocked_helper -- --nocapture\ncargo test --test cli_integration test_show_issue_rich_human_output -- --nocapture\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-efpk\ntarget/debug/atelier workflow validate issue atelier-efpk'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-efpk command-surface closeout validation"
 updated_at: "2026-06-12T21:38:40.973695539+00:00"
 ---

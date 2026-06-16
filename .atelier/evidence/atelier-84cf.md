@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T00:07:26.882543429+00:00"
 command: "bash -lc 'target/debug/atelier status && target/debug/atelier lint && target/debug/atelier export --check && cargo nextest run test_root_status_summarizes_checkout_orientation test_root_status_reports_active_mission_contract_fields test_root_status_no_ready_work_suggests_valid_blocked_list test_workflow_configuration_docs_describe_internal_diagnostics test_workflow_help_is_scoped_as_advanced_internal_diagnostic test_agent_factory_guidance_avoids_raw_workflow_validate_commands test_mission_closeout_blocks_undeferred_obsolete_command_test'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Signpost gap repair validation: target/debug/atelier status shows git and worktree state, active work, active mission health and progress, active-mission ready work, immediate blockers, recent activity, and domain next actions; workflow configuration docs describe hidden advanced/internal diagnostics instead of a normal JSON workflow validate surface; focused tests, lint, and export check pass."
 updated_at: "2026-06-13T00:07:33.290326666+00:00"
 ---

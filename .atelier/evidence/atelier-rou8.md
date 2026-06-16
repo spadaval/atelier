@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T01:15:12.855138179+00:00"
 command: "bash -lc 'cargo nextest run --cargo-quiet test_canonical_changed_record_export_rewrites_issue test_canonical_markdown_serialization_stability && target/debug/atelier rebuild && target/debug/atelier lint atelier-dfc9 && target/debug/atelier export --check && git diff --check'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Canonical export tests expect current sectioned issue bodies"
 updated_at: "2026-06-13T01:15:19.594174827+00:00"
 ---

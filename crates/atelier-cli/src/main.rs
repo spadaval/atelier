@@ -563,16 +563,14 @@ enum PlanCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"
-  atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+  atelier evidence record --target issue/<id> --kind validation \"summary\"
+  atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
 another target.")]
     Record {
         #[arg(long = "kind")]
         evidence_kind: String,
-        #[arg(long)]
-        result: String,
         /// Accountable target using kind/id syntax, for example issue/atelier-1234
         #[arg(long)]
         target: Option<String>,
@@ -604,7 +602,7 @@ another target.")]
     /// List evidence records
     List {
         #[arg(long)]
-        result: Option<String>,
+        status: Option<String>,
     },
 }
 
@@ -1313,7 +1311,6 @@ fn run() -> Result<()> {
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record {
                 evidence_kind,
-                result,
                 target,
                 role,
                 summary,
@@ -1346,7 +1343,6 @@ fn run() -> Result<()> {
                         &storage.state_dir(),
                         &storage.db_path(),
                         &evidence_kind,
-                        &result,
                         summary,
                         path.as_deref(),
                         uri.as_deref(),
@@ -1385,7 +1381,6 @@ fn run() -> Result<()> {
                         &storage.db_path(),
                         commands::evidence::CaptureOptions {
                             evidence_kind: &evidence_kind,
-                            result: &result,
                             summary: command_summary,
                             path: path.as_deref(),
                             uri: uri.as_deref(),
@@ -1420,9 +1415,9 @@ fn run() -> Result<()> {
                     &role,
                 )
             }
-            EvidenceCommands::List { result } => {
+            EvidenceCommands::List { status } => {
                 let db = projection_query_db()?;
-                commands::evidence::list(&db, result.as_deref())
+                commands::evidence::list(&db, status.as_deref())
             }
         },
 

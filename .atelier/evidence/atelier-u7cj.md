@@ -5,27 +5,10 @@ evidence_type: "test"
 captured_at: "2026-06-15T04:27:21.532141688+00:00"
 command: "cargo test --test cli_integration test_mission_worktree_ownership_guards_epic_branch_commands -- --exact"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
 target:
   kind: "issue"
   id: "atelier-l8r9"
   role: "validates"
-follow_up_ids: []
-residual_risks: []
-output:
-  limit_bytes_per_stream: 4096
-  stdout:
-    bytes: 186
-    summary: "\nrunning 1 test\ntest test_mission_worktree_ownership_guards_epic_branch_commands ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 322 filtered out; finished in 1.08s\n\n"
-    truncated: false
-  stderr:
-    bytes: 9042
-    summary: "    Blocking waiting for file lock on package cache\n   Compiling atelier-tracker v0.2.0 (/root/atelier)\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2442:23\n     |\n2442 |         let (success, stdout, stderr) = run_atelier(dir.path(), &args);\n     |                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n     |\n     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2566:19\n     |\n2566 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2619:19\n     |\n2619 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"abandon\", &issue_id]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2660:19\n     |\n2660 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2683:19\n     |\n2683 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2714:19\n     |\n2714 |     let (success, stdout, stderr) =\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:2740:23\n     |\n2740 |         let (success, stdout, stderr) = run_atelier(dir.path(), &args);\n     |                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:4733:19\n     |\n4733 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"issue\", \"ready\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:4763:19\n     |\n4763 |     let (success, stdout, _stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8388:19\n     |\n8388 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8431:19\n     |\n8431 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8539:19\n     |\n8539 |     let (success, stdout, stderr) = run_atelier(\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:8950:19\n     |\n8950 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"workflow\", \"check\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n    --> tests/cli_integration.rs:9213:19\n     |\n9213 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"workflow\", \"check\"]);\n     |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n     --> tests/cli_integration.rs:11062:19\n      |\n11062 |     let (success, stdout, stderr) = run_atelier(dir.path(), &[\"export\", \"--check\"]);\n      |                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_stdout`\n\nwarning: unused variable: `stdout`\n     --> tests/cli_integration.rs:1131"
-    truncated: true
 relationships:
   blocks: []
   children: []
@@ -36,24 +19,42 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "cargo test --test cli_integration test_mission_worktree_ownership_guards_epic_branch_commands -- --exact"
 updated_at: "2026-06-15T04:27:26.957570684+00:00"
 ---
 
+## Summary
+
 cargo test --test cli_integration test_mission_worktree_ownership_guards_epic_branch_commands -- --exact
 
-Command: cargo test --test cli_integration test_mission_worktree_ownership_guards_epic_branch_commands -- --exact
+## Command
+
+```console
+cargo test --test cli_integration test_mission_worktree_ownership_guards_epic_branch_commands -- --exact
+```
+
 Exit status: 0
 
-Stdout summary:
+## Stdout
+
+Bytes: 186
+Truncated: no
+
+```text
 
 running 1 test
 test test_mission_worktree_ownership_guards_epic_branch_commands ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 322 filtered out; finished in 1.08s
+```
 
-Stderr summary (truncated):
+## Stderr
+
+Bytes: 9042
+Truncated: yes
+
+```text
     Blocking waiting for file lock on package cache
    Compiling atelier-tracker v0.2.0 (/root/atelier)
 warning: unused variable: `stdout`
@@ -150,4 +151,4 @@ warning: unused variable: `stdout`
 
 warning: unused variable: `stdout`
      --> tests/cli_integration.rs:1131
-
+```

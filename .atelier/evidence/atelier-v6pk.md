@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T21:38:01.241345102+00:00"
 command: "bash -lc 'set -euo pipefail\ncargo test --test cli_integration section -- --nocapture\ntarget/debug/atelier export --check\ntarget/debug/atelier lint atelier-40ou\ntarget/debug/atelier workflow validate issue atelier-40ou\ntarget/debug/atelier issue show atelier-40ou'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "atelier-40ou sectioned issue closeout validation"
 updated_at: "2026-06-12T21:38:06.815481972+00:00"
 ---

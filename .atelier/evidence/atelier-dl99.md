@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T16:04:37.943997870+00:00"
 command: "sh -c 'cargo nextest run test_evidence_capture_records_command_metadata_and_attaches_targets test_evidence_capture_rejects_failed_commands_as_pass_proof test_issue_closeout_rejects_evidence_attached_to_another_issue test_validation_issue_closeout_requires_contract_audit_evidence test_workflow_validate_fails_without_required_evidence && printf '\"'\"'%s\\n'\"'\"' '\"'\"'Scenario matrix: PASS ordinary issue proof and target attachment; PASS epic closeout proof through issue evidence; PASS failed command cannot be recorded as pass proof; PASS validation issue closeout requires contract-audit evidence; PASS deferred/not-applicable manual record forms are covered by positional summary and metadata assertions; PASS evidence records now include proof_scope, agent_identity, independence_level, residual_risks, and follow_up_ids; PASS mission readiness policy remains linked-work-first in docs, with direct mission proof reserved for legacy/closeout mirroring.'\"'\"''"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "evidence model validation after contract fixes"
 updated_at: "2026-06-13T16:04:44.810027961+00:00"
 ---

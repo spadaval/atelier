@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:54:57.298202980+00:00"
 command: "bash -lc 'atelier export --check && atelier lint && atelier doctor'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Epic closeout health for nzy1: focused closeout proof matrix is attached separately; export check, lint, and doctor all pass on the current tracker state."
 updated_at: "2026-06-12T23:54:58.886263002+00:00"
 ---

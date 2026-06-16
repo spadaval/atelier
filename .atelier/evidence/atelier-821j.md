@@ -5,14 +5,6 @@ evidence_type: "test"
 captured_at: "2026-06-13T23:01:30.606014532+00:00"
 command: "bash -lc 'if rg -n \"TODO|FIXME\" src tests build.rs; then exit 1; else echo \"no TODO/FIXME markers in src tests build.rs\"; fi'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "bash -lc 'if rg -n \"TODO|FIXME\" src tests build.rs; then exit 1; else echo \"no TODO/FIXME markers in src tests build.rs\"; fi'"
 updated_at: "2026-06-13T23:01:33.145531145+00:00"
 ---

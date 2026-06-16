@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T23:06:34.973861111+00:00"
 command: "cargo nextest run test_workflow_validate_reports_agent_factory_command_drift test_workflow_validate_reports_docs_help_root_surface_drift test_mission_closeout_blocks_undeferred_obsolete_command_test"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Docs help and obsolete-test drift focused tests"
 updated_at: "2026-06-12T23:06:39.614874235+00:00"
 ---

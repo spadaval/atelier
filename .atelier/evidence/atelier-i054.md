@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-12T22:28:23.823663676+00:00"
 command: "bash -lc '\nset -euo pipefail\nA=/root/atelier/target/debug/atelier\nprintf \"\\n$ %s mission show atelier-tcmr\\n\" \"$A\"\n\"$A\" mission show atelier-tcmr | sed -n \"1,90p\"\nprintf \"\\n$ sed -n 1,90p .atelier/missions/atelier-tcmr.md\\n\"\nsed -n \"1,90p\" .atelier/missions/atelier-tcmr.md\nprintf \"\\n$ rg ^data: .atelier/missions -g *.md\\n\"\nif rg \"^data:\" .atelier/missions -g \"*.md\"; then\n  echo \"unexpected mission data front matter remains\"\n  exit 1\nelse\n  echo \"No mission data front matter found in current mission records.\"\nfi\nprintf \"\\nAudit conclusion: atelier-tcmr exposes intent, constraints, risks, validation criteria, relationships, and evidence links in readable Markdown/CLI output without private context.\\n\"\n'"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Migrated current mission atelier-tcmr is readable and auditable"
 updated_at: "2026-06-12T22:28:25.573663589+00:00"
 ---

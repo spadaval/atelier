@@ -16,7 +16,6 @@ const ACCEPTED_EVIDENCE_RELATION_ROLES: &[&str] = &["validates"];
 
 pub struct CaptureOptions<'a> {
     pub evidence_kind: &'a str,
-    pub result: &'a str,
     pub summary: Option<&'a str>,
     pub path: Option<&'a str>,
     pub uri: Option<&'a str>,
@@ -36,9 +35,7 @@ pub struct TargetMetadata<'a> {
 
 #[derive(Debug, Clone)]
 struct EvidenceMetadata<'a> {
-    proof_scope: &'a str,
     agent_identity: Option<&'a str>,
-    independence_level: &'a str,
     residual_risks: Vec<String>,
     follow_up_ids: Vec<String>,
 }
@@ -46,9 +43,7 @@ struct EvidenceMetadata<'a> {
 impl<'a> EvidenceMetadata<'a> {
     fn from_producer(producer: Option<&'a str>) -> Self {
         Self {
-            proof_scope: "scoped to the attached target or summary",
             agent_identity: producer,
-            independence_level: "unspecified",
             residual_risks: Vec::new(),
             follow_up_ids: Vec::new(),
         }
@@ -59,7 +54,6 @@ pub fn add_returning_id(
     state_dir: &Path,
     db_path: &Path,
     evidence_kind: &str,
-    result: &str,
     summary: &str,
     path: Option<&str>,
     uri: Option<&str>,
@@ -77,9 +71,9 @@ pub fn add_returning_id(
         path: path.map(str::to_string),
         uri: uri.map(str::to_string),
         producer: producer.map(str::to_string),
-        proof_scope: Some(metadata.proof_scope.to_string()),
+        proof_scope: None,
         agent_identity: metadata.agent_identity.map(str::to_string),
-        independence_level: Some(metadata.independence_level.to_string()),
+        independence_level: None,
         residual_risks: metadata.residual_risks,
         follow_up_ids: metadata.follow_up_ids,
         exit_code: None,
@@ -97,7 +91,7 @@ pub fn add_returning_id(
     let created = store.create_domain_record(
         KIND,
         summary,
-        result,
+        "recorded",
         Some(summary),
         &serde_json::to_string(&data)?,
     )?;
@@ -136,13 +130,6 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
             ),
         };
 
-    if options.result == "pass" && !success {
-        bail!(
-            "cannot record pass evidence for command exit status {}; use --result fail or --result blocked",
-            exit_status
-        );
-    }
-
     let summary = options
         .summary
         .map(str::to_string)
@@ -164,9 +151,9 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         path: options.path.map(str::to_string),
         uri: options.uri.map(str::to_string),
         producer: options.producer.map(str::to_string),
-        proof_scope: Some(metadata.proof_scope.to_string()),
+        proof_scope: None,
         agent_identity: metadata.agent_identity.map(str::to_string),
-        independence_level: Some(metadata.independence_level.to_string()),
+        independence_level: None,
         residual_risks: metadata.residual_risks,
         follow_up_ids: metadata.follow_up_ids,
         exit_code,
@@ -189,7 +176,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
     let created = store.create_domain_record(
         KIND,
         &summary,
-        options.result,
+        "recorded",
         Some(&body),
         &serde_json::to_string(&data)?,
     )?;
@@ -289,7 +276,7 @@ pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
         return Ok(());
     }
     bail!(
-        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target issue/<id> --kind validation --result pass \"summary\"`; reuse existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`.",
+        "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target issue/<id> --kind validation \"summary\"`; reuse existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`.",
         ACCEPTED_EVIDENCE_RELATION_ROLES.join(", ")
     )
 }
@@ -298,8 +285,8 @@ fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
-pub fn list(db: &Database, result: Option<&str>) -> Result<()> {
-    let records = db.list_records(KIND, result)?;
+pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
+    let records = db.list_records(KIND, status)?;
     if records.is_empty() {
         print_heading("Evidence");
         println!("(none)");
@@ -336,7 +323,7 @@ pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
         "{}",
         "=".repeat(record.id.len() + record.status.len() + record.title.len() + 15)
     );
-    println!("Result:      {}", record.status);
+    println!("Status:      {}", record.status);
     println!("Kind:        {}", data.evidence_type);
     println!("Captured:    {}", data.captured_at.to_rfc3339());
     if let Some(command) = data.command.as_deref() {
@@ -487,32 +474,35 @@ fn command_capture_body(
     spawn_error: Option<&str>,
 ) -> String {
     let mut body = String::new();
+    body.push_str("## Summary\n\n");
     body.push_str(summary);
-    body.push_str("\n\nCommand: ");
+    body.push_str("\n\n## Command\n\n```console\n");
     body.push_str(command);
-    body.push_str("\nExit status: ");
+    body.push_str("\n```\n\nExit status: ");
     body.push_str(exit_status);
     if let Some(error) = spawn_error {
         body.push_str("\nSpawn error: ");
         body.push_str(error);
     }
-    body.push_str("\n\nStdout summary");
-    body.push_str(if stdout.truncated { " (truncated)" } else { "" });
-    body.push_str(":\n");
-    push_output_block(&mut body, &stdout.text);
-    body.push_str("\nStderr summary");
-    body.push_str(if stderr.truncated { " (truncated)" } else { "" });
-    body.push_str(":\n");
-    push_output_block(&mut body, &stderr.text);
+    body.push_str("\n\n## Stdout\n\n");
+    push_output_block(&mut body, stdout);
+    body.push_str("\n## Stderr\n\n");
+    push_output_block(&mut body, stderr);
     body
 }
 
-fn push_output_block(body: &mut String, text: &str) {
-    if text.is_empty() {
-        body.push_str("(none)\n");
+fn push_output_block(body: &mut String, text: &BoundedText) {
+    body.push_str(&format!("Bytes: {}\n", text.original_bytes));
+    body.push_str(&format!(
+        "Truncated: {}\n\n",
+        if text.truncated { "yes" } else { "no" }
+    ));
+    body.push_str("```text\n");
+    if text.text.is_empty() {
+        body.push_str("```\n");
     } else {
-        body.push_str(text.trim_end());
-        body.push('\n');
+        body.push_str(text.text.trim_end());
+        body.push_str("\n```\n");
     }
 }
 

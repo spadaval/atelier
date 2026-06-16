@@ -3,16 +3,7 @@ created_at: "2026-06-13T17:48:01.156384900+00:00"
 id: "atelier-fjhv"
 evidence_type: "validation"
 captured_at: "2026-06-13T17:48:01.156355111+00:00"
-command: null
-exit_status: null
 path: "docs/product/workflow-configuration.md"
-uri: null
-proof_scope: null
-agent_identity: null
-independence_level: null
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +14,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "Defined the v1 issue workflow contract around fixed .atelier/workflow.yaml policy, explicit status categories, issue-type mappings, configured built-in validators with params, guidance templates, strict config errors, standard review/proof and lightweight spike workflow examples, and explicit deferred features. atelier lint and atelier export --check passed, and targeted contract grep confirmed the updated text."
 updated_at: "2026-06-13T17:48:10.014658141+00:00"
 ---

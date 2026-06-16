@@ -5,14 +5,6 @@ evidence_type: "validation"
 captured_at: "2026-06-13T16:08:49.857862959+00:00"
 command: "sh -c 'printf '\"'\"'%s\\n'\"'\"' '\"'\"'Contract audit line-by-line classification maps each atelier-ey4y epic outcome line to closed child proof and parent evidence atelier-u7bd.'\"'\"' '\"'\"'PASS: early bounded delegation mapped to Agent Factory guidance.'\"'\"' '\"'\"'PASS: Mini routing and higher-reasoning reservations mapped to model policy docs.'\"'\"' '\"'\"'PASS: prompt requirements mapped to delegation template work.'\"'\"' '\"'\"'PASS: evidence-producing handoffs mapped to dogfood evidence atelier-tezi.'\"'\"''"
 exit_status: "0"
-path: null
-uri: null
-proof_scope: "scoped to the attached target or summary"
-agent_identity: null
-independence_level: "unspecified"
-follow_up_ids: []
-residual_risks: []
-output: null
 relationships:
   blocks: []
   children: []
@@ -23,7 +15,7 @@ relationships:
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
-status: "pass"
+status: "recorded"
 title: "contract-audit line-by-line classification for delegation routing"
 updated_at: "2026-06-13T16:08:51.768996666+00:00"
 ---
