@@ -33,12 +33,15 @@ relationships:
   - kind: "issue"
     id: "atelier-em15"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-k1ga"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"
 title: "Cross-surface blocker-aware ordering validation transcript passes"
-updated_at: "2026-06-16T19:00:23.636621551+00:00"
+updated_at: "2026-06-16T19:02:41.209823139+00:00"
 ---
 
 Cross-surface blocker-aware ordering validation transcript passes

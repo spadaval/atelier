@@ -33,12 +33,15 @@ relationships:
   - kind: "issue"
     id: "atelier-em15"
     role: "validates"
+  - kind: "issue"
+    id: "atelier-k1ga"
+    role: "validates"
   relates: []
 schema: "atelier.evidence"
 schema_version: 1
 status: "pass"
 title: "Focused regressions and local hygiene checks pass for blocker-aware ordering epic"
-updated_at: "2026-06-16T19:01:22.626432164+00:00"
+updated_at: "2026-06-16T19:02:45.204399204+00:00"
 ---
 
 Focused regressions and local hygiene checks pass for blocker-aware ordering epic
