@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-16T19:36:04.327859377+00:00"
+status: "done"
 title: "Make issue creation markdown-first"
-updated_at: "2026-06-16T19:29:04.452845355+00:00"
+updated_at: "2026-06-16T19:36:04.327859377+00:00"
 ---
 
 ## Description
