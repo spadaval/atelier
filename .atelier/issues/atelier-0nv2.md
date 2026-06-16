@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:24:57.519992208+00:00"
+status: "done"
 title: "Validate automatic branch lifecycle and squash merge flow"
-updated_at: "2026-06-16T15:51:11.860079019+00:00"
+updated_at: "2026-06-16T17:24:57.519992208+00:00"
 ---
 
 ## Description
