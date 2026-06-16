@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -8,6 +8,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
+use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::{EvidenceRecordData, Issue};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
 use atelier_sqlite::Database;
@@ -411,6 +412,7 @@ pub fn close_issue(
         );
     }
 
+    let close_git = CloseGitIntegration::prepare(db, &policy, &issue)?;
     transition_issue(
         db,
         state_dir,
@@ -420,8 +422,424 @@ pub fn close_issue(
         Some(close_reason),
     )?;
 
-    let _ = Database::open(db_path)?;
+    if let Some(mut close_git) = close_git {
+        if let Err(error) = close_git.integrate(state_dir, db_path) {
+            bail!("{error:#}");
+        }
+    } else {
+        let _ = Database::open(db_path)?;
+    }
     Ok(())
+}
+
+struct CloseGitIntegration {
+    repo_root: PathBuf,
+    issue_id: String,
+    issue_title: String,
+    resolution: BranchLifecycleResolution,
+    source_pre_head: String,
+    tracker_patch_before_close: Vec<u8>,
+}
+
+impl CloseGitIntegration {
+    fn prepare(
+        db: &Database,
+        policy: &atelier_app::workflow_policy::WorkflowPolicy,
+        issue: &Issue,
+    ) -> Result<Option<Self>> {
+        let repo_root = repo_root()?;
+        if !is_git_repo(&repo_root)? {
+            return Ok(None);
+        }
+        let resolution = policy.resolve_branch_lifecycle(db, &issue.id).with_context(|| {
+            format!(
+                "Close Git integration could not resolve branch lifecycle for {}. Inspect parent links with `atelier issue show {}`.",
+                issue.id, issue.id
+            )
+        })?;
+        ensure_no_non_tracker_dirty(&repo_root)?;
+        ensure_close_branch_ready(&repo_root, &resolution)?;
+        if resolution.merge_owned {
+            ensure_branch_exists(&repo_root, &resolution.base_branch).with_context(|| {
+                format!(
+                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue close {} --reason \"...\"`.",
+                    resolution.base_branch, issue.id
+                )
+            })?;
+        }
+        let current = git_current_branch(&repo_root)?;
+        if current != resolution.expected_branch {
+            git_checked(
+                &repo_root,
+                &["switch", &resolution.expected_branch],
+                "checkout source branch before close",
+            )
+            .with_context(|| {
+                format!(
+                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                    resolution.expected_branch, issue.id
+                )
+            })?;
+        }
+        let source_pre_head = git_stdout(&repo_root, &["rev-parse", "HEAD"], "read source HEAD")?;
+        let tracker_patch_before_close = git_binary_stdout(
+            &repo_root,
+            &["diff", "--binary", "--", ".atelier"],
+            "snapshot tracker changes before close",
+        )?;
+        Ok(Some(Self {
+            repo_root,
+            issue_id: issue.id.clone(),
+            issue_title: issue.title.clone(),
+            resolution,
+            source_pre_head: source_pre_head.trim().to_string(),
+            tracker_patch_before_close,
+        }))
+    }
+
+    fn integrate(&mut self, state_dir: &Path, db_path: &Path) -> Result<()> {
+        println!();
+        println!("Close Git Integration");
+        println!("---------------------");
+        println!("Target:        issue/{}", self.issue_id);
+        println!(
+            "Branch owner:  {} {} ({})",
+            branch_owner_label(&self.resolution.owner_kind),
+            self.resolution.owner_id,
+            self.resolution.owner_issue_type
+        );
+        println!("Source branch: {}", self.resolution.expected_branch);
+        println!("Base branch:   {}", self.resolution.base_branch);
+        println!(
+            "Merge strategy: {}",
+            self.resolution.merge_strategy.as_str()
+        );
+
+        let close_commit = self.commit_tracker_state(state_dir, db_path)?;
+        println!("Tracker commit: {close_commit}");
+        if self.resolution.merge_owned {
+            match self.merge_to_base() {
+                Ok(result) => println!("Merge result:   {result}"),
+                Err(error) => {
+                    self.rollback_after_integration_failure(state_dir, db_path)?;
+                    bail!("{error}");
+                }
+            }
+        } else {
+            println!("Merge result:   deferred to epic close");
+        }
+        println!(
+            "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
+            self.issue_id
+        );
+        let _ = Database::open(db_path)?;
+        Ok(())
+    }
+
+    fn commit_tracker_state(&mut self, state_dir: &Path, db_path: &Path) -> Result<String> {
+        git_checked(
+            &self.repo_root,
+            &["add", "-A", ".atelier"],
+            "stage tracker close state",
+        )
+        .or_else(|error| {
+            self.rollback_tracker_state(state_dir, db_path)?;
+            Err(error)
+        })?;
+        let message = format!("Close {}: {}", self.issue_id, self.issue_title);
+        git_checked(
+            &self.repo_root,
+            &["commit", "-m", &message],
+            "commit tracker close state",
+        )
+        .or_else(|error| {
+            self.rollback_tracker_state(state_dir, db_path)?;
+            Err(error)
+        })
+        .with_context(|| {
+            format!(
+                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                self.issue_id, self.issue_id
+            )
+        })?;
+        git_stdout(
+            &self.repo_root,
+            &["rev-parse", "--short", "HEAD"],
+            "read close commit",
+        )
+        .map(|value| value.trim().to_string())
+    }
+
+    fn merge_to_base(&self) -> Result<String> {
+        git_checked(
+            &self.repo_root,
+            &["switch", &self.resolution.base_branch],
+            "checkout base branch before merge",
+        )
+        .with_context(|| {
+            format!(
+                "Close Git integration failed while switching to base branch '{}'.\nRecovery: source branch '{}' contains the close commit; inspect `git status --short --branch`, switch to the base branch, and retry the merge or rerun close after repair.",
+                self.resolution.base_branch, self.resolution.expected_branch
+            )
+        })?;
+        match self.resolution.merge_strategy {
+            MergeStrategy::Squash => {
+                git_checked(
+                    &self.repo_root,
+                    &["merge", "--squash", &self.resolution.expected_branch],
+                    "squash merge source branch",
+                )
+                .with_context(|| {
+                    format!(
+                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
+                    )
+                })?;
+                let message = format!(
+                    "Squash merge {} into {}",
+                    self.resolution.expected_branch, self.resolution.base_branch
+                );
+                git_checked(
+                    &self.repo_root,
+                    &["commit", "-m", &message],
+                    "commit squash merge",
+                )
+                .with_context(|| {
+                    format!(
+                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        self.resolution.base_branch, self.issue_id
+                    )
+                })?;
+                let sha = git_stdout(
+                    &self.repo_root,
+                    &["rev-parse", "--short", "HEAD"],
+                    "read squash commit",
+                )?;
+                Ok(format!("squash commit {}", sha.trim()))
+            }
+            MergeStrategy::MergeCommit => {
+                let message = format!(
+                    "Merge {} into {}",
+                    self.resolution.expected_branch, self.resolution.base_branch
+                );
+                git_checked(
+                    &self.repo_root,
+                    &["merge", "--no-ff", &self.resolution.expected_branch, "-m", &message],
+                    "merge source branch",
+                )
+                .with_context(|| {
+                    format!(
+                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
+                    )
+                })?;
+                let sha = git_stdout(
+                    &self.repo_root,
+                    &["rev-parse", "--short", "HEAD"],
+                    "read merge commit",
+                )?;
+                Ok(format!("merge commit {}", sha.trim()))
+            }
+            MergeStrategy::FastForwardOnly => {
+                git_checked(
+                    &self.repo_root,
+                    &["merge", "--ff-only", &self.resolution.expected_branch],
+                    "fast-forward source branch",
+                )
+                .with_context(|| {
+                    format!(
+                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
+                    )
+                })?;
+                let sha = git_stdout(
+                    &self.repo_root,
+                    &["rev-parse", "--short", "HEAD"],
+                    "read fast-forward head",
+                )?;
+                Ok(format!("fast-forward to {}", sha.trim()))
+            }
+        }
+    }
+
+    fn rollback_after_integration_failure(&self, state_dir: &Path, db_path: &Path) -> Result<()> {
+        if git_checked(&self.repo_root, &["merge", "--abort"], "abort failed merge").is_err() {
+            git_checked(
+                &self.repo_root,
+                &["reset", "--hard", "HEAD"],
+                "reset failed merge state",
+            )?;
+        }
+        git_checked(
+            &self.repo_root,
+            &["switch", &self.resolution.expected_branch],
+            "return to source branch for rollback",
+        )?;
+        self.rollback_tracker_state(state_dir, db_path)
+    }
+
+    fn rollback_tracker_state(&self, state_dir: &Path, db_path: &Path) -> Result<()> {
+        git_checked(
+            &self.repo_root,
+            &["reset", "--hard", &self.source_pre_head],
+            "move source branch back to pre-close HEAD",
+        )?;
+        if !self.tracker_patch_before_close.is_empty() {
+            let mut child = Command::new("git")
+                .current_dir(&self.repo_root)
+                .args(["apply", "--binary", "--whitespace=nowarn"])
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .context("failed to run git apply while restoring pre-close tracker changes")?;
+            {
+                let stdin = child
+                    .stdin
+                    .as_mut()
+                    .context("failed to open git apply stdin")?;
+                use std::io::Write;
+                stdin.write_all(&self.tracker_patch_before_close)?;
+            }
+            let status = child.wait().context("failed to wait for git apply")?;
+            if !status.success() {
+                bail!("failed to restore pre-close tracker changes after rollback");
+            }
+        }
+        atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
+        Ok(())
+    }
+}
+
+fn branch_owner_label(owner_kind: &atelier_app::workflow_policy::BranchOwnerKind) -> &'static str {
+    match owner_kind {
+        atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
+        atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
+    }
+}
+
+fn is_git_repo(root: &Path) -> Result<bool> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .context("failed to inspect git repository")?;
+    Ok(output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true")
+}
+
+fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution) -> Result<()> {
+    if git_current_branch(root)? == resolution.expected_branch {
+        return Ok(());
+    }
+    if ensure_branch_exists(root, &resolution.expected_branch).is_ok() {
+        return Ok(());
+    }
+    git_checked(
+        root,
+        &["switch", "-c", &resolution.expected_branch],
+        "create source branch before close",
+    )
+    .with_context(|| {
+        format!(
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue close {} --reason \"...\"`.",
+            resolution.expected_branch, resolution.issue_id, resolution.issue_id
+        )
+    })
+}
+
+fn ensure_branch_exists(root: &Path, branch: &str) -> Result<()> {
+    git_checked(
+        root,
+        &["rev-parse", "--verify", "--quiet", branch],
+        "inspect branch",
+    )
+    .map(|_| ())
+}
+
+fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
+    let status = git_stdout(
+        root,
+        &["status", "--porcelain"],
+        "inspect worktree dirtiness",
+    )?;
+    let dirty = status
+        .lines()
+        .filter_map(git_status_path)
+        .filter(|path| !path.starts_with(".atelier/"))
+        .collect::<Vec<_>>();
+    if !dirty.is_empty() {
+        bail!(
+            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
+            dirty.join("\n")
+        );
+    }
+    Ok(())
+}
+
+fn git_status_path(line: &str) -> Option<String> {
+    let path = line.get(3..)?.trim();
+    let path = path.split(" -> ").last().unwrap_or(path);
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+fn git_current_branch(root: &Path) -> Result<String> {
+    git_stdout(root, &["branch", "--show-current"], "read current branch")
+        .map(|value| value.trim().to_string())
+}
+
+fn git_checked(root: &Path, args: &[&str], action: &str) -> Result<()> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .with_context(|| format!("failed to run git for {action}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    bail!(
+        "git {action} failed: {}{}{}",
+        stderr.trim(),
+        if stderr.trim().is_empty() || stdout.trim().is_empty() {
+            ""
+        } else {
+            "\n"
+        },
+        stdout.trim()
+    )
+}
+
+fn git_stdout(root: &Path, args: &[&str], action: &str) -> Result<String> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .with_context(|| format!("failed to run git for {action}"))?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+    }
+    bail!(
+        "git {action} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    )
+}
+
+fn git_binary_stdout(root: &Path, args: &[&str], action: &str) -> Result<Vec<u8>> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .with_context(|| format!("failed to run git for {action}"))?;
+    if output.status.success() {
+        return Ok(output.stdout);
+    }
+    bail!(
+        "git {action} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    )
 }
 
 pub fn print_issue_transition_options(issue: &Issue, options: &[IssueTransitionOption]) {
@@ -1315,6 +1733,10 @@ fn classify_git_dirty_entries(
         if atelier_app::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
+        if is_tracker_generated_evidence_path(relative) {
+            tracker_generated_entries.push(entry.raw.clone());
+            continue;
+        }
         if is_tracker_generated_activity_path(relative) {
             tracker_generated_entries.push(entry.raw.clone());
             continue;
@@ -1340,6 +1762,20 @@ fn atelier_relative_path(repo_path: &str) -> Option<&Path> {
     repo_path
         .strip_prefix(".atelier/")
         .map(|relative| Path::new(relative))
+}
+
+fn is_tracker_generated_evidence_path(relative: &Path) -> bool {
+    let mut components = relative.components();
+    let Some(std::path::Component::Normal(root)) = components.next() else {
+        return false;
+    };
+    if root != "evidence" {
+        return false;
+    }
+    let Some(std::path::Component::Normal(file)) = components.next() else {
+        return false;
+    };
+    components.next().is_none() && file.to_string_lossy().ends_with(".md")
 }
 
 fn is_tracker_generated_activity_path(relative: &Path) -> bool {
