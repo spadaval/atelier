@@ -100,9 +100,10 @@ The exact layout can change, but the principles should not:
 
 - Canonical Markdown records must be deterministic.
 - Canonical Markdown records must be sufficient to rebuild SQLite projections.
-- `export --check` must detect stale canonical records and derived projections
-  during the compatibility window, and the target lint/rebuild checks must
-  validate canonical `.atelier/` Markdown directly.
+- During the compatibility window, hidden/admin deterministic-renderer checks
+  may detect stale generated output, but target-state `lint` and `doctor`
+  checks validate canonical `.atelier/` Markdown and local projection health
+  directly.
 - Mutating commands should write canonical Markdown records first, then refresh
   or mark stale the SQLite projection.
 - Git merges should happen through Markdown record files, not by merging SQLite
@@ -470,8 +471,8 @@ Normal tracked work uses explicit work association rather than inherited
 Chainlink lock sync. The default workflow is one mission worktree when the work
 belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
 preparation through `atelier start`, lifecycle-owned close integration through
-`atelier issue close` or `atelier mission close`, and canonical export
-freshness checks. Explicit branch commands such as `atelier branch for-epic`
+`atelier issue close` or `atelier mission close`, and `lint`/`doctor` health
+checks. Explicit branch commands such as `atelier branch for-epic`
 are internal, diagnostic, or advanced repair surfaces; they are not the normal
 mutating-subagent default.
 
@@ -540,7 +541,6 @@ atelier plan create
 atelier evidence record --target issue/atelier-z1p8 --kind validation --result pass "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>
 atelier lint
-atelier export --check
 atelier doctor
 ```
 

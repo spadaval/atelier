@@ -7,11 +7,12 @@ ignored local state.
 
 ## Goals
 
-- The export is deterministic for the same logical state.
-- The export is sufficient to rebuild SQLite for all canonical records.
+- Canonical rendering is deterministic for the same logical state.
+- Canonical records are sufficient to rebuild SQLite for all canonical records.
 - Every record carries schema and version metadata.
-- `export --check`, `lint`, and `rebuild` validate `.atelier/` Markdown
-  directly.
+- `lint` validates `.atelier/` Markdown directly, `doctor` reports local
+  projection/runtime health, and hidden/admin deterministic-renderer or rebuild
+  diagnostics may verify migration internals.
 - Git merges happen through tracked `.atelier/` record files, not through
   SQLite.
 
@@ -154,7 +155,8 @@ Direct edits are a supported operator and agent workflow:
 2. Run `atelier lint` to validate schema, path, front matter, relationships,
    activity sidecars, and unsupported files.
 3. Run the normal command that depends on the changed record, or run
-   `atelier rebuild` when the local projection needs explicit refresh.
+   `atelier doctor --fix` when local projection/runtime repair is explicitly
+   needed.
 
 Every canonical Markdown file must use YAML front matter bounded by `---`, UTF-8
 encoding, LF line endings, and exactly one trailing newline. Front matter keys
@@ -623,13 +625,15 @@ defines its durable layout.
 
 ## Mutating Command Rollout
 
-`atelier export` remains the deterministic repair/check surface for canonical
-records, and normal durable writes target `.atelier/` directly.
+Hidden/admin `atelier export` remains the deterministic check surface for
+canonical records during migration, and normal durable writes target
+`.atelier/` directly.
 
-`atelier rebuild` recreates `.atelier/runtime/state.db` from tracked
-`.atelier/` canonical records and may create ignored runtime/cache directories
-in a fresh checkout. Backup export formats are no longer command surfaces;
-predecessor imports use `atelier import-beads`.
+Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
+tracked `.atelier/` canonical records and may create ignored runtime/cache
+directories in a fresh checkout. Normal operators use `doctor --fix` for
+explicit ignored-state repair. Backup export formats are no longer command
+surfaces; predecessor imports use `atelier import-beads`.
 
 Rebuild and automatic refresh use an advisory lock in `.atelier/runtime/` and
 write to a unique temporary database before atomically replacing `state.db`.
@@ -651,9 +655,10 @@ implementation. The target architecture is Markdown-first: mutating commands
 write canonical records through RecordStore and then refresh or mark stale the
 ProjectionIndex. During migration, commands that still create, update, close,
 reopen, delete, label, relate, block, comment on, or otherwise change canonical
-records through SQLite must be followed by `atelier export` before committing
-state. Automation work must preserve `export --check` semantics instead of
-duplicating serialization in individual command handlers.
+records through SQLite may require hidden/admin deterministic rendering before
+committing state. Automation work must preserve deterministic-check semantics
+for retained migration diagnostics instead of duplicating serialization in
+individual command handlers.
 
 ## Deferred Or Future Paths
 

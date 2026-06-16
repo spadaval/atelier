@@ -42,9 +42,10 @@ model:
   repository record store that can rebuild local SQLite projections.
 - SQLite remains the fast local ProjectionIndex and RuntimeState store for
   queries, locks, sessions, workflow checks, and Mission Control inputs.
-- Mutating commands are migrating toward Markdown-first writes, and
-  `export --check` detects stale canonical records and derived projections.
-- `rebuild` recreates local SQLite projection state from committed Markdown
+- Mutating commands are migrating toward Markdown-first writes, and normal
+  health is reported through `lint` and `doctor`.
+- Hidden/admin projection diagnostics may verify deterministic rendered output,
+  and `doctor --fix` owns explicit ignored-state repair from committed Markdown
   records after checkout, pull, merge, or clone.
 - Missions, milestone checkpoint records, issues, plans, evidence, workflow
   validators, runs, typed links, and workflows become first-class Atelier

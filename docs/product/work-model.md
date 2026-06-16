@@ -415,7 +415,7 @@ policy owns branch preparation. Workflow-defined hooks are deferred in v1 and
 are not part of the current worktree contract.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated mission/epic/issue work,
-and canonical export freshness when available. `atelier worktree merge <id>`,
+and operator-facing health when available. `atelier worktree merge <id>`,
 `atelier branch merge <id>`, and `atelier worktree remove <id>` are thin Git
 wrappers for merging an associated branch and cleaning up the associated mission
 worktree after branch review and cleanup are complete.

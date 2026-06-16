@@ -35,7 +35,8 @@ Root `atelier start`, `atelier issue close`, root `atelier status`, and
 - keep Git as the source of truth for branches, commits, and worktrees;
 - reject dirty source worktrees where the workflow action depends on a clean
   repository;
-- check canonical export freshness before closeout;
+- check canonical tracker health and local projection health through
+  `lint`/`doctor` before closeout;
 - never launch or supervise coding agents.
 
 Explicit branch helpers are advanced diagnostics and repair surfaces. They do

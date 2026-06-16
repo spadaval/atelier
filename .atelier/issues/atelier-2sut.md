@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Define normal, admin, and debug command boundaries"
-updated_at: "2026-06-16T16:18:15.539492142+00:00"
+updated_at: "2026-06-16T17:27:54.040288681+00:00"
 ---
 
 ## Description

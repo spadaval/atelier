@@ -22,7 +22,7 @@
 - [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
   accepted choice that Markdown records are canonical, SQLite is a
   rebuildable projection index plus local runtime state, and export is a
-  compatibility/repair path during migration.
+  hidden/admin compatibility and determinism-check path during migration.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required
