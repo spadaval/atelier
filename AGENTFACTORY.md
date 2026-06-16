@@ -45,9 +45,10 @@ repository's tactical operator guidance.
   workflow contract here.
 - Normal worker onboarding and recovery start with `atelier man <role>`,
   `atelier status`, `atelier issue show <id>`, and
-  `atelier mission status <mission-id>`. Move work through issue transitions,
-  durable notes, evidence records, and explicit issue or mission closeout
-  surfaces rather than through hidden runtime state.
+  `atelier mission status <mission-id>`. Routine issue work starts with
+  `atelier start <id>`, which owns branch preparation. Move work through issue
+  transitions, durable notes, evidence records, and explicit issue or mission
+  closeout surfaces rather than through hidden runtime state.
 - Missions are durable active-focus records. Link executable issues to missions
   and use `atelier status` or `atelier mission status <mission-id>` to select
   worker issues from the active mission or epic graph.
@@ -76,12 +77,13 @@ repository's tactical operator guidance.
   workspace, an epic branch checkout, the root checkout, or an explicitly
   isolated issue worktree, and which checkout now owns follow-up validation or
   cleanup.
-- Mutating subagents should use the mission workspace and parent epic branch by
-  default. Use an isolated issue worktree only when the assignment explicitly
-  justifies extra isolation for contention, dirty state, high-risk work, or
-  cross-epic separation. Worktree setup, interruption recovery, and stale
-  association handling belong to Atelier-owned worktree status/help and product
-  docs; do not edit runtime state by hand.
+- Mutating subagents should use the mission workspace by default and let
+  `atelier start <id>` prepare the correct owner branch. Use an isolated issue
+  worktree only when the assignment explicitly justifies extra isolation for
+  contention, dirty state, high-risk work, or cross-epic separation. Worktree
+  setup, branch repair, interruption recovery, and stale association handling
+  belong to Atelier-owned status/help and product docs; do not edit runtime
+  state by hand.
 - Hidden workflow diagnostics are not normal planning, implementation, or
   closeout commands. Use them only when a binding, assignment, workflow policy,
   or closeout contract explicitly names the diagnostic command; they do not

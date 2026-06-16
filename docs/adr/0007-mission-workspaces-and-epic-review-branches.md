@@ -41,12 +41,26 @@ Atelier uses this hierarchy as the target operating model:
    local proof named by their `Evidence` section. They do not require an
    independent review by default.
 
-4. Per-issue worktrees and per-issue branches are exceptional isolation.
+4. Branch lifecycle is owned by start and close commands.
+   Routine workers use `atelier start <id>` to prepare the correct owner
+   branch. The owner branch is the nearest parent epic branch for child issues,
+   an issue branch for standalone issues, and an epic branch for epics.
+   `atelier issue close <id>` commits the close-state tracker change on that
+   owner branch. Child issue close stops at the epic branch; standalone issue
+   and epic close merge their owner branch to the configured base branch.
+
+5. Squash merge is the default integration strategy.
+   Repositories may configure merge commit or fast-forward-only alternatives,
+   base branch selection, and branch naming templates. Close must be
+   failure-atomic: a failed tracker commit, merge, or required push must not
+   leave the item closed in the integration branch.
+
+6. Per-issue worktrees and per-issue branches are exceptional isolation.
    Use them only when the assignment or risk justifies containment: dirty
    experiments, destructive migration trials, cross-epic conflicts, high-risk
    validation, or explicitly isolated review work.
 
-5. Independent validation remains risk-based.
+7. Independent validation remains risk-based.
    Review and validation move to the epic by default, but issue-level
    independent validation is still required for process-policy changes, public
    command/API contracts, migrations, persistence/workflow changes,
@@ -86,6 +100,9 @@ where work should happen and where proof should be reviewed.
 - Product docs, validation guidance, command help, and Agent Factory bindings
   must stop teaching per-issue worktrees as the normal mutating-subagent
   default.
+- Product docs, command help, and Agent Factory bindings must teach
+  lifecycle-owned branch preparation through `atelier start <id>` rather than
+  routine pre-work calls to explicit branch helpers.
 - Workflow policy should allow ordinary implementation issues to close with
   local proof and move review gates to epics, validation issues, closeout
   issues, or explicitly risk-escalated issue types.
@@ -94,6 +111,9 @@ where work should happen and where proof should be reviewed.
 - Epic closeout becomes the normal review artifact for grouped implementation
   work. It must map child issue proof to epic outcomes and record residual
   risks.
+- Explicit branch commands such as `atelier branch for-epic` remain internal,
+  diagnostic, or advanced repair surfaces for inspecting or recovering owner
+  branch state.
 - Per-issue isolation remains available but must be explicit, justified, and
   visible in handoff notes or assignment context.
 

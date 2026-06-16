@@ -398,45 +398,82 @@ Desired commands:
 ```text
 atelier agent init <name>
 atelier start atelier-z1p8
-atelier worktree for-mission atelier-k7mq
-atelier branch for-epic atelier-4p7q
 atelier issue close atelier-z1p8 --reason "done"
-atelier worktree merge atelier-k7mq
 ```
 
-The default branch model should be opinionated but configurable:
+`atelier start <id>` owns routine branch preparation. It derives the owner
+branch from the work graph, creates or checks out that branch when needed,
+refreshes local runtime/projection state, and then transitions the issue into
+the checkout's current-work set. Routine workers should not run explicit branch
+setup before issue work.
+
+The default branch model should be opinionated but configurable. Branch owner
+derivation is:
+
+- Child issue: the nearest parent epic's branch.
+- Standalone issue: an issue branch.
+- Epic: an epic branch.
+
+Mission worktrees remain the default shared workspace boundary when a mission
+exists, but the branch owner is still derived from the issue or epic being
+started. Branch names come from configurable templates, with defaults shaped
+like:
 
 ```text
 main
-  integration branch
+  default integration branch unless configured otherwise
 
 mission/atelier-k7mq-short-slug
-  normal shared mission worktree
+  normal shared mission worktree path/branch context when mission workspaces are enabled
 
 epic/atelier-4p7q-short-slug
-  normal reviewable epic branch
+  normal reviewable owner branch for epics and their child issues
 
 issue/atelier-z1p8-short-slug
-  exceptional isolation branch only when a slice needs separate containment
+  owner branch for standalone issues or exceptional issue isolation
 ```
+
+Close-time integration is part of the workflow contract:
+
+- Closing a child issue commits its tracker-state change on the parent epic
+  branch and does not merge that branch to base.
+- Closing a standalone issue commits its tracker-state change on the issue
+  branch and merges that owner branch to the configured base branch.
+- Closing an epic commits its tracker-state change on the epic branch and
+  merges that owner branch to the configured base branch.
+- The default merge strategy is squash merge. Configurable alternatives may
+  include merge commit and fast-forward-only where repository policy allows.
+- Base branch selection is configurable by repository, mission, or epic policy,
+  defaulting to the repository's integration branch when no narrower policy is
+  set.
+
+Close must be atomic with respect to durable workflow state: if the tracker
+commit, integration merge, or required push fails, the item must not be left
+closed in the integration branch. The command should report the failed step and
+leave the operator on a repair path that can retry or inspect state without
+claiming a completed close.
 
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
-- Refuse claim when the worktree is dirty unless overridden.
-- Record mission worktree, epic branch, and active issue association.
-- Refuse `done` when durable records or derived projections are stale.
+- Refuse start or close when the worktree is dirty unless policy allows the
+  specific operation.
+- Record mission workspace, owner branch, base branch, merge strategy, and
+  current issue association.
+- Refuse close when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
 Normal tracked work uses explicit work association rather than inherited
-Chainlink lock sync. The default workflow is one mission worktree, one
-reviewable branch per epic, local Atelier runtime association for the active
-issue slice, and canonical export freshness checks. Per-issue worktrees or
-branches are exceptional isolation tools for risky, dirty, conflicting, or
-cross-epic work, not the normal mutating-subagent default.
+Chainlink lock sync. The default workflow is one mission worktree when the work
+belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
+preparation through `atelier start`, lifecycle-owned close integration through
+`atelier issue close` or `atelier mission close`, and canonical export
+freshness checks. Explicit branch commands such as `atelier branch for-epic`
+are internal, diagnostic, or advanced repair surfaces; they are not the normal
+mutating-subagent default.
 
 ## Validation And Workflow Validators
 

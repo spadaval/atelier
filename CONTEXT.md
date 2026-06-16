@@ -134,6 +134,15 @@
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are
   exceptional isolation tools, not the default assignment model.
+- Branch lifecycle is workflow-owned rather than a separate routine setup step.
+  `atelier start <id>` prepares the owner branch from the work graph: child
+  issues use the nearest parent epic branch, standalone issues use an issue
+  branch, and epics use an epic branch. `atelier issue close <id>` commits the
+  close state on the owner branch; child issues stop there, while standalone
+  issues and epics merge that owner branch to the configured base branch.
+  Squash merge is the default integration strategy, with repository policy able
+  to select alternatives and branch naming templates. A failed close-time
+  commit or merge must not leave the item closed in the integration branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic
   modules under `crates/atelier-cli/src/` are migration input for lower crates,

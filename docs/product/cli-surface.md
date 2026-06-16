@@ -34,7 +34,6 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier issue note <id> "..."`
 - `atelier start`
 - `atelier worktree for-mission/for/status/merge/repair/remove`
-- `atelier branch for-epic/status/merge`
 - `atelier maintenance ...`
 - `atelier lint`
 - `atelier doctor`
@@ -85,7 +84,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `man` | Show role-specific operating guidance for worker, reviewer, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, `doctor`, role-specific commands. |
 | `status` | Root orientation for the current checkout. | Current-work set, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
-| `start` | Move one issue into the checkout's current-work set by transitioning it to `in_progress` in canonical Markdown. | Confirmation, resulting workflow status, checkout/branch context, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
+| `start` | Prepare the work graph's owner branch and move one issue into the checkout's current-work set by transitioning it to `in_progress` in canonical Markdown. | Confirmation, resulting workflow status, owner branch, base branch when relevant, checkout context, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
 | `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
@@ -94,12 +93,12 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
-| `branch` | Create, inspect, and merge reviewable epic branches within a mission worktree. | `for-epic`, `status`, and `merge` name the epic, branch, mission workspace, and review/merge state. | Epic IDs, branch names, paths, and branch-state tokens. | `branch status`, `issue show <epic-id>`, `mission status`. |
 
 ### Specialized But Visible Surfaces
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
+| `branch` | Inspect, repair, or manually recover owner branches when lifecycle-owned start or close cannot complete automatically. | `status`, advanced repair, and manual branch-preparation forms name the owner record, branch, base branch, merge strategy, workspace, and recovery state. | Record IDs, branch names, paths, and branch-state tokens. | `status`, `worktree status`, `issue show <id>`, `mission status`. |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config, rerun `lint`, `doctor`. |
 | `doctor` | Validate runtime, install, and derived-state health; repair ignored local state when `--fix` is supplied. | Named health checks, degraded-state reason, and repair guidance. With `--fix`, reports each ignored runtime/cache/projection repair and refuses to edit tracked `.atelier/` canonical records. | Pass/fail token and degraded check names only. | `lint`, edit named canonical records, `status`. |
@@ -118,11 +117,12 @@ time pressure:
 - Orient: answer what is active, ready, blocked, stale, or unsafe to change.
   Owned by `atelier status`, `atelier issue show/list`, `atelier mission show`,
   `atelier mission status`, `atelier history`, and `atelier search`.
-- Select and run work: choose a clear slice, prepare the mission worktree and
-  epic branch, start the issue slice, leave notes, and advance or close it
-  with proof. Owned by `atelier issue ...`, `atelier worktree ...`,
-  `atelier branch ...`, root `atelier start`, record-specific note commands,
-  and `atelier evidence ...`.
+- Select and run work: choose a clear slice, start the issue slice so lifecycle
+  policy prepares the owner branch, leave notes, and advance or close it with
+  proof. Owned by root `atelier start`, `atelier issue ...`, `atelier worktree
+  ...`, record-specific note commands, and `atelier evidence ...`. Explicit
+  `atelier branch ...` commands are advanced diagnostics or repair surfaces,
+  not the routine worker path.
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, closeout readiness, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
@@ -299,10 +299,25 @@ unbounded logs.
 Root `atelier start <issue-id>` and `atelier issue close <issue-id> --reason
 "..."` are the normal work lifecycle commands. `start` should move the issue
 into `in_progress` in the current checkout's canonical Markdown tracker copy
-after confirming the relevant worktree, branch, and health context; it must not
-create a second durable active-work pointer in runtime state. Current-work
-orientation is then derived from the set of canonical `in_progress` issues in
-that checkout.
+after preparing the owner branch derived from the work graph and confirming the
+relevant worktree and health context; it must not create a second durable
+active-work pointer in runtime state. Current-work orientation is then derived
+from the set of canonical `in_progress` issues in that checkout.
+
+Owner branch derivation is part of the public workflow contract: child issues
+use the nearest parent epic branch, standalone issues use an issue branch, and
+epics use an epic branch. Branch naming templates, base branch selection, and
+merge strategy are configurable repository policy. The default merge strategy
+is squash merge; merge commit and fast-forward-only may be configured when a
+repository allows them.
+
+Close behavior must match the owner boundary. Child issue close commits the
+tracker close state on the parent epic branch and leaves that branch open for
+epic review. Standalone issue close and epic close commit the tracker close
+state on their owner branch and merge that branch to the configured base.
+Close is failure-atomic: when the tracker commit, merge, push, or required
+integration step fails, the item must not be left closed in the integration
+branch, and output must name the failed step plus the repair or retry surface.
 
 There is no target-state rule that one checkout may hold only one current issue.
 Repeated starts of the same issue are harmless, and starting a second issue in
@@ -327,9 +342,10 @@ the removed work-status helper or any legacy work-start path for
 normal workflow.
 Worktree helpers expose scan-friendly status, create/remove associated mission
 Git worktrees, and prepare local runtime state in new worktrees. Branch helpers
-create and inspect epic branches inside those mission worktrees. Per-issue
-worktree helpers may remain as an exceptional isolation mode, but public help
-must not teach them as the default path for every mutating subagent.
+inspect or repair owner branch state when lifecycle-owned start or close cannot
+complete automatically. Per-issue worktree helpers may remain as an exceptional
+isolation mode, but public help must not teach them as the default path for
+every mutating subagent.
 Workflow-defined hooks are deferred in v1 and are not part of the normal
 worktree helper contract.
 Mission closeout is ready only when all linked work is closed, mission blockers

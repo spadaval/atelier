@@ -357,9 +357,35 @@ An agent tasked with a mission should be able to:
 current work is the set of canonical issue records in that checkout's tracked
 `.atelier/` tree whose workflow status is `in_progress`. Root `atelier start
 <issue-id>` is the convenience entrypoint for moving an issue into that set
-after the mission worktree and epic branch context are ready. Root `atelier
+after preparing the branch owner required by the work graph. Root `atelier
 issue close <issue-id> --reason "..."` is the normal completion path for
-tracked work.
+tracked work and owns the close-time tracker commit and integration behavior.
+
+Branch owner derivation is deterministic:
+
+- Child issue: use the nearest parent epic's branch.
+- Standalone issue: use an issue branch.
+- Epic: use an epic branch.
+
+Branch naming templates, base branch selection, and merge strategy are
+configuration policy. The default merge strategy is squash merge; configured
+alternatives may include merge commit or fast-forward-only when a repository
+chooses them. Base branch selection defaults to the repository integration
+branch unless mission or epic policy selects a narrower base.
+
+Close behavior follows the owner boundary:
+
+- Closing a child issue commits the tracker-state close on the parent epic
+  branch and leaves the epic branch open for grouped review.
+- Closing a standalone issue commits the tracker-state close on the issue
+  branch and merges that owner branch to the configured base.
+- Closing an epic commits the tracker-state close on the epic branch and merges
+  that owner branch to the configured base.
+
+Close must be failure-atomic for durable workflow state. If the tracker commit,
+merge, push, or configured integration step fails, the item must not appear
+closed on the integration branch. The command should leave enough state for a
+repair or retry command to explain which step failed.
 
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
@@ -382,10 +408,11 @@ isolated slices.
 `atelier worktree for-mission <mission-id>` creates or locates a mission
 worktree using the configured path policy, rebuilds local SQLite state from
 tracked `.atelier/` records, and reports the mission workspace association.
-`atelier branch for-epic <epic-id>` creates or locates the reviewable epic
-branch inside the current checkout and records the branch boundary in Git.
-Workflow-defined hooks are deferred in v1 and are not part of the current
-worktree contract.
+Explicit branch helpers such as `atelier branch for-epic <epic-id>` create or
+locate reviewable branches for diagnostics, advanced repair, or manual
+recovery. Routine worker starts should use `atelier start <id>` so lifecycle
+policy owns branch preparation. Workflow-defined hooks are deferred in v1 and
+are not part of the current worktree contract.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated mission/epic/issue work,
 and canonical export freshness when available. `atelier worktree merge <id>`,
