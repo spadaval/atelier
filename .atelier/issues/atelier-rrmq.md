@@ -34,9 +34,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Remove closeout as a separate product concept"
-updated_at: "2026-06-16T20:52:02.430336993+00:00"
+updated_at: "2026-06-16T20:52:20.827842987+00:00"
 ---
 
 ## Description
