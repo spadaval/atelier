@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-16T20:16:58.665812744+00:00"
+status: "done"
 title: "Remove closeout issue type and migrate tracker records"
-updated_at: "2026-06-16T20:07:57.377605219+00:00"
+updated_at: "2026-06-16T20:16:58.665812744+00:00"
 ---
 
 ## Description
