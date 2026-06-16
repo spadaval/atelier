@@ -1259,49 +1259,61 @@ fn test_mission_status_cli_reports_control_state() {
 
     let (success, ready_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "subissue",
-            epic_id,
-            "Ready status work",
-            "--description",
-            "## Description\n\nReady status body.\n\n## Outcome\n\nMission status reports ready linked work.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this work as ready.",
-        ],
+        &["issue", "subissue", epic_id, "Ready status work"],
     );
     assert!(success, "ready work create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
     let ready_id = issue_id_by_title(dir.path(), "Ready status work");
     let ready_id = ready_id.as_str();
+    edit_canonical_record(dir.path(), "issues", ready_id, |text| {
+        text.replace("No description provided.", "Ready status body.")
+            .replace(
+                "Outcome was not specified.",
+                "Mission status reports ready linked work.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Manual check: `atelier mission status <mission-id>` lists this work as ready.",
+            )
+    });
 
     let (success, blocked_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "subissue",
-            epic_id,
-            "Blocked status work",
-            "--description",
-            "## Description\n\nBlocked status body.\n\n## Outcome\n\nMission status reports blocked linked work.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this work as blocked.",
-        ],
+        &["issue", "subissue", epic_id, "Blocked status work"],
     );
     assert!(success, "blocked work create failed: {stderr}");
     assert!(blocked_out.contains(epic_id));
     let blocked_id = issue_id_by_title(dir.path(), "Blocked status work");
     let blocked_id = blocked_id.as_str();
-    let (success, blocker_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Status blocker",
-            "--description",
-            "## Description\n\nStatus blocker body.\n\n## Outcome\n\nMission status reports this issue as an open blocker.\n\n## Evidence\n\n- `atelier mission status <mission-id>` lists this blocker.",
-        ],
-    );
+    edit_canonical_record(dir.path(), "issues", blocked_id, |text| {
+        text.replace("No description provided.", "Blocked status body.")
+            .replace(
+                "Outcome was not specified.",
+                "Mission status reports blocked linked work.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Manual check: `atelier mission status <mission-id>` lists this work as blocked.",
+            )
+    });
+
+    let (success, blocker_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Status blocker"]);
     assert!(success, "blocker create failed: {stderr}");
     assert!(blocker_out.contains("Created issue atelier-"));
     let blocker_id = issue_id_by_title(dir.path(), "Status blocker");
     let blocker_id = blocker_id.as_str();
+    edit_canonical_record(dir.path(), "issues", blocker_id, |text| {
+        text.replace("No description provided.", "Status blocker body.")
+            .replace(
+                "Outcome was not specified.",
+                "Mission status reports this issue as an open blocker.",
+            )
+            .replace(
+                "Evidence was not specified.",
+                "- Manual check: `atelier mission status <mission-id>` lists this blocker.",
+            )
+    });
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
     assert!(success, "block issue failed: {stderr}");
 
@@ -1360,9 +1372,8 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
     assert!(!status_out.contains("selectable issue(s)): atelier start"));
     assert!(status_out.contains("Record validation proof ("));
-    assert!(status_out.contains(
-        "atelier evidence record --target issue/<id> --kind validation --result pass \"...\""
-    ));
+    assert!(status_out
+        .contains("atelier evidence record --target issue/<id> --kind validation \"...\""));
     assert!(
         !status_out.contains("workflow validate"),
         "normal mission next commands must not route to raw workflow validators:\n{status_out}"
@@ -1409,13 +1420,11 @@ fn test_mission_status_cli_reports_control_state() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "closeout evidence",
         ],
     );
     assert!(success, "closeout evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - closeout evidence"));
+    assert!(evidence_out.contains("[evidence] recorded - closeout evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "closeout evidence");
     let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(

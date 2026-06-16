@@ -453,7 +453,7 @@ fn attach_evidence(
     dir: &Path,
     target_kind: &str,
     target_id: &str,
-    result: &str,
+    _result: &str,
     summary: &str,
 ) -> String {
     if target_kind == "issue" {
@@ -466,8 +466,6 @@ fn attach_evidence(
             "record",
             "--kind",
             "validation",
-            "--result",
-            result,
             "--target",
             &format!("{target_kind}/{target_id}"),
             summary,
@@ -475,7 +473,7 @@ fn attach_evidence(
     );
     assert!(success, "evidence record failed: {stderr}");
     assert!(
-        evidence_out.contains(&format!("[evidence] {result}")),
+        evidence_out.contains("[evidence] recorded"),
         "{evidence_out}"
     );
     record_id_by_title(dir, "evidence", summary)

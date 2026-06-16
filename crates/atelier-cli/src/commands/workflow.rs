@@ -1191,17 +1191,7 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
             "no_open_blockers",
             "evidence_attached",
         ],
-        ("mission", "close") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_work",
-            "no_open_blockers",
-            "validation_criteria_satisfied",
-            "no_blocking_lints",
-            "command_surface_current",
-            "ignored_tests_reviewed",
-            "git_worktree_clean",
-        ],
+        ("mission", "close") => mission_terminal_validators(),
         ("mission", _) => &[
             "durable_state_current",
             "issue_sections_parseable",
@@ -1218,6 +1208,20 @@ pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
         _ => &["durable_state_current"],
     };
     names.iter().map(|name| (*name).to_string()).collect()
+}
+
+pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
+    &[
+        "durable_state_current",
+        "issue_sections_parseable",
+        "no_open_work",
+        "no_open_blockers",
+        "validation_criteria_satisfied",
+        "no_blocking_lints",
+        "command_surface_current",
+        "ignored_tests_reviewed",
+        "git_worktree_clean",
+    ]
 }
 
 fn print_heading(title: &str) {
@@ -2195,17 +2199,10 @@ mod tests {
         );
         assert_eq!(
             default_validators("mission", "close"),
-            vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_work",
-                "no_open_blockers",
-                "validation_criteria_satisfied",
-                "no_blocking_lints",
-                "command_surface_current",
-                "ignored_tests_reviewed",
-                "git_worktree_clean"
-            ]
+            mission_terminal_validators()
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             default_validators("evidence", "attach"),

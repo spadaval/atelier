@@ -12,6 +12,7 @@ use atelier_records::{RecordStore, MISSION_EMPTY_DATA_JSON};
 use atelier_sqlite::Database;
 
 const KIND: &str = "mission";
+const MISSION_TERMINAL_TRANSITION: &str = "close";
 pub fn create(
     state_dir: &Path,
     db_path: &Path,
@@ -193,8 +194,8 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
     let active_work = active_work_for_mission(db, &mission.id)?;
-    let closeout = mission_closeout_status(db, state_dir, &mission, &summary)?;
-    let validator_failures = closeout.validator_failure_count();
+    let terminal = mission_terminal_status(db, state_dir, &mission, &summary)?;
+    let validator_failures = terminal.validator_failure_count();
 
     if quiet {
         let work = summary.total_work();
@@ -212,7 +213,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
             tracker.status_token(),
             if mission_lifecycle_status(&mission) == "closed" {
                 "complete"
-            } else if closeout.ready() {
+            } else if terminal.ready() {
                 "yes"
             } else {
                 "no"
@@ -235,7 +236,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         "Closeout: {}",
         if mission_lifecycle_status(&mission) == "closed" {
             "complete"
-        } else if closeout.ready() {
+        } else if terminal.ready() {
             "ready"
         } else {
             "blocked"
@@ -318,17 +319,17 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     }
 
     print_mission_heading("Reliability");
-    print_reliability_summary(db, state_dir, &mission, &summary, &tracker, &closeout)?;
+    print_reliability_summary(db, state_dir, &mission, &summary, &tracker, &terminal)?;
 
     print_mission_heading("Closeout Gates");
     if mission_lifecycle_status(&mission) == "closed" {
         println!("Mission is closed.");
     } else {
-        closeout.print_human();
+        terminal.print_human();
     }
 
     let show_advanced_validator_detail = verbose
-        || closeout
+        || terminal
             .validator_results
             .iter()
             .any(|result| !result.passed && result.validator == "ignored_tests_reviewed");
@@ -341,7 +342,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 "{} advanced closeout validator failure detected.",
                 validator_failures
             );
-            for result in closeout
+            for result in terminal
                 .validator_results
                 .iter()
                 .filter(|result| !result.passed)
@@ -362,7 +363,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         }
     }
 
-    print_status_next_commands(&mission, &summary, &closeout);
+    print_status_next_commands(&mission, &summary, &terminal);
     Ok(())
 }
 
@@ -470,7 +471,7 @@ fn print_mission_branch_lifecycle(
 fn print_status_next_commands(
     mission: &DomainRecord,
     summary: &MissionListSummary,
-    closeout: &MissionCloseoutStatus,
+    terminal: &MissionTerminalStatus,
 ) {
     print_mission_heading("Next Commands");
     let lifecycle = mission_lifecycle_status(mission);
@@ -503,7 +504,7 @@ fn print_status_next_commands(
             );
         }
     }
-    if closeout.ready() {
+    if terminal.ready() {
         println!(
             "  Close mission (all closeout gates pass): atelier mission close {} --reason \"...\"",
             mission.id
@@ -776,7 +777,7 @@ pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result
         bail!("mission close requires --reason \"...\"");
     }
     let db = Database::open(db_path)?;
-    enforce_closeout(&db, state_dir, id)?;
+    enforce_mission_terminal_checks(&db, state_dir, id)?;
     drop(db);
 
     let store = RecordStore::new(state_dir);
@@ -861,7 +862,7 @@ pub fn audit(db: &Database, state_dir: &Path, id: &str, quiet: bool) -> Result<(
     }
 }
 
-struct MissionCloseoutStatus {
+struct MissionTerminalStatus {
     mission_id: String,
     has_work: bool,
     open_work: Vec<String>,
@@ -963,7 +964,7 @@ impl MissionContractAudit {
     }
 }
 
-impl MissionCloseoutStatus {
+impl MissionTerminalStatus {
     fn ready(&self) -> bool {
         self.has_work
             && self.open_work.is_empty()
@@ -1002,7 +1003,7 @@ impl MissionCloseoutStatus {
             .iter()
             .filter(|result| !result.passed)
         {
-            if let Some(message) = closeout_validator_blocking_message(result, &self.mission_id) {
+            if let Some(message) = terminal_validator_blocking_message(result, &self.mission_id) {
                 messages.push(message);
             }
         }
@@ -1013,7 +1014,7 @@ impl MissionCloseoutStatus {
         if self.ready() {
             println!("All required closeout gates pass.");
             for result in &self.validator_results {
-                if let Some(line) = closeout_validator_status_line(result, &self.mission_id) {
+                if let Some(line) = terminal_validator_status_line(result, &self.mission_id) {
                     if line.summary.contains(" - ") {
                         println!("{}", line.summary);
                     }
@@ -1037,7 +1038,7 @@ impl MissionCloseoutStatus {
             println!("  Next: close or unblock the blocker issues.");
         }
         for result in &self.validator_results {
-            if let Some(line) = closeout_validator_status_line(result, &self.mission_id) {
+            if let Some(line) = terminal_validator_status_line(result, &self.mission_id) {
                 println!("{}", line.summary);
                 if let Some(next) = line.next {
                     println!("  Next: {next}");
@@ -1060,7 +1061,7 @@ fn print_reliability_summary(
     mission: &DomainRecord,
     summary: &MissionListSummary,
     tracker: &TrackerHealth,
-    closeout: &MissionCloseoutStatus,
+    terminal: &MissionTerminalStatus,
 ) -> Result<()> {
     let section_gaps = mission_issue_section_gaps(db, state_dir, &mission.id)?;
     let issue_proof_gaps = mission_issue_proof_gaps(db, &mission.id)?;
@@ -1075,7 +1076,7 @@ fn print_reliability_summary(
         println!("  Next: atelier doctor");
     }
 
-    if let Some(result) = closeout_validator_result(closeout, "issue_sections_parseable") {
+    if let Some(result) = terminal_validator_result(terminal, "issue_sections_parseable") {
         if result.passed && section_gaps.malformed.is_empty() {
             println!("Malformed Work: none");
         } else {
@@ -1105,7 +1106,7 @@ fn print_reliability_summary(
     }
 
     print_reliability_validator_signal(
-        closeout,
+        terminal,
         "command_surface_current",
         "Docs/Help Drift",
         "clear",
@@ -1113,7 +1114,7 @@ fn print_reliability_summary(
         "update docs, help text, or command-surface tests",
     );
     print_reliability_validator_signal(
-        closeout,
+        terminal,
         "ignored_tests_reviewed",
         "Ignored Test Review",
         "current",
@@ -1121,13 +1122,13 @@ fn print_reliability_summary(
         "assign owners or remove stale ignored tests",
     );
 
-    if closeout.open_blockers.is_empty() {
+    if terminal.open_blockers.is_empty() {
         println!("Open Blockers: none");
     } else {
         println!(
             "Open Blockers: {} open - {}",
-            closeout.open_blockers.len(),
-            compact_strings(&closeout.open_blockers)
+            terminal.open_blockers.len(),
+            compact_strings(&terminal.open_blockers)
         );
         println!("  Next: close or unblock listed blockers");
     }
@@ -1170,14 +1171,14 @@ fn print_section_gap_signal(label: &str, ids: &[String]) {
 }
 
 fn print_reliability_validator_signal(
-    closeout: &MissionCloseoutStatus,
+    terminal: &MissionTerminalStatus,
     validator: &str,
     label: &str,
     pass_text: &str,
     fail_text: &str,
     next: &str,
 ) {
-    let Some(result) = closeout_validator_result(closeout, validator) else {
+    let Some(result) = terminal_validator_result(terminal, validator) else {
         return;
     };
     if result.passed {
@@ -1188,11 +1189,11 @@ fn print_reliability_validator_signal(
     }
 }
 
-fn closeout_validator_result<'a>(
-    closeout: &'a MissionCloseoutStatus,
+fn terminal_validator_result<'a>(
+    terminal: &'a MissionTerminalStatus,
     validator: &str,
 ) -> Option<&'a crate::commands::workflow::ValidatorResult> {
-    closeout
+    terminal
         .validator_results
         .iter()
         .find(|result| result.validator == validator)
@@ -1254,16 +1255,16 @@ fn mission_issue_proof_gaps(db: &Database, mission_id: &str) -> Result<Vec<Strin
     Ok(gaps)
 }
 
-struct CloseoutStatusLine {
+struct TerminalCheckStatusLine {
     summary: String,
     next: Option<String>,
 }
 
-fn closeout_validator_status_line(
+fn terminal_validator_status_line(
     result: &crate::commands::workflow::ValidatorResult,
     mission_id: &str,
-) -> Option<CloseoutStatusLine> {
-    let (label, pass_text, fail_text, next) = closeout_validator_user_text(&result.validator)?;
+) -> Option<TerminalCheckStatusLine> {
+    let (label, pass_text, fail_text, next) = terminal_validator_user_text(&result.validator)?;
     if result.passed {
         let summary = if result.validator == "git_worktree_clean"
             && result.reason != "git worktree is clean"
@@ -1272,24 +1273,24 @@ fn closeout_validator_status_line(
         } else {
             format!("{label}: {pass_text}")
         };
-        Some(CloseoutStatusLine {
+        Some(TerminalCheckStatusLine {
             summary,
             next: None,
         })
     } else {
         let next = next.replace("{mission}", mission_id);
-        Some(CloseoutStatusLine {
+        Some(TerminalCheckStatusLine {
             summary: format!("{label}: {fail_text} - {}", result.reason),
             next: Some(next),
         })
     }
 }
 
-fn closeout_validator_blocking_message(
+fn terminal_validator_blocking_message(
     result: &crate::commands::workflow::ValidatorResult,
     mission_id: &str,
 ) -> Option<String> {
-    let (label, _pass_text, fail_text, next) = closeout_validator_user_text(&result.validator)?;
+    let (label, _pass_text, fail_text, next) = terminal_validator_user_text(&result.validator)?;
     let next = next.replace("{mission}", mission_id);
     Some(format!(
         "{}: {} - {}; next: {}",
@@ -1300,7 +1301,7 @@ fn closeout_validator_blocking_message(
     ))
 }
 
-fn closeout_validator_user_text(
+fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
@@ -1603,45 +1604,54 @@ fn plural_suffix(count: usize) -> &'static str {
     }
 }
 
-fn enforce_closeout(db: &Database, state_dir: &Path, mission_id: &str) -> Result<()> {
+fn enforce_mission_terminal_checks(
+    db: &Database,
+    state_dir: &Path,
+    mission_id: &str,
+) -> Result<()> {
     let mission = db.require_record(KIND, mission_id)?;
     let summary = mission_list_summary(db, mission_id)?;
-    let closeout = mission_closeout_status(db, state_dir, &mission, &summary)?;
-    if closeout.ready() {
+    let terminal = mission_terminal_status(db, state_dir, &mission, &summary)?;
+    if terminal.ready() {
         return Ok(());
     }
     println!("Mission closeout blocked: {mission_id}");
     println!("Closeout blockers");
     println!("-----------------");
-    for message in closeout.blocking_messages() {
+    for message in terminal.blocking_messages() {
         println!("  - {message}");
     }
     bail!("mission closeout blocked; run `atelier mission status {mission_id}` for next commands")
 }
 
-fn mission_closeout_status(
+fn mission_terminal_status(
     db: &Database,
     _state_dir: &Path,
     mission: &DomainRecord,
     _summary: &MissionListSummary,
-) -> Result<MissionCloseoutStatus> {
+) -> Result<MissionTerminalStatus> {
     let has_work = !mission_issue_ids(db, &mission.id)?.is_empty();
     let open_work = open_mission_work(db, &mission.id)?;
     let open_blockers = open_mission_blockers(db, &mission.id)?;
-    let validator_results =
-        match crate::commands::workflow::evaluate(db, KIND, &mission.id, "close", Vec::new()) {
-            Ok(results) => results,
-            Err(error) => vec![crate::commands::workflow::ValidatorResult {
-                target_kind: KIND.to_string(),
-                target_id: mission.id.clone(),
-                transition: "close".to_string(),
-                validator: "workflow_policy".to_string(),
-                passed: false,
-                reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
-                elapsed_ms: 0,
-            }],
-        };
-    Ok(MissionCloseoutStatus {
+    let validator_results = match crate::commands::workflow::evaluate(
+        db,
+        KIND,
+        &mission.id,
+        MISSION_TERMINAL_TRANSITION,
+        Vec::new(),
+    ) {
+        Ok(results) => results,
+        Err(error) => vec![crate::commands::workflow::ValidatorResult {
+            target_kind: KIND.to_string(),
+            target_id: mission.id.clone(),
+            transition: MISSION_TERMINAL_TRANSITION.to_string(),
+            validator: "workflow_policy".to_string(),
+            passed: false,
+            reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
+            elapsed_ms: 0,
+        }],
+    };
+    Ok(MissionTerminalStatus {
         mission_id: mission.id.clone(),
         has_work,
         open_work,
