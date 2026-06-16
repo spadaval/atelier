@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate blocker-aware ordering across work views"
-updated_at: "2026-06-16T15:59:44.332777119+00:00"
+updated_at: "2026-06-16T18:45:37.505786891+00:00"
 ---
 
 ## Description
