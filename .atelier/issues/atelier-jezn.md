@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:44:07.351994347+00:00"
+status: "done"
 title: "Remove export checks from normal guidance"
-updated_at: "2026-06-16T16:18:22.229943934+00:00"
+updated_at: "2026-06-16T17:44:07.351994347+00:00"
 ---
 
 ## Description
