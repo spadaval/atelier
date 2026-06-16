@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:47:58.406275002+00:00"
+status: "done"
 title: "Route projection repair through doctor"
-updated_at: "2026-06-16T16:18:19.905930262+00:00"
+updated_at: "2026-06-16T17:47:58.406275002+00:00"
 ---
 
 ## Description
