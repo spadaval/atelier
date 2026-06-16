@@ -36,6 +36,8 @@ Version 1 workflow policy applies to issues only. The contract defines:
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - built-in issue-type to workflow mappings;
+- branch lifecycle defaults for owner branch names, base branch, and merge
+  strategy;
 - configured built-in validators, including validator params;
 - simple guidance templates rendered with transitions; and
 - strict configuration errors for invalid or deferred config.
@@ -50,6 +52,13 @@ The file is strict YAML with explicit schema identity:
 ```yaml
 schema: atelier.workflow
 schema_version: 1
+
+branch_lifecycle:
+  base_branch: main
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
 
 issue_types:
   bug: standard_proof
@@ -185,10 +194,38 @@ workflows:
 
 Required top-level fields are `schema`, `schema_version`, `issue_types`,
 `statuses`, `validators`, `guidance_templates`, and `workflows`.
+`branch_lifecycle` is optional for existing repositories; when absent, Atelier
+uses the starter defaults shown above.
 
 Unknown fields are hard errors. Unknown references are hard errors. Schema
 version 1 does not permit compatibility aliases, partial parsing, or silent
 fallback behavior.
+
+## Branch Lifecycle
+
+`branch_lifecycle` is the shared branch policy used by workflow commands,
+status surfaces, closeout checks, and advanced branch/worktree helpers. It is
+derived from the tracker graph rather than duplicated in command handlers:
+
+- child issues under an epic use the nearest parent epic as branch owner;
+- standalone issues own their issue branch;
+- epics own their epic branch;
+- child issue close commits tracker state on the epic branch and does not merge
+  to base; and
+- standalone issue and epic close integrate their owner branch to base.
+
+The default merge strategy is `squash`. Repositories may configure:
+
+| Field | Rule |
+| --- | --- |
+| `base_branch` | Required when `branch_lifecycle` is present. Non-empty Git branch name. |
+| `merge_strategy` | Optional. One of `squash`, `merge_commit`, or `fast_forward_only`; default `squash`. |
+| `branch_templates.epic` | Optional branch template for epic owners; default `epic/{{ issue.id }}`. |
+| `branch_templates.issue` | Optional branch template for standalone issue owners and exceptional issue worktrees; default `codex/{{ issue.id }}`. |
+
+Branch templates support only `{{ issue.id }}` and `{{ issue.type }}`. In this
+context, `issue` means the branch owner, not necessarily the child issue being
+started or closed.
 
 ## Statuses And Categories
 
@@ -337,11 +374,13 @@ change, but these names are the contract for diagnostics and validation proof.
 | `workflow_config_invalid_status` | A status entry is malformed or uses an unsupported category. |
 | `workflow_config_invalid_workflow` | A workflow entry is malformed or internally inconsistent. |
 | `workflow_config_invalid_transition` | A transition entry is malformed, unreachable, or violates terminal-state rules. |
+| `workflow_config_invalid_branch_lifecycle` | Branch lifecycle config is malformed, such as a missing base branch, unsupported merge strategy, invalid branch value, or unsupported branch template variable. |
 | `workflow_config_invalid_validator` | A validator entry is malformed, names an unsupported built-in, or uses invalid params. |
 | `workflow_config_invalid_guidance_template` | A guidance template is malformed or references unsupported template variables. |
 | `workflow_config_invalid_issue_type_mapping` | An issue type mapping is missing, uses an unsupported issue type, or points at an undefined workflow. |
 | `workflow_config_unknown_reference` | A transition, workflow, validator, or guidance block references an undefined name. |
 | `workflow_config_deferred_feature` | The config uses a feature that version 1 intentionally does not support. |
+| `workflow_branch_lifecycle_invalid_graph` | An issue's parent graph cannot resolve a branch owner, such as a nested issue without an ancestor epic. |
 
 Error payloads should include `path`, `error`, and `message`, plus `line`,
 `column`, `field`, or `reference` when that detail is available.

@@ -8,6 +8,13 @@ pub use atelier_core::RecordId;
 pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 1
 
+branch_lifecycle:
+  base_branch: main
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
+
 issue_types:
   bug: standard_proof
   closeout: standard_review_proof

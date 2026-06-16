@@ -45,6 +45,7 @@ const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
 const TOP_LEVEL_FIELDS: &[&str] = &[
     "schema",
     "schema_version",
+    "branch_lifecycle",
     "issue_types",
     "statuses",
     "validators",
@@ -58,14 +59,84 @@ const ALLOWED_TEMPLATE_VARIABLES: &[&str] = &[
     "transition.from",
     "transition.to",
 ];
+const ALLOWED_BRANCH_TEMPLATE_VARIABLES: &[&str] = &["issue.id", "issue.type"];
 
 #[derive(Debug, Clone)]
 pub struct WorkflowPolicy {
+    pub branch_lifecycle: BranchLifecycleConfig,
     pub issue_types: BTreeMap<String, String>,
     pub statuses: BTreeMap<String, StatusDefinition>,
     pub validators: BTreeMap<String, ValidatorDefinition>,
     pub guidance_templates: BTreeMap<String, GuidanceTemplate>,
     pub workflows: BTreeMap<String, WorkflowDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchLifecycleConfig {
+    pub base_branch: String,
+    pub merge_strategy: MergeStrategy,
+    pub branch_templates: BranchTemplates,
+}
+
+impl Default for BranchLifecycleConfig {
+    fn default() -> Self {
+        Self {
+            base_branch: "main".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            branch_templates: BranchTemplates::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchTemplates {
+    pub epic: String,
+    pub issue: String,
+}
+
+impl Default for BranchTemplates {
+    fn default() -> Self {
+        Self {
+            epic: "epic/{{ issue.id }}".to_string(),
+            issue: "codex/{{ issue.id }}".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeStrategy {
+    Squash,
+    MergeCommit,
+    FastForwardOnly,
+}
+
+impl MergeStrategy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Squash => "squash",
+            Self::MergeCommit => "merge_commit",
+            Self::FastForwardOnly => "fast_forward_only",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchOwnerKind {
+    Epic,
+    StandaloneIssue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchLifecycleResolution {
+    pub issue_id: String,
+    pub owner_id: String,
+    pub owner_issue_type: String,
+    pub owner_kind: BranchOwnerKind,
+    pub expected_branch: String,
+    pub base_branch: String,
+    pub merge_strategy: MergeStrategy,
+    pub merge_owned: bool,
+    pub nested_under_epic: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +224,47 @@ impl WorkflowPolicy {
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
         Ok(workflow_statuses(self.workflow_for_issue_type(issue_type)?).contains(status))
     }
+
+    pub fn resolve_branch_lifecycle(
+        &self,
+        db: &Database,
+        issue_id: &str,
+    ) -> Result<BranchLifecycleResolution> {
+        let issue = db.require_issue(issue_id)?;
+        let (owner, owner_kind, nested_under_epic) = if issue.issue_type == "epic" {
+            (issue.clone(), BranchOwnerKind::Epic, false)
+        } else if issue.parent_id.is_none() {
+            (issue.clone(), BranchOwnerKind::StandaloneIssue, false)
+        } else {
+            let owner = nearest_parent_epic(db, &issue)?;
+            (owner, BranchOwnerKind::Epic, true)
+        };
+        let expected_branch = self.branch_name_for_owner(&owner, &owner_kind)?;
+        let merge_owned = !nested_under_epic;
+        Ok(BranchLifecycleResolution {
+            issue_id: issue.id,
+            owner_id: owner.id,
+            owner_issue_type: owner.issue_type,
+            owner_kind,
+            expected_branch,
+            base_branch: self.branch_lifecycle.base_branch.clone(),
+            merge_strategy: self.branch_lifecycle.merge_strategy,
+            merge_owned,
+            nested_under_epic,
+        })
+    }
+
+    pub fn branch_name_for_owner(
+        &self,
+        owner: &Issue,
+        owner_kind: &BranchOwnerKind,
+    ) -> Result<String> {
+        let template = match owner_kind {
+            BranchOwnerKind::Epic => &self.branch_lifecycle.branch_templates.epic,
+            BranchOwnerKind::StandaloneIssue => &self.branch_lifecycle.branch_templates.issue,
+        };
+        render_branch_template(template, owner)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +347,25 @@ struct TransitionDefinitionRaw {
 enum StatusSelectorRaw {
     One(String),
     Many(Vec<String>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BranchLifecycleRaw {
+    base_branch: Option<String>,
+    #[serde(default)]
+    merge_strategy: Option<String>,
+    #[serde(default)]
+    branch_templates: Option<BranchTemplatesRaw>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BranchTemplatesRaw {
+    #[serde(default)]
+    epic: Option<String>,
+    #[serde(default)]
+    issue: Option<String>,
 }
 
 pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
@@ -335,6 +466,7 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
         )?,
         display_path,
     )?;
+    let branch_lifecycle = parse_branch_lifecycle(root.get("branch_lifecycle"), display_path)?;
     let workflows = parse_workflows(
         require_mapping(
             root,
@@ -347,6 +479,7 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     )?;
 
     let policy = WorkflowPolicy {
+        branch_lifecycle,
         issue_types,
         statuses,
         validators,
@@ -355,6 +488,85 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     };
     validate_policy(&policy, display_path)?;
     Ok(policy)
+}
+
+fn parse_branch_lifecycle(
+    value: Option<&Value>,
+    display_path: &str,
+) -> Result<BranchLifecycleConfig> {
+    let Some(value) = value else {
+        return Ok(BranchLifecycleConfig::default());
+    };
+    let raw = deserialize_entry::<BranchLifecycleRaw>(
+        value,
+        display_path,
+        "branch_lifecycle",
+        "workflow_config_invalid_branch_lifecycle",
+    )?;
+    let Some(base_branch) = raw.base_branch else {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_branch_lifecycle",
+            display_path,
+            "branch_lifecycle.base_branch",
+            "branch_lifecycle.base_branch is required when branch_lifecycle is configured",
+        ));
+    };
+    validate_branch_value(
+        &base_branch,
+        display_path,
+        "branch_lifecycle.base_branch",
+        "base branch",
+    )?;
+    let merge_strategy = parse_merge_strategy(raw.merge_strategy.as_deref(), display_path)?;
+    let branch_templates = parse_branch_templates(raw.branch_templates, display_path)?;
+    Ok(BranchLifecycleConfig {
+        base_branch,
+        merge_strategy,
+        branch_templates,
+    })
+}
+
+fn parse_merge_strategy(value: Option<&str>, display_path: &str) -> Result<MergeStrategy> {
+    match value.unwrap_or("squash") {
+        "squash" => Ok(MergeStrategy::Squash),
+        "merge_commit" => Ok(MergeStrategy::MergeCommit),
+        "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
+        other => Err(policy_error_with_field(
+            "workflow_config_invalid_branch_lifecycle",
+            display_path,
+            "branch_lifecycle.merge_strategy",
+            format!(
+                "unsupported merge strategy '{}'; expected squash, merge_commit, or fast_forward_only",
+                other
+            ),
+        )),
+    }
+}
+
+fn parse_branch_templates(
+    raw: Option<BranchTemplatesRaw>,
+    display_path: &str,
+) -> Result<BranchTemplates> {
+    let defaults = BranchTemplates::default();
+    let raw = raw.unwrap_or(BranchTemplatesRaw {
+        epic: None,
+        issue: None,
+    });
+    let templates = BranchTemplates {
+        epic: raw.epic.unwrap_or(defaults.epic),
+        issue: raw.issue.unwrap_or(defaults.issue),
+    };
+    validate_branch_template(
+        &templates.epic,
+        display_path,
+        "branch_lifecycle.branch_templates.epic",
+    )?;
+    validate_branch_template(
+        &templates.issue,
+        display_path,
+        "branch_lifecycle.branch_templates.issue",
+    )?;
+    Ok(templates)
 }
 
 fn parse_yaml(text: &str, display_path: &str) -> Result<Value> {
@@ -1238,6 +1450,51 @@ fn workflow_statuses(workflow: &WorkflowDefinition) -> BTreeSet<String> {
     statuses
 }
 
+fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
+    let mut parent_id = issue.parent_id.clone();
+    let mut seen = BTreeSet::new();
+    while let Some(current_id) = parent_id {
+        if !seen.insert(current_id.clone()) {
+            return Err(policy_error_with_reference(
+                "workflow_branch_lifecycle_invalid_graph",
+                WORKFLOW_POLICY_PATH,
+                "branch_lifecycle",
+                &issue.id,
+                format!(
+                    "issue {} has a cyclic parent graph while resolving branch owner",
+                    issue.id
+                ),
+            ));
+        }
+        let parent = db.get_issue(&current_id)?.ok_or_else(|| {
+            policy_error_with_reference(
+                "workflow_branch_lifecycle_invalid_graph",
+                WORKFLOW_POLICY_PATH,
+                "branch_lifecycle",
+                &issue.id,
+                format!(
+                    "issue {} references missing parent issue {}",
+                    issue.id, current_id
+                ),
+            )
+        })?;
+        if parent.issue_type == "epic" {
+            return Ok(parent);
+        }
+        parent_id = parent.parent_id;
+    }
+    Err(policy_error_with_reference(
+        "workflow_branch_lifecycle_invalid_graph",
+        WORKFLOW_POLICY_PATH,
+        "branch_lifecycle",
+        &issue.id,
+        format!(
+            "issue {} is nested but has no parent epic branch owner",
+            issue.id
+        ),
+    ))
+}
+
 fn require_mapping<'a>(
     root: &'a Mapping,
     display_path: &str,
@@ -1309,6 +1566,119 @@ fn validate_template_syntax(display_path: &str, name: &str, template: &str) -> R
         ));
     }
     Ok(())
+}
+
+fn validate_branch_template(template: &str, display_path: &str, field: &str) -> Result<()> {
+    if template.trim().is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_branch_lifecycle",
+            display_path,
+            field,
+            "branch template must not be empty",
+        ));
+    }
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        rest = &rest[start + 2..];
+        let Some(end) = rest.find("}}") else {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_branch_lifecycle",
+                display_path,
+                field,
+                "branch template contains '{{' without a matching '}}'",
+            ));
+        };
+        let variable = rest[..end].trim();
+        if !ALLOWED_BRANCH_TEMPLATE_VARIABLES.contains(&variable) {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_branch_lifecycle",
+                display_path,
+                field,
+                format!(
+                    "unsupported branch template variable '{}'; expected {}",
+                    variable,
+                    ALLOWED_BRANCH_TEMPLATE_VARIABLES.join(", ")
+                ),
+            ));
+        }
+        rest = &rest[end + 2..];
+    }
+    if rest.contains("}}") {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_branch_lifecycle",
+            display_path,
+            field,
+            "branch template contains '}}' without a matching '{{'",
+        ));
+    }
+    let rendered = render_branch_template_with(template, "atelier-example", "task")?;
+    validate_branch_value(&rendered, display_path, field, "branch template")?;
+    Ok(())
+}
+
+fn validate_branch_value(value: &str, display_path: &str, field: &str, kind: &str) -> Result<()> {
+    if value.trim().is_empty()
+        || value.starts_with('/')
+        || value.ends_with('/')
+        || value.contains("..")
+        || value.contains(' ')
+        || value.contains('\\')
+    {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_branch_lifecycle",
+            display_path,
+            field,
+            format!("{} is not a valid branch policy value: '{}'", kind, value),
+        ));
+    }
+    Ok(())
+}
+
+fn render_branch_template(template: &str, issue: &Issue) -> Result<String> {
+    let branch = render_branch_template_with(template, &issue.id, &issue.issue_type)?;
+    validate_branch_value(
+        &branch,
+        WORKFLOW_POLICY_PATH,
+        "branch_lifecycle.branch_templates",
+        "rendered branch name",
+    )?;
+    Ok(branch)
+}
+
+fn render_branch_template_with(template: &str, issue_id: &str, issue_type: &str) -> Result<String> {
+    let mut rendered = String::new();
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        rendered.push_str(&rest[..start]);
+        rest = &rest[start + 2..];
+        let Some(end) = rest.find("}}") else {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_branch_lifecycle",
+                WORKFLOW_POLICY_PATH,
+                "branch_lifecycle.branch_templates",
+                "branch template contains '{{' without a matching '}}'",
+            ));
+        };
+        match rest[..end].trim() {
+            "issue.id" => rendered.push_str(issue_id),
+            "issue.type" => rendered.push_str(issue_type),
+            variable => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_branch_lifecycle",
+                    WORKFLOW_POLICY_PATH,
+                    "branch_lifecycle.branch_templates",
+                    format!(
+                        "unsupported branch template variable '{}'; expected {}",
+                        variable,
+                        ALLOWED_BRANCH_TEMPLATE_VARIABLES.join(", ")
+                    ),
+                ));
+            }
+        }
+        rest = &rest[end + 2..];
+    }
+    rendered.push_str(rest);
+    Ok(rendered)
 }
 
 fn ensure_identifier(
@@ -1411,9 +1781,28 @@ fn policy_error_with_reference(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use atelier_sqlite::Database;
+    use tempfile::{tempdir, TempDir};
 
     fn valid_policy() -> &'static str {
         STARTER_POLICY_YAML
+    }
+
+    fn default_branch_lifecycle() -> &'static str {
+        "branch_lifecycle:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n"
+    }
+
+    fn configured_policy() -> String {
+        valid_policy().replace(
+            default_branch_lifecycle(),
+            "branch_lifecycle:\n  base_branch: trunk\n  merge_strategy: fast_forward_only\n  branch_templates:\n    epic: review/{{ issue.id }}\n    issue: work/{{ issue.type }}/{{ issue.id }}\n",
+        )
+    }
+
+    fn test_db() -> (TempDir, Database) {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("test.db")).unwrap();
+        (dir, db)
     }
 
     #[test]
@@ -1443,6 +1832,154 @@ mod tests {
                 min_count: 1,
                 kind: None,
             })
+        );
+        assert_eq!(
+            policy.branch_lifecycle.merge_strategy,
+            MergeStrategy::Squash
+        );
+        assert_eq!(policy.branch_lifecycle.base_branch, "main");
+    }
+
+    #[test]
+    fn parses_configured_branch_lifecycle_policy() {
+        let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(policy.branch_lifecycle.base_branch, "trunk");
+        assert_eq!(
+            policy.branch_lifecycle.merge_strategy,
+            MergeStrategy::FastForwardOnly
+        );
+        assert_eq!(
+            policy.branch_lifecycle.branch_templates.epic,
+            "review/{{ issue.id }}"
+        );
+        assert_eq!(
+            policy.branch_lifecycle.branch_templates.issue,
+            "work/{{ issue.type }}/{{ issue.id }}"
+        );
+    }
+
+    #[test]
+    fn rejects_configured_branch_lifecycle_without_base_branch() {
+        let text = valid_policy().replace(
+            default_branch_lifecycle(),
+            "branch_lifecycle:\n  merge_strategy: squash\n",
+        );
+        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_branch_lifecycle"));
+        assert!(error.contains("branch_lifecycle.base_branch"));
+    }
+
+    #[test]
+    fn missing_branch_lifecycle_config_uses_default_policy() {
+        let text = valid_policy().replace(default_branch_lifecycle(), "");
+        let policy = parse_policy_text(&text, WORKFLOW_POLICY_PATH).unwrap();
+
+        assert_eq!(policy.branch_lifecycle.base_branch, "main");
+        assert_eq!(
+            policy.branch_lifecycle.merge_strategy,
+            MergeStrategy::Squash
+        );
+        assert_eq!(
+            policy.branch_lifecycle.branch_templates.issue,
+            "codex/{{ issue.id }}"
+        );
+    }
+
+    #[test]
+    fn resolves_child_issue_under_epic_to_epic_branch_without_merge_ownership() {
+        let (_dir, db) = test_db();
+        let epic_id = db
+            .create_issue_with_type("Epic", None, "high", "epic")
+            .unwrap();
+        let child_id = db
+            .create_subissue(&epic_id, "Child", None, "medium")
+            .unwrap();
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        let resolution = policy.resolve_branch_lifecycle(&db, &child_id).unwrap();
+
+        assert_eq!(resolution.owner_id, epic_id);
+        assert_eq!(resolution.owner_kind, BranchOwnerKind::Epic);
+        assert_eq!(
+            resolution.expected_branch,
+            format!("epic/{}", resolution.owner_id)
+        );
+        assert_eq!(resolution.merge_strategy, MergeStrategy::Squash);
+        assert!(!resolution.merge_owned);
+        assert!(resolution.nested_under_epic);
+    }
+
+    #[test]
+    fn resolves_standalone_issue_to_issue_branch_with_merge_ownership() {
+        let (_dir, db) = test_db();
+        let issue_id = db.create_issue("Standalone", None, "medium").unwrap();
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        let resolution = policy.resolve_branch_lifecycle(&db, &issue_id).unwrap();
+
+        assert_eq!(resolution.owner_id, issue_id);
+        assert_eq!(resolution.owner_kind, BranchOwnerKind::StandaloneIssue);
+        assert_eq!(
+            resolution.expected_branch,
+            format!("codex/{}", resolution.owner_id)
+        );
+        assert!(resolution.merge_owned);
+        assert!(!resolution.nested_under_epic);
+    }
+
+    #[test]
+    fn resolves_epic_to_epic_branch_with_merge_ownership() {
+        let (_dir, db) = test_db();
+        let epic_id = db
+            .create_issue_with_type("Epic", None, "high", "epic")
+            .unwrap();
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        let resolution = policy.resolve_branch_lifecycle(&db, &epic_id).unwrap();
+
+        assert_eq!(resolution.owner_id, epic_id);
+        assert_eq!(resolution.owner_kind, BranchOwnerKind::Epic);
+        assert_eq!(
+            resolution.expected_branch,
+            format!("epic/{}", resolution.owner_id)
+        );
+        assert!(resolution.merge_owned);
+        assert!(!resolution.nested_under_epic);
+    }
+
+    #[test]
+    fn rejects_nested_issue_without_parent_epic_branch_owner() {
+        let (_dir, db) = test_db();
+        let parent_id = db.create_issue("Parent task", None, "medium").unwrap();
+        let child_id = db
+            .create_subissue(&parent_id, "Child", None, "medium")
+            .unwrap();
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        let error = policy
+            .resolve_branch_lifecycle(&db, &child_id)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_branch_lifecycle_invalid_graph"));
+        assert!(error.contains("no parent epic"));
+    }
+
+    #[test]
+    fn configured_branch_lifecycle_resolution_surfaces_base_strategy_and_templates() {
+        let (_dir, db) = test_db();
+        let issue_id = db.create_issue("Standalone", None, "medium").unwrap();
+        let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
+
+        let resolution = policy.resolve_branch_lifecycle(&db, &issue_id).unwrap();
+
+        assert_eq!(resolution.base_branch, "trunk");
+        assert_eq!(resolution.merge_strategy, MergeStrategy::FastForwardOnly);
+        assert_eq!(
+            resolution.expected_branch,
+            format!("work/task/{}", resolution.owner_id)
         );
     }
 

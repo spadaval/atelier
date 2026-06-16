@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T16:39:57.219253564+00:00"
+status: "done"
 title: "Add branch lifecycle policy and merge strategy config"
-updated_at: "2026-06-16T15:47:26.736815316+00:00"
+updated_at: "2026-06-16T16:39:57.219253564+00:00"
 ---
 
 ## Description

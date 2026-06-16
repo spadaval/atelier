@@ -189,12 +189,26 @@ fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+fn issue_branch_name(root: &Path, issue: &Issue) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(root)?;
+    policy.branch_name_for_owner(
+        issue,
+        &atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue,
+    )
+}
+
+fn epic_branch_name(epic: &Issue) -> Result<String> {
+    let root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&root)?;
+    policy.branch_name_for_owner(epic, &atelier_app::workflow_policy::BranchOwnerKind::Epic)
+}
+
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let issue = db.require_issue(id)?;
     print_active_mission_context(db, id)?;
     ensure_issue_active_for_worktree(db, id)?;
     let root = repo_root()?;
-    let branch = format!("codex/{}", id);
+    let branch = issue_branch_name(&root, &issue)?;
     let worktree_path = path
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".atelier-worktrees").join(id));
@@ -213,7 +227,7 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
                 String::from_utf8_lossy(&output.stderr).trim()
             );
         }
-    } else if !worktree_has_issue_branch(&worktree_path, id)? {
+    } else if !worktree_has_issue_branch(&worktree_path, &branch)? {
         recover_incomplete_worktree_setup(&root, &worktree_path)?;
     }
     ensure_git_worktree(&worktree_path)?;
@@ -355,7 +369,7 @@ pub fn branch_for_epic(db: &Database, epic_id: &str) -> Result<()> {
     let mission_id = owning_mission_id(db, &epic.id)?;
     let worktree_path = require_mission_worktree_owner(&mission_id, "atelier branch for-epic")?;
     ensure_clean_worktree()?;
-    let branch = format!("epic/{}", epic.id);
+    let branch = epic_branch_name(&epic)?;
     if branch_exists(&branch)? {
         git_switch(&branch)?;
     } else {
@@ -378,6 +392,8 @@ pub fn branch_status(db: &Database) -> Result<()> {
     let mission_id = current_mission_worktree_owner("atelier branch status")?;
     let worktree_path = env::current_dir().context("failed to read current checkout path")?;
     let current = current_branch().unwrap_or_else(|_| "(detached)".to_string());
+    let root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&root)?;
     println!("Epic Branch Status");
     println!("==================");
     println!("Mission: {mission_id}");
@@ -390,7 +406,8 @@ pub fn branch_status(db: &Database) -> Result<()> {
         if !crate::commands::mission::issue_advances_mission(db, &mission_id, &issue.id)? {
             continue;
         }
-        let branch = format!("epic/{}", issue.id);
+        let branch = policy
+            .branch_name_for_owner(&issue, &atelier_app::workflow_policy::BranchOwnerKind::Epic)?;
         if branch_exists(&branch)? {
             println!("  {branch} - {} [{}]", issue.title, issue.status);
         }
@@ -410,7 +427,7 @@ pub fn branch_merge(db: &Database, epic_id: &str) -> Result<()> {
     let mission_id = owning_mission_id(db, &epic.id)?;
     let worktree_path = require_mission_worktree_owner(&mission_id, "atelier branch merge")?;
     ensure_clean_worktree()?;
-    let branch = format!("epic/{}", epic.id);
+    let branch = epic_branch_name(&epic)?;
     if !branch_exists(&branch)? {
         bail!("No epic branch found for {}: {branch}", epic.id);
     }
@@ -489,8 +506,9 @@ fn validate_worktree_projection(
 }
 
 pub fn worktree_merge(db: &Database, id: &str) -> Result<()> {
-    db.require_issue(id)?;
-    let branch = format!("codex/{id}");
+    let issue = db.require_issue(id)?;
+    let root = repo_root()?;
+    let branch = issue_branch_name(&root, &issue)?;
     if !branch_exists(&branch)? {
         bail!("No worktree branch found for {id}: {branch}");
     }
@@ -509,7 +527,7 @@ pub fn worktree_merge(db: &Database, id: &str) -> Result<()> {
 
 pub fn worktree_remove(db: &Database, id: &str, force: bool) -> Result<()> {
     db.require_issue(id)?;
-    let path = worktree_path_for_issue(id)?
+    let path = worktree_path_for_issue(db, id)?
         .ok_or_else(|| anyhow::anyhow!("No git worktree found for {id}"))?;
     let path_arg = path.to_string_lossy().to_string();
     let root = repo_root()?;
@@ -531,7 +549,7 @@ pub fn worktree_remove(db: &Database, id: &str, force: bool) -> Result<()> {
 
 pub fn worktree_repair(db: &Database, id: &str) -> Result<()> {
     db.require_issue(id)?;
-    let Some(path) = expected_or_actual_worktree_path(id)? else {
+    let Some(path) = expected_or_actual_worktree_path(db, id)? else {
         bail!("No worktree path found for {id}");
     };
     if path.exists() {
@@ -592,47 +610,52 @@ fn worktree_statuses(db: &Database) -> Result<Vec<WorktreeStatus>> {
 }
 
 fn status_derived_work_for_branch(db: &Database, branch: Option<&str>) -> Result<Vec<Issue>> {
-    let Some(issue_id) = branch.and_then(issue_id_from_codex_branch) else {
-        return Ok(Vec::new());
-    };
-    let Some(issue) = db.get_issue(issue_id)? else {
+    let Some(branch) = branch else {
         return Ok(Vec::new());
     };
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    if crate::commands::issue_workflow::issue_status_category(
-        workflow_policy.as_ref(),
-        &issue.status,
-    )
-    .as_deref()
-        == Some("active")
-    {
-        Ok(vec![issue])
-    } else {
-        Ok(Vec::new())
+    let root = repo_root()?;
+    let branch_policy = atelier_app::workflow_policy::load(&root)?;
+    let mut associated = Vec::new();
+    for issue in db.list_issues(None, None, None)? {
+        if crate::commands::issue_workflow::issue_status_category(
+            workflow_policy.as_ref(),
+            &issue.status,
+        )
+        .as_deref()
+            != Some("active")
+        {
+            continue;
+        }
+        if branch_policy
+            .resolve_branch_lifecycle(db, &issue.id)?
+            .expected_branch
+            == branch
+        {
+            associated.push(issue);
+        }
     }
+    Ok(associated)
 }
 
-fn issue_id_from_codex_branch(branch: &str) -> Option<&str> {
-    branch.strip_prefix("codex/")
+fn worktree_has_issue_branch(path: &Path, expected: &str) -> Result<bool> {
+    Ok(git_worktrees()?
+        .into_iter()
+        .any(|worktree| worktree.path == path && worktree.branch.as_deref() == Some(expected)))
 }
 
-fn worktree_has_issue_branch(path: &Path, id: &str) -> Result<bool> {
-    let expected = format!("codex/{id}");
-    Ok(git_worktrees()?.into_iter().any(|worktree| {
-        worktree.path == path && worktree.branch.as_deref() == Some(expected.as_str())
-    }))
-}
-
-fn worktree_path_for_issue(id: &str) -> Result<Option<PathBuf>> {
-    let expected = format!("codex/{id}");
+fn worktree_path_for_issue(db: &Database, id: &str) -> Result<Option<PathBuf>> {
+    let issue = db.require_issue(id)?;
+    let root = repo_root()?;
+    let expected = issue_branch_name(&root, &issue)?;
     Ok(git_worktrees()?
         .into_iter()
         .find(|worktree| worktree.branch.as_deref() == Some(expected.as_str()))
         .map(|worktree| worktree.path))
 }
 
-fn expected_or_actual_worktree_path(id: &str) -> Result<Option<PathBuf>> {
-    if let Some(path) = worktree_path_for_issue(id)? {
+fn expected_or_actual_worktree_path(db: &Database, id: &str) -> Result<Option<PathBuf>> {
+    if let Some(path) = worktree_path_for_issue(db, id)? {
         return Ok(Some(path));
     }
     Ok(Some(repo_root()?.join(".atelier-worktrees").join(id)))
