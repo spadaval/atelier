@@ -18,6 +18,18 @@ fn test_create_issue() {
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
     assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
     assert!(stdout.contains(&format!("atelier lint {issue_id}")));
+    assert!(stdout.contains(&format!("atelier issue show {issue_id}")));
+    let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(issue_text.contains("## Description\n\nNo description provided."));
+    assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
+    assert!(issue_text.contains("## Evidence\n\nEvidence was not specified."));
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(!success, "placeholder scaffold should be under-specified");
+    assert!(stderr.contains("Lint failed"));
+    assert!(lint_out.contains("Issue section Description must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Outcome must be present and non-empty"));
+    assert!(lint_out.contains("Issue section Evidence must be present and non-empty"));
 }
 
 #[test]
@@ -38,11 +50,11 @@ fn test_create_issue_with_priority() {
 }
 
 #[test]
-fn test_create_issue_with_description() {
+fn test_create_issue_with_description_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, _) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
@@ -53,11 +65,56 @@ fn test_create_issue_with_description() {
         ],
     );
 
-    assert!(success);
+    assert!(!success, "issue create -d should be removed");
+    assert!(stderr.contains("unexpected argument") || stderr.contains("Usage:"));
+}
 
-    // Verify description in show
-    let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
-    assert!(show_out.contains("Detailed description"));
+#[test]
+fn test_issue_create_help_is_markdown_first() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(!stdout.contains("--description"), "{stdout}");
+    assert!(stdout.contains("--template"), "{stdout}");
+}
+
+#[test]
+fn test_issue_create_scaffold_edit_lint_show_flow() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Markdown first issue"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Markdown first issue");
+    assert!(stdout.contains(&format!(".atelier/issues/{issue_id}.md")));
+
+    let path = canonical_issue_path(dir.path(), &issue_id);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let text = text
+        .replace(
+            "No description provided.",
+            "Describe the markdown-first issue.",
+        )
+        .replace(
+            "Outcome was not specified.",
+            "Issue sections are populated by editing canonical Markdown.",
+        )
+        .replace(
+            "Evidence was not specified.",
+            "- `atelier lint <id>` passes after section edits.",
+        );
+    std::fs::write(&path, text).unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
+    assert!(success, "lint after markdown edit failed: {stderr}");
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show.contains("Describe the markdown-first issue."));
+    assert!(show.contains("Issue sections are populated by editing canonical Markdown."));
+    assert!(show.contains("atelier lint <id>"));
 }
 
 #[test]

@@ -166,6 +166,29 @@ pub fn lint(
                     });
                 }
             }
+            if input.issue_ref.is_some() {
+                for (name, value) in [
+                    (
+                        IssueSectionName::Description,
+                        record.sections.description.as_str(),
+                    ),
+                    (IssueSectionName::Outcome, record.sections.outcome.as_str()),
+                    (
+                        IssueSectionName::Evidence,
+                        record.sections.evidence.as_str(),
+                    ),
+                ] {
+                    if issue_section_placeholder(name, value) {
+                        findings.push(LintFinding {
+                            id: issue_id_for_agent(&issue),
+                            message: format!(
+                                "Issue section {} must be present and non-empty",
+                                name.title()
+                            ),
+                        });
+                    }
+                }
+            }
             if issue_requires_concrete_evidence(&issue) {
                 for (index, entry) in evidence_entries(&record.sections.evidence)
                     .iter()
@@ -198,6 +221,15 @@ pub fn lint(
             data: LintView { findings },
         },
     })
+}
+
+fn issue_section_placeholder(name: IssueSectionName, value: &str) -> bool {
+    matches!(
+        (name, value.trim()),
+        (IssueSectionName::Description, "No description provided.")
+            | (IssueSectionName::Outcome, "Outcome was not specified.")
+            | (IssueSectionName::Evidence, "Evidence was not specified.")
+    )
 }
 
 pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {

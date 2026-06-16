@@ -268,9 +268,6 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
-        /// Issue description
-        #[arg(short, long)]
-        description: Option<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
@@ -669,7 +666,6 @@ enum DiagnosticsCommands {
 
 fn issue_create_parts(
     priority: &str,
-    description: Option<&str>,
     template: Option<&str>,
     labels: &[String],
     issue_type: Option<&str>,
@@ -692,20 +688,13 @@ fn issue_create_parts(
             } else {
                 template.priority
             };
-            let description = match (template.description_prefix, description) {
-                (Some(prefix), Some(user_description)) => {
-                    Some(format!("{prefix}\n\n{user_description}"))
-                }
-                (Some(prefix), None) => Some(prefix.to_string()),
-                (None, description) => description.map(str::to_string),
-            };
             (
                 priority.to_string(),
-                description,
+                template.description_prefix.map(str::to_string),
                 Some(template_default_issue_type(template_name)),
             )
         } else {
-            (priority.to_string(), description.map(str::to_string), None)
+            (priority.to_string(), None, None)
         };
 
     if !commands::create::validate_priority(&final_priority) {
@@ -849,7 +838,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
     match action {
         IssueCommands::Create {
             title,
-            description,
             priority,
             template,
             label,
@@ -859,7 +847,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let (state_dir, db_path) = state_and_db_paths()?;
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
-                description.as_deref(),
                 template.as_deref(),
                 &label,
                 issue_type.as_deref(),
