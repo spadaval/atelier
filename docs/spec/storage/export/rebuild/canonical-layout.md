@@ -318,7 +318,7 @@ Issue front matter adds:
 | Field | Type | Rule |
 | --- | --- | --- |
 | `priority` | string | Stable issue priority token. Version 1 uses `P0`, `P1`, `P2`, and `P3`; human labels such as `critical`, `high`, `medium`, and `low` are derived display text. |
-| `issue_type` | string | `task`, `feature`, `epic`, `bug`, `validation`, `closeout`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `issue_type` | string | `task`, `feature`, `epic`, `bug`, `validation`, or `spike`. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 
 Issue front matter does not carry large human-authored acceptance or proof
 text. The canonical issue schema removes the legacy `acceptance` and

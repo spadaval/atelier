@@ -115,7 +115,7 @@ Required fields:
 | --- | --- | --- |
 | `client_ref` | string | Unique local reference. |
 | `title` | string | Non-empty human title. |
-| `issue_type` | string | `epic`, `task`, `feature`, `bug`, `validation`, `closeout`, `spike`, or repository-configured value. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
+| `issue_type` | string | `epic`, `task`, `feature`, `bug`, `validation`, `spike`, or repository-configured value. Use `task` for work whose deliverable is an ADR, spec, context, or target-state update. |
 | `priority` | string | Stable priority value accepted by `atelier issue`, such as `high`, `medium`, `low`, or `P1`. |
 
 Optional fields:

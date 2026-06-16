@@ -1,9 +1,8 @@
 ---
 created_at: "2026-06-13T17:29:11.074648455+00:00"
 id: "atelier-2bpd"
-issue_type: "closeout"
+issue_type: "validation"
 labels:
-- "closeout"
 - "workflow"
 priority: "P0"
 relationships:

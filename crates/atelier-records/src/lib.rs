@@ -85,15 +85,7 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
 ];
 
 pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
-pub const VALID_ISSUE_TYPES: &[&str] = &[
-    "bug",
-    "closeout",
-    "epic",
-    "feature",
-    "spike",
-    "task",
-    "validation",
-];
+pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 pub const MAX_LABEL_LEN: usize = 128;
 
 pub fn validate_status(status: &str) -> Result<()> {

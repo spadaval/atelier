@@ -62,7 +62,6 @@ branch_lifecycle:
 
 issue_types:
   bug: standard_proof
-  closeout: standard_review_proof
   epic: standard_review_proof
   feature: standard_proof
   spike: lightweight_spike
@@ -254,7 +253,6 @@ Statuses in a workflow's `done_statuses` list are terminal for that workflow:
 accepts only these built-in issue types:
 
 - `bug`
-- `closeout`
 - `epic`
 - `feature`
 - `spike`
@@ -269,7 +267,6 @@ The starter policy is:
 | Issue type | Default workflow |
 | --- | --- |
 | `bug` | `standard_proof` |
-| `closeout` | `standard_review_proof` |
 | `epic` | `standard_review_proof` |
 | `feature` | `standard_proof` |
 | `spike` | `lightweight_spike` |
@@ -324,7 +321,7 @@ Version 1 built-in validator names are fixed:
 | --- | --- | --- |
 | `durable_state_current` | none | Fails when canonical tracker state or required export freshness is stale for the transition. |
 | `evidence_attached` | `min_count` (required integer >= 1), `kind` (optional evidence kind) | Fails when the issue does not have enough attached evidence records matching the params. |
-| `review_complete` | none | Fails when an epic, review, validation, closeout, or explicitly review-gated issue has not gone through the expected review path for the transition. It is not the default close gate for ordinary implementation tasks. |
+| `review_complete` | none | Fails when an epic, review, validation, or explicitly review-gated issue has not gone through the expected review path for the transition. It is not the default close gate for ordinary implementation tasks. |
 | `epic_child_proof_complete` | none | For epic issues, fails when a child issue is still open or lacks passing linked proof. For non-epic targets, passes without effect. |
 | `validation_criteria_satisfied` | none | For mission closeout, checks configured workflow approval on explicit linked validation or closeout work when parent-level judgment is required. Mission validation prose remains human guidance and is not parsed as a coded evidence contract. For other targets, reports that no parent closeout criteria apply. |
 | `no_open_blockers` | none | Fails when blocking issue dependencies remain open. |

@@ -277,7 +277,7 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
-        /// Explicit work type (bug, closeout, epic, feature, spike, task, validation)
+        /// Explicit work type (bug, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Parent issue ID or imported source ID
@@ -337,7 +337,7 @@ enum IssueCommands {
         /// New priority
         #[arg(short, long)]
         priority: Option<String>,
-        /// New issue type (bug, closeout, epic, feature, spike, task, validation)
+        /// New issue type (bug, epic, feature, spike, task, validation)
         #[arg(long)]
         issue_type: Option<String>,
         /// Add labels to the issue

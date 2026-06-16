@@ -1319,7 +1319,7 @@ fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionW
     let mut approval = MissionWorkflowApproval::default();
     for issue_id in mission_issue_ids(db, mission_id)? {
         let issue = db.require_issue(&issue_id)?;
-        if !matches!(issue.issue_type.as_str(), "validation" | "closeout") {
+        if issue.issue_type != "validation" {
             continue;
         }
         match crate::commands::issue_workflow::issue_status_category(
@@ -1595,7 +1595,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         if validating_evidence_ids(db, "issue", issue_id)?.is_empty() {
             summary.issue_proof_gap_count += 1;
         }
-        if matches!(issue.issue_type.as_str(), "validation" | "closeout")
+        if issue.issue_type == "validation"
             && !crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), &issue)
         {
             summary.approval_pending_count += 1;

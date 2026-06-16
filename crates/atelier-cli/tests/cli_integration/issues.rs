@@ -2027,20 +2027,38 @@ fn test_issue_update_issue_type_persists_through_rebuild() {
 fn test_removed_issue_type_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mutable task"]);
+    assert!(success, "baseline issue create failed: {stderr}");
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Artifact task",
-            "--issue-type",
-            "decision",
-        ],
-    );
+    for removed_type in ["decision", "closeout"] {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "Artifact task",
+                "--issue-type",
+                removed_type,
+            ],
+        );
 
-    assert!(!success, "removed issue type should be rejected");
-    assert!(stderr.contains("Invalid issue_type 'decision'"));
+        assert!(
+            !success,
+            "removed issue type {removed_type} should be rejected"
+        );
+        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &["issue", "update", "1", "--issue-type", removed_type],
+        );
+
+        assert!(
+            !success,
+            "removed issue type {removed_type} should be rejected on update"
+        );
+        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+    }
 }
 
 // ==================== Session Tests ====================

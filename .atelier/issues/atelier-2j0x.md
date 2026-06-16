@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-11T22:15:21.083457086+00:00"
 id: "atelier-2j0x"
-issue_type: "closeout"
+issue_type: "validation"
 labels:
 - "validation"
 priority: "P2"

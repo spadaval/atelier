@@ -17,7 +17,6 @@ branch_lifecycle:
 
 issue_types:
   bug: standard_proof
-  closeout: standard_review_proof
   epic: standard_review_proof
   feature: standard_proof
   spike: lightweight_spike
