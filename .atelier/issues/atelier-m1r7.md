@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:57:20.074566792+00:00"
+status: "done"
 title: "Validate cleaned command surface and recovery paths"
-updated_at: "2026-06-16T16:18:26.360127183+00:00"
+updated_at: "2026-06-16T17:57:20.074566792+00:00"
 ---
 
 ## Description
