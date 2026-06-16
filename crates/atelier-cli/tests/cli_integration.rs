@@ -379,10 +379,13 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier evidence record/show/list/attach`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
-- `atelier branch for-epic/status/merge`
 - `atelier maintenance delete`
 - `atelier lint`
 - `atelier doctor`
+
+## Advanced Repair
+
+- `atelier branch for-epic/status/merge`
 "#
 }
 

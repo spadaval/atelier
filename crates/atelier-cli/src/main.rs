@@ -38,7 +38,7 @@ Records:
 
 Advanced work:
   worktree      Create, inspect, merge, and remove mission or issue worktrees
-  branch        Create, inspect, and merge epic review branches
+  branch        Inspect and repair epic review branches
 
 Maintenance:
   maintenance   Run explicit destructive maintenance commands

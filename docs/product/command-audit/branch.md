@@ -1,17 +1,18 @@
 # `atelier branch`
 
-Primary role: Manager/orchestrator.
+Primary role: Advanced manager/orchestrator recovery.
 
-Primary question: "How do I create, inspect, or merge the review branch for an
-epic?"
+Primary question: "How do I inspect or recover an owner branch when normal
+start or close lifecycle commands cannot complete automatically?"
 
 ## Assessment
 
 - Name: Correct.
 - Documentation: Correct in source help, but the installed `atelier` binary may
   lag and omit this command.
-- Design: Correct. It keeps epic review boundaries separate from issue slices
-  and mission worktrees.
+- Design: Advanced. Routine worker and manager loops should use `atelier start`
+  for branch preparation and close lifecycle commands for integration; branch
+  commands remain explicit recovery and diagnostic surfaces.
 - Output hierarchy: Epic ID, branch name, mission workspace, review/merge state,
   next status or merge command.
 
@@ -19,6 +20,6 @@ epic?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `branch for-epic <id>` | Manager/orchestrator | Create or switch to epic review branch. | Good. |
-| `branch status` | Manager/orchestrator | Inspect local epic review branches. | Good. |
-| `branch merge <id>` | Manager/orchestrator | Merge epic review branch. | Good. |
+| `branch for-epic <id>` | Advanced manager/orchestrator recovery | Manually create or switch to an epic review branch when lifecycle-owned start cannot prepare it. | Advanced repair. |
+| `branch status` | Advanced manager/orchestrator recovery | Inspect local epic review branches. | Advanced diagnostic. |
+| `branch merge <id>` | Advanced manager/orchestrator recovery | Manually merge an epic review branch when close lifecycle integration requires recovery. | Advanced repair. |

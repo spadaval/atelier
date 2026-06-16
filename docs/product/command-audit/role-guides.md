@@ -94,12 +94,13 @@ atelier mission add-work <mission-id> <issue-id>
 atelier issue block <blocked-id> <blocker-id>
 atelier graph tree --compact
 atelier worktree for-mission <mission-id>
-atelier branch for-epic <epic-id>
 ```
 
 Manager guide should include `plan apply --dry-run` and
 `plan apply --validate-only` as advanced bulk-planning commands, not as the
-ordinary way to make every issue.
+ordinary way to make every issue. Explicit branch commands belong in advanced
+repair and diagnostic guidance; normal branch preparation belongs to
+`atelier start <id>`.
 
 ## Admin Guide
 
