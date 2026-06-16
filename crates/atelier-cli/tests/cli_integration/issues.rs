@@ -769,8 +769,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
             "record",
             "--kind",
             "test",
-            "--result",
-            "pass",
             "Canonical evidence summary",
         ],
     );
@@ -1042,15 +1040,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     );
     let (success, _evidence_out, stderr) = run_atelier(
         dir.path(),
-        &[
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "Cargo test passed",
-        ],
+        &["evidence", "record", "--kind", "test", "Cargo test passed"],
     );
     assert!(success, "evidence record failed: {stderr}");
     let evidence_id = record_id_by_title(dir.path(), "evidence", "Cargo test passed");

@@ -537,8 +537,8 @@ atelier mission show atelier-k7mq
 atelier mission add-work atelier-k7mq atelier-z1p8
 atelier milestone create
 atelier plan create
-atelier evidence record --target issue/atelier-z1p8 --kind validation --result pass "summary"
-atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>
+atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
+atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier lint
 atelier doctor
 ```

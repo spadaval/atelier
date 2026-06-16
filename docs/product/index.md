@@ -13,14 +13,14 @@ that can be implemented and validated.
 
 - [Zen Of Atelier](zen.md): product principles for long-running
   semi-autonomous mission work, coordination, evidence, validation, and
-  closeout.
+  terminal checks.
 
 ## Workflow Model
 
 - [Work Model](work-model.md): mission, milestone, epic, issue, workflow
   validator, and evidence relationships.
 - [Validation](validation.md): product language for outcomes, proof, evidence,
-  validation, closeout, and proof visibility in normal operator surfaces.
+  validation, terminal checks, and proof visibility in normal operator surfaces.
 - [Milestone Records](milestone-records.md): first-class checkpoint record
   fields, validation model, evidence links, and command-surface ownership.
 - [Workflow Configuration Contract](workflow-configuration.md):

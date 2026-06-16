@@ -203,7 +203,7 @@ fallback behavior.
 ## Branch Lifecycle
 
 `branch_lifecycle` is the shared branch policy used by workflow commands,
-status surfaces, closeout checks, and advanced branch/worktree helpers. It is
+status surfaces, terminal checks, and advanced branch/worktree helpers. It is
 derived from the tracker graph rather than duplicated in command handlers:
 
 - child issues under an epic use the nearest parent epic as branch owner;
@@ -323,10 +323,10 @@ Version 1 built-in validator names are fixed:
 | `evidence_attached` | `min_count` (required integer >= 1), `kind` (optional evidence kind) | Fails when the issue does not have enough attached evidence records matching the params. |
 | `review_complete` | none | Fails when an epic, review, validation, or explicitly review-gated issue has not gone through the expected review path for the transition. It is not the default close gate for ordinary implementation tasks. |
 | `epic_child_proof_complete` | none | For epic issues, fails when a child issue is still open or lacks passing linked proof. For non-epic targets, passes without effect. |
-| `validation_criteria_satisfied` | none | For mission closeout, checks configured workflow approval on explicit linked validation or closeout work when parent-level judgment is required. Mission validation prose remains human guidance and is not parsed as a coded evidence contract. For other targets, reports that no parent closeout criteria apply. |
+| `validation_criteria_satisfied` | none | For mission terminal checks, checks configured workflow approval on explicit linked validation work when parent-level judgment is required. Mission validation prose remains human guidance and is not parsed as a coded evidence contract. For other targets, reports that no parent terminal criteria apply. |
 | `no_open_blockers` | none | Fails when blocking issue dependencies remain open. |
 | `no_blocking_lints` | none | Fails when tracker lint reports blocking defects for the issue or transition. |
-| `git_worktree_clean` | none | Fails when the current worktree has tracked or untracked changes that make closeout non-clean. |
+| `git_worktree_clean` | none | Fails when the current worktree has tracked or untracked changes that make terminal checks non-clean. |
 
 Unknown built-in names, missing required params, wrong param types, and
 unexpected params are strict configuration errors.
@@ -418,7 +418,7 @@ This workflow is intentionally strict about proof and light about ceremony:
 - `close_reason` must be recorded;
 - at least one evidence record must be attached when configured;
 - blockers and blocking lints must be clear; and
-- durable tracker state must be current enough for closeout.
+- durable tracker state must be current enough for terminal checks.
 
 It does not require `request_review` or `request_validation` for an ordinary
 implementation slice. The parent epic branch carries the normal review and
@@ -427,7 +427,7 @@ validation boundary for the coherent changeset.
 ## Standard Review/Proof Workflow Example
 
 The standard review/proof workflow is the contract for epics, validation,
-closeout, and issue types that explicitly require review before close. It makes
+validation, and issue types that explicitly require review before close. It makes
 review and proof explicit before `done`, and it keeps `archived` available as a
 terminal legacy-migration status:
 
@@ -471,11 +471,11 @@ This workflow is intentionally strict at close:
 - at least one evidence record must be attached;
 - epic child proof must be complete when the target is an epic;
 - blockers and blocking lints must be clear; and
-- durable tracker state and the worktree must be current enough for closeout.
+- durable tracker state and the worktree must be current enough for terminal checks.
 
-Mission closeout additionally evaluates any configured
-`validation_criteria_satisfied` gate by checking explicit linked validation or
-closeout work rather than token-matching mission prose. `atelier mission
+Mission terminal checks additionally evaluate any configured
+`validation_criteria_satisfied` gate by checking explicit linked validation
+work rather than token-matching mission prose. `atelier mission
 status` reports the gate as actionable validation-criteria output, while
 verbose status keeps the raw validator name available for advanced diagnostics.
 
@@ -517,8 +517,8 @@ This example makes the intended trade-off explicit:
 Workflow diagnostics stay on supported operator surfaces. Use `atelier lint`
 for committed workflow configuration and canonical record-health checks,
 `atelier issue transition <id> --options` for transition gate inspection, and
-`atelier doctor`, `atelier mission status`, or `atelier mission audit` for
-runtime health and closeout. A separate `workflow check` command is not needed
+`atelier doctor`, or `atelier mission status` for runtime health and terminal
+checks. A separate `workflow check` command is not needed
 for normal operator work; if raw workflow diagnostics exist for development,
 they are advanced debug surfaces and must not be required for ordinary handoff.
 The previous `atelier workflow validate` diagnostic command is not part of the

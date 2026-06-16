@@ -198,7 +198,7 @@ telemetry, command-performance analysis, debugging diagnostics storage, and
 future tools that summarize command behavior. It is not the contract for normal
 project operation.
 
-Normal mission, issue, validation, and closeout workflows must use
+Normal mission, issue, validation, and terminal workflows must use
 human-oriented operator surfaces: `atelier status`, `atelier mission status`,
 `atelier issue transition <id> --options`, `atelier lint`, `atelier doctor`,
 and `atelier evidence record`. Agents and scripts must not parse diagnostics

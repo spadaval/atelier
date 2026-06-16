@@ -83,7 +83,7 @@ lore.
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
-| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission audit`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
 | Tracker freshness, health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier mission status`, `atelier lint`, `atelier doctor` | Missing proof, blockers, stale state, and health failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
 | Agent-facing command freshness for `AGENTS.md`, `AGENTFACTORY.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
@@ -144,8 +144,8 @@ Use one evidence-recording workflow for manual summaries and command
 transcripts:
 
 ```text
-atelier evidence record --target issue/<id> --kind validation --result pass "summary"
-atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+atelier evidence record --target issue/<id> --kind validation "summary"
+atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 The target syntax is `<kind>/<id>`. New proof normally targets `issue/<id>` so

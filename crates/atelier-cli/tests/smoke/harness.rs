@@ -105,8 +105,6 @@ impl SmokeHarness {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "--target",
             &format!("issue/{issue_id}"),
             &summary,

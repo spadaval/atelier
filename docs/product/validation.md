@@ -68,7 +68,7 @@ For normal implementation work, validation should stay light:
 The happy path should be one command for proof capture when possible:
 
 ```text
-atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 or a higher-level convenience command that does the same capture and attachment.
@@ -122,7 +122,7 @@ Required for close: 1 passing evidence record attached to issue/<id>
 Expected proof:
   - focused CLI test proves the changed completion behavior
 Next:
-  atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+  atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 When proof is present, the same block should name the evidence IDs and results.
@@ -136,7 +136,7 @@ operator language:
 ```text
 close -> done: blocked
   missing proof: no passing evidence attached to issue/<id>
-  next: atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+  next: atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 `atelier mission status <id>` should show mission proof gaps by accountable
@@ -150,7 +150,7 @@ Proof Gaps
   atelier-epic1: child proof incomplete
 ```
 
-`atelier mission status --completion <id>` may show deeper audit detail, including
+`atelier mission status <id> --verbose` may show deeper terminal-check detail, including
 unmapped parent outcome lines, failed proof, blocked proof, deferred proof, and
 residual risks.
 

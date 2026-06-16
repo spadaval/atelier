@@ -19,5 +19,5 @@ Primary question: "How do I record, inspect, and reuse proof?"
 | --- | --- | --- | --- |
 | `evidence record --target issue/<id> ...` | Reviewer | Capture validation, test, review, or artifact proof. | Good. |
 | `evidence show <id>` | Reviewer | Inspect one proof record. | Good. |
-| `evidence list [--result]` | Reviewer | Find proof records by outcome. | Good. |
+| `evidence list` | Reviewer | Find proof records. | Good. |
 | `evidence attach <id> ...` | Reviewer | Reuse existing proof on another target. | Good as secondary surface. |

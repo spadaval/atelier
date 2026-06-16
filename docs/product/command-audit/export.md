@@ -11,13 +11,13 @@ storage migration or repair?"
 ## Assessment
 
 - Name: Potentially misleading if visible. Product docs say export/rebuild are
-  low-level mechanics, not normal handoff, health, validation, or closeout
+  low-level mechanics, not normal handoff, health, validation, or terminal
   commands.
 - Documentation: Should be hidden/admin-only, absent from root normal workflow
   help, and absent from worker/reviewer handoff recipes.
 - Design: Acceptable only as a deterministic-renderer test, projection
   diagnostic, or temporary migration surface. It should not be an automation
-  contract for agents selecting work, proving validation, or deciding closeout.
+  contract for agents selecting work, proving validation, or deciding terminal readiness.
 - Output hierarchy: Export/check result, paths, freshness result, next `lint` or
   `doctor` command.
 
@@ -35,4 +35,4 @@ diagnostic, lock, and cache state is repairable checkout state. Normal commands
 should refresh projections safely when possible, `doctor` reports local health,
 and `doctor --fix` owns explicit ignored-state repair. `export` must not
 overwrite canonical records during recovery and must not be presented as the
-ordinary proof that a handoff, validation, or closeout is ready.
+ordinary proof that a handoff, validation, or terminal check is ready.

@@ -528,10 +528,10 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     assert!(mission_out.contains("Mission atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Dirty closeout");
     let (success, work_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Dirty closeout work"]);
+        run_atelier(dir.path(), &["issue", "create", "Dirty terminal work"]);
     assert!(success, "work create failed: {stderr}");
     assert!(work_out.contains("Created issue atelier-"));
-    let work_id = issue_id_by_title(dir.path(), "Dirty closeout work");
+    let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
@@ -1049,13 +1049,11 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "newest closed evidence",
         ],
     );
     assert!(success, "closed evidence create failed: {stderr}");
-    assert!(closed_evidence.contains("[evidence] pass - newest closed evidence"));
+    assert!(closed_evidence.contains("[evidence] recorded - newest closed evidence"));
     let closed_evidence_id = record_id_by_title(dir.path(), "evidence", "newest closed evidence");
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1140,13 +1138,11 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
             "record",
             "--kind",
             "test",
-            "--result",
-            "pass",
             "older mission evidence",
         ],
     );
     assert!(success, "evidence record failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - older mission evidence"));
+    assert!(evidence_out.contains("[evidence] recorded - older mission evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "older mission evidence");
     let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(
@@ -1674,13 +1670,11 @@ fn test_mission_list_default_current_empty_state() {
             "record",
             "--kind",
             "validation",
-            "--result",
-            "pass",
             "closed only evidence",
         ],
     );
     assert!(success, "evidence create failed: {stderr}");
-    assert!(evidence_out.contains("[evidence] pass - closed only evidence"));
+    assert!(evidence_out.contains("[evidence] recorded - closed only evidence"));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "closed only evidence");
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1994,8 +1988,8 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     assert!(success, "issue block failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
     assert!(success, "export failed: {stderr}");
-    ensure_issue_closeout_sections(dir.path(), &first_id);
-    ensure_issue_closeout_sections(dir.path(), &second_id);
+    ensure_issue_completion_sections(dir.path(), &first_id);
+    ensure_issue_completion_sections(dir.path(), &second_id);
 
     std::fs::write(dir.path().join(".atelier/manifest.json"), "{}\n").unwrap();
     std::fs::write(dir.path().join(".atelier/graph.json"), "{}\n").unwrap();
@@ -2051,7 +2045,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
     let issue_id = issue_ref(dir.path(), 1);
     let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
     assert!(success, "doctor --fix failed: {stderr}");
-    ensure_issue_closeout_sections(dir.path(), &issue_id);
+    ensure_issue_completion_sections(dir.path(), &issue_id);
     write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
@@ -3272,7 +3266,7 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id]);
     assert!(success, "child start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
-    ensure_all_issue_closeout_sections(dir.path());
+    ensure_all_issue_completion_sections(dir.path());
     attach_issue_pass_evidence(dir.path(), &child_id);
 
     let (success, close_out, stderr) = run_atelier(
@@ -3315,7 +3309,7 @@ fn test_standalone_issue_close_squash_merges_to_base() {
     assert!(success, "start failed: {stderr}");
     std::fs::write(dir.path().join("standalone.txt"), "standalone work\n").unwrap();
     commit_all(dir.path(), "standalone implementation");
-    ensure_all_issue_closeout_sections(dir.path());
+    ensure_all_issue_completion_sections(dir.path());
     attach_issue_pass_evidence(dir.path(), &issue_id);
 
     let (success, close_out, stderr) = run_atelier(
@@ -3369,7 +3363,7 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
 
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id]);
     assert!(success, "child start failed: {stderr}");
-    ensure_all_issue_closeout_sections(dir.path());
+    ensure_all_issue_completion_sections(dir.path());
     attach_issue_pass_evidence(dir.path(), &child_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -3380,7 +3374,7 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
     assert!(success, "epic start failed: {stderr}");
     move_issue_to_validation(dir.path(), &epic_id);
-    ensure_all_issue_closeout_sections(dir.path());
+    ensure_all_issue_completion_sections(dir.path());
     attach_issue_pass_evidence(dir.path(), &epic_id);
 
     let (success, close_out, stderr) = run_atelier(
@@ -3420,7 +3414,7 @@ fn test_issue_close_merge_failure_rolls_back_terminal_tracker_state() {
     assert!(success, "start failed: {stderr}");
     std::fs::write(dir.path().join("conflict.txt"), "issue branch\n").unwrap();
     commit_all(dir.path(), "issue branch conflict content");
-    ensure_all_issue_closeout_sections(dir.path());
+    ensure_all_issue_completion_sections(dir.path());
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "issue proof ready before conflict close");
 

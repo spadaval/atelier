@@ -164,7 +164,7 @@ time pressure:
 - Coordinate mission progress: see linked work by state, blockers, evidence
   gaps, completion status, and the next action for the mission. Owned by
   `atelier mission show`, `atelier mission status`, `atelier mission update`,
-  `atelier mission add-work/unlink/add-blocker`, and `atelier mission audit`.
+  and `atelier mission add-work/unlink/add-blocker`.
 - Manage relationships: record issue blockers and inspect cross-record impact
   when the next action depends on graph shape. Owned by issue blocker
   subcommands, mission work-link subcommands, evidence attachment, plan
@@ -281,14 +281,13 @@ State-specific next actions are part of the command contract:
 - `closed`: show the close reason, completion evidence or validation issue, and
   history/audit drill-down commands without suggesting new implementation work.
 
-`atelier mission audit <id>` is not a normal daily status command. Its fate is
-to remain a completion drill-down and, where practical, become the verbose
-completion section behind `atelier mission status --completion` or equivalent. The
-audit is advisory orientation unless a workflow explicitly requires it; parent
-judgment that can block completion belongs to linked validation work
-with attached evidence and workflow approval. Raw workflow validator names are
-diagnostic detail; normal completion output names the operator-facing blocker
-class and the next domain command. `atelier lint` owns committed
+`atelier mission status <id> --verbose` is the mission terminal-check
+drill-down. It remains advisory orientation unless a workflow explicitly
+requires linked validation work; parent judgment that can block completion
+belongs to linked validation work with attached evidence and workflow approval.
+Raw workflow validator names are diagnostic detail; normal completion output
+names the operator-facing blocker class and the next domain command.
+`atelier lint` owns committed
 workflow/config validity, `issue transition --options` owns issue-level
 readiness inspection, and `mission status` owns mission completion inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
@@ -301,8 +300,8 @@ proof, and artifact references as one operator workflow. The target is supplied
 as one low-friction argument:
 
 ```text
-atelier evidence record --target issue/<id> --kind validation --result pass "summary"
-atelier evidence record --target issue/<id> --kind test --result pass -- <command>
+atelier evidence record --target issue/<id> --kind validation "summary"
+atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 The target syntax is `<kind>/<id>`. Version 1 accepts `issue/<id>` as the normal
@@ -515,11 +514,12 @@ generic relationship verb.
 | Show issue accountability, status, blockers, notes, and completion status | issue ID | `atelier issue show <issue-id>` or `atelier issue transition <issue-id> --options` | Issue commands accept issue IDs. Passing a mission, evidence, plan, or milestone ID should produce wrong-kind guidance to the matching show surface. |
 | Add or remove mission work | mission ID plus issue or epic ID | `atelier mission add-work <mission-id> <issue-id>` and `atelier mission unlink <mission-id> <issue-id>` | Mission work links use the `advances` relation. Do not use a generic link command. |
 | Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier mission add-blocker <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
-| Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation --result pass "summary"` or `atelier evidence record --target issue/<id> --kind test --result pass -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit completion mirroring. |
+| Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation "summary"` or `atelier evidence record --target issue/<id> --kind test -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit completion mirroring. |
 | Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
 | Inspect cross-record impact or hierarchy | mission or issue ID for impact; all records for tree | `atelier graph impact <mission-or-issue-id>` and `atelier graph tree --compact` | Graph commands inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
 | Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
 | Create or relate durable plans | plan, mission, issue, and evidence IDs as required by the subcommand | `atelier plan create`, `atelier plan show <plan-id>`, `atelier plan link <plan-id> <kind>/<id>`, and `atelier plan apply <plan-id>` | Plans own authored execution graphs. Plan links do not replace issue blockers or mission work links. |
+| Inspect or repair epic review branches | epic or issue ID | `atelier branch status`, `atelier branch for-epic <epic-id>`, and `atelier branch merge <epic-id>` | Branch helpers are advanced Git lifecycle surfaces. Routine workers usually use `atelier start` and issue close. |
 | Inspect first-class evidence, plan, or milestone records | evidence, plan, or milestone ID | `atelier evidence show <evidence-id>`, `atelier plan show <plan-id>`, or the milestone surface when enabled | These records are supporting artifacts. Issue commands should reject their IDs with corrective wrong-kind guidance. |
 
 Mission-vs-issue example:
@@ -527,7 +527,7 @@ Mission-vs-issue example:
 ```text
 atelier mission add-work atelier-hy2i atelier-4p7q
 atelier issue block atelier-isd5 atelier-a625
-atelier evidence record --target issue/atelier-isd5 --kind validation --result pass "operator command map checked against current help"
+atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map checked against current help"
 atelier graph impact atelier-hy2i
 atelier issue note atelier-isd5 "CLI surface examples checked against root help."
 ```

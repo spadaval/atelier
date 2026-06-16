@@ -104,8 +104,8 @@ Choose the proof surface by the claim being closed:
 | Claim | Enough proof | Command shape | Completion implication |
 | --- | --- | --- | --- |
 | Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier mission note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
-| Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation --result pass "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
-| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test --result pass -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
+| Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
+| Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
 | Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent completion should map the parent claim to the independent validation issue and its evidence ID. |
 | Epic or mission completion | Validation issue that maps parent claims to child proof | Record evidence on the validation issue. | Mission completion comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
@@ -114,20 +114,20 @@ Example for ordinary documentation work:
 
 ```text
 atelier issue note atelier-isd5 "Examples checked against graph, mission, issue, and evidence help."
-atelier evidence record --target issue/atelier-isd5 --kind validation --result pass "operator command map examples use current record-specific command families"
+atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map examples use current record-specific command families"
 atelier issue transition atelier-isd5 request_validation
 ```
 
 Example for command-backed validation:
 
 ```text
-atelier evidence record --target issue/atelier-zrqa --kind test --result pass -- target/debug/atelier lint atelier-zrqa
+atelier evidence record --target issue/atelier-zrqa --kind test -- target/debug/atelier lint atelier-zrqa
 ```
 
 Example for independent completion proof:
 
 ```text
-atelier evidence record --target issue/<validation-issue-id> --kind validation --result pass "mission completion validation maps mission expectations to closed linked work and evidence IDs"
+atelier evidence record --target issue/<validation-issue-id> --kind validation "mission completion validation maps mission expectations to closed linked work and evidence IDs"
 atelier mission close <mission-id> --reason "linked work closed and completion proof attached"
 ```
 

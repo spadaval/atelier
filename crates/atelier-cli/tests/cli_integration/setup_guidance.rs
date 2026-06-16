@@ -806,12 +806,9 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["evidence", "record", "--help"]);
     assert!(success, "evidence record help failed: {stderr}");
     assert!(stdout.contains("issue/<id>"));
-    assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind validation --result pass \"summary\""
-    ));
-    assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind test --result pass -- <command>"
-    ));
+    assert!(stdout
+        .contains("atelier evidence record --target issue/<id> --kind validation \"summary\""));
+    assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));
 }
 
@@ -1176,9 +1173,8 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(spec.contains("atelier status"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
-    assert!(spec.contains(
-        "atelier evidence record --target issue/atelier-z1p8 --kind test --result pass -- <command>"
-    ));
+    assert!(spec
+        .contains("atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>"));
 }
 
 #[test]

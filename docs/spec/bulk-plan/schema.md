@@ -171,7 +171,7 @@ Milestone records follow the first-class checkpoint model in
 | `scope` | array of strings | Included, excluded, or deferred boundaries in author order. |
 | `validation_criteria` | array of strings | Ordered acceptance criteria for the checkpoint. |
 | `missions` | array of references | Missions this checkpoint advances. |
-| `contributing_work` | array of references | Issues, epics, reviews, validations, or closeouts that contribute. |
+| `contributing_work` | array of references | Issues, epics, reviews, or validations that contribute. |
 
 Milestones are not parent work queues. Use hierarchy for issue ownership and
 mission `work`, plan `applies_to`, evidence `validates`, or milestone
