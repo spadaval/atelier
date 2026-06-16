@@ -59,6 +59,6 @@ Atelier should use missions as background-agent workspaces, epics as branch/revi
 - Agent Factory skill and repo binding instruct orchestrators to share mission worktrees, use epic branches for review, and avoid per-issue worktrees unless isolation is justified.
 - Migration evidence classifies existing issue worktrees and branches, removes clean contained worktrees, and preserves or folds unmerged/dirty state into the new model.
 
-## Closeout Notes
+## Terminal Notes
 
 - Close reason: Mission complete: all 24 linked work items are closed; mission closeout audit passes; blockers are clear; attached proof is complete; lint, doctor, and export check pass.

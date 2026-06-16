@@ -771,8 +771,8 @@ pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result
     let store = RecordStore::new(state_dir);
     let mut current = store.load_domain_record_by_id(KIND, id)?;
     let mut sections = record_store::mission_sections_from_domain_record(&current.record)?;
-    sections.closeout_notes = Some(append_closeout_reason(
-        sections.closeout_notes.as_deref(),
+    sections.terminal_notes = Some(append_terminal_reason(
+        sections.terminal_notes.as_deref(),
         reason.trim(),
     ));
     current.record.status = "closed".to_string();
@@ -786,7 +786,7 @@ pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result
     print_record(&record)
 }
 
-fn append_closeout_reason(existing: Option<&str>, reason: &str) -> String {
+fn append_terminal_reason(existing: Option<&str>, reason: &str) -> String {
     let entry = format!("- Close reason: {reason}");
     match existing.map(str::trim).filter(|value| !value.is_empty()) {
         Some(existing) => format!("{existing}\n{entry}"),
@@ -2171,8 +2171,8 @@ fn render_mission_show_human(
     print_mission_section("Constraints", &sections.constraints);
     print_mission_section("Risks", &sections.risks);
     print_mission_section("Validation", &sections.validation);
-    if let Some(closeout_notes) = sections.closeout_notes.as_deref() {
-        print_mission_section("Closeout Notes", closeout_notes);
+    if let Some(terminal_notes) = sections.terminal_notes.as_deref() {
+        print_mission_section("Terminal Notes", terminal_notes);
     }
     if let Some(notes) = sections.notes.as_deref() {
         print_mission_section("Notes", notes);

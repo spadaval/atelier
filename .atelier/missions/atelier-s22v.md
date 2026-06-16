@@ -49,6 +49,6 @@ Turn the postmortem decisions into a simpler Atelier workflow: missions act as c
 - Product, workflow, validation, and Agent Factory docs describe the simplified model without red-tape heuristics.
 - atelier lint, git diff --check, and relevant focused workflow and command-surface checks pass.
 
-## Closeout Notes
+## Terminal Notes
 
 - Close reason: All linked work, parent epics, and independent validation issue atelier-jxs8 are closed with passing evidence; mission closeout gates are green.

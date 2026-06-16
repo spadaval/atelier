@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Migrate mission terminal notes section away from Closeout Notes"
-updated_at: "2026-06-15T21:32:01.323862375+00:00"
+updated_at: "2026-06-16T20:34:01.488740734+00:00"
 ---
 
 ## Description

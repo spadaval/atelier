@@ -56,6 +56,6 @@ Turn the 2026-06-14 Codex mission-log findings into durable improvements across 
 - Focused CLI tests prove corrective errors, stale-state recovery, worktree behavior, and closeout proof matching where implemented.
 - Mission closeout records atelier lint, atelier doctor, relevant focused tests, and git diff --check proof; low-level export/rebuild diagnostics are recorded only when a failure specifically requires them.
 
-## Closeout Notes
+## Terminal Notes
 
 - Close reason: All linked epics and closeout work are done; mission audit covers all validation lines and epic outcomes with evidence; lint, doctor, focused tests, docs/help drift, and git diff checks passed.

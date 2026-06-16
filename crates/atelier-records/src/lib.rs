@@ -308,7 +308,7 @@ pub struct MissionSections {
     pub constraints: String,
     pub risks: String,
     pub validation: String,
-    pub closeout_notes: Option<String>,
+    pub terminal_notes: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -318,7 +318,7 @@ pub enum MissionSectionName {
     Constraints,
     Risks,
     Validation,
-    CloseoutNotes,
+    TerminalNotes,
     Notes,
 }
 
@@ -328,7 +328,7 @@ impl MissionSections {
         MissionSectionName::Constraints,
         MissionSectionName::Risks,
         MissionSectionName::Validation,
-        MissionSectionName::CloseoutNotes,
+        MissionSectionName::TerminalNotes,
         MissionSectionName::Notes,
     ];
 }
@@ -340,7 +340,7 @@ impl MissionSectionName {
             MissionSectionName::Constraints => "Constraints",
             MissionSectionName::Risks => "Risks",
             MissionSectionName::Validation => "Validation",
-            MissionSectionName::CloseoutNotes => "Closeout Notes",
+            MissionSectionName::TerminalNotes => "Terminal Notes",
             MissionSectionName::Notes => "Notes",
         }
     }
@@ -1920,7 +1920,7 @@ pub fn mission_sections_from_inputs(
         constraints: mission_list_section(constraints, "- None."),
         risks: mission_list_section(risks, "- None."),
         validation: mission_list_section(validation, "- Validation was not specified."),
-        closeout_notes: None,
+        terminal_notes: None,
         notes: None,
     }
 }
@@ -1948,14 +1948,14 @@ pub fn render_mission_sections(sections: &MissionSections) -> String {
         sections.risks.trim(),
         sections.validation.trim()
     );
-    if let Some(closeout_notes) = sections
-        .closeout_notes
+    if let Some(terminal_notes) = sections
+        .terminal_notes
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        body.push_str("\n\n## Closeout Notes\n\n");
-        body.push_str(closeout_notes);
+        body.push_str("\n\n## Terminal Notes\n\n");
+        body.push_str(terminal_notes);
     }
     if let Some(notes) = sections
         .notes
@@ -2028,8 +2028,8 @@ pub fn parse_mission_sections(body: &str, relative: &Path) -> Result<MissionSect
         )?,
         risks: required_mission_section(&sections, MissionSectionName::Risks, relative)?,
         validation: required_mission_section(&sections, MissionSectionName::Validation, relative)?,
-        closeout_notes: sections
-            .get(MissionSectionName::CloseoutNotes.title())
+        terminal_notes: sections
+            .get(MissionSectionName::TerminalNotes.title())
             .cloned(),
         notes: sections.get(MissionSectionName::Notes.title()).cloned(),
     })
@@ -2091,7 +2091,7 @@ fn legacy_mission_sections(
             value_string_array(&data, "validation"),
             "- Validation was not specified.",
         ),
-        closeout_notes: value_string_array(&data, "closeout_notes")
+        terminal_notes: value_string_array(&data, "terminal_notes")
             .into_iter()
             .next()
             .filter(|value| !value.trim().is_empty()),
@@ -3372,7 +3372,7 @@ mod tests {
             constraints: "- Keep command output readable.".to_string(),
             risks: "- Relationship buckets can drift.".to_string(),
             validation: "- `cargo test record_store` passes.".to_string(),
-            closeout_notes: Some("Closed with validation evidence.".to_string()),
+            terminal_notes: Some("Closed with validation evidence.".to_string()),
             notes: Some("Handoff context.".to_string()),
         };
         CanonicalDomainRecord {
@@ -3707,7 +3707,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("## Intent\n\nRepair mission records."));
         assert!(text.contains("## Constraints\n\n- Keep command output readable."));
-        assert!(text.contains("## Closeout Notes\n\nClosed with validation evidence."));
+        assert!(text.contains("## Terminal Notes\n\nClosed with validation evidence."));
         assert!(text.contains(
             "  relates:\n  - kind: \"issue\"\n    id: \"atelier-blok\"\n    type: \"blocked_by\"\n"
         ));

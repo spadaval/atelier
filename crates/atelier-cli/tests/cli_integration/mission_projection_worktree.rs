@@ -500,7 +500,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
         "mission close should succeed after gates pass: {stderr}"
     );
     assert!(close_out.contains("Status: closed"));
-    assert!(close_out.contains("Closeout Notes"));
+    assert!(close_out.contains("Terminal Notes"));
     assert!(close_out.contains("- Close reason: ready to close"));
     commit_all(dir.path(), "closed mission");
 
@@ -611,7 +611,7 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
         "mission close should ignore tracker-generated closeout bookkeeping: {stderr}"
     );
     assert!(close_out.contains("Status: closed"));
-    assert!(close_out.contains("Closeout Notes"));
+    assert!(close_out.contains("Terminal Notes"));
 }
 
 #[test]
