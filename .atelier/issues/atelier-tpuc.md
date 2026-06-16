@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-16T20:33:39.847499685+00:00"
+status: "done"
 title: "Update tests and docs for closeout removal"
-updated_at: "2026-06-16T20:18:59.152063592+00:00"
+updated_at: "2026-06-16T20:33:39.847499685+00:00"
 ---
 
 ## Description
