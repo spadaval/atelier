@@ -8,8 +8,8 @@ start or close lifecycle commands cannot complete automatically?"
 ## Assessment
 
 - Name: Correct.
-- Documentation: Correct in source help, but the installed `atelier` binary may
-  lag and omit this command.
+- Documentation: Correct in source help. It belongs in advanced recovery
+  guidance, not routine worker loops.
 - Design: Advanced. Routine worker and manager loops should use `atelier start`
   for branch preparation and close lifecycle commands for integration; branch
   commands remain explicit recovery and diagnostic surfaces.
