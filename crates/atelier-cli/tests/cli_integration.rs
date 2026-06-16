@@ -150,6 +150,20 @@ fn git_status_short(dir: &Path) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
+fn git_current_branch(dir: &Path) -> String {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["branch", "--show-current"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git branch --show-current failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 fn init_atelier_with_telemetry_disabled(dir: &Path) {
     let (success, _, stderr) =
         run_atelier_with_env(dir, &["init"], &[("ATELIER_TELEMETRY", "off")]);

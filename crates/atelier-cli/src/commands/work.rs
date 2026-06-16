@@ -24,12 +24,24 @@ struct WorktreeStatus {
     export_errors: Vec<String>,
 }
 
-fn print_started_work(db: &Database, id: &str) -> Result<()> {
+fn print_started_work(
+    db: &Database,
+    id: &str,
+    resolution: &atelier_app::workflow_policy::BranchLifecycleResolution,
+) -> Result<()> {
     let issue = db.require_issue(id)?;
     let branch = current_branch().ok();
     let path = env::current_dir()?.to_string_lossy().to_string();
     crate::commands::activity_log::record_work_started(id, branch.as_deref(), Some(&path))?;
     println!("Started work on {} {}", issue.id, issue.title);
+    println!(
+        "Branch owner: {} {} ({})",
+        branch_owner_label(&resolution.owner_kind),
+        resolution.owner_id,
+        resolution.owner_issue_type
+    );
+    println!("Effective branch: {}", resolution.expected_branch);
+    println!("Base branch: {}", resolution.base_branch);
     if let Some(branch) = branch {
         println!("Branch: {branch}");
     }
@@ -42,6 +54,7 @@ fn print_started_work(db: &Database, id: &str) -> Result<()> {
         println!("  Inspect mission selection and blockers: atelier mission status {mission_id}");
     }
     println!("  Inspect work transitions: atelier issue transition {id} --options");
+    println!("  Record proof: atelier evidence record --target issue/{id} --kind test --result pass \"...\"");
     Ok(())
 }
 
@@ -49,12 +62,59 @@ pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()>
     let db = Database::open(db_path)?;
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
-    ensure_clean_worktree()?;
+    let resolution = prepare_start_branch(&db, id)?;
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
     drop(db);
 
     let db = Database::open(db_path)?;
-    print_started_work(&db, id)
+    print_started_work(&db, id, &resolution)
+}
+
+fn prepare_start_branch(
+    db: &Database,
+    id: &str,
+) -> Result<atelier_app::workflow_policy::BranchLifecycleResolution> {
+    ensure_clean_worktree()?;
+    let root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&root)?;
+    let resolution = policy.resolve_branch_lifecycle(db, id).with_context(|| {
+        format!(
+            "Branch lifecycle resolution failed before workflow transition. Inspect parent links with `atelier issue show {id}`."
+        )
+    })?;
+    ensure_start_branch(&resolution)?;
+    Ok(resolution)
+}
+
+fn ensure_start_branch(
+    resolution: &atelier_app::workflow_policy::BranchLifecycleResolution,
+) -> Result<()> {
+    let current = current_branch().unwrap_or_default();
+    if current == resolution.expected_branch {
+        return Ok(());
+    }
+
+    if branch_exists(&resolution.expected_branch)? {
+        git_switch_for_start(&resolution.expected_branch)?;
+        return Ok(());
+    }
+
+    if !branch_exists(&resolution.base_branch)? {
+        bail!(
+            "Branch checkout failed before workflow transition: configured base branch '{}' does not exist.\nNext command: git branch {}",
+            resolution.base_branch,
+            resolution.base_branch
+        );
+    }
+
+    git_create_branch_for_start(&resolution.expected_branch, &resolution.base_branch)
+}
+
+fn branch_owner_label(owner_kind: &atelier_app::workflow_policy::BranchOwnerKind) -> &'static str {
+    match owner_kind {
+        atelier_app::workflow_policy::BranchOwnerKind::Epic => "epic",
+        atelier_app::workflow_policy::BranchOwnerKind::StandaloneIssue => "issue",
+    }
 }
 
 pub fn worktree_status(db: &Database) -> Result<()> {
@@ -686,6 +746,34 @@ fn git_switch(branch: &str) -> Result<()> {
         .context("failed to run git switch")?;
     if !status.success() {
         bail!("git switch failed for {branch}");
+    }
+    Ok(())
+}
+
+fn git_switch_for_start(branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .args(["switch", branch])
+        .output()
+        .context("failed to run git switch")?;
+    if !output.status.success() {
+        bail!(
+            "Branch checkout failed before workflow transition while switching to {branch}: {}\nNext command: git status --short --branch",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+fn git_create_branch_for_start(branch: &str, base_branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .args(["switch", "-c", branch, base_branch])
+        .output()
+        .context("failed to run git switch -c")?;
+    if !output.status.success() {
+        bail!(
+            "Branch checkout failed before workflow transition while creating {branch} from {base_branch}: {}\nNext command: git status --short --branch",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     Ok(())
 }

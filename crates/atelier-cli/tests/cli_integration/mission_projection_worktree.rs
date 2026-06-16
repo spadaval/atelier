@@ -2675,6 +2675,11 @@ fn test_work_lifecycle_human_output_and_guards() {
         .args(["config", "user.name", "Test"])
         .status()
         .unwrap();
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
     init_atelier(dir.path());
     migrate_default_issue_workflow(dir.path());
 
@@ -2754,11 +2759,25 @@ hooks:
         activities.join("\n--- activity ---\n")
     );
 
-    let worktree_path = dir.path().join(".atelier-worktrees").join(&issue_id);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Worktree item"]);
+    assert!(success, "worktree issue create failed: {stderr}");
+    let worktree_issue_id = issue_id_by_title(dir.path(), "Worktree item");
+    commit_all(dir.path(), "worktree setup baseline");
+
+    let worktree_path = dir
+        .path()
+        .join(".atelier-worktrees")
+        .join(&worktree_issue_id);
     let worktree_arg = worktree_path.to_string_lossy().to_string();
     let (success, worktree_out, stderr) = run_atelier(
         dir.path(),
-        &["worktree", "for", &issue_id, "--path", &worktree_arg],
+        &[
+            "worktree",
+            "for",
+            &worktree_issue_id,
+            "--path",
+            &worktree_arg,
+        ],
     );
     assert!(success, "worktree for failed: {stderr}");
     assert!(worktree_out.contains(&worktree_arg));
@@ -2770,14 +2789,14 @@ hooks:
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "worktree-local status failed: {stderr}");
     assert!(
-        child_status_out.contains(&format!("  {issue_id} - Work item")),
+        child_status_out.contains(&format!("  {worktree_issue_id} - Worktree item")),
         "worktree-local status should derive current work from issue status: {child_status_out}"
     );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status failed: {stderr}");
     assert!(status_out.contains(&worktree_arg));
-    assert!(status_out.contains(&format!("{issue_id} [in_progress]")));
+    assert!(status_out.contains(&format!("{worktree_issue_id} [in_progress]")));
 
     let (success, status_human, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "human worktree status failed: {stderr}");
@@ -2786,7 +2805,7 @@ hooks:
     assert!(status_human.contains("Branch:"));
     assert!(status_human.contains("State:"));
     assert!(status_human.contains("Associated Work"));
-    assert!(status_human.contains(&format!("{issue_id} [in_progress]")));
+    assert!(status_human.contains(&format!("{worktree_issue_id} [in_progress]")));
     assert!(!status_human.contains("work:"));
     assert!(!status_human.contains("export:"));
 
@@ -2797,12 +2816,13 @@ hooks:
         .unwrap();
     assert!(status.success(), "manual git worktree remove failed");
     assert!(!worktree_path.exists());
-    let (success, repair_out, stderr) = run_atelier(dir.path(), &["worktree", "repair", &issue_id]);
+    let (success, repair_out, stderr) =
+        run_atelier(dir.path(), &["worktree", "repair", &worktree_issue_id]);
     assert!(success, "worktree repair failed: {stderr}");
     assert!(repair_out.contains("Cleared stale worktree path"));
     let (success, repaired_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
     assert!(success, "worktree status after repair failed: {stderr}");
-    assert!(!repaired_status.contains(&issue_id));
+    assert!(!repaired_status.contains(&worktree_issue_id));
 
     migrate_default_issue_workflow(dir.path());
     let (success, _, stderr) =
@@ -2849,6 +2869,157 @@ hooks:
         "worktree status after failed setup failed: {stderr}"
     );
     assert!(failed_status.contains(&format!("{failed_issue_id} [in_progress]")));
+}
+
+#[test]
+fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transition() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Owner epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Owner epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Child work", "--parent", &epic_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Child work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Standalone work"]);
+    assert!(success, "standalone create failed: {stderr}");
+    let standalone_id = issue_id_by_title(dir.path(), "Standalone work");
+    commit_all(dir.path(), "initial tracker state");
+
+    let (success, child_out, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+    assert!(success, "child start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(child_out.contains(&format!("Started work on {child_id} Child work")));
+    assert!(child_out.contains(&format!("Branch owner: epic {epic_id} (epic)")));
+    assert!(child_out.contains(&format!("Effective branch: epic/{epic_id}")));
+    assert!(child_out.contains("Base branch: main"));
+    assert!(child_out.contains(&format!(
+        "Record proof: atelier evidence record --target issue/{child_id}"
+    )));
+    let (success, child_show, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "child show failed: {stderr}");
+    assert!(child_show.contains("Status:   in_progress"), "{child_show}");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch back to main failed");
+    let (success, standalone_out, stderr) = run_atelier(dir.path(), &["start", &standalone_id]);
+    assert!(success, "standalone start failed: {stderr}");
+    assert_eq!(
+        git_current_branch(dir.path()),
+        format!("codex/{standalone_id}")
+    );
+    assert!(standalone_out.contains(&format!("Branch owner: issue {standalone_id} (task)")));
+    assert!(standalone_out.contains(&format!("Effective branch: codex/{standalone_id}")));
+    let (success, standalone_show, stderr) =
+        run_atelier(dir.path(), &["issue", "show", &standalone_id]);
+    assert!(success, "standalone show failed: {stderr}");
+    assert!(
+        standalone_show.contains("Status:   in_progress"),
+        "{standalone_show}"
+    );
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch back to main failed");
+    let (success, epic_out, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
+    assert!(success, "epic start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(epic_out.contains(&format!("Branch owner: epic {epic_id} (epic)")));
+    let (success, epic_show, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
+    assert!(success, "epic show failed: {stderr}");
+    assert!(epic_show.contains("Status:   in_progress"), "{epic_show}");
+}
+
+#[test]
+fn test_start_dirty_worktree_leaves_tracker_state_unchanged() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Dirty start"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Dirty start");
+    commit_all(dir.path(), "initial tracker state");
+    std::fs::write(dir.path().join("dirty.txt"), "dirty\n").unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(!success, "dirty start unexpectedly succeeded:\n{stdout}");
+    assert!(
+        stderr.contains("Worktree has uncommitted changes") && stderr.contains("dirty.txt"),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "main");
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
+}
+
+#[test]
+fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Checkout failure"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Checkout failure");
+    commit_all(dir.path(), "initial tracker state");
+    let other_dir = tempdir().unwrap();
+    let other_worktree = other_dir.path().join("other-worktree");
+    let expected_branch = format!("codex/{issue_id}");
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["worktree", "add", "-b", &expected_branch])
+        .arg(&other_worktree)
+        .arg("main")
+        .status()
+        .unwrap();
+    assert!(status.success(), "git worktree add failed");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(
+        !success,
+        "checkout-failure start unexpectedly succeeded:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("Branch checkout failed before workflow transition")
+            && stderr.contains("Next command: git status --short --branch"),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "main");
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
 }
 
 #[test]

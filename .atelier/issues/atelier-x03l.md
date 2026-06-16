@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T16:51:14.162938659+00:00"
+status: "done"
 title: "Make start prepare the correct work branch automatically"
-updated_at: "2026-06-16T15:47:26.736815316+00:00"
+updated_at: "2026-06-16T16:51:14.162938659+00:00"
 ---
 
 ## Description
