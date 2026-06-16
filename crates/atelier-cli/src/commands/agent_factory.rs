@@ -5,9 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_blocks_work, issue_start_readiness, issue_status_category,
-    issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
-    IssueStartReadiness,
+    format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
+    load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
@@ -991,7 +990,7 @@ pub fn list(
     if rows.is_empty() {
         println!("No issues found.");
     } else if quiet {
-        render_queue_ids_quiet(rows);
+        render_queue_ids_quiet(order_queue_rows(rows));
     } else {
         render_issue_queue_human(db, "Issue Queue", rows, true)?;
     }
@@ -1159,19 +1158,11 @@ fn filter_ready_rows(
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
-                let readiness =
-                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
-                Ok((
-                    row,
-                    external.is_empty() && readiness == IssueStartReadiness::Ready,
-                ))
+                let is_ready = external.is_empty() && row.state_label() == "ready";
+                Ok((row, is_ready))
             } else {
-                let readiness =
-                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
-                Ok((
-                    row.clone(),
-                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready,
-                ))
+                let is_ready = row.open_blockers.is_empty() && row.state_label() == "ready";
+                Ok((row, is_ready))
             }
         })
         .filter_map(|result: Result<(QueueRow, bool)>| match result {
@@ -1348,7 +1339,12 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     println!("\n{heading}");
     println!("{}", "-".repeat(heading.len()));
     if !group.external_blockers.is_empty() {
-        println!("  blocked by {}", compact_id_list(&group.external_blockers));
+        let group_id = group.id.as_deref().unwrap_or("<id>");
+        println!(
+            "  blocked by {} external blocker{}; details: atelier issue blocked {group_id}",
+            group.external_blockers.len(),
+            plural_suffix(group.external_blockers.len())
+        );
     }
     if group.rows.is_empty() {
         return;
@@ -1367,7 +1363,7 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
         } else {
             String::new()
         };
-        let blockers = blocker_suffix(&row.open_blockers);
+        let blockers = blocker_suffix(&row.id, &row.open_blockers);
         let indent = "  ".repeat(row.depth.max(1));
         println!(
             "  {}[{}] {}{} - {}{}",
@@ -1381,20 +1377,23 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
 }
 
-fn blocker_suffix(blockers: &[String]) -> String {
+fn blocker_suffix(issue_id: &str, blockers: &[String]) -> String {
     if blockers.is_empty() {
         String::new()
     } else {
-        format!(" - blocked by {}", compact_id_list(blockers))
+        format!(
+            " ({} blocker{}; details: atelier issue blocked {issue_id})",
+            blockers.len(),
+            plural_suffix(blockers.len())
+        )
     }
 }
 
-fn compact_id_list(ids: &[String]) -> String {
-    const LIMIT: usize = 3;
-    if ids.len() <= LIMIT {
-        ids.join(", ")
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
     } else {
-        format!("{}, +{} more", ids[..LIMIT].join(", "), ids.len() - LIMIT)
+        "s"
     }
 }
 

@@ -897,7 +897,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 if status != "todo" || category.is_some() || label.is_some() || priority.is_some() {
                     bail!("--blocked cannot be combined with --status, --category, --label, or --priority");
                 }
-                commands::deps::list_blocked(&db)
+                commands::deps::list_blocked(&db, quiet)
             } else {
                 commands::agent_factory::list(
                     &db,
@@ -1020,7 +1020,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             if let Some(id) = id {
                 commands::agent_factory::dep_list(&db, Some(&id))
             } else {
-                commands::deps::list_blocked(&db)
+                commands::deps::list_blocked(&db, quiet)
             }
         }
     }

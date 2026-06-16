@@ -1,35 +1,90 @@
 use anyhow::Result;
 
+use crate::commands::issue_workflow::{
+    issue_blocks_work, issue_status_category, load_issue_workflow_policy,
+};
+use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::{format_issue_id, truncate};
+use atelier_app::workflow_policy::WorkflowPolicy;
+use atelier_core::Issue;
 use atelier_sqlite::Database;
 
-pub fn list_blocked(db: &Database) -> Result<()> {
-    let issues = db.list_blocked_issues()?;
+#[derive(Debug, Clone)]
+struct BlockedListRow {
+    issue: Issue,
+    display_id: String,
+    blockers: Vec<String>,
+    status_category: Option<String>,
+}
 
-    if issues.is_empty() {
+pub fn list_blocked(db: &Database, quiet: bool) -> Result<()> {
+    let workflow_policy = load_issue_workflow_policy()?;
+    let mut rows = db
+        .list_blocked_issues()?
+        .into_iter()
+        .map(|issue| blocked_list_row(db, workflow_policy.as_ref(), issue))
+        .collect::<Result<Vec<_>>>()?;
+    rows = order_work_rows(rows, |row| WorkOrderRow {
+        id: row.display_id.clone(),
+        status_category: row.status_category.clone(),
+        priority: row.issue.priority.clone(),
+        updated_at: row.issue.updated_at,
+        open_blockers: row.blockers.clone(),
+    });
+
+    if rows.is_empty() {
         println!("No blocked issues.");
         return Ok(());
     }
 
-    println!("Blocked issues:");
-    for issue in issues {
-        let mut blocker_strs: Vec<String> = db
-            .get_blockers(&issue.id)?
-            .into_iter()
-            .filter_map(|id| db.require_issue(&id).ok())
-            .filter(|blocker| !matches!(blocker.status.as_str(), "done" | "archived"))
-            .map(|blocker| format_issue_id(&blocker.id))
-            .collect();
-        blocker_strs.sort();
+    if quiet {
+        for row in rows {
+            println!("{}", row.display_id);
+        }
+        return Ok(());
+    }
+
+    println!("Blocked issues");
+    println!("==============");
+    println!("{} total", rows.len());
+    println!("Drill down: atelier issue blocked <id>");
+    for row in rows {
+        let blocker_count = row.blockers.len();
+        let blocker_text = if blocker_count == 1 {
+            "1 blocker".to_string()
+        } else {
+            format!("{blocker_count} blockers")
+        };
         println!(
-            "  {:<5} {} - blocked by {}",
-            format_issue_id(&issue.id),
-            truncate(&issue.title, 40),
-            blocker_strs.join(", ")
+            "  blocked {:<12} {} ({blocker_text}; details: atelier issue blocked {})",
+            row.display_id,
+            truncate(&row.issue.title, 40),
+            row.display_id
         );
     }
 
     Ok(())
+}
+
+fn blocked_list_row(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: Issue,
+) -> Result<BlockedListRow> {
+    let mut blockers = db
+        .get_blockers(&issue.id)?
+        .into_iter()
+        .filter_map(|id| db.require_issue(&id).ok())
+        .filter(|blocker| issue_blocks_work(workflow_policy, blocker))
+        .map(|blocker| format_issue_id(&blocker.id))
+        .collect::<Vec<_>>();
+    blockers.sort();
+    Ok(BlockedListRow {
+        display_id: format_issue_id(&issue.id),
+        status_category: issue_status_category(workflow_policy, &issue.status),
+        issue,
+        blockers,
+    })
 }
 
 #[cfg(test)]
@@ -49,7 +104,7 @@ mod tests {
     fn test_list_blocked_empty() {
         let (db, _dir) = setup_test_db();
 
-        list_blocked(&db).unwrap();
+        list_blocked(&db, false).unwrap();
         let blocked = db.list_blocked_issues().unwrap();
         assert!(blocked.is_empty());
     }
@@ -61,7 +116,7 @@ mod tests {
         let issue2 = db.create_issue("Blocker", None, "medium").unwrap();
         db.add_dependency(&issue1, &issue2).unwrap();
 
-        list_blocked(&db).unwrap();
+        list_blocked(&db, false).unwrap();
         let blocked = db.list_blocked_issues().unwrap();
         assert_eq!(blocked.len(), 1);
         assert_eq!(blocked[0].id, issue1);
@@ -76,7 +131,7 @@ mod tests {
         db.add_dependency(&blocked, &blocker1).unwrap();
         db.add_dependency(&blocked, &blocker2).unwrap();
 
-        list_blocked(&db).unwrap();
+        list_blocked(&db, false).unwrap();
         let blockers = db.get_blockers(&blocked).unwrap();
         assert_eq!(blockers.len(), 2);
         assert!(blockers.contains(&blocker1));

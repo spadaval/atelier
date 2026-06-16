@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Sort issue list queues by blocker order"
-updated_at: "2026-06-16T15:59:31.663188790+00:00"
+updated_at: "2026-06-16T18:06:53.417729839+00:00"
 ---
 
 ## Description
