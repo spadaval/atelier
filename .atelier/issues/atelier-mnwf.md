@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T17:04:39.061124746+00:00"
+status: "done"
 title: "Make close commit tracker state and merge branch atomically"
-updated_at: "2026-06-16T15:47:26.736815316+00:00"
+updated_at: "2026-06-16T17:04:39.061124746+00:00"
 ---
 
 ## Description
