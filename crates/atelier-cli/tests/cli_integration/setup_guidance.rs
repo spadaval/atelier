@@ -2284,6 +2284,54 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
 }
 
 #[test]
+fn test_graph_tree_orders_children_by_visible_blockers() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Graph parent", "--issue-type", "epic"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Implementation node"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Contract node"]);
+    let parent_id = issue_ref(dir.path(), 1);
+    let implementation_id = issue_ref(dir.path(), 2);
+    let contract_id = issue_ref(dir.path(), 3);
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &implementation_id, &contract_id],
+    );
+
+    let (success, full_out, stderr) = run_atelier(dir.path(), &["graph", "tree"]);
+    assert!(success, "graph tree failed: {stderr}");
+    assert!(full_out.contains("Legend: ready, blocked"));
+    assert!(
+        full_out.find("Contract node").unwrap() < full_out.find("Implementation node").unwrap(),
+        "{full_out}"
+    );
+    assert!(
+        full_out.contains(&format!(
+            "[blocked] #{implementation_id} medium - Implementation node (1 blocker; details: atelier issue blocked {implementation_id})"
+        )),
+        "{full_out}"
+    );
+    assert!(!full_out.contains("todo/todo"), "{full_out}");
+
+    let (success, compact_out, stderr) = run_atelier(dir.path(), &["graph", "tree", "--compact"]);
+    assert!(success, "compact graph tree failed: {stderr}");
+    assert!(compact_out.contains("Compact Issue Hierarchy"));
+    assert!(
+        compact_out.find("Contract node").unwrap()
+            < compact_out.find("Implementation node").unwrap(),
+        "{compact_out}"
+    );
+    assert!(compact_out.contains(&parent_id), "{compact_out}");
+}
+
+#[test]
 fn test_graph_commands_include_mission_linked_issue_hierarchy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

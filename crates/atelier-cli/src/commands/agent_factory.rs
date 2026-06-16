@@ -5,8 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
-    load_issue_workflow_policy, open_blocker_ids_with_policy,
+    format_status_with_category, issue_blocks_work, issue_start_readiness, issue_status_category,
+    issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
+    IssueStartReadiness,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
@@ -1187,10 +1188,15 @@ fn filter_ready_rows(
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
-                let is_ready = external.is_empty() && row.state_label() == "ready";
+                let readiness =
+                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
+                let is_ready = external.is_empty() && readiness == IssueStartReadiness::Ready;
                 Ok((row, is_ready))
             } else {
-                let is_ready = row.open_blockers.is_empty() && row.state_label() == "ready";
+                let readiness =
+                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
+                let is_ready =
+                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready;
                 Ok((row, is_ready))
             }
         })

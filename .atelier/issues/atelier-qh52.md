@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Sort graph tree children by blocker order"
-updated_at: "2026-06-16T15:59:35.972443477+00:00"
+updated_at: "2026-06-16T18:29:35.057568464+00:00"
 ---
 
 ## Description
