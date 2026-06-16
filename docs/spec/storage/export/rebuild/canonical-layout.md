@@ -256,8 +256,8 @@ standard recovery loop is:
 3. Use focused drill-down commands such as `atelier issue show <id>`,
    `atelier mission show <id>`, `atelier evidence show <id>`, or
    `atelier issue list --ready` to inspect the affected records.
-4. Run `atelier rebuild` if the local projection is stale or was rebuilt from
-   invalid intermediate files.
+4. Run `atelier doctor --fix` if ignored local projection/runtime state is
+   stale or was rebuilt from invalid intermediate files.
 5. Re-run `atelier lint` and the workflow validator for the issue, epic, or
    mission being closed.
 

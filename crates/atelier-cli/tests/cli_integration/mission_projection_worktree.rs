@@ -1557,8 +1557,8 @@ fn test_active_mission_focus_guides_status_and_work() {
         "Mission Status {mission_id} [active] - Active focus"
     )));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(success, "doctor --fix failed: {stderr}");
     migrate_default_issue_workflow(dir.path());
     Command::new("git")
         .current_dir(dir.path())
@@ -1609,8 +1609,8 @@ fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
     assert!(success, "outside issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Outside work");
     let issue_id = issue_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(success, "doctor --fix failed: {stderr}");
     migrate_default_issue_workflow(dir.path());
     Command::new("git")
         .current_dir(dir.path())
@@ -2017,11 +2017,11 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
 }
 
 #[test]
-fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
+fn test_rebuild_temp_files_are_ignored_by_query_lint_and_doctor() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, export, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.`, `atelier export --check` exits 0, and `atelier doctor` exits 0 while rebuild temp files exist.";
+    let body = "## Description\n\nTemp rebuild filter body.\n\n## Outcome\n\nQuery, lint, and doctor ignore rebuild temp files.\n\n## Evidence\n\n- manual check: `atelier lint` output prints `Lint passed.`, `atelier doctor` exits 0, and `atelier doctor --fix` exits 0 while rebuild temp files exist.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -2035,8 +2035,8 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
+    assert!(success, "doctor --fix failed: {stderr}");
     ensure_issue_closeout_sections(dir.path(), &issue_id);
     write_ignored_canonical_artifacts(dir.path(), &issue_id);
 
@@ -2052,7 +2052,7 @@ fn test_rebuild_temp_files_are_ignored_by_query_lint_export_and_doctor() {
         "query diagnostics must not report rebuild tmp path: {stderr}"
     );
 
-    let commands: &[&[&str]] = &[&["lint"], &["export", "--check"], &["doctor"]];
+    let commands: &[&[&str]] = &[&["lint"], &["doctor"], &["doctor", "--fix"]];
     for args in commands {
         let (success, stdout, stderr) = run_atelier(dir.path(), args);
         assert!(
