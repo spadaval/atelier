@@ -1269,6 +1269,8 @@ fn test_mission_status_cli_reports_control_state() {
     );
     assert!(success, "ready work create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
+    let ready_id = issue_id_by_title(dir.path(), "Ready status work");
+    let ready_id = ready_id.as_str();
 
     let (success, blocked_out, stderr) = run_atelier(
         dir.path(),
@@ -1318,12 +1320,13 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("blocked"));
     assert!(status_out.contains("Selectable Work"));
     assert!(status_out.contains(&format!(
-        "Ready status work | ready: no open blockers; parent {epic_id}; proof missing"
+        "ready {ready_id} - Ready status work | no open blockers; parent {epic_id}; proof missing"
     )));
     assert!(status_out.contains("Blocked Work"));
     assert!(status_out.contains(&format!(
-        "Blocked status work | blocked by {blocker_id}; parent {epic_id}; proof missing"
+        "blocked {blocked_id} - Blocked status work | 1 blocker; details: atelier issue blocked {blocked_id}; parent {epic_id}; proof missing"
     )));
+    assert!(!status_out.contains(&format!("blocked by {blocker_id}")));
     assert!(status_out.contains("Blockers"));
     assert!(status_out.contains("Evidence"));
     assert!(status_out.contains("Direct mission evidence: none"));
@@ -1396,6 +1399,7 @@ fn test_mission_status_cli_reports_control_state() {
         &["mission", "add-work", closeout_mission, work_id],
     );
     assert!(success, "closeout mission add work failed: {stderr}");
+    commit_all(dir.path(), "ready closeout mission fixture");
     close_issue_with_evidence(dir.path(), work_id, Some("done"));
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
