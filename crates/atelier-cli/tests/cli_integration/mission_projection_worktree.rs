@@ -1088,6 +1088,8 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         run_atelier(dir.path(), &["issue", "subissue", epic_id, "Ready work"]);
     assert!(success, "ready subissue create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
+    let ready_id = issue_id_by_title(dir.path(), "Ready work");
+    let ready_id = ready_id.as_str();
 
     let (success, blocked_out, stderr) =
         run_atelier(dir.path(), &["issue", "subissue", epic_id, "Blocked work"]);
@@ -1095,15 +1097,6 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(blocked_out.contains(epic_id));
     let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
     let blocked_id = blocked_id.as_str();
-    let (success, blocker_out, stderr) =
-        run_atelier(dir.path(), &["issue", "create", "Work blocker"]);
-    assert!(success, "work blocker create failed: {stderr}");
-    assert!(blocker_out.contains("Created issue atelier-"));
-    let blocker_id = issue_id_by_title(dir.path(), "Work blocker");
-    let blocker_id = blocker_id.as_str();
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
-    assert!(success, "block issue failed: {stderr}");
 
     let (success, done_out, stderr) =
         run_atelier(dir.path(), &["issue", "subissue", epic_id, "Done work"]);
@@ -1112,6 +1105,8 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let done_id = issue_id_by_title(dir.path(), "Done work");
     let done_id = done_id.as_str();
     close_issue_with_evidence(dir.path(), done_id, Some("done"));
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &blocked_id, &ready_id]);
+    assert!(success, "block issue failed: {stderr}");
 
     let (success, loose_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Loose mission work"]);
@@ -1182,14 +1177,20 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(!stdout.contains(&closed_row));
     assert!(
         stdout.contains(&format!(
-            "[epic] {epic_id} [todo] medium - Mission epic | ready 1, blocked 1, done 1"
+            "[epic] {epic_id} [ready] medium - Mission epic | ready 1, blocked 1, done 1"
         )),
         "missing linked epic summary:\n{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("Next work: ready {ready_id} - Ready work")),
+        "mission list should cue the visible blocker before blocked work:\n{stdout}"
     );
     assert!(stdout.contains("Other linked work: 1 ready"));
     assert!(stdout.contains("Mission blockers: 1 open"));
     assert!(stdout.contains("No linked epics."));
     assert!(!stdout.contains("Loose mission work"));
+    assert!(!stdout.contains("Blocked work |"));
+    assert!(!stdout.contains("todo/todo"));
     assert!(stdout.contains(&format!("atelier mission status {active_id}")));
     assert!(stdout.contains(&format!("atelier mission show {active_id}")));
     assert!(stdout.contains("atelier mission status"));

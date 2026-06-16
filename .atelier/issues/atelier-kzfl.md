@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Align mission list actionability with blocker-aware work"
-updated_at: "2026-06-16T15:59:40.138266627+00:00"
+updated_at: "2026-06-16T18:39:54.671671601+00:00"
 ---
 
 ## Description

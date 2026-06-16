@@ -1757,6 +1757,7 @@ struct MissionListSummary {
 
 struct MissionListEpic {
     issue: Issue,
+    state_label: String,
     work: WorkCounts,
 }
 
@@ -1842,6 +1843,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         if issue.issue_type == "epic" {
             summary.epics.push(MissionListEpic {
                 work: epic_work_counts(db, &issue.id)?,
+                state_label: mission_issue_state(db, &issue)?.to_string(),
                 issue,
             });
         } else if !has_ancestor_in_set(db, &issue, &linked_epic_ids)? {
@@ -2070,7 +2072,7 @@ fn print_mission_list_open_work(row: &MissionListRow) {
             println!(
                 "    [epic] {} [{}] {} - {} | {}",
                 epic.issue.id,
-                epic.issue.status,
+                epic.state_label,
                 epic.issue.priority,
                 epic.issue.title,
                 epic.work.to_inline_text()
@@ -2081,6 +2083,18 @@ fn print_mission_list_open_work(row: &MissionListRow) {
         println!(
             "    Other linked work: {}",
             row.summary.other_work.to_compact_text()
+        );
+    }
+    if let Some(issue) = representative_selectable_work(&row.summary) {
+        println!("    Next work: ready {} - {}", issue.id, issue.title);
+    } else if let Some(blocked) = row.summary.blocked_work.first() {
+        println!(
+            "    Next work: blocked {} - {} ({} blocker{}; details: atelier issue blocked {})",
+            blocked.issue.id,
+            blocked.issue.title,
+            blocked.blockers.len(),
+            plural_suffix(blocked.blockers.len()),
+            blocked.issue.id
         );
     }
     if row.summary.open_blockers > 0 {
@@ -2095,6 +2109,19 @@ fn print_mission_list_open_work(row: &MissionListRow) {
     if row.summary.closeout_needed() {
         println!("    Closeout: needed");
     }
+}
+
+fn representative_selectable_work(summary: &MissionListSummary) -> Option<&Issue> {
+    let visible_blockers = summary
+        .blocked_work
+        .iter()
+        .flat_map(|blocked| blocked.blockers.iter())
+        .collect::<BTreeSet<_>>();
+    summary
+        .selectable_work
+        .iter()
+        .find(|issue| visible_blockers.contains(&issue.id))
+        .or_else(|| summary.selectable_work.first())
 }
 
 fn epic_work_counts(db: &Database, epic_id: &str) -> Result<WorkCounts> {
