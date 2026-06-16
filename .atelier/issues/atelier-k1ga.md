@@ -30,9 +30,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Epic: Sort work views by blocker dependency order"
-updated_at: "2026-06-16T19:02:37.223074271+00:00"
+updated_at: "2026-06-16T19:03:03.350541097+00:00"
 ---
 
 ## Description
