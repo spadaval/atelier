@@ -915,9 +915,9 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(
         stdout.contains("Inspect mission readiness (no mission is active): atelier mission status")
     );
-    assert!(stdout.contains(
-        "Inspect blocked work (no ready work is available): atelier issue list --blocked"
-    ));
+    assert!(stdout
+        .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
+    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
     assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
@@ -961,7 +961,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
     let blocker_id = issue_id_by_title(dir.path(), "Focus blocker");
     let blocker_id = blocker_id.as_str();
 
-    for issue_id in [ready_id, blocked_id] {
+    for issue_id in [ready_id, blocked_id, blocker_id] {
         let (success, _, stderr) =
             run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
         assert!(success, "mission add work failed for {issue_id}: {stderr}");
@@ -985,12 +985,29 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Active Mission"));
     assert!(stdout.contains(&format!("{mission_id} - Status focus")));
     assert!(stdout.contains("Health:   blocked"));
-    assert!(stdout.contains("Work:     ready 1, blocked 1, done 0, backlog 0"));
+    assert!(stdout.contains("Work:     ready 2, blocked 1, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
     assert!(stdout.contains(ready_id));
+    assert!(stdout.contains(blocker_id));
     assert!(stdout.contains(&format!(
-        "{ready_id} - Ready focus | ready: no open blockers; mission-linked root; proof missing"
+        "ready {blocker_id} - Focus blocker | no open blockers; mission-linked root; proof missing"
     )));
+    assert!(stdout.contains(&format!(
+        "ready {ready_id} - Ready focus | no open blockers; mission-linked root; proof missing"
+    )));
+    assert!(stdout.contains("Blocked In Active Mission"));
+    assert!(stdout.contains(&format!(
+        "blocked {blocked_id} - Blocked focus | 1 blocker; details: atelier issue blocked {blocked_id}"
+    )));
+    assert!(
+        stdout
+            .find(&format!("ready {blocker_id} - Focus blocker"))
+            .unwrap()
+            < stdout
+                .find(&format!("blocked {blocked_id} - Blocked focus"))
+                .unwrap(),
+        "visible blocker should appear before blocked dependent work:\n{stdout}"
+    );
     assert!(stdout.contains("Immediate Blockers"));
     assert!(stdout.contains(blocker_id));
     assert!(stdout.contains("Recent Activity"));
@@ -1000,7 +1017,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
         "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Start selectable active-mission work (1 selectable issue(s)): atelier start {ready_id}"
+        "Start selectable active-mission work (2 selectable issue(s)): atelier start {blocker_id}"
     )));
     assert!(
         !stdout.contains("workflow validate"),
@@ -1049,7 +1066,7 @@ fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Ready work:    0"));
     assert!(stdout.contains("Current work:  1 issue(s)"));
-    assert!(stdout.contains(&format!("  {issue_id} - Active item")));
+    assert!(stdout.contains(&format!("  active {issue_id} - Active item")));
     assert!(stdout.contains("Health:   active"));
     assert!(stdout.contains("Work:     ready 0, active 1, blocked 0, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
