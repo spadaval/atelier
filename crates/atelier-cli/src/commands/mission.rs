@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::agent_factory::ProofCoverageStatus;
+use crate::commands::work_order::WorkOrderRow;
 use atelier_core::{DomainRecord, Issue, RecordLink};
 use atelier_records as record_store;
 use atelier_records::{RecordStore, MISSION_EMPTY_DATA_JSON};
@@ -266,8 +267,9 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         println!("(none)");
     } else {
         for issue in summary.selectable_work.iter().take(5) {
+            let state = mission_issue_state(db, issue)?;
             println!(
-                "  {} - {} | ready: no open blockers; {}; {}",
+                "  {state} {} - {} | no open blockers; {}; {}",
                 issue.id,
                 issue.title,
                 parent_context(issue),
@@ -282,10 +284,12 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     } else {
         for blocked in summary.blocked_work.iter().take(5) {
             println!(
-                "  {} - {} | blocked by {}; {}; {}",
+                "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}; {}; {}",
                 blocked.issue.id,
                 blocked.issue.title,
-                compact_strings(&blocked.blockers),
+                blocked.blockers.len(),
+                plural_suffix(blocked.blockers.len()),
+                blocked.issue.id,
                 parent_context(&blocked.issue),
                 proof_context(db, &blocked.issue.id)?
             );
@@ -1593,6 +1597,14 @@ fn compact_strings(values: &[String]) -> String {
     }
 }
 
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 fn enforce_closeout(db: &Database, state_dir: &Path, mission_id: &str) -> Result<()> {
     let mission = db.require_record(KIND, mission_id)?;
     let summary = mission_list_summary(db, mission_id)?;
@@ -1745,6 +1757,7 @@ struct MissionListSummary {
 
 struct MissionListEpic {
     issue: Issue,
+    state_label: String,
     work: WorkCounts,
 }
 
@@ -1830,6 +1843,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         if issue.issue_type == "epic" {
             summary.epics.push(MissionListEpic {
                 work: epic_work_counts(db, &issue.id)?,
+                state_label: mission_issue_state(db, &issue)?.to_string(),
                 issue,
             });
         } else if !has_ancestor_in_set(db, &issue, &linked_epic_ids)? {
@@ -1849,23 +1863,14 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
                 .push(BlockedMissionWork { issue, blockers });
             continue;
         }
-        if matches!(
-            crate::commands::issue_workflow::issue_start_readiness(
-                db,
-                workflow_policy.as_ref(),
-                &issue
-            )?,
-            crate::commands::issue_workflow::IssueStartReadiness::Ready
-        ) {
+        if mission_issue_state(db, &issue)? == "ready" {
             summary.selectable_work.push(issue);
         }
     }
 
-    summary.epics.sort_by(compare_mission_list_epics);
-    summary.selectable_work.sort_by(|a, b| a.id.cmp(&b.id));
-    summary
-        .blocked_work
-        .sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
+    summary.epics = order_mission_epics(db, summary.epics)?;
+    summary.selectable_work = order_issues_by_work(db, summary.selectable_work)?;
+    summary.blocked_work = order_blocked_work(db, summary.blocked_work)?;
     Ok(summary)
 }
 
@@ -2067,7 +2072,7 @@ fn print_mission_list_open_work(row: &MissionListRow) {
             println!(
                 "    [epic] {} [{}] {} - {} | {}",
                 epic.issue.id,
-                epic.issue.status,
+                epic.state_label,
                 epic.issue.priority,
                 epic.issue.title,
                 epic.work.to_inline_text()
@@ -2078,6 +2083,18 @@ fn print_mission_list_open_work(row: &MissionListRow) {
         println!(
             "    Other linked work: {}",
             row.summary.other_work.to_compact_text()
+        );
+    }
+    if let Some(issue) = representative_selectable_work(&row.summary) {
+        println!("    Next work: ready {} - {}", issue.id, issue.title);
+    } else if let Some(blocked) = row.summary.blocked_work.first() {
+        println!(
+            "    Next work: blocked {} - {} ({} blocker{}; details: atelier issue blocked {})",
+            blocked.issue.id,
+            blocked.issue.title,
+            blocked.blockers.len(),
+            plural_suffix(blocked.blockers.len()),
+            blocked.issue.id
         );
     }
     if row.summary.open_blockers > 0 {
@@ -2092,6 +2109,19 @@ fn print_mission_list_open_work(row: &MissionListRow) {
     if row.summary.closeout_needed() {
         println!("    Closeout: needed");
     }
+}
+
+fn representative_selectable_work(summary: &MissionListSummary) -> Option<&Issue> {
+    let visible_blockers = summary
+        .blocked_work
+        .iter()
+        .flat_map(|blocked| blocked.blockers.iter())
+        .collect::<BTreeSet<_>>();
+    summary
+        .selectable_work
+        .iter()
+        .find(|issue| visible_blockers.contains(&issue.id))
+        .or_else(|| summary.selectable_work.first())
 }
 
 fn epic_work_counts(db: &Database, epic_id: &str) -> Result<WorkCounts> {
@@ -2169,12 +2199,6 @@ fn format_duplicate_reachability(duplicate: &DuplicateReachability) -> String {
         .collect::<Vec<_>>();
     qualifiers.sort();
     format!("{} ({})", duplicate.issue_id, qualifiers.join(" + "))
-}
-
-fn compare_mission_list_epics(a: &MissionListEpic, b: &MissionListEpic) -> std::cmp::Ordering {
-    mission_status_rank(&a.issue.status)
-        .cmp(&mission_status_rank(&b.issue.status))
-        .then_with(|| a.issue.id.cmp(&b.issue.id))
 }
 
 fn has_ancestor_in_set(
@@ -2289,7 +2313,7 @@ fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &
 fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
     let issue_ids = mission_issue_ids(db, mission_id)?;
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut issues = db
+    let issues = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| issue_ids.contains(&issue.id))
@@ -2302,8 +2326,7 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
                 == Some("active")
         })
         .collect::<Vec<_>>();
-    issues.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(issues)
+    order_issues_by_work(db, issues)
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
@@ -2648,16 +2671,64 @@ fn issue_bucket(db: &Database, issue: &Issue) -> Result<&'static str> {
     if !open_blockers(db, &issue.id)?.is_empty() {
         return Ok("blocked");
     }
-    match crate::commands::issue_workflow::issue_start_readiness(
-        db,
-        workflow_policy.as_ref(),
-        issue,
-    )? {
-        crate::commands::issue_workflow::IssueStartReadiness::Ready => return Ok("ready"),
-        crate::commands::issue_workflow::IssueStartReadiness::Blocked => return Ok("blocked"),
-        crate::commands::issue_workflow::IssueStartReadiness::NotReady => {}
-    }
-    Ok("backlog")
+    mission_issue_state(db, issue).map(|state| if state == "ready" { "ready" } else { "backlog" })
+}
+
+fn mission_issue_state(db: &Database, issue: &Issue) -> Result<&'static str> {
+    Ok(work_order_row_for_issue(db, issue)?.state().label())
+}
+
+fn order_issues_by_work(db: &Database, issues: Vec<Issue>) -> Result<Vec<Issue>> {
+    let rows = issues
+        .iter()
+        .map(|issue| work_order_row_for_issue(db, issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn order_blocked_work(
+    db: &Database,
+    blocked: Vec<BlockedMissionWork>,
+) -> Result<Vec<BlockedMissionWork>> {
+    let rows = blocked
+        .iter()
+        .map(|row| work_order_row_for_issue(db, &row.issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = blocked.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn order_mission_epics(db: &Database, epics: Vec<MissionListEpic>) -> Result<Vec<MissionListEpic>> {
+    let rows = epics
+        .iter()
+        .map(|epic| work_order_row_for_issue(db, &epic.issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = epics.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn work_order_row_for_issue(db: &Database, issue: &Issue) -> Result<WorkOrderRow> {
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    Ok(WorkOrderRow {
+        id: issue.id.clone(),
+        status_category: crate::commands::issue_workflow::issue_status_category(
+            workflow_policy.as_ref(),
+            &issue.status,
+        ),
+        priority: issue.priority.clone(),
+        updated_at: issue.updated_at,
+        open_blockers: open_blockers(db, &issue.id)?,
+    })
 }
 
 fn open_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {

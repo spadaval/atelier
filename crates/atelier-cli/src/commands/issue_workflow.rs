@@ -70,7 +70,21 @@ pub(crate) fn issue_start_readiness(
     };
     let options = match crate::commands::workflow::issue_transition_options(db, &issue.id) {
         Ok(options) => options,
-        Err(_) => return Ok(IssueStartReadiness::NotReady),
+        Err(_) => {
+            if start_transition_has_validators(policy, issue) {
+                return Ok(IssueStartReadiness::NotReady);
+            }
+            return if issue_status_category(Some(policy), &issue.status).as_deref() == Some("todo")
+            {
+                if open_blocker_ids_with_policy(db, Some(policy), &issue.id)?.is_empty() {
+                    Ok(IssueStartReadiness::Ready)
+                } else {
+                    Ok(IssueStartReadiness::Blocked)
+                }
+            } else {
+                Ok(IssueStartReadiness::NotReady)
+            };
+        }
     };
     let mut has_start_target = false;
     let mut blocked = false;
@@ -91,6 +105,20 @@ pub(crate) fn issue_start_readiness(
     } else {
         Ok(IssueStartReadiness::NotReady)
     }
+}
+
+fn start_transition_has_validators(policy: &WorkflowPolicy, issue: &Issue) -> bool {
+    let Some(workflow_name) = policy.issue_types.get(&issue.issue_type) else {
+        return false;
+    };
+    let Some(workflow) = policy.workflows.get(workflow_name) else {
+        return false;
+    };
+    workflow.transitions.values().any(|transition| {
+        transition.from.iter().any(|status| status == &issue.status)
+            && issue_status_category(Some(policy), &transition.to).as_deref() == Some("active")
+            && !transition.validators.is_empty()
+    })
 }
 
 pub(crate) fn open_blocker_ids_with_policy(

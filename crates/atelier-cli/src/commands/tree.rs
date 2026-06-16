@@ -2,27 +2,32 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 
+use crate::commands::work_order::WorkOrderRow;
+use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{DomainRecord, Issue};
 use atelier_sqlite::Database;
 
 const COMPACT_MAX_DEPTH: usize = 3;
 const COMPACT_MAX_SIBLINGS: usize = 6;
 
-fn status_icon(status: &str) -> &'static str {
-    match status {
-        "todo" => " ",
-        "done" => "x",
-        _ => "?",
-    }
-}
-
-fn print_issue(issue: &Issue, indent: usize) {
+fn print_issue(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+    indent: usize,
+) -> Result<()> {
     let prefix = "  ".repeat(indent);
-    let icon = status_icon(&issue.status);
+    let row = work_order_row_for_issue(db, workflow_policy, issue)?;
     println!(
-        "{}[{}] #{} {} - {}",
-        prefix, icon, issue.id, issue.priority, issue.title
+        "{}[{}] #{} {} - {}{}",
+        prefix,
+        row.state().label(),
+        issue.id,
+        issue.priority,
+        issue.title,
+        blocker_suffix(&issue.id, &row.open_blockers)
     );
+    Ok(())
 }
 
 fn print_mission(mission: &DomainRecord, indent: usize) {
@@ -39,7 +44,9 @@ fn print_tree_recursive(
     indent: usize,
     status_filter: Option<&str>,
 ) -> Result<()> {
-    let subissues = db.get_subissues(parent_id)?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let subissues =
+        order_issues_by_work(db, workflow_policy.as_ref(), db.get_subissues(parent_id)?)?;
     for sub in subissues {
         let dominated_by_filter = match status_filter {
             Some("all") | None => false,
@@ -48,7 +55,7 @@ fn print_tree_recursive(
         if dominated_by_filter {
             continue;
         }
-        print_issue(&sub, indent);
+        print_issue(db, workflow_policy.as_ref(), &sub, indent)?;
         print_tree_recursive(db, &sub.id, indent + 1, status_filter)?;
     }
     Ok(())
@@ -90,13 +97,17 @@ fn print_mission_trees(
             continue;
         }
         print_mission(&mission, 0);
-        for issue_id in issue_ids {
-            let issue = db.require_issue(&issue_id)?;
+        let issues = issue_ids
+            .into_iter()
+            .map(|issue_id| db.require_issue(&issue_id))
+            .collect::<Result<Vec<_>>>()?;
+        let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+        for issue in order_issues_by_work(db, workflow_policy.as_ref(), issues)? {
             if !status_matches(&issue, status_filter) {
                 continue;
             }
             linked_issue_ids.insert(issue.id.clone());
-            print_issue(&issue, 1);
+            print_issue(db, workflow_policy.as_ref(), &issue, 1)?;
             print_tree_recursive(db, &issue.id, 2, status_filter)?;
         }
     }
@@ -145,16 +156,87 @@ fn status_matches(issue: &Issue, status_filter: Option<&str>) -> bool {
     }
 }
 
+fn order_issues_by_work(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issues: Vec<Issue>,
+) -> Result<Vec<Issue>> {
+    let rows = issues
+        .iter()
+        .map(|issue| work_order_row_for_issue(db, workflow_policy, issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn work_order_row_for_issue(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<WorkOrderRow> {
+    Ok(WorkOrderRow {
+        id: issue.id.clone(),
+        status_category: crate::commands::issue_workflow::issue_status_category(
+            workflow_policy,
+            &issue.status,
+        ),
+        priority: issue.priority.clone(),
+        updated_at: issue.updated_at,
+        open_blockers: open_blockers(db, &issue.id, workflow_policy)?,
+    })
+}
+
+fn open_blockers(
+    db: &Database,
+    issue_id: &str,
+    workflow_policy: Option<&WorkflowPolicy>,
+) -> Result<Vec<String>> {
+    let mut blockers = Vec::new();
+    for blocker_id in db.get_blockers(issue_id)? {
+        let blocker = db.require_issue(&blocker_id)?;
+        if crate::commands::issue_workflow::issue_blocks_work(workflow_policy, &blocker) {
+            blockers.push(blocker_id);
+        }
+    }
+    blockers.sort();
+    Ok(blockers)
+}
+
+fn blocker_suffix(issue_id: &str, blockers: &[String]) -> String {
+    if blockers.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " ({} blocker{}; details: atelier issue blocked {issue_id})",
+            blockers.len(),
+            plural_suffix(blockers.len())
+        )
+    }
+}
+
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}
+
 fn filtered_subissues(
     db: &Database,
     parent_id: &str,
     status_filter: Option<&str>,
 ) -> Result<Vec<Issue>> {
-    Ok(db
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    let issues = db
         .get_subissues(parent_id)?
         .into_iter()
         .filter(|issue| status_matches(issue, status_filter))
-        .collect())
+        .collect();
+    order_issues_by_work(db, workflow_policy.as_ref(), issues)
 }
 
 fn descendant_summary(
@@ -193,7 +275,13 @@ fn issue_set_summary(
     Ok(summary)
 }
 
-fn compact_issue_line(issue: &Issue, indent: usize, children: &[Issue]) {
+fn compact_issue_line(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+    indent: usize,
+    children: &[Issue],
+) -> Result<()> {
     let prefix = "  ".repeat(indent);
     let child_summary = direct_child_summary(children);
     let child_suffix = if children.is_empty() {
@@ -202,10 +290,19 @@ fn compact_issue_line(issue: &Issue, indent: usize, children: &[Issue]) {
         format!(" children={} {}", children.len(), child_summary.format())
     };
 
+    let row = work_order_row_for_issue(db, workflow_policy, issue)?;
     println!(
-        "{}[{} {}] {} [{}] - {}{}",
-        prefix, issue.status, issue.priority, issue.id, issue.issue_type, issue.title, child_suffix
+        "{}[{} {}] {} [{}] - {}{}{}",
+        prefix,
+        row.state().label(),
+        issue.priority,
+        issue.id,
+        issue.issue_type,
+        issue.title,
+        blocker_suffix(&issue.id, &row.open_blockers),
+        child_suffix
     );
+    Ok(())
 }
 
 fn compact_missions(
@@ -222,7 +319,11 @@ fn compact_missions(
             .filter(|issue| status_matches(issue, status_filter))
             .collect::<Vec<_>>();
         if !issues.is_empty() {
-            rows.push((mission, issues));
+            let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+            rows.push((
+                mission,
+                order_issues_by_work(db, workflow_policy.as_ref(), issues)?,
+            ));
         }
     }
     Ok(rows)
@@ -247,7 +348,8 @@ fn compact_tree_recursive(
     status_filter: Option<&str>,
 ) -> Result<()> {
     let children = filtered_subissues(db, &issue.id, status_filter)?;
-    compact_issue_line(issue, indent, &children);
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
+    compact_issue_line(db, workflow_policy.as_ref(), issue, indent, &children)?;
 
     if children.is_empty() {
         return Ok(());
@@ -291,10 +393,12 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
 
     // Get all top-level issues (no parent)
     let all_issues = db.list_issues(status_filter, None, None)?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let top_level: Vec<_> = all_issues
         .into_iter()
         .filter(|i| i.parent_id.is_none() && !linked_issue_ids.contains(&i.id))
         .collect();
+    let top_level = order_issues_by_work(db, workflow_policy.as_ref(), top_level)?;
 
     if top_level.is_empty() && linked_issue_ids.is_empty() {
         println!("No issues found.");
@@ -302,13 +406,13 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
     }
 
     for issue in top_level {
-        print_issue(&issue, 0);
+        print_issue(db, workflow_policy.as_ref(), &issue, 0)?;
         print_tree_recursive(db, &issue.id, 1, status_filter)?;
     }
 
     // Legend
     println!();
-    println!("Legend: [ ] todo, [x] done");
+    println!("Legend: ready, blocked, active, review, validation, done, not-ready");
 
     Ok(())
 }
@@ -316,10 +420,12 @@ pub fn run(db: &Database, status_filter: Option<&str>) -> Result<()> {
 pub fn run_compact(db: &Database, status_filter: Option<&str>) -> Result<()> {
     let linked_root_ids = mission_linked_root_ids(db)?;
     let all_issues = db.list_issues(status_filter, None, None)?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let top_level: Vec<_> = all_issues
         .into_iter()
         .filter(|i| i.parent_id.is_none() && !linked_root_ids.contains(&i.id))
         .collect();
+    let top_level = order_issues_by_work(db, workflow_policy.as_ref(), top_level)?;
     let missions = compact_missions(db, status_filter)?;
 
     if top_level.is_empty() && missions.is_empty() {
@@ -378,18 +484,16 @@ mod tests {
     }
 
     #[test]
-    fn test_status_icon_todo() {
-        assert_eq!(status_icon("todo"), " ");
+    fn test_blocker_suffix_empty() {
+        assert_eq!(blocker_suffix("atelier-a", &[]), "");
     }
 
     #[test]
-    fn test_status_icon_done() {
-        assert_eq!(status_icon("done"), "x");
-    }
-
-    #[test]
-    fn test_status_icon_unknown() {
-        assert_eq!(status_icon("archived"), "?");
+    fn test_blocker_suffix_names_drill_down() {
+        assert_eq!(
+            blocker_suffix("atelier-a", &["atelier-b".to_string()]),
+            " (1 blocker; details: atelier issue blocked atelier-a)"
+        );
     }
 
     #[test]

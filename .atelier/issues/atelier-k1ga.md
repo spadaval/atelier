@@ -30,9 +30,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-16T19:03:14.608736104+00:00"
+status: "done"
 title: "Epic: Sort work views by blocker dependency order"
-updated_at: "2026-06-16T15:59:44.332777119+00:00"
+updated_at: "2026-06-16T19:03:14.608736104+00:00"
 ---
 
 ## Description

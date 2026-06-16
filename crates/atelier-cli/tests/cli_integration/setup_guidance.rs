@@ -915,9 +915,9 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(
         stdout.contains("Inspect mission readiness (no mission is active): atelier mission status")
     );
-    assert!(stdout.contains(
-        "Inspect blocked work (no ready work is available): atelier issue list --blocked"
-    ));
+    assert!(stdout
+        .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
+    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
     assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
@@ -961,7 +961,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
     let blocker_id = issue_id_by_title(dir.path(), "Focus blocker");
     let blocker_id = blocker_id.as_str();
 
-    for issue_id in [ready_id, blocked_id] {
+    for issue_id in [ready_id, blocked_id, blocker_id] {
         let (success, _, stderr) =
             run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
         assert!(success, "mission add work failed for {issue_id}: {stderr}");
@@ -985,12 +985,29 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Active Mission"));
     assert!(stdout.contains(&format!("{mission_id} - Status focus")));
     assert!(stdout.contains("Health:   blocked"));
-    assert!(stdout.contains("Work:     ready 1, blocked 1, done 0, backlog 0"));
+    assert!(stdout.contains("Work:     ready 2, blocked 1, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
     assert!(stdout.contains(ready_id));
+    assert!(stdout.contains(blocker_id));
     assert!(stdout.contains(&format!(
-        "{ready_id} - Ready focus | ready: no open blockers; mission-linked root; proof missing"
+        "ready {blocker_id} - Focus blocker | no open blockers; mission-linked root; proof missing"
     )));
+    assert!(stdout.contains(&format!(
+        "ready {ready_id} - Ready focus | no open blockers; mission-linked root; proof missing"
+    )));
+    assert!(stdout.contains("Blocked In Active Mission"));
+    assert!(stdout.contains(&format!(
+        "blocked {blocked_id} - Blocked focus | 1 blocker; details: atelier issue blocked {blocked_id}"
+    )));
+    assert!(
+        stdout
+            .find(&format!("ready {blocker_id} - Focus blocker"))
+            .unwrap()
+            < stdout
+                .find(&format!("blocked {blocked_id} - Blocked focus"))
+                .unwrap(),
+        "visible blocker should appear before blocked dependent work:\n{stdout}"
+    );
     assert!(stdout.contains("Immediate Blockers"));
     assert!(stdout.contains(blocker_id));
     assert!(stdout.contains("Recent Activity"));
@@ -1000,7 +1017,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
         "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Start selectable active-mission work (1 selectable issue(s)): atelier start {ready_id}"
+        "Start selectable active-mission work (2 selectable issue(s)): atelier start {blocker_id}"
     )));
     assert!(
         !stdout.contains("workflow validate"),
@@ -1049,7 +1066,7 @@ fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Ready work:    0"));
     assert!(stdout.contains("Current work:  1 issue(s)"));
-    assert!(stdout.contains(&format!("  {issue_id} - Active item")));
+    assert!(stdout.contains(&format!("  active {issue_id} - Active item")));
     assert!(stdout.contains("Health:   active"));
     assert!(stdout.contains("Work:     ready 0, active 1, blocked 0, done 0, backlog 0"));
     assert!(stdout.contains("Ready In Active Mission"));
@@ -2264,6 +2281,54 @@ fn test_non_lifecycle_issue_flows_use_explicit_homes() {
     );
     assert!(success, "maintenance delete failed: {stderr}");
     assert!(delete_out.contains("Deleted issue"));
+}
+
+#[test]
+fn test_graph_tree_orders_children_by_visible_blockers() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Graph parent", "--issue-type", "epic"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Implementation node"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Contract node"]);
+    let parent_id = issue_ref(dir.path(), 1);
+    let implementation_id = issue_ref(dir.path(), 2);
+    let contract_id = issue_ref(dir.path(), 3);
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &implementation_id, &contract_id],
+    );
+
+    let (success, full_out, stderr) = run_atelier(dir.path(), &["graph", "tree"]);
+    assert!(success, "graph tree failed: {stderr}");
+    assert!(full_out.contains("Legend: ready, blocked"));
+    assert!(
+        full_out.find("Contract node").unwrap() < full_out.find("Implementation node").unwrap(),
+        "{full_out}"
+    );
+    assert!(
+        full_out.contains(&format!(
+            "[blocked] #{implementation_id} medium - Implementation node (1 blocker; details: atelier issue blocked {implementation_id})"
+        )),
+        "{full_out}"
+    );
+    assert!(!full_out.contains("todo/todo"), "{full_out}");
+
+    let (success, compact_out, stderr) = run_atelier(dir.path(), &["graph", "tree", "--compact"]);
+    assert!(success, "compact graph tree failed: {stderr}");
+    assert!(compact_out.contains("Compact Issue Hierarchy"));
+    assert!(
+        compact_out.find("Contract node").unwrap()
+            < compact_out.find("Implementation node").unwrap(),
+        "{compact_out}"
+    );
+    assert!(compact_out.contains(&parent_id), "{compact_out}");
 }
 
 #[test]

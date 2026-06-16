@@ -5,6 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::commands;
+use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
 use atelier_core::{DomainRecord, Issue};
 use atelier_records::activity::list_all_issue_activities;
@@ -27,18 +28,15 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| !active_issue_ids.contains(issue.id.as_str()))
-        .filter_map(|issue| {
-            match commands::issue_workflow::issue_start_readiness(
-                db,
-                workflow_policy.as_ref(),
-                &issue,
-            ) {
-                Ok(commands::issue_workflow::IssueStartReadiness::Ready) => Some(Ok(issue)),
+        .filter_map(
+            |issue| match status_issue_state(db, workflow_policy.as_ref(), &issue) {
+                Ok("ready") => Some(Ok(issue)),
                 Ok(_) => None,
                 Err(error) => Some(Err(error)),
-            }
-        })
+            },
+        )
         .collect::<Result<Vec<_>>>()?;
+    let ready = order_issues_by_work(db, workflow_policy.as_ref(), ready)?;
     let mission_snapshot = active_mission
         .as_ref()
         .map(|mission| mission_snapshot(db, mission, &active_issue_ids))
@@ -79,7 +77,8 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     } else {
         println!("Current work:  {} issue(s)", active_issues.len());
         for issue in &active_issues {
-            println!("  {} - {}", issue.id, issue.title);
+            let state = status_issue_state(db, workflow_policy.as_ref(), issue)?;
+            println!("  {state} {} - {}", issue.id, issue.title);
         }
     }
 
@@ -129,12 +128,32 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             println!("(none)");
         } else {
             for issue in snapshot.selectable_issues.iter().take(5) {
+                let state = status_issue_state(db, workflow_policy.as_ref(), issue)?;
                 println!(
-                    "  {} - {} | ready: no open blockers; {}; {}",
+                    "  {state} {} - {} | no open blockers; {}; {}",
                     issue.id,
                     issue.title,
                     parent_context(issue),
                     proof_context(db, &issue.id)?
+                );
+            }
+        }
+
+        println!();
+        println!("Blocked In Active Mission");
+        println!("-------------------------");
+        if snapshot.blocked_issues.is_empty() {
+            println!("(none)");
+        } else {
+            for issue in snapshot.blocked_issues.iter().take(5) {
+                let blockers = open_issue_blockers(db, &issue.id, workflow_policy.as_ref())?;
+                println!(
+                    "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}",
+                    issue.id,
+                    issue.title,
+                    blockers.len(),
+                    plural_suffix(blockers.len()),
+                    issue.id
                 );
             }
         }
@@ -266,6 +285,7 @@ struct MissionSnapshot {
     active_issues: Vec<Issue>,
     ready_issues: Vec<Issue>,
     selectable_issues: Vec<Issue>,
+    blocked_issues: Vec<Issue>,
     open_blockers: Vec<String>,
     active: usize,
     ready: usize,
@@ -333,14 +353,22 @@ fn mission_snapshot(
                 }
                 snapshot.ready_issues.push(issue);
             }
-            IssueBucket::Blocked => snapshot.blocked += 1,
+            IssueBucket::Blocked => {
+                snapshot.blocked += 1;
+                snapshot.blocked_issues.push(issue);
+            }
             IssueBucket::Done => snapshot.done += 1,
             IssueBucket::Backlog => snapshot.backlog += 1,
         }
     }
-    snapshot.active_issues.sort_by(|a, b| a.id.cmp(&b.id));
-    snapshot.ready_issues.sort_by(|a, b| a.id.cmp(&b.id));
-    snapshot.selectable_issues.sort_by(|a, b| a.id.cmp(&b.id));
+    snapshot.active_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.active_issues)?;
+    snapshot.ready_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.ready_issues)?;
+    snapshot.selectable_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
+    snapshot.blocked_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
     Ok(snapshot)
 }
 
@@ -367,10 +395,9 @@ fn issue_bucket(
     if !open_issue_blockers(db, &issue.id, workflow_policy)?.is_empty() {
         return Ok(IssueBucket::Blocked);
     }
-    match commands::issue_workflow::issue_start_readiness(db, workflow_policy, issue)? {
-        commands::issue_workflow::IssueStartReadiness::Ready => Ok(IssueBucket::Ready),
-        commands::issue_workflow::IssueStartReadiness::Blocked => Ok(IssueBucket::Blocked),
-        commands::issue_workflow::IssueStartReadiness::NotReady => Ok(IssueBucket::Backlog),
+    match status_issue_state(db, workflow_policy, issue)? {
+        "ready" => Ok(IssueBucket::Ready),
+        _ => Ok(IssueBucket::Backlog),
     }
 }
 
@@ -378,7 +405,7 @@ pub(crate) fn current_work_issues(
     db: &Database,
     workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
 ) -> Result<Vec<Issue>> {
-    let mut issues = db
+    let issues = db
         .list_issues(Some("all"), None, None)?
         .into_iter()
         .filter(|issue| {
@@ -387,8 +414,50 @@ pub(crate) fn current_work_issues(
                 == Some("active")
         })
         .collect::<Vec<_>>();
-    issues.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(issues)
+    order_issues_by_work(db, workflow_policy, issues)
+}
+
+fn order_issues_by_work(
+    db: &Database,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issues: Vec<Issue>,
+) -> Result<Vec<Issue>> {
+    let rows = issues
+        .iter()
+        .map(|issue| work_order_row_for_issue(db, workflow_policy, issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn work_order_row_for_issue(
+    db: &Database,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<WorkOrderRow> {
+    Ok(WorkOrderRow {
+        id: issue.id.clone(),
+        status_category: commands::issue_workflow::issue_status_category(
+            workflow_policy,
+            &issue.status,
+        ),
+        priority: issue.priority.clone(),
+        updated_at: issue.updated_at,
+        open_blockers: open_issue_blockers(db, &issue.id, workflow_policy)?,
+    })
+}
+
+fn status_issue_state(
+    db: &Database,
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<&'static str> {
+    Ok(work_order_row_for_issue(db, workflow_policy, issue)?
+        .state()
+        .label())
 }
 
 fn open_issue_blockers(
@@ -425,6 +494,14 @@ fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
         Ok("proof attached")
     } else {
         Ok("proof missing")
+    }
+}
+
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
     }
 }
 

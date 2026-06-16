@@ -9,6 +9,7 @@ use crate::commands::issue_workflow::{
     issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
     IssueStartReadiness,
 };
+use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, DomainRecord, Issue};
@@ -24,6 +25,7 @@ pub struct IssueSummary {
     pub issue_type: String,
     pub priority: String,
     pub parent: Option<String>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +39,7 @@ struct QueueRow {
     parent: Option<String>,
     open_blockers: Vec<String>,
     depth: usize,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,22 @@ struct QueueGroup {
     priority: Option<String>,
     external_blockers: Vec<String>,
     rows: Vec<QueueRow>,
+}
+
+impl QueueRow {
+    fn work_order_row(&self) -> WorkOrderRow {
+        WorkOrderRow {
+            id: self.id.clone(),
+            status_category: self.status_category.clone(),
+            priority: self.priority.clone(),
+            updated_at: self.updated_at,
+            open_blockers: self.open_blockers.clone(),
+        }
+    }
+
+    fn state_label(&self) -> &'static str {
+        self.work_order_row().state().label()
+    }
 }
 
 struct DependencyListRow {
@@ -425,6 +444,7 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
             .parent_id
             .map(|id| dependency_summary(db, &id).map(|summary| summary.id))
             .transpose()?,
+        updated_at: issue.updated_at,
     })
 }
 
@@ -779,6 +799,7 @@ fn dependency_rows_for_text(
 
 fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
     let mut subissues = db.get_subissues(canonical_id)?;
+    let workflow_policy = load_issue_workflow_policy()?;
     println!("\nSubissues");
     println!("---------");
     if subissues.is_empty() {
@@ -787,23 +808,51 @@ fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
     }
 
     println!("{}", subissue_summary(&subissues));
-    subissues.sort_by(|a, b| {
-        status_rank(&a.status)
-            .cmp(&status_rank(&b.status))
-            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-            .then(a.id.cmp(&b.id))
-            .then(a.title.cmp(&b.title))
-    });
+    subissues = order_issues_by_work(db, workflow_policy.as_ref(), subissues)?;
     for subissue in subissues {
+        let row = work_order_row_for_issue(db, workflow_policy.as_ref(), &subissue)?;
+        let blockers = blocker_suffix(&subissue.id, &row.open_blockers);
         println!(
-            "  {} [{}] {} - {}",
+            "  {} {} [{}] {} - {}{}",
+            row.state().label(),
             format_issue_id(&subissue.id),
             subissue.status,
             subissue.priority,
-            subissue.title
+            subissue.title,
+            blockers
         );
     }
     Ok(())
+}
+
+fn order_issues_by_work(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issues: Vec<Issue>,
+) -> Result<Vec<Issue>> {
+    let rows = issues
+        .iter()
+        .map(|issue| work_order_row_for_issue(db, workflow_policy, issue))
+        .collect::<Result<Vec<_>>>()?;
+    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(crate::commands::work_order::ordered_work_indices(&rows)
+        .into_iter()
+        .filter_map(|index| keyed[index].take())
+        .collect())
+}
+
+fn work_order_row_for_issue(
+    db: &Database,
+    workflow_policy: Option<&WorkflowPolicy>,
+    issue: &Issue,
+) -> Result<WorkOrderRow> {
+    Ok(WorkOrderRow {
+        id: format_issue_id(&issue.id),
+        status_category: issue_status_category(workflow_policy, &issue.status),
+        priority: issue.priority.clone(),
+        updated_at: issue.updated_at,
+        open_blockers: open_blocker_ids_with_policy(db, workflow_policy, &issue.id)?,
+    })
 }
 
 fn subissue_summary(subissues: &[Issue]) -> String {
@@ -971,7 +1020,7 @@ pub fn list(
     if rows.is_empty() {
         println!("No issues found.");
     } else if quiet {
-        render_queue_ids_quiet(rows);
+        render_queue_ids_quiet(order_queue_rows(rows));
     } else {
         render_issue_queue_human(db, "Issue Queue", rows, true)?;
     }
@@ -1082,15 +1131,7 @@ fn render_issue_queue_human(
     items: Vec<QueueRow>,
     show_status: bool,
 ) -> Result<()> {
-    let mut rows = items;
-    rows.sort_by(|a, b| {
-        status_rank(&a.status)
-            .cmp(&status_rank(&b.status))
-            .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-            .then(a.issue_type.cmp(&b.issue_type))
-            .then(a.parent.cmp(&b.parent))
-            .then(a.id.cmp(&b.id))
-    });
+    let rows = order_queue_rows(items);
 
     println!("{title}");
     println!("{}", "=".repeat(title.len()));
@@ -1128,7 +1169,12 @@ fn queue_row(
         parent: item.parent,
         open_blockers,
         depth,
+        updated_at: item.updated_at,
     })
+}
+
+fn order_queue_rows(rows: Vec<QueueRow>) -> Vec<QueueRow> {
+    order_work_rows(rows, QueueRow::work_order_row)
 }
 
 fn filter_ready_rows(
@@ -1144,17 +1190,14 @@ fn filter_ready_rows(
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
                 let readiness =
                     issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
-                Ok((
-                    row,
-                    external.is_empty() && readiness == IssueStartReadiness::Ready,
-                ))
+                let is_ready = external.is_empty() && readiness == IssueStartReadiness::Ready;
+                Ok((row, is_ready))
             } else {
                 let readiness =
                     issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
-                Ok((
-                    row.clone(),
-                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready,
-                ))
+                let is_ready =
+                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready;
+                Ok((row, is_ready))
             }
         })
         .filter_map(|result: Result<(QueueRow, bool)>| match result {
@@ -1186,13 +1229,7 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
 
     let mut groups = Vec::new();
     for (group_id, mut rows) in grouped {
-        rows.sort_by(|a, b| {
-            ancestry_depth(db, &a.id)
-                .unwrap_or(0)
-                .cmp(&ancestry_depth(db, &b.id).unwrap_or(0))
-                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-                .then(a.id.cmp(&b.id))
-        });
+        rows = order_queue_rows(rows);
         let issue = db.require_issue(&group_id)?;
         let workflow_policy = load_issue_workflow_policy()?;
         let external_blockers =
@@ -1212,12 +1249,7 @@ fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
     }
 
     if !standalone.is_empty() {
-        standalone.sort_by(|a, b| {
-            status_rank(&a.status)
-                .cmp(&status_rank(&b.status))
-                .then(priority_rank(&a.priority).cmp(&priority_rank(&b.priority)))
-                .then(a.id.cmp(&b.id))
-        });
+        standalone = order_queue_rows(standalone);
         groups.push(QueueGroup {
             id: None,
             title: "Standalone".to_string(),
@@ -1342,17 +1374,19 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     println!("\n{heading}");
     println!("{}", "-".repeat(heading.len()));
     if !group.external_blockers.is_empty() {
-        println!("  blocked by {}", compact_id_list(&group.external_blockers));
+        let group_id = group.id.as_deref().unwrap_or("<id>");
+        println!(
+            "  blocked by {} external blocker{}; details: atelier issue blocked {group_id}",
+            group.external_blockers.len(),
+            plural_suffix(group.external_blockers.len())
+        );
     }
     if group.rows.is_empty() {
         return;
     }
     for row in group.rows {
         let status_text = if show_status {
-            format!(
-                "{} ",
-                format_status_with_category(row.status_category.as_deref(), &row.status)
-            )
+            format!("{} ", row.state_label())
         } else {
             String::new()
         };
@@ -1364,7 +1398,7 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
         } else {
             String::new()
         };
-        let blockers = blocker_suffix(&row.open_blockers);
+        let blockers = blocker_suffix(&row.id, &row.open_blockers);
         let indent = "  ".repeat(row.depth.max(1));
         println!(
             "  {}[{}] {}{} - {}{}",
@@ -1378,20 +1412,23 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
     }
 }
 
-fn blocker_suffix(blockers: &[String]) -> String {
+fn blocker_suffix(issue_id: &str, blockers: &[String]) -> String {
     if blockers.is_empty() {
         String::new()
     } else {
-        format!(" - blocked by {}", compact_id_list(blockers))
+        format!(
+            " ({} blocker{}; details: atelier issue blocked {issue_id})",
+            blockers.len(),
+            plural_suffix(blockers.len())
+        )
     }
 }
 
-fn compact_id_list(ids: &[String]) -> String {
-    const LIMIT: usize = 3;
-    if ids.len() <= LIMIT {
-        ids.join(", ")
+fn plural_suffix(count: usize) -> &'static str {
+    if count == 1 {
+        ""
     } else {
-        format!("{}, +{} more", ids[..LIMIT].join(", "), ids.len() - LIMIT)
+        "s"
     }
 }
 

@@ -143,6 +143,146 @@ fn test_list_issues() {
 }
 
 #[test]
+fn test_issue_list_orders_visible_blockers_before_blocked_rows() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocked work", "-p", "high"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Direct blocker", "-p", "low"],
+    );
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
+    let blocker_id = issue_id_by_title(dir.path(), "Direct blocker");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    assert!(success, "issue block failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list"]);
+    assert!(success, "issue list failed: {stderr}");
+    let blocker_pos = stdout.find("Direct blocker").unwrap_or(usize::MAX);
+    let blocked_pos = stdout.find("Blocked work").unwrap_or(usize::MAX);
+    assert!(
+        blocker_pos < blocked_pos,
+        "blocker should appear before blocked work:\n{stdout}"
+    );
+    assert!(stdout.contains("ready [task]"), "{stdout}");
+    assert!(stdout.contains("blocked [task]"), "{stdout}");
+    assert!(!stdout.contains("todo/todo"), "{stdout}");
+    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+}
+
+#[test]
+fn test_issue_list_ready_excludes_blocked_and_quiet_matches_human_order() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Low ready", "-p", "low"]);
+    run_atelier(dir.path(), &["issue", "create", "High ready", "-p", "high"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocked ready", "-p", "critical"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Ready blocker", "-p", "medium"],
+    );
+    let low_id = issue_id_by_title(dir.path(), "Low ready");
+    let high_id = issue_id_by_title(dir.path(), "High ready");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked ready");
+    let blocker_id = issue_id_by_title(dir.path(), "Ready blocker");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &blocked_id, &blocker_id]);
+    assert!(success, "issue block failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "issue list --ready failed: {stderr}");
+    assert!(stdout.contains("High ready"), "{stdout}");
+    assert!(stdout.contains("Low ready"), "{stdout}");
+    assert!(stdout.contains("Ready blocker"), "{stdout}");
+    assert!(!stdout.contains("Blocked ready"), "{stdout}");
+    assert!(
+        stdout.find("High ready").unwrap() < stdout.find("Low ready").unwrap(),
+        "high priority ready work should sort before low priority work:\n{stdout}"
+    );
+
+    let (success, quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "issue", "list", "--ready"]);
+    assert!(success, "quiet issue list --ready failed: {stderr}");
+    let quiet_ids = quiet.lines().collect::<Vec<_>>();
+    assert!(!quiet_ids.contains(&blocked_id.as_str()), "{quiet}");
+    assert_eq!(
+        quiet_ids.first().copied(),
+        Some(high_id.as_str()),
+        "{quiet}"
+    );
+    assert!(quiet_ids.contains(&low_id.as_str()), "{quiet}");
+    assert!(quiet_ids.contains(&blocker_id.as_str()), "{quiet}");
+}
+
+#[test]
+fn test_issue_show_subissues_use_blocker_order_and_state_labels() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "Implementation child"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Contract child"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "subissue", "1", "External blocked child"],
+    );
+    run_atelier(dir.path(), &["issue", "create", "External blocker"]);
+    let parent_id = issue_ref(dir.path(), 1);
+    let implementation_id = issue_ref(dir.path(), 2);
+    let contract_id = issue_ref(dir.path(), 3);
+    let external_child_id = issue_ref(dir.path(), 4);
+    let external_blocker_id = issue_ref(dir.path(), 5);
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &implementation_id, &contract_id],
+    );
+    run_atelier(
+        dir.path(),
+        &["issue", "block", &external_child_id, &external_blocker_id],
+    );
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &parent_id]);
+    assert!(success, "issue show failed: {stderr}");
+    let contract_pos = stdout.find("Contract child").unwrap_or(usize::MAX);
+    let implementation_pos = stdout.find("Implementation child").unwrap_or(usize::MAX);
+    assert!(
+        contract_pos < implementation_pos,
+        "visible blocker child should appear before dependent child:\n{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("ready {contract_id} [todo]")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("blocked {implementation_id} [todo]")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(&format!(
+            "blocked {external_child_id} [todo] medium - External blocked child (1 blocker; details: atelier issue blocked {external_child_id})"
+        )),
+        "{stdout}"
+    );
+    assert!(!stdout.contains(&external_blocker_id), "{stdout}");
+    assert!(stdout.contains("Next Commands"));
+}
+
+#[test]
 fn test_list_filter_by_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1516,7 +1656,15 @@ fn test_issue_list_blocked_replaces_blocked_helper() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "list", "--blocked"]);
     assert!(success, "issue list --blocked failed: {stderr}");
     assert!(stdout.contains("Blocked issue"));
-    assert!(stdout.contains(&blocker_id));
+    assert!(stdout.contains("blocked"));
+    assert!(stdout.contains("1 blocker"));
+    assert!(stdout.contains(&format!("details: atelier issue blocked {blocked_id}")));
+    assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
+
+    let (success, quiet, stderr) =
+        run_atelier(dir.path(), &["--quiet", "issue", "list", "--blocked"]);
+    assert!(success, "quiet issue list --blocked failed: {stderr}");
+    assert_eq!(quiet.trim(), blocked_id);
 }
 
 #[test]
@@ -1691,7 +1839,9 @@ fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
         ready_out.contains("Blocked parent epic (context; parent blocked)"),
         "{ready_out}"
     );
-    assert!(ready_out.contains(&format!("blocked by {blocker_id}")));
+    assert!(ready_out.contains("blocked by 1 external blocker"));
+    assert!(ready_out.contains(&format!("details: atelier issue blocked {parent_id}")));
+    assert!(!ready_out.contains(&format!("blocked by {blocker_id}")));
     assert!(ready_out.contains(&format!("{child_id} - Ready child")));
 
     let (success, blocked_out, stderr) = run_atelier(dir.path(), &["issue", "blocked", &parent_id]);
@@ -1717,7 +1867,9 @@ fn test_issue_list_marks_external_epic_blockers_by_id() {
 
     assert!(success, "issue list failed: {stderr}");
     assert!(stdout.contains("Parent epic"));
-    assert!(stdout.contains(&format!("blocked by {blocker_id}")));
+    assert!(stdout.contains("1 blocker"));
+    assert!(stdout.contains("details: atelier issue blocked"));
+    assert!(!stdout.contains(&format!("blocked by {blocker_id}")));
     assert!(!stdout.contains("open blocker"));
 }
 

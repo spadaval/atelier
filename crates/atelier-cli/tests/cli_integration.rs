@@ -547,12 +547,15 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
             success,
             "transition options failed for {issue_id}: {stderr}"
         );
-        if !options.contains(&format!("{transition} [allowed]")) {
+        let option_present = options.contains(&format!("{transition} ["));
+        if !option_present {
             continue;
         }
         let (success, _, stderr) =
             run_atelier(dir, &["issue", "transition", &issue_id, transition]);
-        assert!(success, "{transition} failed for {issue_id}: {stderr}");
+        if options.contains(&format!("{transition} [allowed]")) {
+            assert!(success, "{transition} failed for {issue_id}: {stderr}");
+        }
     }
     issue_id
 }
