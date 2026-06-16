@@ -13,20 +13,20 @@ proof. These concepts should not collapse into one issue hierarchy.
   desired state, scope boundaries, validation criteria, accepted evidence, and
   completion state. It is not a work container or super-epic.
 - Epic: a coordinated work package and the normal branch/review boundary.
-  Epics group implementation, documentation, review, validation, and closeout
+  Epics group implementation, documentation, review, validation, and completion
   tasks that deliver a coherent change on one reviewable branch.
 - Issue: the actual accountability unit for work. Ordinary implementation
   issues are local slices on an epic branch; tasks, bugs, reviews,
-  validations, closeouts, and artifact updates are issue-shaped until a more
+  validations, completions, and artifact updates are issue-shaped until a more
   specific first-class record exists.
 - Workflow: the policy for how records move between states.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
-- Evidence: durable proof that accountable work, review, validation, or closeout
+- Evidence: durable proof that accountable work, review, validation, or completion
   happened. Normal evidence attaches to issue-shaped work because issues own
-  accountability. Parent readiness is derived from linked implementation,
-  review, validation, and closeout evidence rather than from direct proof pasted
+  accountability. Parent completion is derived from linked implementation,
+  review, validation, and completion evidence rather than from direct proof pasted
   onto the parent objective.
 
 ## Evidence Records
@@ -41,7 +41,7 @@ Required or expected fields are:
 | Field | Contract |
 | --- | --- |
 | `id` | Canonical evidence ID. |
-| `targets` | Accountable target IDs. Version 1 normally uses `issue/<id>` for implementation, review, validation, or closeout work. |
+| `targets` | Accountable target IDs. Version 1 normally uses `issue/<id>` for implementation, review, validation, or validation work. |
 | `proof_scope` | The local Outcome line, parent validation criterion, workflow validator, audit row, or review claim being proven. |
 | `kind` | Evidence type such as `test`, `validation`, `review`, `audit`, `transcript`, `artifact`, or `migration`. |
 | `result` | `pass`, `fail`, `blocked`, `deferred`, or `not-applicable`. |
@@ -49,7 +49,7 @@ Required or expected fields are:
 | `commands` | Optional command transcript metadata: argv or rendered command, exit status, success flag, timestamp, and bounded stdout/stderr summaries. |
 | `artifacts` | Optional repository paths, external URIs, sizes, and hashes when payloads are available. |
 | `agent_identity` | Producer or validator identity, using the local agent identity when available. |
-| `independence_level` | `implementer`, `peer`, `independent`, `closeout`, or `adversarial`. |
+| `independence_level` | `implementer`, `peer`, `independent`, `completion`, or `adversarial`. |
 | `residual_risks` | Known caveats that remain after this proof. Empty is allowed only when the producer has no known caveat. |
 | `follow_up_ids` | Issue IDs for defects, deferred proof, migration cleanup, or remaining work. |
 | `created_at` | Capture time. |
@@ -64,31 +64,34 @@ manual review fills `summary`, `proof_scope`, `independence_level`, and
 Atelier routes proof by risk and scope. Ordinary executable issues prove their
 own Outcome on the issue: the `Evidence` section names the proof, the worker
 runs the narrowest checks that support the claim, and the result is recorded
-before closeout. Ordinary implementation issues do not require a separate
+before completion. Ordinary implementation issues do not require a separate
 independent review by default; the parent epic supplies the review and
 validation boundary for the coherent changeset.
 
 Durable issue notes are for handoff context, caveats, skipped optional checks,
 and trivial proof that does not need a separate artifact. First-class evidence
 records are required for non-trivial command transcripts, test results,
-migration proof, process-policy changes, workflow validation, closeout audits,
+migration proof, process-policy changes, workflow validation, validation audits,
 and any `fail`, `blocked`, `deferred`, or `not-applicable` classification that
 future workers must inspect.
 
-Separate validation or closeout issues are required when the implementer should
+Separate validation issues are required when the implementer should
 not validate the claim alone: migrations, public command or API contracts,
 docs/help parity, stale-test risk, cross-cutting workflow or persistence
 behavior, Agent Factory process changes, explicitly risk-escalated issue
-slices, epic closeouts, and explicit mission-level closeout or validation
+slices, epic completions, and explicit mission-level completion or validation
 claims.
 
 Missions are coordination shells by default, not work logs. A mission may
-retain direct evidence links only for legacy imports, migration notes, or an
-explicit mirrored closeout artifact whose accountable owner is also linked
-issue-shaped validation or closeout work. Normal mission readiness is computed
-from closed linked work, clear mission blockers, configured health gates, and
-workflow approval on accountable child work; mission `Validation` prose guides
-human closeout and validation but is not parsed as a coded evidence contract.
+retain direct evidence links only for legacy imports or migration notes. Normal
+mission completion is computed from closed linked work, clear mission blockers,
+configured health gates, and workflow approval on accountable child work;
+mission `Validation` prose guides human completion and validation but is not
+parsed as a coded evidence contract.
+Missions keep the built-in lifecycle `draft`, `ready`, `active`, and `closed`;
+Atelier does not add a configurable mission workflow graph. Issues and epics
+remain the workflow-owned records: they move through normal issue transitions
+until a terminal done-category status is allowed.
 
 The detailed routing table lives in
 [Validation](../architecture/quality/validation.md). Product docs should point
@@ -98,14 +101,14 @@ to that router instead of defining a second proof model.
 
 Choose the proof surface by the claim being closed:
 
-| Claim | Enough proof | Command shape | Closeout implication |
+| Claim | Enough proof | Command shape | Completion implication |
 | --- | --- | --- | --- |
-| Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier mission note <mission-id> "coordination context"` | Notes help future operators, but closeout validators do not treat them as claim proof. |
+| Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier mission note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
 | Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation --result pass "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
 | Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test --result pass -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
-| Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent closeout should map the parent claim to the independent validation issue and its evidence ID. |
-| Epic or mission closeout | Validation or closeout issue that maps parent claims to child proof | Record evidence on the validation or closeout issue and, when explicitly needed, mirror the final closeout artifact to the mission. | Mission readiness comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
+| Process-policy, public command, persistence, migration, or cross-cutting workflow behavior | Independent validation issue plus evidence on that issue | Create a validation issue, run the checks from a clean checkout or independent review path, then record evidence on the validation issue. | Parent completion should map the parent claim to the independent validation issue and its evidence ID. |
+| Epic or mission completion | Validation issue that maps parent claims to child proof | Record evidence on the validation issue. | Mission completion comes from closed linked work, clear blockers, configured health gates, and workflow approval on accountable child work. |
 
 Example for ordinary documentation work:
 
@@ -121,16 +124,16 @@ Example for command-backed validation:
 atelier evidence record --target issue/atelier-zrqa --kind test --result pass -- target/debug/atelier lint atelier-zrqa
 ```
 
-Example for independent closeout proof:
+Example for independent completion proof:
 
 ```text
-atelier evidence record --target issue/<validation-issue-id> --kind validation --result pass "mission closeout validation maps mission expectations to closed linked work and evidence IDs"
-atelier mission close <mission-id> --reason "linked work closed and closeout proof attached"
+atelier evidence record --target issue/<validation-issue-id> --kind validation --result pass "mission completion validation maps mission expectations to closed linked work and evidence IDs"
+atelier mission close <mission-id> --reason "linked work closed and completion proof attached"
 ```
 
 ## Parent Coverage Summaries
 
-Issue closeout reads evidence attached to that issue and checks whether the
+Issue completion reads evidence attached to that issue and checks whether the
 issue's `Evidence` section has objective proof. Parent records summarize
 coverage instead of owning every proof detail.
 
@@ -141,12 +144,12 @@ residual risks plus follow-up IDs. It may use stable claim anchors for
 automation-heavy, high-risk, or repeated audit work, but ordinary issues should
 not need line-level claim plumbing.
 
-A mission closeout summary, when the mission needs one, lives on explicit
-validation or closeout issue-shaped work. It maps explicit approval work and
-linked execution status to implementation, review, validation, and closeout
-issues. The mission derives readiness from closed linked work, clear blockers,
-configured health gates, and independent closeout validation when configured.
-Direct mission evidence is not the normal coverage source.
+A mission completion summary, when the mission needs one, lives on explicit
+validation issue-shaped work. It maps explicit approval work and linked
+execution status to implementation, review, and validation issues. The mission
+derives completion from closed linked work, clear blockers, configured health
+gates, and independent validation when configured. Direct mission evidence is
+not the normal coverage source.
 
 Existing prose evidence migrates as structured evidence with the original text
 as `summary`, best-effort `kind` and `result`, the linked issue as `targets`,
@@ -165,17 +168,17 @@ mission is executed.
 A mission is large enough to require at least one epic. If the work can be
 planned, claimed, implemented, validated, and closed as a single accountable
 unit, it should remain an issue. If the work needs coordinated implementation,
-review, validation, documentation, or closeout slices under a shared objective,
+review, validation, documentation, or migration slices under a shared objective,
 the shared objective should be a mission and the executable slices should live
 under one or more epics or issues linked to that mission.
 
 ## Mission Graph Shape
 
-Prefer a shallow mission graph: the mission links to epics, closeout issues, or
+Prefer a shallow mission graph: the mission links to epics, validation issues, or
 other root work that directly advances the objective, and those epics own their
 executable child tasks. Ordinary child tasks should not also be direct mission
 work unless the duplicate link is deliberate and useful for a specific
-closeout, migration, or emergency tracking reason.
+validation, migration, or emergency tracking reason.
 
 ```text
 mission atelier-hy2i
@@ -185,7 +188,7 @@ mission atelier-hy2i
   advances epic atelier-a625
     child task atelier-oqtz
     child task atelier-qdaw
-  advances closeout issue atelier-mission-closeout
+  advances validation issue atelier-mission-validation
 ```
 
 In this shape, the mission carries objective scope and validation expectations,
@@ -193,7 +196,7 @@ epics group accountable work packages on reviewable branches, and child issues
 execute as implementation slices under their epic. Mission status should count
 each unique issue once even when a deliberate duplicate path exists, but
 planners should avoid duplicate mission links by default because they make
-readiness and closeout harder to scan.
+completion state harder to scan.
 
 ## Workspace, Branch, And Review Boundaries
 
@@ -201,7 +204,7 @@ The default operating model separates three concerns:
 
 - Mission: one shared worktree or background checkout for coordinated work.
 - Epic: one reviewable branch or PR-equivalent changeset under that mission.
-- Issue: one implementation, documentation, review, validation, closeout, or
+- Issue: one implementation, documentation, review, validation, migration, or
   artifact-update slice with local proof.
 
 Per-issue worktrees and per-issue branches are exceptional isolation tools. Use
@@ -210,7 +213,7 @@ migration trials, or an explicitly assigned validation/review context. They are
 not the default for every mutating subagent or every ordinary child issue.
 
 Independent review moves to the epic by default. Ordinary implementation issues
-close with their own proof, while epic closeout maps child issue proof to the
+close with their own proof, while epic completion maps child issue proof to the
 parent outcome and records the review or validation judgment for the branch.
 
 ## Relationships
@@ -228,7 +231,6 @@ issue contributes_to milestone
 evidence validates issue
 evidence validates review issue
 evidence validates validation issue
-evidence validates closeout issue
 evidence validates milestone.validation_criteria[N]
 workflow transition uses validator
 validator evaluation produces evidence or a machine-readable result
@@ -253,19 +255,18 @@ Mission records are meant to be reviewed by operators and agents in normal
 Markdown diffs. The product contract is not an escaped `data` object in YAML.
 Mission front matter carries compact identity, lifecycle state, labels, and
 typed relationships. Mission narrative, constraints, risks, validation
-expectations, and closeout notes live in ordered Markdown sections:
+expectations, and terminal notes live in ordered Markdown sections:
 
 ```text
 ## Intent
 ## Constraints
 ## Risks
 ## Validation
-## Closeout Notes
 ## Notes
 ```
 
-`Intent`, `Constraints`, `Risks`, and `Validation` are required. `Closeout
-Notes` and `Notes` are optional. Linked work, blockers, checkpoints, plans,
+`Intent`, `Constraints`, `Risks`, and `Validation` are required. `Notes` is
+optional. Linked work, blockers, checkpoints, plans,
 evidence, and other supporting records are typed links, not prose-only lists.
 `atelier mission show` and `atelier mission status` render those links as
 Linked Work, Mission Blockers, Evidence, Plans, and checkpoint sections. They
@@ -278,7 +279,7 @@ This abbreviated escaped-JSON shape is rejected as an authoring contract:
 ```markdown
 ---
 id: "atelier-tcmr"
-data: "{\"constraints\":[\"Use sectioned issue Markdown.\"],\"risks\":[\"Large rework can sprawl.\"],\"validation\":[\"Closeout requires evidence.\"],\"work\":[]}"
+data: "{\"constraints\":[\"Use sectioned issue Markdown.\"],\"risks\":[\"Large rework can sprawl.\"],\"validation\":[\"Completion requires evidence.\"],\"work\":[]}"
 schema: "atelier.mission"
 schema_version: 1
 status: "ready"
@@ -296,7 +297,7 @@ atelier mission create "Repair CLI workflow rework and validation gaps" \
   --body "Repair the CLI workflow and validation gaps." \
   --constraint "Use sectioned issue Markdown." \
   --risk "Large rework can sprawl." \
-  --validation "Closeout requires linked work closed and validation evidence attached."
+  --validation "Completion requires linked work closed and validation evidence attached."
 ```
 
 ```markdown
@@ -330,7 +331,7 @@ Repair the CLI workflow and validation gaps.
 
 ## Validation
 
-- Closeout requires linked work closed and validation evidence attached.
+- Completion requires linked work closed and validation evidence attached.
 ```
 
 The validating evidence itself is a separate evidence record linked back to the

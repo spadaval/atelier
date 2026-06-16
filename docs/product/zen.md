@@ -54,7 +54,7 @@ Process should target agent failure modes: add enforcement where agents are
 likely to skip evidence, miss blockers, or close too early; keep routine work
 light.
 
-Parent closeout should synthesize accountable child proof: missions and epics
+Parent completion should synthesize accountable child proof: missions and epics
 protect coordination, coverage, and review boundaries without forcing a second
 copy of proof that already belongs on closed child work.
 

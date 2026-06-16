@@ -4,7 +4,7 @@
 
 Proof starts on the work item that made the claim. The issue `Evidence`
 section names the expected proof, and the worker records that proof before
-closeout. Escalate by risk and scope: ordinary local implementation work proves
+completion. Escalate by risk and scope: ordinary local implementation work proves
 itself on the issue, while risky, broad, review-boundary, or parent-level
 claims require independent validation and first-class evidence.
 
@@ -21,10 +21,9 @@ process-policy, and other broad claims.
 Epics and missions coordinate work; they are not the normal executable proof
 surface. A mission is the shared workspace/background checkout boundary, and an
 epic is the branch and review boundary. Their claims are proven by evidence on
-accountable child work plus a closeout or validation item that audits the
-parent outcome. Direct evidence on a mission is legacy, migration-only, or a
-final closeout artifact mirrored from an accountable closeout issue; it is not
-the normal way to satisfy mission proof.
+accountable child work plus a validation item that audits the parent outcome.
+Direct evidence on a mission is legacy or migration-only; it is not the normal
+way to satisfy mission proof.
 
 ## Validation Placement
 
@@ -33,18 +32,18 @@ detail at every parent layer.
 
 | Layer | Owns | Avoid |
 | --- | --- | --- |
-| Mission `Validation` | Mission-level target state, shared workspace confidence, closeout confidence, required independent or adversarial review, and the evidence classes needed to trust the whole mission. | Child implementation steps, exact file lists, or every command each issue must run. |
-| Epic `Outcome`/`Evidence` | Cohesive product, process, or architecture result, branch/review scope, plus how child work, a validation item, or closeout item will prove the parent claim. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
-| Executable issue `Outcome`/`Evidence` | The local observable result and proof for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad closeout promises, default independent review requirements, or proof that belongs to an independent validation issue. |
+| Mission `Validation` | Mission-level target state, shared workspace confidence, completion confidence, required independent or adversarial review, and the evidence classes needed to trust the whole mission. | Child implementation steps, exact file lists, or every command each issue must run. |
+| Epic `Outcome`/`Evidence` | Cohesive product, process, or architecture result, branch/review scope, plus how child work or a validation item will prove the parent claim. | Repeating every child issue's local proof or turning the epic into a second implementation spec. |
+| Executable issue `Outcome`/`Evidence` | The local observable result and proof for the owned implementation slice: command output, file content, tests, transcripts, screenshots, or evidence records. | Parent mission claims, broad completion promises, default independent review requirements, or proof that belongs to an independent validation issue. |
 | Dedicated validation issue `Outcome`/`Evidence` | Independent review scenarios, claim classification, evaluator context, baseline or scenario setup, and evidence capture. | Fixing defects while validating or restating the implementation plan as validation criteria. |
 
 Anti-red-tape rule: add detail to a higher layer only when it changes scope,
 risk, sequencing, or parent-level confidence. Otherwise, keep detail at the
-lowest accountable layer and let closeout map parent claims to child evidence.
+lowest accountable layer and let completion map parent claims to child evidence.
 
 Broad persistence, canonical write, projection refresh, runtime-cache, and
 worktree changes need early concurrency or scenario validation before final
-closeout. Do not rely only on an end-of-mission audit for changes that can lose
+completion. Do not rely only on an end-of-mission audit for changes that can lose
 canonical state, corrupt projections, or misroute work.
 
 ## Contract-First Work
@@ -84,9 +83,9 @@ lore.
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
-| Proof routing, evidence placement, independent-validation triggers, and parent closeout expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission audit`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission audit`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
 | Tracker freshness, health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier mission status`, `atelier lint`, `atelier doctor` | Missing proof, blockers, stale state, and health failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, `AGENTFACTORY.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission closeout | Routine handoff uses visible lint/status surfaces; mission status and closeout surface docs/help drift validators when a mission is being closed. |
+| Agent-facing command freshness for `AGENTS.md`, `AGENTFACTORY.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 For the current binding, this means the retained `Sources` and tracker-shape
@@ -124,9 +123,8 @@ files by hand as a substitute for the documented repair surfaces.
 | `task` | Focused diff inspection plus the narrow checks named by the task. Docs-only tasks usually need the documentation diff, Markdown whitespace check, and tracker lint for the item when tracker state changed. Ordinary implementation tasks do not require independent review by default. | The task changes process policy, public docs that must match help output, workflow gates, Agent Factory guidance, or another artifact that future work depends on. |
 | `feature` | Positive and negative behavior proof through focused tests, command transcripts, screenshots, or docs/help parity checks for the user-visible surface. | The feature changes a public command/API contract, crosses storage/projection/workflow boundaries, or broad green tests could miss the claim. |
 | `story` | End-to-end scenario proof for the operator workflow, including the important success path and rejected or blocked path. | The story spans multiple commands, records, UI views, or mission criteria, or claims a parent-level user outcome. |
-| `bug` | A failing-before and passing-after reproduction when practical, plus a regression test or transcript that shows the defect no longer appears. | The bug involved data loss, stale projection, migration, closeout, safety, security, or behavior that is hard for the implementer to disprove alone. |
+| `bug` | A failing-before and passing-after reproduction when practical, plus a regression test or transcript that shows the defect no longer appears. | The bug involved data loss, stale projection, migration, completion, safety, security, or behavior that is hard for the implementer to disprove alone. |
 | `validation` | An independent validator classifies each relevant claim as `pass`, `fail`, `blocked`, `deferred`, or `not-applicable` and attaches first-class evidence. | Validation discovers new defects, stale tests, missing proof, or ambiguous criteria; create follow-up implementation or artifact-update issues instead of silently widening scope. |
-| `closeout` | A closeout worker maps every parent Outcome or validation criterion to linked work, attached evidence, branch/review state, and workflow validation output. | Epic closeout requires independent validation. Mission closeout requires independent or adversarial validation only when explicit mission-level validation, closeout work, or cross-cutting risk makes that parent judgment accountable. |
 | `spike` | A durable decision, investigation result, or artifact update that names what was learned, what remains unknown, and what work is now unblocked. | The conclusion commits the repository to a migration, public contract, architecture boundary, workflow policy, or costly sequencing choice. |
 
 ## Evidence Destination
@@ -136,8 +134,8 @@ claim without private context.
 
 | Destination | Use when | Not enough for |
 | --- | --- | --- |
-| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where the issue Evidence section explicitly says no separate proof artifact is meaningful. | Required proof for behavior changes, parent closeout, validation items, process-policy changes, or workflow validators that require evidence. |
-| First-class evidence record | Any non-trivial proof: command transcripts, focused tests, migration results, docs/help parity, workflow validation, closeout audit tables, screenshots, or `fail`, `blocked`, `deferred`, and `not-applicable` classifications that should survive handoff. Attach it to the accountable issue-shaped work that produced or validated the proof. Parent readiness reads those child links through implementation, review, validation, and closeout issues. | Proof that must be performed independently by another worker, or unresolved defects that need their own owner. |
+| Durable issue note | Handoff context, caveats, skipped optional checks, small observations, or a trivial docs-only change where the issue Evidence section explicitly says no separate proof artifact is meaningful. | Required proof for behavior changes, parent completion, validation items, process-policy changes, or workflow validators that require evidence. |
+| First-class evidence record | Any non-trivial proof: command transcripts, focused tests, migration results, docs/help parity, workflow validation, validation audit tables, screenshots, or `fail`, `blocked`, `deferred`, and `not-applicable` classifications that should survive handoff. Attach it to the accountable issue-shaped work that produced or validated the proof. Parent completion reads those child links through implementation, review, and validation issues. | Proof that must be performed independently by another worker, or unresolved defects that need their own owner. |
 | Separate validation issue | Independent judgment is required, proof is broad enough to be its own work, or the implementer should not validate their own claim. Link it as validation or a blocker before relying on its result. | Tiny local checks where the issue worker can produce objective proof directly on the implementing issue. |
 
 ## Evidence Recording Contract
@@ -151,8 +149,8 @@ atelier evidence record --target issue/<id> --kind test --result pass -- <comman
 ```
 
 The target syntax is `<kind>/<id>`. New proof normally targets `issue/<id>` so
-the accountable implementation, review, validation, or closeout issue owns the
-claim. Parent closeout reads those child evidence links rather than accepting a
+the accountable implementation, review, or validation issue owns the
+claim. Parent completion reads those child evidence links rather than accepting a
 mission-level proof dump.
 
 Evidence records should include accountable targets, proof scope, kind, result,
@@ -166,13 +164,13 @@ Examples:
 | Scenario | Evidence shape |
 | --- | --- |
 | Command transcript | `target=issue/atelier-z1p8`, `proof_scope="Outcome: rejected command errors"`, `kind=test`, `result=pass`, `commands=[{command, exit_status, stdout_summary, stderr_summary}]`, `independence_level=implementer`. |
-| Audit table | `target=issue/atelier-closeout`, `proof_scope="Epic outcome coverage"`, `kind=audit`, `result=pass`, `artifacts=[docs or evidence IDs]`, `independence_level=closeout`, `residual_risks=[]`. |
+| Audit table | `target=issue/atelier-validation`, `proof_scope="Epic outcome coverage"`, `kind=audit`, `result=pass`, `artifacts=[docs or evidence IDs]`, `independence_level=independent`, `residual_risks=[]`. |
 | Failed validation | `target=issue/atelier-validation`, `kind=validation`, `result=fail`, `summary` names the failed behavior, `commands` or artifacts show the failure, and `follow_up_ids` names the defect owner. |
 | Deferred result | `target=issue/atelier-validation`, `kind=validation`, `result=deferred`, `summary` explains why proof is postponed, `residual_risks` names the risk, and `follow_up_ids` names the issue that must complete it. |
 
 ## Independent Validation Triggers
 
-Create or use a separate validation or closeout issue when any of these apply:
+Create or use a separate validation issue when any of these apply:
 
 - migration, schema, canonical record, projection rebuild, or runtime-state
   repair work;
@@ -180,7 +178,7 @@ Create or use a separate validation or closeout issue when any of these apply:
   workflow behavior;
 - cross-cutting behavior in storage, export, rebuild, workflow validators,
   evidence, mission status, Agent Factory process, or Mission Control;
-- epic, mission, milestone, or other parent-level closeout claims;
+- epic, mission, milestone, or other parent-level completion claims;
 - epic branch review or PR-equivalent readiness;
 - stale-test, ignored-test, fixture drift, or broad-green-test risk;
 - irreversible, security-sensitive, data-loss, or hard-to-reproduce behavior;
@@ -218,13 +216,13 @@ than "make mission status faster."
 
 | Work item | Proof on the implementing item | Evidence destination | Independent validation |
 | --- | --- | --- | --- |
-| Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier lint <id>` or repo-wide `atelier lint` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, closeout, public contracts, docs/help parity, or epic/mission review boundaries. |
+| Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier lint <id>` or repo-wide `atelier lint` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, completion, public contracts, docs/help parity, or epic/mission review boundaries. |
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
-| Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, closeout, mission orchestration, or future worker behavior. |
-| Crate migration root-deletion closeout | `python3 scripts/check_crate_migration_closeout.py`, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before the root is deleted, use `python3 scripts/check_crate_migration_closeout.py --self-test` to prove the guard detects representative regressions. | First-class evidence attached to the root-deletion or closeout issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission closeout. |
-| Epic closeout | Closeout issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured closeout check, and records residual risks. | First-class evidence attached to the closeout issue; the epic derives readiness from that linked closeout plus child evidence. | Always required, performed by a closeout or validation worker that did not implement the bulk of the children. |
-| Mission closeout | Mission status and closeout synthesize linked work state, clear blockers, tracker health, configured gates, and explicit validation or closeout work when parent-level judgment is required. They do not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation or closeout issue when one exists; a direct mission link is retained only when the closeout workflow explicitly mirrors the same artifact for legacy closeout gates. | Required for explicit mission-level validation or closeout work, adversarial closeout, or cross-cutting mission claims; routine mission shell closeout stays a thin synthesis over proved child work and health gates. |
+| Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
+| Crate migration root-deletion completion | Crate-migration guard script, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before root deletion, run the guard self-test if one exists. | First-class evidence attached to the root-deletion or validation issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission completion. |
+| Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
+| Mission completion | Mission status synthesizes linked work state, clear blockers, tracker health, configured gates, and explicit validation work when parent-level judgment is required. It does not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation issue when one exists. | Required for explicit mission-level validation work, adversarial validation, or cross-cutting mission claims; routine mission shell completion stays a thin synthesis over proved child work and health gates. |
 
 Unavailable optional tooling should not be converted into an implicit failure.
 When a repo-supported tool has an install path, install it and rerun before
@@ -237,16 +235,16 @@ Parent coverage summaries should classify each parent Outcome or validation
 line as `covered`, `missing`, `failed`, `blocked`, `deferred`, or
 `not-applicable`, then cite the accountable child issue IDs and evidence IDs.
 Stable claim anchors are optional and reserved for high-risk or
-automation-heavy closeout; ordinary issue work should stay readable and avoid
+automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
 
 `atelier mission status` is the normal operator surface for mission state,
-blockers, evidence gaps, next actions, and closeout readiness. `atelier mission
-audit` is closeout drill-down: it exists to report mission shell readiness and
-any explicit linked validation or closeout work that supplies workflow
-approval, and may be folded into a verbose closeout mode of mission status.
+blockers, evidence gaps, next actions, and completion status. `atelier mission
+audit` is completion drill-down: it exists to report mission shell completion and
+any explicit linked validation work that supplies workflow
+approval, and may be folded into a verbose completion mode of mission status.
 Hidden workflow validators are
-advanced diagnostics; use them only when the binding, assignment, or closeout
+advanced diagnostics; use them only when the binding, assignment, or completion
 contract explicitly requires them, and attach the human-readable result to the
 accountable issue that performed the check.
 
@@ -285,7 +283,7 @@ For a canonical write or projection-refresh issue:
   evidence record that proves early concurrent write, rebuild, and export
   freshness behavior.
 - The validation issue replays the scenario or inspects the evidence before
-  final closeout rather than waiting for a mission audit to discover projection
+  final completion rather than waiting for a mission audit to discover projection
   drift.
 
 ## Commands
@@ -309,8 +307,8 @@ route to when a worker needs concrete command forms:
 | Tracker health check | `atelier doctor` |
 | Deterministic export/projection diagnostic | `atelier export --check`, only for storage-rendering, migration, or debug claims |
 | Python invocation | `python3 -c 'print("validation ok")'` |
-| Crate migration closeout guard | `python3 scripts/check_crate_migration_closeout.py` |
-| Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_closeout.py --self-test` |
+| Crate migration completion guard | `python3 scripts/check_crate_migration_completion.py` |
+| Crate migration guard self-test before root deletion | `python3 scripts/check_crate_migration_completion.py --self-test` |
 | Warning-free workspace check | `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` |
 
 When a Rust test needs more than one target, run separate `cargo test`
@@ -341,15 +339,15 @@ diagnostics, or command families that belong to a different record kind.
 | `cargo test` | Cargo/libtest compatibility check |
 | `cargo test --test cli_integration` | user-visible CLI behavior |
 | `cargo test --test smoke_tests` | smoke scenarios |
-| `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` | warning-free workspace closeout |
-| `python3 scripts/check_crate_migration_closeout.py` | crate migration root-deletion guard |
+| `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets` | warning-free workspace completion |
+| `python3 scripts/check_crate_migration_completion.py` | crate migration root-deletion guard |
 | `atelier lint` | tracker structure |
 | `atelier doctor` | tracker install, local runtime, diagnostics, and workflow health |
 
 Rust hazard scan classifications live in
 `docs/architecture/quality/rust-quality-hazard-scans.md`.
 
-Workflow and closeout validation failures are command failures by default.
+Workflow and completion validation failures are command failures by default.
 Mission completion is valid only when all linked work is closed, mission
 blockers are clear, required evidence is attached to accountable child work,
 configured transition gates pass, docs/help/Agent Factory command guidance has
@@ -357,11 +355,11 @@ no drift, stale obsolete-command tests are explicitly owned or deferred, and
 the Git worktree is clean. Routine mission completion does not require a second
 direct mission evidence record when those child and health gates already prove
 the mission shell.
-The `validation_criteria_satisfied` closeout gate is Atelier-owned: for mission
-closeout it checks configured workflow approval on explicit validation or
-closeout work when parent-level judgment is required. Missing parent coverage,
+The `validation_criteria_satisfied` completion gate is Atelier-owned: for mission
+completion it checks configured workflow approval on explicit validation or
+validation work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through
-mission status, validation issue output, and closeout failure output rather
+mission status, validation issue output, and completion failure output rather
 than through Agent Factory prose alone.
 
 ## Scenario Proof
@@ -374,7 +372,7 @@ than through Agent Factory prose alone.
 - Workflow, validator, evidence, mission, milestone, or plan changes should
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.
-- Mission closeout proof should show linked work closed, evidence attached to
+- Mission completion proof should show linked work closed, evidence attached to
   accountable child work, configured transition gates passing, and clean Git
   state.
 - Agent Factory and tracker workflow validation should use human command output
@@ -384,10 +382,10 @@ than through Agent Factory prose alone.
   mission status or audit output.
 - Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
   only for local Atelier performance and telemetry analysis. It is not proof of
-  ready work, blockers, validation results, evidence coverage, or closeout
+  ready work, blockers, validation results, evidence coverage, or completion
   readiness.
 - Migration work should classify expected breakage and name reconnect or
-  closeout ownership.
+  completion ownership.
 
 ## Result States
 

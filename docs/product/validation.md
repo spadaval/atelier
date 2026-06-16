@@ -32,7 +32,7 @@ on chat history.
 
 Validation is the act of checking a claim against evidence. Ordinary
 implementation work can validate its own local outcome with focused proof.
-Risky, parent-level, public-contract, migration, workflow, or closeout claims
+Risky, parent-level, public-contract, migration, workflow, or completion claims
 may need separate validation work.
 
 Workflow validator is a configured transition gate. It answers whether a record
@@ -41,14 +41,14 @@ as missing proof, open blockers, stale tracker state, dirty worktree, or pending
 validation work. Validator names are diagnostic detail, not the main product
 language for normal operators.
 
-Closeout is the final readiness judgment. For an ordinary issue, closeout means
+Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or
-mission, closeout synthesizes child work, blockers, proof, review, and
+mission, completion synthesizes child work, blockers, proof, review, and
 validation rather than duplicating every child proof record.
 
 ## Product Rule
 
-Proof requirements must be visible before closeout.
+Proof requirements must be visible before completion.
 
 Agents should not discover required proof only after `atelier issue close` or
 `atelier mission close` fails. The normal workflow surfaces should show the
@@ -63,7 +63,7 @@ For normal implementation work, validation should stay light:
 2. Implement the feature or fix.
 3. Run the focused check that proves the outcome.
 4. Record the check as evidence attached to the issue.
-5. Close when transition readiness is satisfied.
+5. Close when transition checks are satisfied.
 
 The happy path should be one command for proof capture when possible:
 
@@ -74,7 +74,7 @@ atelier evidence record --target issue/<id> --kind test --result pass -- <comman
 or a higher-level convenience command that does the same capture and attachment.
 
 Ordinary issues should not require manual claim IDs, independent reviewer
-metadata, residual-risk forms, or parent closeout tables. The evidence section
+metadata, residual-risk forms, or parent completion tables. The evidence section
 and command transcript are enough when the proof is specific and inspectable.
 
 ## Escalated Validation
@@ -85,7 +85,7 @@ agents or users depend on:
 - public CLI behavior, help text, or command contracts;
 - workflow policy, transition gates, or proof behavior;
 - canonical records, projection rebuild, migration, or runtime repair;
-- mission, epic, milestone, or other parent-level closeout claims;
+- mission, epic, milestone, or other parent-level completion claims;
 - security, data-loss, irreversible, or hard-to-reproduce behavior;
 - broad claims where one green test run could easily miss the real outcome.
 
@@ -94,19 +94,19 @@ what it can from commands, targets, status, actor identity, and linked work.
 Manual detail is useful only when it explains risk, judgment, or a failed,
 blocked, deferred, or not-applicable result.
 
-## Parent Closeout
+## Parent Completion
 
 Missions and epics coordinate work; they are not proof dumping grounds.
 
-An epic closeout should answer whether the reviewable branch is coherent, child
+An epic completion should answer whether the reviewable branch is coherent, child
 work is closed, child proof exists, and any explicit review or validation work
 has approved the branch.
 
-A mission closeout should answer whether linked work is closed, blockers are
+A mission completion should answer whether linked work is closed, blockers are
 clear, configured health gates pass, and any explicit mission-level validation
-or closeout work is complete.
+or validation work is complete.
 
-Parent closeout should cite child issue IDs and evidence IDs. It should not ask
+Parent completion should cite child issue IDs and evidence IDs. It should not ask
 operators to restate proof that already belongs on closed child work.
 
 ## Visibility Surfaces
@@ -120,7 +120,7 @@ Proof
 Status: missing
 Required for close: 1 passing evidence record attached to issue/<id>
 Expected proof:
-  - focused CLI test proves the changed closeout behavior
+  - focused CLI test proves the changed completion behavior
 Next:
   atelier evidence record --target issue/<id> --kind test --result pass -- <command>
 ```
@@ -130,7 +130,7 @@ When proof is present, the same block should name the evidence IDs and results.
 `atelier start <id>` should remind the worker what proof will be needed before
 close, because this is where the operator forms the work plan.
 
-`atelier issue transition <id> --options` should preview closeout blockers in
+`atelier issue transition <id> --options` should preview completion blockers in
 operator language:
 
 ```text
@@ -150,18 +150,18 @@ Proof Gaps
   atelier-epic1: child proof incomplete
 ```
 
-`atelier mission status --closeout <id>` may show deeper audit detail, including
+`atelier mission status --completion <id>` may show deeper audit detail, including
 unmapped parent outcome lines, failed proof, blocked proof, deferred proof, and
 residual risks.
 
 ## Notes Versus Evidence
 
 Notes are for handoff context, caveats, observations, and coordination.
-Evidence is for closeout proof.
+Evidence is for completion proof.
 
 A note can explain why a command was skipped, where follow-up should start, or
 what an operator learned. A note should not satisfy an evidence requirement for
-a behavior change, validation issue, closeout issue, workflow gate, or parent
+a behavior change, validation issue, validation issue, workflow gate, or parent
 claim.
 
 ## Results

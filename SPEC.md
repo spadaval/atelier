@@ -152,7 +152,7 @@ Missions should be focused on the goal or end state, not on a specific task.
 They are the right shape when the objective is large enough to require at least
 one epic of accountable work beneath it. Smaller work should stay as an issue,
 while mission execution should be split into epics, tasks, validation, review,
-documentation, or closeout issues linked back to the mission.
+documentation, or migration issues linked back to the mission.
 
 ### Epic
 
@@ -186,7 +186,7 @@ tasks, bugs, research items, implementation slices, review items, validation
 items, or custom configured types. Under the mission/epic model, an ordinary
 implementation issue is a local slice on its parent epic branch. It closes with
 the proof named by its `Evidence` section unless the issue itself is a review,
-validation, closeout, migration, or other explicitly risk-escalated item.
+validation, migration, or other explicitly risk-escalated item.
 
 ### Plan
 
@@ -200,18 +200,18 @@ to be revised with reasons as new facts emerge.
 
 ### Evidence
 
-Evidence records prove that accountable work, review, validation, or closeout
+Evidence records prove that accountable work, review, validation, or migration
 happened. Evidence may point to test results, logs, screenshots, videos, API
 responses, benchmark output, review notes, or generated reports. Normal evidence
 targets issue-shaped work because issues own accountability; mission,
 milestone, and epic readiness is derived from linked implementation,
-validation, review, and closeout work rather than direct parent attachments.
+validation, and review work rather than direct parent attachments.
 
 Evidence metadata should include:
 
 - ID.
 - Accountable target IDs, normally issue-shaped work such as implementation,
-  review, validation, or closeout issues.
+  review, validation, or migration issues.
 - Proof scope: the issue Outcome line, parent validation criterion, workflow
   validator result, milestone criterion, or review/audit claim being proven.
 - Kind.
@@ -221,16 +221,16 @@ Evidence metadata should include:
   paths, or URIs.
 - Agent identity or producer.
 - Independence level, such as implementer-produced, peer validation,
-  independent validation, closeout audit, or adversarial validation.
+  independent validation, parent-claim audit, or adversarial validation.
 - Residual risks.
 - Follow-up issue IDs for defects, deferred proof, or remaining work.
 - Size.
 - Hash when applicable.
 - Created time.
 
-Direct mission evidence links are retained only for legacy imports, migration
-notes, or explicit closeout mirroring. New mission proof should be captured on
-the linked closeout or validation issue that performed the audit.
+Direct mission evidence links are retained only for legacy imports or migration
+notes. New mission proof should be captured on the linked validation issue that
+performed the audit.
 
 Small artifacts may live in the repo. Large artifacts should use external
 storage while preserving metadata in repo state. The first supported backend is
@@ -282,7 +282,6 @@ Example workflow:
 ```yaml
 issue_types:
   bug: standard_review_proof
-  closeout: standard_review_proof
   epic: standard_review_proof
   feature: standard_review_proof
   spike: lightweight_spike
@@ -342,7 +341,7 @@ workflows:
 Workflows should scale with risk. Small tasks should not require heavyweight
 ceremony unless policy says so. The starter contract uses proof-first closure
 for ordinary implementation tasks, keeps review/proof workflows for epics,
-validation, closeout, and other risk-bearing issue types, and keeps a lighter
+validation and other risk-bearing issue types, and keeps a lighter
 spike workflow that records an inspectable close reason without requiring
 first-class evidence.
 
@@ -514,7 +513,7 @@ Mission Control should be able to show:
 
 The first Mission Control slice should be CLI-native: `atelier mission status
 [<id>]` should summarize mission health, blockers, evidence gaps, validator
-failures, closeout readiness, and next actions for agents and orchestrators.
+failures, completion status, and next actions for agents and orchestrators.
 Deterministic JSON projections and richer UI surfaces can follow once the CLI
 status contract proves the needed state model.
 
