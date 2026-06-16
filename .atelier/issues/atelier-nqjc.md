@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-16T18:29:14.269167043+00:00"
+status: "done"
 title: "Sort issue show subissues by blocker order"
-updated_at: "2026-06-16T18:26:15.290457841+00:00"
+updated_at: "2026-06-16T18:29:14.269167043+00:00"
 ---
 
 ## Description
