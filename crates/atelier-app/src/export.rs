@@ -57,6 +57,14 @@ pub fn canonical_export(
         bail!("Canonical export is stale:\n{}", stale_entries.join("\n"));
     }
 
+    let rewrite_risks = canonical_rewrite_risk_entries(input.db, &input.state_dir)?;
+    if !rewrite_risks.is_empty() {
+        bail!(
+            "Refusing to write canonical tracker records from the local projection:\n{}\nrecovery: 1. run `atelier lint`; 2. fix any named canonical Markdown records; 3. run `atelier doctor --fix` for ignored local projection/runtime state; 4. rerun the blocked command",
+            rewrite_risks.join("\n")
+        );
+    }
+
     write_canonical_from_db(input.db, &input.state_dir)?;
     Ok(Outcome {
         value: ViewModel {
@@ -97,6 +105,49 @@ pub fn write_canonical_from_db(db: &Database, state_dir: &Path) -> Result<()> {
 
 pub fn canonical_stale_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
     canonical_check_entries(db, state_dir)
+}
+
+fn canonical_rewrite_risk_entries(db: &Database, state_dir: &Path) -> Result<Vec<String>> {
+    if !state_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut risks = canonical_check_entries(db, state_dir)?;
+    if !risks.is_empty() {
+        return Ok(risks);
+    }
+
+    let projected = build_canonical_projection(db, state_dir)?;
+    let expected: BTreeSet<PathBuf> = projected.iter().map(|file| file.path.clone()).collect();
+    for file in projected {
+        let path = state_dir.join(&file.path);
+        match fs::read(&path) {
+            Ok(existing) if existing == file.bytes => {}
+            Ok(_) => risks.push(format!(
+                "would rewrite tracked canonical record from local projection: {}",
+                display_state_path(&file.path)
+            )),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => risks.push(format!(
+                "would create tracked canonical record from local projection: {}",
+                display_state_path(&file.path)
+            )),
+            Err(error) => {
+                return Err(error).with_context(|| format!("Failed to read {}", path.display()));
+            }
+        }
+    }
+
+    for relative_path in canonical_files_under(state_dir)? {
+        if !expected.contains(&relative_path) {
+            risks.push(format!(
+                "would remove tracked canonical record from local projection: {}",
+                display_state_path(&relative_path)
+            ));
+        }
+    }
+
+    risks.sort();
+    Ok(risks)
 }
 
 fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<ProjectionFile>> {
@@ -198,7 +249,7 @@ fn canonical_check_entries(db: &Database, state_dir: &Path) -> Result<Vec<String
 
     if let Err(error) = crate::rebuild::validate_canonical_state(state_dir) {
         stale.push(format!(
-            "invalid: canonical tracker Markdown is invalid while running `atelier export --check`: {error:#}\nrecovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor`; 4. rerun `atelier export --check`"
+            "invalid: canonical tracker Markdown is invalid while running a deterministic export diagnostic: {error:#}\nrecovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor --fix`; 4. rerun the blocked command"
         ));
         return Ok(stale);
     }

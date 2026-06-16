@@ -101,7 +101,14 @@ fn test_canonical_export_check_cli() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Canonical issue"]);
-    h.run_ok(&["export"]);
+    let write_result = h.run_err(&["export"]);
+    assert!(
+        write_result
+            .stderr
+            .contains("Refusing to write canonical tracker records from the local projection"),
+        "expected export write refusal, got stderr: {}",
+        write_result.stderr
+    );
     h.run_ok(&["export", "--check"]);
 
     h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
@@ -129,6 +136,20 @@ fn test_canonical_export_check_cli() {
             && result.stderr.contains("4. rerun the blocked command"),
         "expected ordered stale projection recovery, got stderr: {}",
         result.stderr
+    );
+
+    let rewrite_result = h.run_err(&["export"]);
+    assert!(
+        rewrite_result
+            .stderr
+            .contains("Refusing to write canonical tracker records from the local projection"),
+        "expected export write refusal, got stderr: {}",
+        rewrite_result.stderr
+    );
+    assert!(
+        h.read_canonical_record("issues", &issue_id)
+            .contains("Markdown canonical issue"),
+        "export should not rewrite tracked canonical Markdown"
     );
 }
 

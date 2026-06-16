@@ -242,7 +242,7 @@ fn print_normal_loop(role: Role) {
             println!("  atelier lint");
             println!("  atelier doctor");
             println!("  atelier doctor --fix");
-            println!("  atelier export --check");
+            println!("  atelier branch status");
         }
     }
 }

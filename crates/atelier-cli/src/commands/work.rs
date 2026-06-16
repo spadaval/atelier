@@ -192,7 +192,7 @@ pub fn worktree_status(db: &Database) -> Result<()> {
             println!("    Updated:  {}", work.updated_at.to_rfc3339());
         }
         if let Some(false) = status.export_fresh {
-            print_heading("Export");
+            print_heading("Tracker Health");
             println!("  State: stale");
             if status.export_errors.is_empty() {
                 println!("  Errors: (none)");
@@ -203,7 +203,7 @@ pub fn worktree_status(db: &Database) -> Result<()> {
                 }
             }
         } else if let Some(true) = status.export_fresh {
-            print_heading("Export");
+            print_heading("Tracker Health");
             println!("  State: current");
         }
     }
@@ -865,10 +865,10 @@ fn export_errors(path: &Path) -> Vec<String> {
     };
     let Ok(output) = Command::new(exe)
         .current_dir(path)
-        .args(["export", "--check"])
+        .args(["doctor"])
         .output()
     else {
-        return vec!["failed to run atelier export --check".to_string()];
+        return vec!["failed to run atelier doctor".to_string()];
     };
     if output.status.success() {
         Vec::new()
