@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:29:33.173593671+00:00"
+status: "done"
 title: "Record app-layer contract audit and closeout criteria"
-updated_at: "2026-06-17T19:37:43.104869767+00:00"
+updated_at: "2026-06-17T23:29:33.173593671+00:00"
 ---
 
 ## Description

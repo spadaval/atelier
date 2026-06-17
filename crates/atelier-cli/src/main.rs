@@ -4,6 +4,7 @@ use atelier_app::command_storage::{
     canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
     lint_db, projection_query_db, state_and_db_paths, CommandStorageAccess,
 };
+use atelier_app::use_cases;
 use atelier_core::IssuePriority;
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
@@ -712,14 +713,6 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
-fn resolve_optional_record_arg(
-    db: &Database,
-    kind: &str,
-    id: Option<String>,
-) -> Result<Option<String>> {
-    id.map(|id| resolve_record_arg(db, kind, &id)).transpose()
-}
-
 fn resolve_graph_record_arg(db: &Database, id: &str) -> Result<(String, String)> {
     match commands::agent_factory::resolve_id(db, id) {
         Ok(issue_id) => Ok(("issue".to_string(), issue_id)),
@@ -754,24 +747,6 @@ fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
         bail!("{command} currently supports issue records only; got '{kind}'");
     }
     Ok(())
-}
-
-fn parse_evidence_target(target: &str) -> Result<(&str, &str)> {
-    let Some((kind, id)) = target.split_once('/') else {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
-    };
-    if kind.trim().is_empty() || id.trim().is_empty() {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
-    }
-    Ok((kind, id))
-}
-
-fn resolve_evidence_target_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
-    if matches!(kind, "issue" | "epic") {
-        resolve_issue_arg(db, id)
-    } else {
-        Ok(id.to_string())
-    }
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -999,7 +974,7 @@ fn run() -> Result<()> {
         Commands::Man { role } => commands::man::run(role),
 
         Commands::Status => {
-            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+            let storage = use_cases::status_storage()?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
@@ -1073,7 +1048,7 @@ fn run() -> Result<()> {
                 risk,
                 validation,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
                 commands::mission::create(
@@ -1087,20 +1062,21 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Show { id } => {
-                let db = degraded_projection_query_db()?;
-                let id = resolve_record_arg(&db, "mission", &id)?;
-                commands::mission::show(&db, &id)
+                let storage = use_cases::mission_query_storage()?;
+                let db = storage.db();
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                commands::mission::show(db, &id)
             }
             MissionCommands::Start { id, switch_active } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
             MissionCommands::Status { id, verbose } => {
-                let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-                let id = resolve_optional_record_arg(storage.db(), "mission", id)?;
+                let storage = use_cases::mission_query_storage()?;
+                let id = use_cases::resolve_optional_record_ref(&storage, "mission", id)?;
                 commands::mission::status(
                     storage.db(),
                     &storage.state_dir(),
@@ -1110,14 +1086,15 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Close { id, reason } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::close(&state_dir, &db_path, &id, &reason)
             }
             MissionCommands::List { status } => {
-                let db = degraded_projection_query_db()?;
+                let storage = use_cases::mission_query_storage()?;
+                let db = storage.db();
                 commands::mission::list(&db, status.as_deref())
             }
             MissionCommands::Update {
@@ -1129,10 +1106,10 @@ fn run() -> Result<()> {
                 risk,
                 validation,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::update(
                     &state_dir,
                     &db_path,
@@ -1146,32 +1123,32 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Note { id, text, kind } => {
-                let db = canonical_mutation_db()?;
-                let id = resolve_record_arg(&db, "mission", &id)?;
-                commands::comment::run_mission_note(&db, &id, &text, &kind)
+                let storage = use_cases::mission_mutation_storage()?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                commands::comment::run_mission_note(storage.db(), &id, &text, &kind)
             }
             MissionCommands::AddWork { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::add_work(&state_dir, &db_path, &id, &issue)
             }
             MissionCommands::Unlink { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::unlink(&state_dir, &db_path, &id, &issue)
             }
             MissionCommands::AddBlocker { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
             }
         },
@@ -1205,12 +1182,16 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::evidence_mutation_storage()?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => {
-                        let (kind, id) = parse_evidence_target(target)?;
-                        let id = resolve_evidence_target_arg(storage.db(), kind, id)?;
-                        Some((kind.to_string(), id))
+                        let target = use_cases::parse_evidence_target_arg(target)?;
+                        let id = use_cases::resolve_evidence_target_ref(
+                            &storage,
+                            &target.kind,
+                            &target.id,
+                        )?;
+                        Some((target.kind, id))
                     }
                     None => None,
                 };
@@ -1250,7 +1231,7 @@ fn run() -> Result<()> {
                             &role,
                         )?;
                     }
-                    let db = Database::open(&storage.db_path())?;
+                    let db = use_cases::refreshed_mutation_db(&storage)?;
                     commands::evidence::show(&db, &evidence_id)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
@@ -1278,7 +1259,8 @@ fn run() -> Result<()> {
                 }
             }
             EvidenceCommands::Show { id } => {
-                let db = projection_query_db()?;
+                let storage = use_cases::evidence_query_storage()?;
+                let db = storage.db();
                 commands::evidence::show(&db, &id)
             }
             EvidenceCommands::Attach {
@@ -1287,9 +1269,9 @@ fn run() -> Result<()> {
                 target_id,
                 role,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::evidence_mutation_storage()?;
                 let target_id =
-                    resolve_evidence_target_arg(storage.db(), &target_kind, &target_id)?;
+                    use_cases::resolve_evidence_target_ref(&storage, &target_kind, &target_id)?;
                 commands::evidence::attach(
                     &storage.state_dir(),
                     &storage.db_path(),
@@ -1300,7 +1282,8 @@ fn run() -> Result<()> {
                 )
             }
             EvidenceCommands::List { status } => {
-                let db = projection_query_db()?;
+                let storage = use_cases::evidence_query_storage()?;
+                let db = storage.db();
                 commands::evidence::list(&db, status.as_deref())
             }
         },
@@ -1346,7 +1329,8 @@ fn run() -> Result<()> {
 
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => {
-                let db = projection_query_db()?;
+                let storage = use_cases::workflow_query_storage()?;
+                let db = storage.db();
                 commands::workflow::check(&db)
             }
         },

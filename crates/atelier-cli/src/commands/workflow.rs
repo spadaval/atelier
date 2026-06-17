@@ -8,9 +8,10 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
+use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::{EvidenceRecord, Issue, Record};
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
+use atelier_records::{CanonicalIssueRecord, IssueSections};
 use atelier_sqlite::Database;
 
 #[derive(Debug, Clone, Serialize)]
@@ -83,8 +84,7 @@ pub fn issue_transition_options(
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
     let state_dir = atelier_app::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
-    let store = RecordStore::new(&state_dir);
-    let record = store.load_issue_by_id(&issue.id)?;
+    let record = app_use_cases::load_canonical_issue(&state_dir, &issue.id)?;
     let mut options = Vec::new();
 
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
@@ -321,8 +321,7 @@ pub fn transition_issue(
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
-    let store = RecordStore::new(state_dir);
-    let mut record = store.load_issue_by_id(&before.id)?;
+    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     let (blockers, validator_results) = transition_blockers(
         db,
         &policy,
@@ -342,11 +341,11 @@ pub fn transition_issue(
         )?;
     }
 
-    apply_transition_record(&policy, &store, &mut record, transition, close_reason)?;
+    apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     record_applied_transition(&before, transition_name, transition)?;
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let refreshed = Database::open(db_path)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
@@ -475,7 +474,7 @@ fn report_blocked_transition(
 
 fn apply_transition_record(
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    store: &RecordStore,
+    state_dir: &Path,
     record: &mut CanonicalIssueRecord,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
     close_reason: Option<&str>,
@@ -488,7 +487,7 @@ fn apply_transition_record(
     } else {
         None
     };
-    store.write_issue_atomic(record)?;
+    app_use_cases::write_canonical_issue(state_dir, record)?;
     if let Some(reason) = close_reason {
         crate::commands::activity_log::record_close_reason(&record.issue.id, reason)?;
     }
@@ -600,7 +599,7 @@ pub fn close_issue(
             bail!("{error:#}");
         }
     } else {
-        let _ = Database::open(db_path)?;
+        let _ = app_use_cases::open_database(db_path)?;
     }
     Ok(())
 }
@@ -705,7 +704,7 @@ impl CloseGitIntegration {
             "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
             self.issue_id
         );
-        let _ = Database::open(db_path)?;
+        let _ = app_use_cases::open_database(db_path)?;
         Ok(())
     }
 
@@ -877,7 +876,7 @@ impl CloseGitIntegration {
                 bail!("failed to restore pre-close tracker changes after rollback");
             }
         }
-        atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
+        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
         Ok(())
     }
 }
@@ -1388,8 +1387,7 @@ fn evaluate_builtin_with_params(
                 let issue = db.require_issue(target_id)?;
                 let state_dir =
                     atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-                let store = RecordStore::new(&state_dir);
-                let record = store.load_issue_by_id(target_id)?;
+                let record = app_use_cases::load_canonical_issue(&state_dir, target_id)?;
                 let gate = issue_evidence_gate_status(db, &issue, Some(&record.sections))?;
                 if let Some(atelier_app::workflow_policy::ValidatorParams::EvidenceAttached {
                     min_count,
@@ -1560,10 +1558,9 @@ fn issue_sections_parseable(
     }
 
     let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-    let store = RecordStore::new(&state_dir);
     let mut checked = 0;
     for issue_id in issue_ids {
-        let record = match store.load_issue_by_id(&issue_id) {
+        let record = match app_use_cases::load_canonical_issue(&state_dir, &issue_id) {
             Ok(record) => record,
             Err(error) => return Ok((false, error.to_string())),
         };
@@ -1639,11 +1636,12 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
     let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
         return Ok(None);
     };
-    let store = RecordStore::new(state_dir);
-    Ok(match store.load_record_by_id("evidence", id) {
-        Ok(Record::Evidence(record)) => Some(record),
-        Ok(_) | Err(_) => None,
-    })
+    Ok(
+        match app_use_cases::load_canonical_record(&state_dir, "evidence", id) {
+            Ok(Record::Evidence(record)) => Some(record),
+            Ok(_) | Err(_) => None,
+        },
+    )
 }
 
 fn review_complete(

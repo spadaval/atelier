@@ -11,6 +11,7 @@ pub mod lint;
 pub mod projection;
 pub mod rebuild;
 pub mod storage_layout;
+pub mod use_cases;
 pub mod workflow_policy;
 
 /// Minimal outcome wrapper for early app-layer extraction.

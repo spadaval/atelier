@@ -17,5 +17,7 @@
 - `stabilization-closeout-inventory-2026-06-13.md`: current stabilization
   mission audit inventory, owner map, residue classifications, and health
   transcript for `atelier-man9`.
+- `app-cli-boundary-audit-2026-06-17.md`: audit of the live app/CLI boundary
+  contradiction and stricter closeout proof for app-layer claims.
 - `beads-replacement-closeout.md`: final mission closeout classifications and
   residual deferred items for the Beads replacement mission.
