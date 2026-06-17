@@ -49,6 +49,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0003: Evidence Artifact Storage](../adr/0003-evidence-artifact-storage.md)
 - [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
 - [ADR 0009: Virtual Workspace Root And CLI-Owned Binary](../adr/0009-virtual-workspace-root-and-cli-binary.md)
+- [ADR 0010: Session-Aware PR Coordination Boundaries](../adr/0010-session-aware-pr-coordination-boundaries.md)
 
 ## Target Architecture
 
