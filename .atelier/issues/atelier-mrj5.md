@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Make bundle apply atomic, previewable, and workflow-aware"
-updated_at: "2026-06-17T21:29:09.196770062+00:00"
+updated_at: "2026-06-17T22:07:19.687192982+00:00"
 ---
 
 ## Description

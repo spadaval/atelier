@@ -2615,6 +2615,68 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
 }
 
 #[test]
+fn test_bundle_apply_mid_apply_failure_leaves_canonical_files_unchanged() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let before_issues = count_markdown_records(dir.path(), "issues");
+    let before_evidence = count_markdown_records(dir.path(), "evidence");
+    let bundle_path = dir.path().join("invalid-parent-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Mid apply failure",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.invalid-parent",
+        "title": "Should not persist",
+        "issue_type": "task",
+        "priority": "high",
+        "parent": { "client_ref": "evidence.invalid-parent" }
+      }
+    ],
+    "evidence": [
+      {
+        "client_ref": "evidence.invalid-parent",
+        "title": "Should not persist evidence",
+        "evidence_type": "test",
+        "result": "pass",
+        "body": "This staged record must not install."
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+
+    assert!(!success, "invalid bundle should fail");
+    assert!(
+        stderr.contains("Issue parent for issue.invalid-parent must resolve to an issue"),
+        "{stderr}"
+    );
+    assert_eq!(count_markdown_records(dir.path(), "issues"), before_issues);
+    assert_eq!(
+        count_markdown_records(dir.path(), "evidence"),
+        before_evidence
+    );
+    assert!(
+        !canonical_directory_contains(dir.path(), "issues", "Should not persist"),
+        "staged issue leaked into canonical files"
+    );
+    assert!(
+        !canonical_directory_contains(dir.path(), "evidence", "Should not persist evidence"),
+        "staged evidence leaked into canonical files"
+    );
+}
+
+#[test]
 fn test_work_commands_are_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3857,4 +3919,26 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     assert!(success, "mapped issue blocked failed: {stderr}");
     assert!(stdout.contains("atelier-0003"));
     assert!(stdout.contains("atelier-0002"));
+}
+
+fn count_markdown_records(dir: &std::path::Path, directory: &str) -> usize {
+    let record_dir = dir.join(".atelier").join(directory);
+    std::fs::read_dir(&record_dir)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("md"))
+        .count()
+}
+
+fn canonical_directory_contains(dir: &std::path::Path, directory: &str, needle: &str) -> bool {
+    let record_dir = dir.join(".atelier").join(directory);
+    std::fs::read_dir(&record_dir)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()))
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("md"))
+        .any(|entry| {
+            std::fs::read_to_string(entry.path())
+                .map(|text| text.contains(needle))
+                .unwrap_or(false)
+        })
 }

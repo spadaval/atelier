@@ -584,6 +584,9 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &dependent_id]);
     assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&issue_id));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(stdout.contains("Status:   todo"), "{stdout}");
 }
 
 #[test]
@@ -631,6 +634,47 @@ fn test_bundle_preview_rejects_plan_and_milestone_resources() {
     );
     assert!(
         stderr.contains("unknown field `plans`") || stderr.contains("unknown field `milestones`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_status_outside_workflow_policy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("invalid-status-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid status bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.invalid-status",
+        "title": "Invalid status",
+        "issue_type": "task",
+        "priority": "high",
+        "status": "not_real"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject unknown workflow status"
+    );
+    assert!(
+        stderr.contains("status is not defined in .atelier/workflow.yaml"),
         "{stderr}"
     );
 }

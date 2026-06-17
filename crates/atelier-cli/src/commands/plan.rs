@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{EvidenceRecordData, Issue, PlanRecord, PlanRecordData, PlanRevision, Record};
+use atelier_records::activity::{create_issue_activity, ActivityEventType};
 use atelier_records::{
     is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
 };
@@ -345,7 +346,7 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         validate_issue_type(&issue.issue_type)?;
         validate_priority(&issue.priority)?;
         if let Some(status) = &issue.status {
-            validate_status(status)?;
+            validate_bundle_issue_status(status)?;
         }
         validate_refs_exist(db, bundle, issue.parent.iter(), &issue.client_ref)?;
         validate_refs_exist(db, bundle, issue.depends_on.iter(), &issue.client_ref)?;
@@ -400,7 +401,79 @@ fn validate_operation(operation: Option<&str>, client_ref: &str) -> Result<()> {
     }
 }
 
+fn validate_bundle_issue_status(status: &str) -> Result<()> {
+    validate_status(status)?;
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok(());
+    }
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if policy.statuses.contains_key(status) {
+        Ok(())
+    } else {
+        bail!(
+            "Invalid bundle issue status '{status}'; status is not defined in .atelier/workflow.yaml"
+        )
+    }
+}
+
+fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok("todo".to_string());
+    }
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    Ok(policy
+        .workflow_for_issue_type(issue_type)?
+        .initial_status
+        .clone())
+}
+
 fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
+    let stage_parent = state_dir
+        .parent()
+        .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    let stage = create_bundle_stage_dir(stage_parent)?;
+    let result = (|| {
+        copy_state_tree(state_dir, &stage)?;
+        let summary = apply_bundle_to_state(db, &stage, bundle)?;
+        install_bundle_stage(&stage, state_dir)?;
+        Ok(summary)
+    })();
+    let _ = fs::remove_dir_all(&stage);
+    result
+}
+
+fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
+    let base = format!(
+        ".atelier-bundle-stage-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    for suffix in 0..=99 {
+        let candidate = if suffix == 0 {
+            parent.join(&base)
+        } else {
+            parent.join(format!("{base}-{suffix:02}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Failed to create {}", candidate.display()))
+            }
+        }
+    }
+    bail!(
+        "Failed to allocate bundle staging directory in {}",
+        parent.display()
+    )
+}
+
+fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
     let store = RecordStore::new(state_dir);
@@ -409,7 +482,10 @@ fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Re
         let description = issue_description(issue);
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
-        let status = issue.status.as_deref().unwrap_or("todo").to_string();
+        let status = match &issue.status {
+            Some(status) => status.clone(),
+            None => workflow_initial_issue_status(&issue.issue_type)?,
+        };
         let sections = IssueSections::unchecked_from_body(description.as_deref());
         let record = CanonicalIssueRecord {
             issue: Issue {
@@ -435,7 +511,15 @@ fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Re
                 _ => note.body.clone(),
             };
             let _ = &note.created_at;
-            super::activity_log::record_note(&id, &body)?;
+            create_issue_activity(
+                state_dir,
+                &id,
+                ActivityEventType::Note,
+                &current_actor(),
+                chrono::Utc::now(),
+                "Added note",
+                &body,
+            )?;
         }
         resolved.insert(
             issue.client_ref.clone(),
@@ -564,6 +648,98 @@ fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Re
         "records": created,
         "relationships": relationship_count,
     }))
+}
+
+fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let name = entry.file_name();
+        if matches!(
+            name.to_str(),
+            Some("runtime" | "cache" | "locks" | "diagnostics")
+        ) {
+            continue;
+        }
+        let source_path = entry.path();
+        let dest_path = dest.join(&name);
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &dest_path)?;
+        } else {
+            fs::copy(&source_path, &dest_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    dest_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let source_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &dest_path)?;
+        } else {
+            fs::copy(&source_path, &dest_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    dest_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn install_bundle_stage(stage: &Path, state_dir: &Path) -> Result<()> {
+    for name in ["issues", "missions", "evidence"] {
+        replace_dir_from_stage(&stage.join(name), &state_dir.join(name))?;
+    }
+    Ok(())
+}
+
+fn replace_dir_from_stage(staged: &Path, dest: &Path) -> Result<()> {
+    let backup = dest.with_extension("bundle-backup");
+    if backup.exists() {
+        fs::remove_dir_all(&backup)
+            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+    }
+    if dest.exists() {
+        fs::rename(dest, &backup).with_context(|| {
+            format!("Failed to move {} to {}", dest.display(), backup.display())
+        })?;
+    }
+    let result = fs::rename(staged, dest)
+        .with_context(|| format!("Failed to install staged {}", dest.display()));
+    if let Err(err) = result {
+        if backup.exists() && !dest.exists() {
+            let _ = fs::rename(&backup, dest);
+        }
+        return Err(err);
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup)
+            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+    }
+    Ok(())
+}
+
+fn current_actor() -> String {
+    std::env::var("ATELIER_AGENT")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "agent".to_string())
 }
 
 impl BundleFile {
