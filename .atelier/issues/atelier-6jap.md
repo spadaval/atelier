@@ -26,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Finish storage boundary cleanup"
-updated_at: "2026-06-17T20:03:45.913489820+00:00"
+updated_at: "2026-06-17T23:05:06.484242283+00:00"
 ---
 
 ## Description

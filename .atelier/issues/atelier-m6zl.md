@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Decide comment sidecar API ownership"
-updated_at: "2026-06-17T19:38:15.898621682+00:00"
+updated_at: "2026-06-17T23:05:31.744857379+00:00"
 ---
 
 ## Description
