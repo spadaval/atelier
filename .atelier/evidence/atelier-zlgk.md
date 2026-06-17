@@ -14,6 +14,9 @@ relationships:
   children: []
   attachments:
   - kind: "issue"
+    id: "atelier-7qsr"
+    role: "validates"
+  - kind: "issue"
     id: "atelier-aqqc"
     role: "validates"
   relates: []
@@ -21,7 +24,7 @@ schema: "atelier.evidence"
 schema_version: 1
 status: "recorded"
 title: "Independent closeout validation for plan/milestone removal: docs and tracker references are deferred or historical, public help omits plan/milestone commands, production searches show no record APIs or link roles, full CLI tests and tracker health checks pass."
-updated_at: "2026-06-17T23:03:04.603172227+00:00"
+updated_at: "2026-06-17T23:04:12.420976100+00:00"
 ---
 
 ## Summary
