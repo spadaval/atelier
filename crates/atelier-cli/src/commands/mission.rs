@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::work_order::WorkOrderRow;
+use atelier_app::use_cases as app_use_cases;
 use atelier_core::{Issue, MissionRecord, Record, RecordLink};
 use atelier_records as record_store;
-use atelier_records::RecordStore;
 use atelier_sqlite::{Database, RecordSummary};
 
 const KIND: &str = "mission";
@@ -23,9 +23,8 @@ pub fn create(
 ) -> Result<()> {
     let sections =
         record_store::mission_sections_from_inputs(title, body, constraints, risks, validation);
-    let store = RecordStore::new(state_dir);
-    let created = store.create_mission(title, "ready", sections)?;
-    refresh_projection(state_dir, db_path)?;
+    let created = app_use_cases::create_mission_record(state_dir, title, "ready", sections)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     print_record(&created)
 }
 
@@ -34,7 +33,7 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 }
 
 pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     let mission = db.require_record(KIND, id)?;
     let current_missions = current_mission_records(&db)?;
     let active = current_missions
@@ -56,19 +55,18 @@ pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) ->
     }
     drop(db);
 
-    let store = RecordStore::new(state_dir);
     let mut changed = false;
     for record in current_missions {
         let mut canonical = canonical_mission_record(&record.id)?;
         let should_be_active = canonical.header.id == mission.id;
         if set_mission_active_state(&mut canonical, should_be_active)? {
             canonical.header.updated_at = Utc::now();
-            store.write_record_atomic(&Record::Mission(canonical))?;
+            app_use_cases::write_canonical_record(state_dir, &Record::Mission(canonical))?;
             changed = true;
         }
     }
     if changed {
-        refresh_projection(state_dir, db_path)?;
+        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     }
     println!("Active mission: {} - {}", mission.id, mission.title);
     println!("Next Commands");
@@ -598,11 +596,7 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
         bail!("Cannot locate canonical Atelier state directory");
     };
-    let store = RecordStore::new(state_dir);
-    match store.load_record_by_id(KIND, id)? {
-        Record::Mission(record) => Ok(record),
-        other => bail!("Expected mission record {id}, found {}", other.kind()),
-    }
+    app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
 pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
@@ -707,7 +701,6 @@ pub fn update(
     {
         bail!("Nothing to update");
     }
-    let store = RecordStore::new(state_dir);
     let mut current = canonical_mission_record(id)?;
     let mut sections = current.sections.clone();
     replace_section_list(&mut sections.constraints, constraints);
@@ -730,8 +723,8 @@ pub fn update(
     }
     current.sections = sections;
     current.header.updated_at = Utc::now();
-    store.write_record_atomic(&Record::Mission(current.clone()))?;
-    refresh_projection(state_dir, db_path)?;
+    app_use_cases::write_canonical_record(state_dir, &Record::Mission(current.clone()))?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     print_record(&current)
 }
 
@@ -739,11 +732,10 @@ pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result
     if reason.trim().is_empty() {
         bail!("mission close requires --reason \"...\"");
     }
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     enforce_mission_terminal_checks(&db, state_dir, id)?;
     drop(db);
 
-    let store = RecordStore::new(state_dir);
     let mut current = canonical_mission_record(id)?;
     let mut sections = current.sections.clone();
     sections.terminal_notes = Some(append_terminal_reason(
@@ -753,8 +745,8 @@ pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result
     current.header.status = "closed".to_string();
     current.sections = sections;
     current.header.updated_at = Utc::now();
-    store.write_record_atomic(&Record::Mission(current.clone()))?;
-    refresh_projection(state_dir, db_path)?;
+    app_use_cases::write_canonical_record(state_dir, &Record::Mission(current.clone()))?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     print_record(&current)
 }
 
@@ -767,13 +759,14 @@ fn append_terminal_reason(existing: Option<&str>, reason: &str) -> String {
 }
 
 pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
-    refresh_projection(state_dir, db_path)?;
+    let inserted = app_use_cases::add_record_relationship(
+        state_dir, KIND, id, "issue", &issue.id, "advances",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted {
         println!("Added work {} to mission {}", issue.id, id);
     } else {
@@ -783,13 +776,14 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
 }
 
 pub fn unlink(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let removed = store.remove_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
-    refresh_projection(state_dir, db_path)?;
+    let removed = app_use_cases::remove_record_relationship(
+        state_dir, KIND, id, "issue", &issue.id, "advances",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if removed {
         println!("Unlinked work {} from mission {}", issue.id, id);
     } else {
@@ -1046,10 +1040,9 @@ fn mission_issue_section_gaps(
     state_dir: &Path,
     mission_id: &str,
 ) -> Result<IssueSectionGapSummary> {
-    let store = RecordStore::new(state_dir);
     let mut gaps = IssueSectionGapSummary::default();
     for issue_id in mission_issue_ids(db, mission_id)? {
-        match store.load_issue_by_id(&issue_id) {
+        match app_use_cases::load_canonical_issue(state_dir, &issue_id) {
             Ok(record) => {
                 for state in record.sections.section_states() {
                     if !state.required || (state.present && !state.empty) {
@@ -1442,23 +1435,25 @@ fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<Str
 }
 
 pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "blocked_by")?;
-    refresh_projection(state_dir, db_path)?;
+    let inserted = app_use_cases::add_record_relationship(
+        state_dir,
+        KIND,
+        id,
+        "issue",
+        &issue.id,
+        "blocked_by",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted {
         println!("Added blocker {} to mission {}", issue.id, id);
     } else {
         println!("Blocker {} is already on mission {}", issue.id, id);
     }
     Ok(())
-}
-
-fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 fn print_record(record: &MissionRecord) -> Result<()> {

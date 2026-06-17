@@ -3,11 +3,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
-    EvidenceTarget, Record, RecordLink,
+    EvidenceTarget, RecordLink,
 };
-use atelier_records::RecordStore;
 use atelier_sqlite::{validate_record_kind, Database};
 
 const KIND: &str = "evidence";
@@ -87,10 +87,10 @@ pub fn add_returning_id(
             role: target.role.to_string(),
         }),
     };
-    let store = RecordStore::new(state_dir);
-    let created = store.create_evidence(summary, "recorded", summary, data)?;
+    let created =
+        app_use_cases::create_evidence_record(state_dir, summary, "recorded", summary, data)?;
     let id = created.header.id.clone();
-    refresh_projection(state_dir, db_path)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(id)
 }
 
@@ -166,9 +166,9 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
         }),
     };
 
-    let store = RecordStore::new(state_dir);
-    let created = store.create_evidence(&summary, "recorded", &body, data)?;
-    refresh_projection(state_dir, db_path)?;
+    let created =
+        app_use_cases::create_evidence_record(state_dir, &summary, "recorded", &body, data)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if let Some(target) = target {
         attach(
             state_dir,
@@ -179,7 +179,7 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
             &target.role,
         )?;
     }
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     print_record(&db, &created)
 }
 
@@ -198,16 +198,21 @@ pub fn attach(
     role: &str,
 ) -> Result<()> {
     validate_evidence_relation_role(role)?;
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let target = validate_record_ref(&db, target_kind, target_id, role)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let inserted =
-        store.add_attachment_relationship(KIND, id, &target.canonical_kind, target_id, role)?;
-    refresh_projection(state_dir, db_path)?;
+    let inserted = app_use_cases::add_attachment_relationship(
+        state_dir,
+        KIND,
+        id,
+        &target.canonical_kind,
+        target_id,
+        role,
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted && target.canonical_kind == "issue" {
-        let db = Database::open(db_path)?;
+        let db = app_use_cases::open_database(db_path)?;
         let evidence = db.require_record(KIND, id)?;
         super::activity_log::record_evidence_attached(target_id, id, Some(&evidence.status))?;
     }
@@ -267,10 +272,6 @@ pub fn validate_evidence_relation_role(role: &str) -> Result<()> {
         "Invalid evidence relation role '{role}'. Accepted evidence relation vocabulary: {}. Evidence kinds such as validation belong in --kind, not --role. Normal flow: record proof with `atelier evidence record --target issue/<id> --kind validation \"summary\"`; reuse existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`.",
         ACCEPTED_EVIDENCE_RELATION_ROLES.join(", ")
     )
-}
-
-fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
 pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
@@ -375,7 +376,7 @@ fn capture_target<'a>(
 ) -> Result<Option<TargetRef<'a>>> {
     match (target_kind, target_id) {
         (Some(kind), Some(id)) => {
-            let db = Database::open(db_path)?;
+            let db = app_use_cases::open_database(db_path)?;
             Ok(Some(validate_record_ref(&db, kind, id, role)?))
         }
         (None, None) => Ok(None),
@@ -603,11 +604,7 @@ fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
         bail!("Cannot locate canonical Atelier state directory");
     };
-    let store = RecordStore::new(state_dir);
-    match store.load_record_by_id(KIND, id)? {
-        Record::Evidence(record) => Ok(record),
-        other => bail!("Expected evidence record {id}, found {}", other.kind()),
-    }
+    app_use_cases::load_canonical_evidence(&state_dir, id)
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {

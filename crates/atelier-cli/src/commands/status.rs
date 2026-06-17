@@ -7,6 +7,7 @@ use std::process::Command;
 use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
+use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
 use atelier_records::activity::list_all_issue_activities;
 use atelier_sqlite::{Database, RecordSummary};
@@ -773,7 +774,7 @@ pub fn close_all_lifecycle(
     label_filter: Option<&str>,
     priority_filter: Option<&str>,
 ) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     let issues = db.list_issues(Some("todo"), label_filter, priority_filter)?;
     drop(db);
 
