@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T23:01:20.099966048+00:00"
+status: "done"
 title: "Remove plan record CRUD and canonical plan storage"
-updated_at: "2026-06-17T22:43:54.486888437+00:00"
+updated_at: "2026-06-17T23:01:20.099966048+00:00"
 ---
 
 ## Description
