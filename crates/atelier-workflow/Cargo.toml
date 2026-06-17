@@ -12,5 +12,9 @@ path = "src/lib.rs"
 
 [dependencies]
 atelier-core = { path = "../atelier-core" }
+anyhow.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

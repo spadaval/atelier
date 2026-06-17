@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T22:32:46.314662578+00:00"
+status: "done"
 title: "Reconcile workflow semantics with atelier-workflow crate ownership"
-updated_at: "2026-06-17T20:04:18.546862100+00:00"
+updated_at: "2026-06-17T22:32:46.314662578+00:00"
 ---
 
 ## Description

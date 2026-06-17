@@ -167,7 +167,9 @@ dependencies = [
 name = "atelier-workflow"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "atelier-core",
+ "chrono",
  "serde",
  "serde_yaml",
 ]

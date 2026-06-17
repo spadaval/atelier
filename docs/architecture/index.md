@@ -72,11 +72,14 @@ Accepted ADRs record cross-cutting product choices:
   operator-facing health checks.
 - `doctor --fix` repairs ignored local projection/cache state from committed
   Markdown records when it is safe to do so.
-- First-class concepts include missions, milestone checkpoint records, issues,
-  plans, evidence, runs, typed links, workflows, and workflow validators; their
+- First-class concepts include missions, issues, evidence, typed links,
+  workflows, workflow validators, and deferred session/run metadata; their
   user-visible behavior is defined in [Product](../product/index.md).
-- Repository-owned workflow policy lives in `.atelier/config.toml` or a
-  documented workflow policy file selected by config.
+- Repository-owned issue workflow policy lives at the fixed
+  `.atelier/workflow.yaml` path. Loading, schema validation, status categories,
+  transition lookup, validator evaluation, guidance rendering, and branch
+  lifecycle policy belong to `atelier-workflow`; app and CLI layers consume
+  those APIs instead of maintaining parallel policy copies.
 
 ## Boundaries
 
@@ -88,8 +91,9 @@ Accepted ADRs record cross-cutting product choices:
   record-local validation.
 - ProjectionIndex code must own rebuild, reindex, query freshness, and
   stale-projection detection.
-- Workflow validator evaluation should produce machine-readable results suitable
-  for the product workflow and Mission Control surfaces.
+- Workflow validator evaluation should be implemented in `atelier-workflow` and
+  produce machine-readable results suitable for app orchestration, product
+  workflow surfaces, and Mission Control.
 - Mission Control TUI code should consume only documented projection fields and
   keep CLI commands plus durable projections as the primary agent interface.
 - Human CLI rendering should keep canonical projection logic separate from
