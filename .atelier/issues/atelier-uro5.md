@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Move command orchestration behind app APIs"
-updated_at: "2026-06-17T19:37:25.811227947+00:00"
+updated_at: "2026-06-17T23:29:52.924608859+00:00"
 ---
 
 ## Description
