@@ -77,7 +77,7 @@ fn prepare_start_branch(
     ensure_clean_worktree()?;
     let root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&root)?;
-    let resolution = policy.resolve_branch_lifecycle(db, id).with_context(|| {
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, id).with_context(|| {
         format!(
             "Branch lifecycle resolution failed before workflow transition. Inspect parent links with `atelier issue show {id}`."
         )
@@ -687,8 +687,7 @@ fn status_derived_work_for_branch(db: &Database, branch: Option<&str>) -> Result
         {
             continue;
         }
-        if branch_policy
-            .resolve_branch_lifecycle(db, &issue.id)?
+        if atelier_app::workflow_policy::resolve_branch_lifecycle(&branch_policy, db, &issue.id)?
             .expected_branch
             == branch
         {

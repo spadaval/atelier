@@ -82,16 +82,12 @@ pub fn issue_transition_options(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
     let state_dir = atelier_app::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
     let store = RecordStore::new(&state_dir);
     let record = store.load_issue_by_id(&issue.id)?;
     let mut options = Vec::new();
 
-    for (name, transition) in &workflow.transitions {
-        if !transition.from.iter().any(|from| from == &issue.status) {
-            continue;
-        }
+    for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let mut blockers = required_field_failures(&record, transition, None)?;
         blockers.extend(branch_context_blockers(db, &issue, name, transition)?);
         let validator_results = evaluate_policy_transition(
@@ -111,7 +107,7 @@ pub fn issue_transition_options(
         let mut guidance = render_transition_guidance(&policy, &issue, name, transition)?;
         guidance.extend(branch_context_guidance(db, &issue, name, transition)?);
         options.push(IssueTransitionOption {
-            name: name.clone(),
+            name: name.to_string(),
             from: transition.from.clone(),
             to: transition.to.clone(),
             allowed: blockers.is_empty(),
@@ -139,7 +135,7 @@ pub(crate) fn branch_lifecycle_context(
 ) -> Result<BranchLifecycleContext> {
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let resolution = policy.resolve_branch_lifecycle(db, issue_id)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
     Ok(BranchLifecycleContext {
         expected_branch_exists: branch_exists_at(&repo_root, &resolution.expected_branch)?,
         base_branch_exists: branch_exists_at(&repo_root, &resolution.base_branch)?,
@@ -159,7 +155,8 @@ pub(crate) fn known_branch_owner(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let mut owner_ids = BTreeSet::new();
     for issue in db.list_issues(Some("all"), None, None)? {
-        let resolution = policy.resolve_branch_lifecycle(db, &issue.id)?;
+        let resolution =
+            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
         if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
             return Ok(Some(resolution));
         }
@@ -321,8 +318,7 @@ pub fn transition_issue(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let before = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
-    let workflow = policy.workflow_for_issue_type(&before.issue_type)?;
-    let transition = resolve_issue_transition(workflow, &before, transition_name)?;
+    let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
     let store = RecordStore::new(state_dir);
@@ -362,18 +358,17 @@ pub fn transition_issue(
 }
 
 fn resolve_issue_transition<'a>(
-    workflow: &'a atelier_app::workflow_policy::WorkflowDefinition,
+    policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
 ) -> Result<&'a atelier_app::workflow_policy::TransitionDefinition> {
-    if let Some(transition) = workflow.transitions.get(transition_name) {
+    if let Ok(transition) = policy.transition_for_issue_type(&issue.issue_type, transition_name) {
         return Ok(transition);
     }
-    let available = workflow
-        .transitions
-        .iter()
-        .filter(|(_, candidate)| candidate.from.iter().any(|from| from == &issue.status))
-        .map(|(name, _)| name.as_str())
+    let available = policy
+        .transitions_from_status(&issue.issue_type, &issue.status)?
+        .into_iter()
+        .map(|(name, _)| name)
         .collect::<Vec<_>>();
     if available.is_empty() {
         bail!(
@@ -526,16 +521,11 @@ pub fn close_issue(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
-
-    let mut candidates = workflow
-        .transitions
-        .iter()
-        .filter(|(_, transition)| {
-            transition.from.iter().any(|from| from == &issue.status)
-                && policy.status_category(&transition.to) == Some("done")
-        })
-        .map(|(name, transition)| (name.as_str(), transition.to.as_str()))
+    let mut candidates = policy
+        .transitions_from_status(&issue.issue_type, &issue.status)?
+        .into_iter()
+        .filter(|(_, transition)| policy.status_category(&transition.to) == Some("done"))
+        .map(|(name, transition)| (name, transition.to.as_str()))
         .collect::<Vec<_>>();
 
     if candidates.is_empty() {
@@ -550,13 +540,10 @@ pub fn close_issue(
     if let Some(to_status) = to_status {
         candidates.retain(|(_, destination)| *destination == to_status);
         if candidates.is_empty() {
-            let available = workflow
-                .transitions
-                .iter()
-                .filter(|(_, transition)| {
-                    transition.from.iter().any(|from| from == &issue.status)
-                        && policy.status_category(&transition.to) == Some("done")
-                })
+            let available = policy
+                .transitions_from_status(&issue.issue_type, &issue.status)?
+                .into_iter()
+                .filter(|(_, transition)| policy.status_category(&transition.to) == Some("done"))
                 .map(|(_, transition)| transition.to.as_str())
                 .collect::<BTreeSet<_>>();
             bail!(
@@ -637,7 +624,7 @@ impl CloseGitIntegration {
         if !is_git_repo(&repo_root)? {
             return Ok(None);
         }
-        let resolution = policy.resolve_branch_lifecycle(db, &issue.id).with_context(|| {
+        let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id).with_context(|| {
             format!(
                 "Close Git integration could not resolve branch lifecycle for {}. Inspect parent links with `atelier issue show {}`.",
                 issue.id, issue.id

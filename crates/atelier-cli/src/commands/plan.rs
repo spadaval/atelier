@@ -420,15 +420,10 @@ fn validate_bundle_issue_status(status: &str) -> Result<()> {
 
 fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
     let repo_root = atelier_app::storage_layout::find_repo_root()?;
-    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
-    if !policy_path.exists() {
-        return Ok("todo".to_string());
-    }
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    Ok(policy
-        .workflow_for_issue_type(issue_type)?
-        .initial_status
-        .clone())
+    Ok(
+        atelier_app::workflow_policy::configured_initial_status(&repo_root, issue_type)?
+            .unwrap_or_else(|| "todo".to_string()),
+    )
 }
 
 fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
