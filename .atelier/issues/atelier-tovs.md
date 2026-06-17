@@ -66,9 +66,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T23:52:41.065977217+00:00"
+status: "done"
 title: "Epic: Settle architecture and product contract"
-updated_at: "2026-06-17T23:45:59.352461621+00:00"
+updated_at: "2026-06-17T23:52:41.065977217+00:00"
 ---
 
 ## Description
