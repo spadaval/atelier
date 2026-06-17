@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Repair ready issue list so documented ready queue matches status"
-updated_at: "2026-06-17T21:36:08.136514195+00:00"
+updated_at: "2026-06-17T21:46:52.893299894+00:00"
 ---
 
 ## Description
