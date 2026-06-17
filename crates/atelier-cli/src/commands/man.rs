@@ -254,9 +254,7 @@ fn print_not_usually(role: Role) {
     println!("-------------------------");
     match role {
         Role::Worker => {
-            println!(
-                "  maintenance, diagnostics, raw workflow checks, bulk plan apply, branch merge"
-            );
+            println!("  maintenance, diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Reviewer => {
             println!("  init, maintenance delete, issue creation, mission scope mutation");

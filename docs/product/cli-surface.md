@@ -243,8 +243,9 @@ evidence, and issue lifecycle mutations write canonical
 Markdown through RecordStore before refreshing the SQLite projection; local
 projection repair is normally transparent or routed through `doctor --fix`.
 `atelier bundle preview <file>` validates authored bundle JSON from a real file
-path and prints a non-mutating deterministic preview. `atelier bundle apply
-<file> --yes` applies create-only v1 bundle resources, creates record graphs in
+path and prints a non-mutating deterministic preview. `atelier bundle apply`
+applies create-only v1 bundle resources from a file path after the operator
+passes the command's required confirmation flag, creates record graphs in
 canonical Markdown, normalizes issue dependency fields, writes canonical
 relationship buckets, refreshes projection state after successful canonical
 writes, and reports recovery detail if an unexpected apply failure leaves any
@@ -523,7 +524,7 @@ generic relationship verb.
 | Inspect cross-record impact or hierarchy | mission or issue ID for impact; all records for tree | `atelier graph impact <mission-or-issue-id>` and `atelier graph tree --compact` | Graph commands inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
 | Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
 | Create or relate durable plans | plan, mission, issue, and evidence IDs as required by the subcommand | `atelier plan create`, `atelier plan show <plan-id>`, and `atelier plan link <plan-id> <kind>/<id>` | Plans are Markdown artifacts referenced by accountable work or evidence. Plan links do not replace issue blockers or mission work links. |
-| Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file> --yes` | Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |
+| Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file>` | Bundle apply requires its explicit confirmation flag. Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |
 | Inspect or repair epic review branches | epic or issue ID | `atelier branch status`, `atelier branch for-epic <epic-id>`, and `atelier branch merge <epic-id>` | Branch helpers are advanced Git lifecycle surfaces. Routine workers usually use `atelier start` and issue close. |
 | Inspect first-class evidence, plan, or milestone records | evidence, plan, or milestone ID | `atelier evidence show <evidence-id>`, `atelier plan show <plan-id>`, or the milestone surface when enabled | These records are supporting artifacts. Issue commands should reject their IDs with corrective wrong-kind guidance. |
 

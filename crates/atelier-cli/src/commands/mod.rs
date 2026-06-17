@@ -1,5 +1,6 @@
 pub mod activity_log;
 pub mod agent_factory;
+pub mod bundle;
 pub mod comment;
 pub mod create;
 pub mod delete;

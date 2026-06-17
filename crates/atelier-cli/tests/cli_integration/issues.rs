@@ -539,23 +539,22 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
 }
 
 #[test]
-fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
+fn test_bundle_apply_accepts_partial_issue_key_refs() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Existing issue target"]);
     let issue_id = issue_id_by_title(dir.path(), "Existing issue target");
     let issue_key = issue_key(&issue_id);
-    let bulk_path = dir.path().join("partial-key-plan.json");
+    let bundle_path = dir.path().join("partial-key-bundle.json");
     std::fs::write(
-        &bulk_path,
+        &bundle_path,
         format!(
             r#"{{
-  "schema": "atelier.bulk-plan",
+  "schema": "atelier.bundle",
   "schema_version": 1,
-  "title": "Partial key bulk apply",
-  "apply": {{ "export": "auto" }},
-  "records": {{
+  "title": "Partial key bundle apply",
+  "resources": {{
     "issues": [
       {{
         "client_ref": "issue.partial",
@@ -571,15 +570,69 @@ fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["plan", "apply", bulk_path.to_str().unwrap()]);
-    assert!(success, "bulk apply by partial issue key failed: {stderr}");
-    assert!(stdout.contains("Bulk plan applied."));
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(
+        success,
+        "bundle apply by partial issue key failed: {stderr}"
+    );
+    assert!(stdout.contains("Bundle applied."));
 
     let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &dependent_id]);
     assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&issue_id));
+}
+
+#[test]
+fn test_plan_apply_command_is_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["plan", "apply", "bundle.json"]);
+
+    assert!(!success, "plan apply should be removed");
+    assert!(
+        stderr.contains("unrecognized subcommand") || stderr.contains("unexpected argument"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_plan_and_milestone_resources() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("invalid-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid bundle",
+  "resources": {
+    "issues": [],
+    "plans": [{ "client_ref": "plan.invalid", "title": "No plan resources" }],
+    "milestones": [{ "client_ref": "milestone.invalid", "title": "No milestones" }]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject v1 plan/milestone resources"
+    );
+    assert!(
+        stderr.contains("unknown field `plans`") || stderr.contains("unknown field `milestones`"),
+        "{stderr}"
+    );
 }
 
 #[test]

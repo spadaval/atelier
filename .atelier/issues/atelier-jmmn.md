@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Move graph creation off plan apply and into bundle commands"
-updated_at: "2026-06-17T21:28:50.408259454+00:00"
+updated_at: "2026-06-17T21:55:57.159981074+00:00"
 ---
 
 ## Description

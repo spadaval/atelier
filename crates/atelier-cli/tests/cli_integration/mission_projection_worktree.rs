@@ -2521,18 +2521,17 @@ fn assert_lint_rejects_canonical_mutation(
 }
 
 #[test]
-fn test_bulk_plan_apply_records_links_export_and_rebuild() {
+fn test_bundle_apply_records_links_export_and_rebuild() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let bulk_path = dir.path().join("bulk-plan.json");
+    let bundle_path = dir.path().join("bundle.json");
     std::fs::write(
-        &bulk_path,
+        &bundle_path,
         r#"{
-  "schema": "atelier.bulk-plan",
+  "schema": "atelier.bundle",
   "schema_version": 1,
-  "title": "Bulk apply smoke",
-  "apply": { "export": "auto" },
-  "records": {
+  "title": "Bundle apply smoke",
+  "resources": {
     "issues": [
       {
         "client_ref": "issue.blocker",
@@ -2540,89 +2539,70 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
         "issue_type": "task",
         "priority": "medium",
         "status": "done",
-        "labels": ["bulk"]
+        "labels": ["bundle"]
       },
       {
         "client_ref": "issue.work",
-        "title": "Implement bulk output",
+        "title": "Implement bundle output",
         "issue_type": "feature",
         "priority": "high",
         "status": "in_progress",
         "depends_on": [{ "client_ref": "issue.blocker" }],
-        "acceptance": ["summary maps client refs"],
-        "evidence_required": ["export check passes"]
+        "outcome": ["summary maps client refs"],
+        "evidence": ["export check passes"]
       }
     ],
     "missions": [
       {
-        "client_ref": "mission.bulk",
-        "title": "Bulk mission",
-        "body": "Mission from bulk plan",
-        "labels": ["bulk", "mission"],
-        "work": [{ "client_ref": "issue.work" }],
-        "plans": [{ "client_ref": "plan.bulk" }],
-        "milestones": [{ "client_ref": "milestone.bulk" }]
-      }
-    ],
-    "milestones": [
-      {
-        "client_ref": "milestone.bulk",
-        "title": "Bulk checkpoint",
-        "desired_state": "Records are durable",
-        "scope": ["records"],
-        "validation_criteria": ["rebuild preserves links"],
-        "missions": [{ "client_ref": "mission.bulk" }],
-        "contributing_work": [{ "client_ref": "issue.work" }]
-      }
-    ],
-    "plans": [
-      {
-        "client_ref": "plan.bulk",
-        "title": "Bulk plan",
-        "body": "Apply the graph.",
-        "applies_to": [{ "client_ref": "mission.bulk" }]
+        "client_ref": "mission.bundle",
+        "title": "Bundle mission",
+        "body": "Mission from bundle",
+        "labels": ["bundle", "mission"],
+        "work": [{ "client_ref": "issue.work" }]
       }
     ],
     "evidence": [
       {
-        "client_ref": "evidence.bulk",
-        "title": "Bulk evidence",
+        "client_ref": "evidence.bundle",
+        "title": "Bundle evidence",
         "evidence_type": "test",
         "result": "pass",
         "body": "The apply smoke test passed.",
-        "validates": [{ "client_ref": "mission.bulk" }]
+        "validates": [{ "client_ref": "mission.bundle" }]
       }
     ]
   }
 }"#,
     )
     .unwrap();
-    let bulk_arg = bulk_path.to_str().unwrap();
+    let bundle_arg = bundle_path.to_str().unwrap();
 
     let (success, dry_run_out, stderr) =
-        run_atelier(dir.path(), &["plan", "apply", bulk_arg, "--dry-run"]);
-    assert!(success, "bulk dry-run failed: {stderr}");
-    assert!(dry_run_out.contains("Bulk plan preview is valid."));
+        run_atelier(dir.path(), &["bundle", "preview", bundle_arg]);
+    assert!(success, "bundle preview failed: {stderr}");
+    assert!(dry_run_out.contains("Bundle preview is valid."));
     assert!(dry_run_out.contains("Applied:       false"));
+    assert!(dry_run_out.contains("Preview:       true"));
     assert!(dry_run_out.contains("missions: 1"));
 
-    let (success, apply_out, stderr) = run_atelier(dir.path(), &["plan", "apply", bulk_arg]);
-    assert!(success, "bulk apply failed: {stderr}");
-    assert!(apply_out.contains("Bulk plan applied."));
+    let (success, apply_out, stderr) =
+        run_atelier(dir.path(), &["bundle", "apply", bundle_arg, "--yes"]);
+    assert!(success, "bundle apply failed: {stderr}");
+    assert!(apply_out.contains("Bundle applied."));
     assert!(apply_out.contains("Applied:       true"));
     assert!(apply_out.contains("atelier mission show"));
-    let mission_id = record_id_by_title(dir.path(), "missions", "Bulk mission");
+    let mission_id = record_id_by_title(dir.path(), "missions", "Bundle mission");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
-    assert!(success, "export check after bulk apply failed: {stderr}");
+    assert!(success, "export check after bundle apply failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild after bulk apply failed: {stderr}");
+    assert!(success, "rebuild after bundle apply failed: {stderr}");
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
-    assert!(success, "mission show after bulk apply failed: {stderr}");
-    assert!(view_out.contains("Records: plans=1 milestones=1 evidence=1"));
+    assert!(success, "mission show after bundle apply failed: {stderr}");
+    assert!(view_out.contains("Records: plans=0 milestones=0 evidence=1"));
     assert!(view_out.contains("Work: ready=0 blocked=0 done=0 backlog=1"));
     let mission_markdown = std::fs::read_to_string(
         dir.path()
@@ -2630,7 +2610,7 @@ fn test_bulk_plan_apply_records_links_export_and_rebuild() {
             .join(format!("{mission_id}.md")),
     )
     .unwrap();
-    assert!(mission_markdown.contains("- \"bulk\"\n"));
+    assert!(mission_markdown.contains("- \"bundle\"\n"));
     assert!(mission_markdown.contains("- \"mission\"\n"));
 }
 
