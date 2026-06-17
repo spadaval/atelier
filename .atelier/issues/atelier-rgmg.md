@@ -20,12 +20,18 @@ updated_at: "2026-06-17T18:00:01.688899039+00:00"
 
 ## Description
 
-No description provided.
+Add canonical issue-field support through RecordStore and rebuild/lint paths so
+typed fields are durable Markdown state.
 
 ## Outcome
 
-Outcome was not specified.
+- Issue records parse, render, and preserve a `fields` mapping.
+- Lint and rebuild validate field values against workflow schema version 2.
+- Projection/query paths expose enough field data for PR validators and status
+  surfaces.
 
 ## Evidence
 
-Evidence was not specified.
+- Focused RecordStore and rebuild tests prove issue field parse/render,
+  validation failure, and projection recovery behavior.
+- Command transcript shows targeted tests and `atelier export --check` pass.

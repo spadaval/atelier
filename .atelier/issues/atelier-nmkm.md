@@ -20,12 +20,18 @@ updated_at: "2026-06-17T17:59:59.203859627+00:00"
 
 ## Description
 
-No description provided.
+Extend workflow policy parsing to schema version 2 with top-level typed field
+definitions for issue records.
 
 ## Outcome
 
-Outcome was not specified.
+- Workflow schema version 2 accepts `fields` definitions.
+- Supported field types are string, bool, integer, enum, and object with
+  required keys.
+- Unknown field-definition shapes produce strict workflow configuration errors.
 
 ## Evidence
 
-Evidence was not specified.
+- Focused unit tests cover valid and invalid workflow schema version 2 field
+  definitions.
+- Command transcript shows the targeted workflow-policy test filter passes.

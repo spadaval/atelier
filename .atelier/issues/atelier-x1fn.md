@@ -20,12 +20,21 @@ updated_at: "2026-06-17T18:00:03.988050823+00:00"
 
 ## Description
 
-No description provided.
+Define the first concrete typed field, `forge_pr`, for the one active Forgejo
+pull request attached to an epic or standalone issue.
 
 ## Outcome
 
-Outcome was not specified.
+- `forge_pr` requires provider, host, owner, repo, number, url, source branch,
+  and target branch.
+- Child issues inherit PR visibility from the nearest parent epic rather than
+  duplicating the field.
+- Invalid or mismatched `forge_pr` values produce actionable lint or validator
+  failures.
 
 ## Evidence
 
-Evidence was not specified.
+- Manual check of workflow policy documentation or config fixture file content
+  shows the `forge_pr` field definition.
+- Focused tests cover valid, missing-key, and child-inheritance PR field
+  behavior.
