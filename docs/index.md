@@ -7,7 +7,7 @@
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  canonical `.atelier/` record file, ignored runtime/cache, compatibility, and
+  canonical `.atelier/` record file, ignored projection/cache, compatibility, and
   rebuild layout.
 - [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
   versioned JSON contract, validation diagnostics, dry-run preview shape, and
@@ -21,7 +21,7 @@
   such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
 - [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
   accepted choice that Markdown records are canonical, SQLite is a
-  rebuildable projection index plus local runtime state, and export is a
+  rebuildable projection index, and export is a
   hidden/admin compatibility and determinism-check path during migration.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
@@ -50,9 +50,8 @@
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   guidance templates, strict errors, and starter workflow examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
-  RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
-  durable writes, issue activity sidecars, rebuildable SQLite indexes, and
-  local runtime data.
+  RecordStore and ProjectionIndex boundaries for Markdown-first durable writes,
+  issue activity sidecars, rebuildable SQLite indexes, and local cache data.
 - [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
   local command telemetry storage, redaction defaults, opt-out controls,
   retention behavior, event fields, and Mission Control export boundary.

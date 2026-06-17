@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, lint_db,
-    projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
+    lint_db, projection_query_db, state_and_db_paths, CommandStorageAccess,
 };
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
@@ -1440,7 +1440,7 @@ fn run() -> Result<()> {
         },
 
         Commands::Worktree { action } => {
-            let db = runtime_db()?;
+            let db = existing_projection_db()?;
             match action {
                 WorktreeCommands::ForMission { id, path } => {
                     commands::work::worktree_for_mission(&db, &id, path.as_deref())
@@ -1466,7 +1466,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Branch { action } => {
-            let db = runtime_db()?;
+            let db = existing_projection_db()?;
             match action {
                 BranchCommands::ForEpic { id } => {
                     let id = resolve_issue_arg(&db, &id)?;
@@ -1515,7 +1515,7 @@ fn run() -> Result<()> {
                 storage.repo_root(),
                 &storage.state_dir(),
                 &storage.db_path(),
-                storage.runtime_db_existed,
+                storage.projection_db_existed,
                 fix,
             )
         }

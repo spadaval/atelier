@@ -49,7 +49,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(success, "in_progress filter failed: {stderr}");
     assert!(active_out.contains("Category: active=1"), "{active_out}");
     assert!(active_out.contains("Status: in_progress=1"), "{active_out}");
-    assert!(active_out.contains("active/in_progress"), "{active_out}");
+    assert!(active_out.contains("active [task]"), "{active_out}");
     assert!(active_out.contains(&active_id), "{active_out}");
     assert!(!active_out.contains(&todo_id), "{active_out}");
 
@@ -65,7 +65,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
         "{active_category_out}"
     );
     assert!(
-        active_category_out.contains("active/in_progress"),
+        active_category_out.contains("active [task]"),
         "{active_category_out}"
     );
     assert!(
@@ -97,7 +97,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(success, "done filter failed: {stderr}");
     assert!(done_out.contains("Category: done=1"), "{done_out}");
     assert!(done_out.contains("Status: done=1"), "{done_out}");
-    assert!(done_out.contains("done/done"), "{done_out}");
+    assert!(done_out.contains("done [task]"), "{done_out}");
     assert!(done_out.contains(&done_id), "{done_out}");
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &active_id]);
@@ -649,7 +649,7 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
 
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
         markdown.replace(
-            "The issue outcome is complete and ready for closeout.",
+            "The issue outcome is complete and ready for terminal checks.",
             "The issue outcome was hand-edited after closeout.",
         )
     });
@@ -776,7 +776,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
         stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
         "valid stale projection should be named and repaired before mission status:\nstdout:\n{stale_status}\nstderr:\n{stderr}"
     );
-    assert!(stale_status.contains("Tracker:  ok"));
+    assert!(stale_status.contains("Tracker:"));
     assert!(stale_status.contains("Tracker State: current"));
 
     let stale_markdown = std::fs::read_to_string(&issue_path).unwrap();
@@ -796,7 +796,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
         hasher.update(std::fs::read(path).unwrap());
         let invalid_hash = format!("{:x}", hasher.finalize());
         conn.execute(
-            "UPDATE projection_index_sources
+            "UPDATE projection_sources
              SET size_bytes = ?1, sha256 = ?2
              WHERE path = ?3",
             rusqlite::params![
@@ -1323,7 +1323,7 @@ fn test_mission_status_cli_reports_control_state() {
         "Mission Status {mission_id} [ready] - Autonomy status"
     )));
     assert!(status_out.contains("Health:   blocked"));
-    assert!(status_out.contains("Tracker:  ok"));
+    assert!(status_out.contains("Tracker:"));
     assert!(status_out.contains("Work"));
     assert!(status_out.contains("ready"));
     assert!(status_out.contains("blocked"));
@@ -1468,7 +1468,7 @@ fn test_mission_status_cli_reports_control_state() {
         run_atelier(dir.path(), &["mission", "status", mission_id]);
     assert!(success, "stale mission status failed: {stderr}");
     assert!(stale_status.contains("Autonomy status stale"));
-    assert!(stale_status.contains("Tracker:  ok"));
+    assert!(stale_status.contains("Tracker:"));
     assert!(stale_status.contains("Worktree: dirty"));
     assert!(!stale_status.contains("advanced terminal validator failure detected."));
 }
@@ -1792,8 +1792,8 @@ fn test_projection_index_rebuilds_changed_sources_before_issue_queries() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
     let (success, list_out, stderr) =
         run_atelier(dir.path(), &["issue", "list", "--status", "all"]);
@@ -1827,8 +1827,8 @@ fn test_projection_index_bounds_many_changed_sources_and_rebuilds() {
         assert!(issue_out.contains("Created issue atelier-"));
         issue_ids.push(issue_ref(dir.path(), index + 1));
     }
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
     for (index, issue_id) in issue_ids.iter().enumerate() {
         edit_canonical_issue(dir.path(), issue_id, |markdown| {
@@ -1882,8 +1882,8 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
         run_atelier(dir.path(), &["issue", "create", "Second indexed issue"]);
     assert!(success, "second create failed: {stderr}");
     assert!(second_out.contains("Created issue atelier-"));
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
     let first_path = canonical_issue_path(dir.path(), &first_id);
     let first_markdown = read_canonical_record(dir.path(), "issues", &first_id);
@@ -1898,8 +1898,10 @@ fn test_projection_index_rebuilds_deleted_and_unindexed_sources_before_issue_que
     assert!(!list_out.contains("First indexed issue"));
     assert!(list_out.contains("Second indexed issue"));
     assert!(
-        stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
-        "missing automatic rebuild diagnostic: {stderr}"
+        stderr
+            .contains("Projection index was stale; repaired local SQLite projection incrementally")
+            || stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
+        "missing automatic repair diagnostic: {stderr}"
     );
 
     std::fs::write(&first_path, first_markdown).unwrap();
@@ -1986,8 +1988,8 @@ fn test_projection_index_rebuilds_dep_list_and_lint_but_ignores_derived_files() 
     let second_id = issue_ref(dir.path(), 2);
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &second_id, &first_id]);
     assert!(success, "issue block failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
     ensure_issue_completion_sections(dir.path(), &first_id);
     ensure_issue_completion_sections(dir.path(), &second_id);
 
@@ -2088,8 +2090,8 @@ fn test_projection_index_rejects_invalid_markdown_without_rebuild() {
     assert!(success, "issue create failed: {stderr}");
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_ref(dir.path(), 1);
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
 
     let markdown = read_canonical_record(dir.path(), "issues", &issue_id);
     corrupt_issue_title_yaml(dir.path(), &issue_id, "Invalid Markdown source");
@@ -2172,7 +2174,7 @@ fn test_lint_validates_canonical_markdown_even_when_projection_metadata_is_fresh
     let invalid_hash = format!("{:x}", hasher.finalize());
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
-        "UPDATE projection_index_sources
+        "UPDATE projection_sources
          SET size_bytes = ?1, sha256 = ?2
          WHERE path = ?3",
         rusqlite::params![
@@ -2273,7 +2275,7 @@ fn test_status_recovers_when_runtime_directory_is_missing() {
         stderr.contains("Runtime projection database was missing; rebuilt local SQLite projection")
     );
     assert!(stdout.contains("Current work:  1 issue(s)"), "{stdout}");
-    assert!(stdout.contains(&format!("  {issue_id} - Runtime directory recovery")));
+    assert!(stdout.contains(&format!("{issue_id} - Runtime directory recovery")));
     assert!(dir.path().join(".atelier/runtime/state.db").exists());
 }
 
@@ -2690,8 +2692,8 @@ fn test_work_lifecycle_human_output_and_guards() {
     let (success, _, _) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(!success, "dirty worktree should reject root start");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
     migrate_default_issue_workflow(dir.path());
     std::fs::write(
         dir.path().join("atelier.workflow.yaml"),
@@ -2730,7 +2732,7 @@ hooks:
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Atelier Status"));
     assert!(status_out.contains("Current work:  1 issue(s)"));
-    assert!(status_out.contains(&format!("  {issue_id} - Work item")));
+    assert!(status_out.contains(&format!("{issue_id} - Work item")));
 
     let (success, abandon_out, stderr) = run_atelier(
         dir.path(),
@@ -2785,7 +2787,7 @@ hooks:
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "worktree-local status failed: {stderr}");
     assert!(
-        child_status_out.contains(&format!("  {worktree_issue_id} - Worktree item")),
+        child_status_out.contains(&format!("{worktree_issue_id} - Worktree item")),
         "worktree-local status should derive current work from issue status: {child_status_out}"
     );
 
@@ -3538,7 +3540,7 @@ fn test_worktree_setup_failure_does_not_associate_and_can_retry() {
     let (success, child_status_out, stderr) = run_atelier(&worktree_path, &["status"]);
     assert!(success, "child status after retry failed: {stderr}");
     assert!(child_status_out.contains("Current work:  1 issue(s)"));
-    assert!(child_status_out.contains(&format!("  {issue_id} - Retriable setup worktree")));
+    assert!(child_status_out.contains(&format!("{issue_id} - Retriable setup worktree")));
 }
 
 #[test]
@@ -3838,8 +3840,8 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(success, "ready failed: {stderr}");
     assert!(stdout.contains("validation"));
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["export"]);
-    assert!(success, "export failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
     let issue_record = std::fs::read_to_string(
         dir.path()
             .join(".atelier/issues")

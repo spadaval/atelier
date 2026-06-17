@@ -9,7 +9,7 @@ pub struct DoctorRequest<'a> {
     pub repo_root: PathBuf,
     pub state_dir: PathBuf,
     pub db_path: PathBuf,
-    pub runtime_db_existed: bool,
+    pub projection_db_existed: bool,
     pub fix: bool,
     pub diagnostics_enabled: bool,
 }
@@ -25,9 +25,7 @@ pub struct DoctorView {
     pub rebuild_ready: bool,
     pub projection_fresh: bool,
     pub cache_dir_status: &'static str,
-    pub runtime_dir_ok: bool,
     pub runtime_db_available: bool,
-    pub runtime_tables_available: bool,
     pub diagnostics: &'static str,
     pub health: BTreeMap<&'static str, bool>,
 }
@@ -37,7 +35,6 @@ pub fn doctor(
 ) -> Result<crate::Outcome<crate::ViewModel<DoctorView>>> {
     let input = request.input;
     let layout = crate::storage_layout::StorageLayout::new(&input.repo_root);
-    let atelier_dir = layout.atelier_dir();
     let config_path = layout.config_path();
     let cache_dir = layout.cache_dir();
 
@@ -47,13 +44,14 @@ pub fn doctor(
             "doctor --fix refused to edit tracked `.atelier/` canonical records; \
              run `atelier lint`, fix the named canonical Markdown record, then rerun `atelier doctor --fix`"
         })?;
-        crate::rebuild::refresh_projection_preserving_runtime(&input.state_dir, &input.db_path)
-            .with_context(|| {
+        crate::rebuild::refresh_projection(&input.state_dir, &input.db_path).with_context(
+            || {
                 format!(
                     "doctor --fix failed while repairing ignored local projection state at {}",
                     input.db_path.display()
                 )
-            })?;
+            },
+        )?;
         repaired_db =
             Database::open(&input.db_path).context("Failed to reopen repaired database")?;
         &repaired_db
@@ -65,11 +63,10 @@ pub fn doctor(
     let projection_fresh = atelier_sqlite::projection_index::check(active_db, &input.state_dir)
         .map(|report| report.is_fresh())
         .unwrap_or(false);
-    let runtime_tables_available = active_db.runtime_state_tables_available().unwrap_or(false);
     let runtime_db_available = if input.fix {
         input.db_path.exists()
     } else {
-        input.runtime_db_existed
+        input.projection_db_existed
     };
     let state_dir_ok = input.state_dir.is_dir();
     let ignore_rules_current = runtime_gitignore_entries_present(&input.repo_root);
@@ -84,8 +81,6 @@ pub fn doctor(
     health.insert("ignore_rules", ignore_rules_current);
     health.insert("projection_fresh", projection_fresh);
     health.insert("rebuild_ready", rebuild_ready);
-    health.insert("runtime_state", atelier_dir.is_dir());
-    health.insert("runtime_tables", runtime_tables_available);
 
     Ok(crate::Outcome {
         value: crate::ViewModel {
@@ -99,9 +94,7 @@ pub fn doctor(
                 rebuild_ready,
                 projection_fresh,
                 cache_dir_status: optional_dir_status(&cache_dir),
-                runtime_dir_ok: atelier_dir.is_dir(),
                 runtime_db_available,
-                runtime_tables_available,
                 diagnostics,
                 health,
             },

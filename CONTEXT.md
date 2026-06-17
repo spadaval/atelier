@@ -13,19 +13,19 @@
 - Beads migration input: repo-local `.beads/issues.manual.jsonl` data that
   `atelier init --import-beads` may import when explicitly requested.
 - Canonical record tree: deterministic tracked Markdown files under `.atelier/`
-  that can rebuild the local SQLite projection/runtime database.
+  that can rebuild the local SQLite projection database.
 - RecordStore: the target component that owns canonical Markdown record reads,
   writes, validation, deterministic rendering, and ID allocation.
 - ProjectionIndex: the target rebuildable SQLite index derived from
   RecordStore records for global queries, graph traversal, search, validation,
-  and Mission Control inputs.
-- RuntimeState: local-only ignored data under `.atelier/runtime/` and
-  `.atelier/cache/` such as ephemeral checkout/session context, agent identity,
-  diagnostics, locks, and UI caches. It can reference canonical IDs but is not
-  the durable project record source or the current-work source of truth.
+  and Mission Control inputs. It may keep covered-index metadata but not
+  project facts that cannot be recreated from canonical Markdown.
+- Local diagnostics and cache: local-only ignored files such as command
+  diagnostics, locks, and UI caches. These are not SQLite tracker state and
+  must not define durable project records or current work.
 - Local command diagnostics: user-local command telemetry used for performance
-  and failure analysis. It is RuntimeState-adjacent diagnostic data, not a
-  canonical work record or exported run/session record.
+  and failure analysis. It is local diagnostic data, not a canonical work
+  record, SQLite tracker state, or exported run/session record.
 - Chainlink: the inherited Rust CLI codebase this repository starts from.
 - Virtual workspace root: the target repository root `Cargo.toml` shape after
   the crate migration. It owns workspace membership and shared package metadata,
@@ -33,7 +33,7 @@
 - Atelier crate layers: the target internal Rust crates under `crates/`:
   `atelier-core` for pure domain types, `atelier-workflow` for workflow policy,
   `atelier-records` for canonical Markdown storage, `atelier-sqlite` for
-  rebuildable projection and ignored runtime SQLite state, `atelier-app` for
+  rebuildable projection SQLite state, `atelier-app` for
   use-case orchestration, and `atelier-cli` for the public `atelier` binary.
 - Evidence: a durable proof record for validation, such as test output, logs,
   screenshots, reports, or benchmark results.
@@ -90,8 +90,8 @@
 - Abandon: a legacy active-pointer cleanup concept that should not remain the
   normal way to leave current work once status-derived current work replaces
   runtime work associations.
-- SQLite state: fast local projection and runtime state, currently inherited
-  from Chainlink and currently living at ignored `.atelier/state.db`.
+- SQLite state: fast local projection state, currently living at ignored
+  `.atelier/runtime/state.db`.
 - Doctor: an operator health surface that reports whether the repository and
   local runtime are usable and may perform safe repair when explicitly asked.
 
@@ -109,8 +109,8 @@
 - Beads migration is explicit during setup. `atelier init` may detect the
   standard repo-local Beads migration input, but import requires an explicit
   setup option rather than a silent automatic conversion.
-- Doctor repair may change ignored runtime/cache/projection state but must not
-  edit tracked `.atelier/` canonical records.
+- Doctor repair may change ignored projection/cache state but must not edit
+  tracked `.atelier/` canonical records.
 - Graph commands should inspect cross-record relationships, including missions
   and issues. If a view is issue-only, its help should say so explicitly.
 - The canonical-state target is Markdown-first in a single `.atelier/` tree:

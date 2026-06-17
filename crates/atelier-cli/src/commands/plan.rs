@@ -173,13 +173,14 @@ pub fn apply(
 }
 
 fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
+    let record = canonical_record_detail(KIND, &record.id)?.unwrap_or_else(|| record.clone());
     println!("{} [plan] {} - {}", record.id, record.status, record.title);
     println!(
         "{}",
         "=".repeat(record.id.len() + record.status.len() + record.title.len() + 11)
     );
     println!("Status:   {}", record.status);
-    println!("Revision: {}", data_revision(record).unwrap_or(1));
+    println!("Revision: {}", data_revision(&record).unwrap_or(1));
     println!("Created:  {}", record.created_at.to_rfc3339());
     println!("Updated:  {}", record.updated_at.to_rfc3339());
     let links = db.list_record_links(KIND, &record.id)?;

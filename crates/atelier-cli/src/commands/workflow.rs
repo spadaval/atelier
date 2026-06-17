@@ -1634,7 +1634,8 @@ fn linked_evidence_records(
         let Some(evidence_id) = evidence_id else {
             continue;
         };
-        let record = db.require_record("evidence", &evidence_id)?;
+        let record = canonical_evidence_record(&evidence_id)?
+            .unwrap_or(db.require_record("evidence", &evidence_id)?);
         if let Some(required_kind) = required_kind {
             let data = serde_json::from_str::<EvidenceRecordData>(&record.data_json)
                 .unwrap_or_else(|_| EvidenceRecordData {
@@ -1663,6 +1664,17 @@ fn linked_evidence_records(
         records.push(record);
     }
     Ok(records)
+}
+
+fn canonical_evidence_record(id: &str) -> Result<Option<atelier_core::DomainRecord>> {
+    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(store
+        .load_domain_record_by_id("evidence", id)
+        .map(|record| Some(record.record))
+        .unwrap_or(None))
 }
 
 fn review_complete(

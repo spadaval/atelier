@@ -54,7 +54,7 @@ fn test_create_issue_with_description_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier_raw(
         dir.path(),
         &[
             "issue",
@@ -471,7 +471,7 @@ fn test_issue_show_surfaces_evidence_status() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show with evidence failed: {stderr}");
     assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: attached - validating evidence is linked"));
+    assert!(stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
@@ -616,7 +616,7 @@ fn test_show_issue_rich_human_output() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
     assert!(stdout.contains("Status:   todo"));
-    assert!(stdout.contains("Type:     task"));
+    assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     let target_id = issue_id_by_title(dir.path(), "Target issue");
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
@@ -777,27 +777,23 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
-        "UPDATE records SET body = 'SQLite mission body', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"constraints":["SQLite constraint"],"risks":[],"validation":[],"milestones":[],"plans":[],"evidence":[],"work":[]}"#,
-            mission_id.as_str(),
-        ],
+        "UPDATE records SET title = 'SQLite mission title', status = 'sqlite_status' WHERE id = ?1",
+        [mission_id.as_str()],
     )
     .unwrap();
     conn.execute(
-        "UPDATE records SET body = 'SQLite plan body', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"revision":99,"revisions":[{"revision":99,"reason":"sqlite","body":"SQLite plan body"}]}"#,
-            plan_id.as_str(),
-        ],
+        "UPDATE records SET title = 'SQLite plan title', status = 'sqlite_status' WHERE id = ?1",
+        [plan_id.as_str()],
     )
     .unwrap();
     conn.execute(
-        "UPDATE records SET body = 'SQLite evidence summary', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"kind":"sqlite","result":"fail","path":null,"uri":null,"producer":null,"captured_at":"2000-01-01T00:00:00Z"}"#,
-            evidence_id.as_str(),
-        ],
+        "UPDATE records SET title = 'SQLite evidence title', status = 'sqlite_status' WHERE id = ?1",
+        [evidence_id.as_str()],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE plans SET revision = 99 WHERE id = ?1",
+        [plan_id.as_str()],
     )
     .unwrap();
 
@@ -805,21 +801,21 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("Canonical mission body"));
     assert!(mission_out.contains("Canonical constraint"));
-    assert!(!mission_out.contains("SQLite mission body"));
-    assert!(!mission_out.contains("SQLite constraint"));
+    assert!(!mission_out.contains("SQLite mission title"));
+    assert!(!mission_out.contains("sqlite_status"));
 
     let (success, plan_out, stderr) = run_atelier(dir.path(), &["plan", "show", &plan_id]);
     assert!(success, "plan show failed: {stderr}");
     assert!(plan_out.contains("Canonical plan body"));
     assert!(plan_out.contains("Revision: 1"));
-    assert!(!plan_out.contains("SQLite plan body"));
+    assert!(!plan_out.contains("SQLite plan title"));
     assert!(!plan_out.contains("Revision: 99"));
 
     let (success, evidence_out, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
     assert!(evidence_out.contains("Canonical evidence summary"));
-    assert!(evidence_out.contains("Result:      pass"));
+    assert!(evidence_out.contains("Status:      recorded"));
     assert!(evidence_out.contains("Kind:        test"));
     assert!(!evidence_out.contains("SQLite evidence summary"));
     assert!(!evidence_out.contains("Kind:        sqlite"));

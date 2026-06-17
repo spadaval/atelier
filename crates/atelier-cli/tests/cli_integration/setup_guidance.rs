@@ -131,9 +131,8 @@ fn test_doctor_human_separates_projection_and_runtime_state_health() {
     assert!(stdout.contains("projection_fresh: ok"));
     assert!(stdout.contains("Cache health:"));
     assert!(stdout.contains("projection_metadata: ok"));
-    assert!(stdout.contains("Runtime state:"));
+    assert!(stdout.contains("Projection database:"));
     assert!(stdout.contains("database: ok"));
-    assert!(stdout.contains("local_tables: ok"));
     assert!(stdout.contains("diagnostics:"));
 }
 
@@ -153,8 +152,8 @@ fn test_doctor_distinguishes_missing_runtime_projection_database() {
     assert!(success, "doctor failed: {stderr}");
     assert!(stdout.contains("Projection rebuild:"));
     assert!(stdout.contains("projection_fresh: not ok"));
-    assert!(stdout.contains("Runtime state:"));
-    assert!(stdout.contains("database: missing (runtime projection artifact)"));
+    assert!(stdout.contains("Projection database:"));
+    assert!(stdout.contains("database: missing"));
     assert!(stdout.contains("projection_metadata: stale"));
 }
 
@@ -279,13 +278,12 @@ fn test_doctor_reports_runtime_health_without_becoming_canonical_lint() {
     let (doctor_success, doctorstdout, doctor_stderr) = run_atelier(dir.path(), &["doctor"]);
     assert!(
         doctor_success,
-        "doctor should continue reporting runtime health: {doctor_stderr}"
+        "doctor should continue reporting health: {doctor_stderr}"
     );
     assert!(doctorstdout.contains("Projection rebuild:"));
     assert!(doctorstdout.contains("rebuild_ready: not ok"));
-    assert!(doctorstdout.contains("Runtime state:"));
+    assert!(doctorstdout.contains("Projection database:"));
     assert!(doctorstdout.contains("database: ok"));
-    assert!(doctorstdout.contains("local_tables: ok"));
 }
 
 #[test]
@@ -1456,7 +1454,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(status_out.contains("Current work:  1 issue(s)"));
-    assert!(status_out.contains(&format!("  {issue_id} - Root start item")));
+    assert!(status_out.contains(&format!("{issue_id} - Root start item")));
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1524,8 +1522,8 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
         status_out.contains("Current work:  2 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("  {active_id} - Active item")));
-    assert!(status_out.contains(&format!("  {next_id} - Next item")));
+    assert!(status_out.contains(&format!("{active_id} - Active item")));
+    assert!(status_out.contains(&format!("{next_id} - Next item")));
 }
 
 #[test]
@@ -1587,8 +1585,8 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
         status_out.contains("Current work:  2 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("  {first_id} - First item")));
-    assert!(status_out.contains(&format!("  {second_id} - Second item")));
+    assert!(status_out.contains(&format!("{first_id} - First item")));
+    assert!(status_out.contains(&format!("{second_id} - Second item")));
 }
 
 #[test]
@@ -1632,8 +1630,8 @@ fn test_separate_worktrees_can_have_different_active_issues() {
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("  {root_id} - Root work")));
-    assert!(status_out.contains(&format!("  {worktree_id} - Worktree work")));
+    assert!(status_out.contains(&format!("{root_id} - Root work")));
+    assert!(status_out.contains(&format!("{worktree_id} - Worktree work")));
 
     let (success, mission_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
@@ -2053,7 +2051,7 @@ fn test_removed_abandon_preserves_issue_status_and_activity() {
         status_out.contains("Current work:  1 issue(s)"),
         "{status_out}"
     );
-    assert!(status_out.contains(&format!("  {issue_id} - Abandonable workflow item")));
+    assert!(status_out.contains(&format!("{issue_id} - Abandonable workflow item")));
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert!(

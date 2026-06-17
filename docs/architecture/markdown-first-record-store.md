@@ -4,21 +4,24 @@ This document defines the target persistence architecture for Atelier after the
 Markdown-only canonical state cutover. It refines the storage contract in
 [Canonical Record And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md)
 by separating canonical record ownership from rebuildable query indexes and
-local-only runtime state.
+ignored local diagnostics/cache files.
 
 ## Direction
 
 Atelier's durable project state lives in tracked Markdown record files under
-`.atelier/`. SQLite remains valuable, but as a rebuildable projection and
-runtime store rather than a second canonical copy of the same facts.
+`.atelier/`. SQLite remains valuable, but as a rebuildable projection rather
+than a second canonical copy of the same facts.
 
-The target architecture has three explicit components:
+The target architecture has two explicit tracker-state components:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
 | `RecordStore` | Canonical Markdown record discovery, parsing, validation, ID allocation, deterministic writes, atomic file replacement, and known-ID mutations. | Global query planning, runtime-only checkout/session context, or long-lived caches. |
 | `ProjectionIndex` | Rebuildable SQLite indexes derived from `RecordStore`: issue lists, ready queries, reverse links, graph traversal, search, validation lookups, and Mission Control query inputs. | Canonical record mutation or facts that cannot be recreated from Markdown. |
-| `RuntimeState` | Local-only ignored state under `.atelier/runtime/` and `.atelier/cache/`: ephemeral checkout/session context, local agent identity, locks, diagnostics, UI caches, and other machine-specific data. | Durable project records, the current-work source of truth, dependencies, typed links, evidence metadata, or workflow policy. |
+
+Ignored local diagnostics, lock files, and UI caches may exist beside these
+components, but they are not SQLite tracker state and must not define durable
+project records or current work.
 
 Successful canonical mutations must write Markdown first. A command may refresh
 the projection in the same operation, but durability must not depend on a later
@@ -90,7 +93,7 @@ field belongs to exactly one of these classes:
 | Required | Must be present in canonical Markdown for that record kind. Missing data is a lint/rebuild error. |
 | Optional | May be present when the record needs the field. Omit it instead of writing an empty compatibility placeholder unless the record kind says otherwise. |
 | Derived | Never authored directly in canonical Markdown. Commands, rebuild, or projections compute it from canonical fields. |
-| Compatibility-only | Allowed only while migration residue still exists. New writers must stop creating it, and cleanup work may delete it once readers no longer depend on it. |
+| Compatibility-only | Allowed only for explicitly named non-canonical migration residue. New canonical Markdown readers and writers must not accept it. |
 | Forbidden | Not allowed in canonical Markdown because another field or section already owns the meaning. |
 
 Common front matter ownership for first-class records (`issue`, `mission`,
@@ -101,7 +104,7 @@ Common front matter ownership for first-class records (`issue`, `mission`,
 | `schema`, `schema_version`, `id`, `title`, `status`, `created_at`, `updated_at`, `labels`, `relationships` | Required | Shared record identity, lifecycle, timestamps, labels, and typed links. |
 | Canonical file path | Derived | Computed from record kind plus `id`; it is never duplicated in front matter. |
 | Status category, ready/done grouping, priority display label, reverse-link views, and query/projection rows | Derived | Commands and projections compute these from durable fields. |
-| Generic escaped payload fields such as `data` or `data_json` | Compatibility-only | Legacy migration residue. New canonical writers must not introduce new generic payload blobs. |
+| Generic escaped payload fields such as `data` or `data_json` | Forbidden | Canonical Markdown readers reject generic payload blobs; record-kind contracts must expose typed front matter and body sections instead. |
 | Duplicate convenience links such as `validates`, `targets`, `missions`, `contributing_work`, `depends_on`, or `blocked_by` | Forbidden unless a record-kind contract explicitly assigns them | Use `relationships` as the canonical cross-record surface. |
 
 ### Relationships
@@ -148,8 +151,8 @@ categories, not alternate stored tokens.
 | Required body | `## Intent`, `## Constraints`, `## Risks`, and `## Validation`. |
 | Optional body | `## Terminal Notes` and `## Notes`. |
 | Derived | Linked work from `relationships.relates[]` entries with `type: advances`; direct mission blockers from `relationships.relates[]` entries with `type: blocked_by`; mission evidence coverage from incoming evidence links with `role: validates`. |
-| Compatibility-only | Escaped mission `data` payloads and front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`. |
-| Forbidden | Any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose must not become a shadow graph. |
+| Compatibility-only | None in canonical Markdown. |
+| Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose must not become a shadow graph. |
 
 Mission status is mission-lifecycle state, not issue workflow state. The current
 durable vocabulary is `draft`, `ready`, `active`, and `closed`.
@@ -163,8 +166,8 @@ durable vocabulary is `draft`, `ready`, `active`, and `closed`.
 | Required body | The durable execution intent in Markdown prose. V1 does not require a section grammar for plan bodies. |
 | Optional body | Any additional Markdown structure inside that execution intent. |
 | Derived | Superseded-by views from other plans' `supersedes` arrays; applicability rollups from `applies_to` plus `relationships`; plan freshness summaries from `drift_status`. |
-| Compatibility-only | Quoted JSON `data` payloads that carry `revision` or `revisions`. |
-| Forbidden | Generic front matter arrays such as `revisions`, `steps`, or `targets` when their meaning is already owned by `revision`, the body, or `relationships`. |
+| Compatibility-only | None in canonical Markdown. |
+| Forbidden | Quoted JSON `data` payloads and generic front matter arrays such as `steps` or `targets` when their meaning is already owned by `revision`, the body, or `relationships`. |
 
 Plan status owns the lifecycle of the plan record itself. Exact plan status
 tokens may evolve with the dedicated plan command surface, but they must remain
@@ -179,13 +182,13 @@ plan-specific lifecycle values rather than borrowed issue workflow aliases.
 | Required body | Human-readable proof summary and any important limits not already captured in front matter. |
 | Optional body | Additional bounded transcript excerpts, audit notes, or artifact context. |
 | Derived | Evidence coverage views for issues, missions, plans, or milestones; command success summaries from structured transcript metadata; reverse lookup of which records this evidence validates. |
-| Compatibility-only | Escaped `data` payloads carrying fields such as `kind`, `result`, `path`, `uri`, `producer`, `output`, `exit_code`, or `target`. |
-| Forbidden | Separate `targets` or `validates` front matter arrays, because validating links belong in `relationships.attachments[]`. |
+| Compatibility-only | None in canonical Markdown. |
+| Forbidden | Escaped `data` payloads and separate `targets` or `validates` front matter arrays, because validating links belong in `relationships.attachments[]`. |
 
 Evidence `status` is the canonical proof result token. The target vocabulary is
 `pass`, `fail`, `blocked`, `deferred`, `not_applicable`, or `informational`.
-Older records that still mirror result-like fields inside escaped `data` are
-compatibility residue rather than a second canonical status surface.
+Records that still mirror result-like fields inside escaped `data` are invalid
+canonical Markdown and must be migrated before rebuild/lint can pass.
 
 ### Milestone Records
 
@@ -206,7 +209,7 @@ progress.
 ### Activity Sidecars
 
 Activity sidecars are canonical durable history owned by the activity sidecar
-API in `src/activity.rs`, not by `RecordStore` and not by the runtime SQLite
+API in `src/activity.rs`, not by `RecordStore` and not by the SQLite
 projection. They are canonical Markdown files, but they are not first-class
 records that share the common `title`/`status` contract.
 
@@ -225,8 +228,8 @@ records that share the common `title`/`status` contract.
 | --- | --- |
 | Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`, `runtime_dir`, `runtime_database`, and `cache_dir`. |
 | Compatibility-only config | `[paths].compatibility_state_root` remains tracked only while `.atelier-state/` compatibility flows still exist. |
-| Local runtime state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, local agent identity, sessions, and work-association tables are ignored machine-local state. They may cache checkout context, but they do not define current work. |
-| Projection provenance | `projection_index_sources` rows, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
+| Local projection/cache state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, and UI caches are ignored machine-local artifacts. SQLite tables under `state.db` must be rebuildable projection state, not non-Markdown tracker facts. |
+| Projection provenance | `projection_sources` rows, record identity, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
 | Forbidden durable provenance | Runtime branch names, worktree paths, session IDs, lock ownership, local diagnostic output, and cache payloads must not be promoted into canonical record front matter without a separate artifact update. |
 
 ### Manual Classification Check
@@ -238,7 +241,7 @@ current committed records against the target contract above.
 | --- | --- | --- | --- |
 | `.atelier/issues/atelier-x45p.md` | Issue | Pass | Uses required issue front matter plus `Description`/`Outcome`/`Evidence`; blocker intent lives in `relationships.blocks`; durable priority/status tokens are `P1` and `todo`. |
 | `.atelier/missions/atelier-man9.md` | Mission | Pass | Uses mission required sections and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
-| `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (compatibility residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
+| `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (forbidden payload residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
 | `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |
 | `.atelier/config.toml` | Project config/runtime boundary | Pass with compatibility note | Correctly tracks canonical path ownership and local runtime/cache locations. `compatibility_state_root` remains compatibility-only until old `.atelier-state/` flows are removed. |
 | `.atelier/plans/` | Plan | Defer | No committed plan records exist yet, so the contract is target-state only in this manual check. |
@@ -264,14 +267,15 @@ not require them.
 Read-only commands must not silently answer from a stale projection when the
 result could affect orchestration, validation, or closeout decisions.
 
-The first `ProjectionIndex` slice stores canonical record-source provenance in
-local SQLite table `projection_index_sources`. Each entry records the relative
-`.atelier/` path, file size, modified-time hint, SHA-256 content hash, and
-index timestamp for files under canonical record directories such as `issues/`,
-`missions/`, `milestones/`, `plans/`, and `evidence/`. Content hash is
-authoritative; size and mtime exist only as cheap diagnostics and future
-optimization hints. The table is runtime projection metadata, not canonical
-state, and is recreated by `atelier rebuild`. Root-level derived compatibility
+The projection stores canonical record-source provenance in local SQLite table
+`projection_sources`. Each entry records the relative `.atelier/` path, record
+kind/id, file size, modified-time hint, SHA-256 content hash, and index timestamp
+for files under canonical record directories such as `issues/`, `missions/`,
+`milestones/`, `plans/`, and `evidence/`. Unchanged size and mtime are accepted
+as the fast path; when either stat changes, Atelier hashes only that candidate.
+If the hash still matches, the source metadata row is refreshed without
+reindexing the record. The table is projection metadata, not canonical state,
+and is recreated by `atelier rebuild`. Root-level derived compatibility
 files such as `manifest.json` and `graph.json` are not query-projection sources.
 Issue activity sidecars are not indexed in this table because recent activity
 previews read those canonical files directly; rebuild still validates sidecar
@@ -284,12 +288,14 @@ queryable. Ordinary projection-backed read surfaces (`issue list`,
 `graph impact`, `graph tree`, dependency lists,
 and tracker lint) check the metadata before reading SQLite whenever
 canonical records exist. If a canonical source changed, disappeared, appeared
-without being indexed, or lacks metadata, the command first validates
-`.atelier/`; when validation succeeds it automatically rebuilds the local
-SQLite projection and answers the query. Invalid Markdown, schema drift,
-conflicting records, missing required canonical state, or rebuild failures still
-block completion paths. Orientation and repair surfaces should degrade at the
-record level where possible instead of collapsing into cache-maintenance errors.
+without being indexed, or lacks metadata, the command first attempts targeted
+repair for small first-class record changes by parsing only the changed Markdown
+record and replacing rows owned by that record. Broad changes, issue graph
+changes, missing metadata, unsupported paths, invalid Markdown, schema drift,
+conflicting records, missing required canonical state, or targeted repair
+failures fall back to the safe rebuild path or block completion paths.
+Orientation and repair surfaces should degrade at the record level where
+possible instead of collapsing into cache-maintenance errors.
 
 The projection is metadata-only in the target design: it may keep fields needed
 to find, sort, filter, traverse, and validate records, but it must not be
@@ -303,11 +309,12 @@ are classified as follows:
 | `labels.issue_id`, `labels.label` | Projection metadata | Keep for queue filters, ownership labels, and Mission Control facets. |
 | `dependencies.blocker_id`, `dependencies.blocked_id` | Projection metadata | Keep as derived graph edges for ready queries and workflow checks. |
 | `relations.issue_id_1`, `relations.issue_id_2`, `relations.relation_type`, `relations.created_at` | Projection metadata | Keep as derived typed issue-link edges for traversal and impact views. |
-| `records.id`, `records.kind`, `records.title`, `records.status`, `records.created_at`, `records.updated_at` | Projection metadata | Keep or replace with a narrower cross-record metadata index for missions, milestones, plans, and evidence. |
-| `records.body`, `records.data_json` | Removal candidate | Rich first-class record content owned by `RecordStore`; command detail views should load selected Markdown records instead of rendering these columns. |
+| `records.kind`, `records.id`, `records.title`, `records.status`, `records.created_at`, `records.updated_at`, `records.source_path` | Projection metadata | Covered cross-record metadata index for missions, milestones, plans, and evidence. Full bodies and typed detail remain owned by Markdown. |
+| `record_labels.kind`, `record_labels.id`, `record_labels.label` | Projection metadata | Covered label index for first-class non-issue records. |
+| `evidence.*`, `plans.*`, `milestones.*` | Projection metadata | Narrow typed satellites for query-worthy fields. They are derived from Markdown and do not store generic JSON payloads. |
 | `record_links.source_kind`, `source_id`, `target_kind`, `target_id`, `relation_type`, `created_at` | Projection metadata | Keep as derived cross-record graph edges for workflow validation and Mission Control rollups. |
-| `projection_index_sources.path`, `size_bytes`, `modified_micros`, `sha256`, `indexed_at` | Projection metadata | Keep as rebuildable freshness metadata. Hash is authoritative; size and modified time are optimization hints. |
-| `sessions.*`, `work_associations.*` | Runtime state | Keep local-only under `.atelier/runtime/`; rebuild may recreate these tables empty or preserve them through runtime-specific paths, but they are not durable project facts and do not define current work. |
+| `projection_sources.path`, `kind`, `id`, `size_bytes`, `modified_micros`, `sha256`, `indexed_at` | Projection metadata | Keep as rebuildable freshness metadata. Kind/id allow deleted-source repair; size and modified time are the fast path, with hash used for changed candidates. |
+| `sessions.*`, `work_associations.*`, `runtime_metadata` | Removed local-only SQLite state | These tables are not part of the target schema because SQLite tracker state must be rebuildable from canonical Markdown. |
 | `comments.content`, `comments.kind`, `comments.created_at` | Compatibility residue | Legacy SQLite notes retained for imports and repositories not yet migrated to activity sidecars. New issue activity detail is canonical Markdown sidecar state. |
 | Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
 
@@ -325,9 +332,8 @@ lists without treating every Markdown body or record payload as cached UI state.
 
 `atelier rebuild` recreates the canonical portion of
 `.atelier/runtime/state.db` from Markdown records discovered under tracked
-`.atelier/` record directories. It ignores local-only runtime state except
-where runtime tables must be recreated empty or migrated for schema
-compatibility.
+`.atelier/` record directories. It drops local-only SQLite state rather than
+preserving non-Markdown tracker facts.
 
 Issue activity history is canonical sidecar state under
 `.atelier/issues/<issue-id>.activity/`. Each activity entry is a Markdown
@@ -436,14 +442,13 @@ projections, and names degraded-orientation behavior. This keeps CLI dispatch
 focused on public command contracts instead of embedding projection freshness
 rules in every match arm.
 
-For RecordStore-owned mutations, Atelier uses a runtime-preserving projection
-refresh after each successful canonical write. Mutation commands write
+For RecordStore-owned mutations, Atelier refreshes the projection after each
+successful canonical write. Mutation commands write
 tracked `.atelier/` records first through `RecordStore`, then call
 `refresh_projection_after_canonical_write` to validate canonical Markdown and
-replace projection rows from that source while copying valid local session and
-work-association rows forward. This preserves the clear ownership boundary:
-Markdown is the durable write target, while SQLite is the disposable projection
-used by subsequent query commands plus local RuntimeState.
+replace projection rows from that source. This preserves the clear ownership
+boundary: Markdown is the durable write target, while SQLite is the disposable
+covered index used by subsequent query commands.
 
 The refresh helper deliberately runs canonical validation before replacing the
 projection. If a command writes invalid Markdown, the command must fail before

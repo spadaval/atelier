@@ -295,6 +295,7 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     print_heading("Evidence");
     println!("{} total", records.len());
     for record in records {
+        let record = canonical_record_detail(KIND, &record.id)?.unwrap_or(record);
         let data = evidence_record_data(&record)?;
         let kind = data.evidence_type.as_str();
         let command = data.command.as_deref().unwrap_or("(manual)");
@@ -314,7 +315,8 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
 }
 
 pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
-    let data = evidence_record_data(record)?;
+    let record = canonical_record_detail(KIND, &record.id)?.unwrap_or_else(|| record.clone());
+    let data = evidence_record_data(&record)?;
     println!(
         "{} [evidence] {} - {}",
         record.id, record.status, record.title

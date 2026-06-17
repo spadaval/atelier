@@ -1490,6 +1490,7 @@ fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
 }
 
 fn print_record(record: &DomainRecord) -> Result<()> {
+    let record = canonical_record_detail(KIND, &record.id)?.unwrap_or_else(|| record.clone());
     println!("Mission {}: {}", record.id, record.title);
     println!("Status: {}", record.status);
     if let Some(body) = &record.body {

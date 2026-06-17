@@ -656,7 +656,10 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Domai
             None
         };
         if let Some(evidence_id) = evidence_id {
-            evidence.push(db.require_record("evidence", &evidence_id)?);
+            evidence.push(
+                canonical_evidence_record(&evidence_id)?
+                    .unwrap_or(db.require_record("evidence", &evidence_id)?),
+            );
         }
     }
     evidence.sort_by(|a, b| a.id.cmp(&b.id));
@@ -692,7 +695,31 @@ fn issue_evidence_gate_status_from_records(
 
     let _ = issue;
     let _ = sections;
-    evidence_gate(true, "validating evidence is linked")
+    let passing = evidence.iter().any(|record| {
+        serde_json::from_str::<atelier_core::EvidenceRecordData>(&record.data_json)
+            .map(|data| {
+                data.success.unwrap_or_else(|| {
+                    !matches!(record.status.as_str(), "blocked" | "fail" | "failed")
+                })
+            })
+            .unwrap_or_else(|_| !matches!(record.status.as_str(), "blocked" | "fail" | "failed"))
+    });
+    if passing {
+        evidence_gate(true, "passing validating evidence is linked")
+    } else {
+        evidence_gate(false, "expected at least 1 passing evidence record")
+    }
+}
+
+fn canonical_evidence_record(id: &str) -> Result<Option<DomainRecord>> {
+    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(store
+        .load_domain_record_by_id("evidence", id)
+        .map(|record| Some(record.record))
+        .unwrap_or(None))
 }
 
 fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {
@@ -1869,7 +1896,7 @@ pub fn doctor(
     repo_root: &Path,
     state_dir: &Path,
     db_path: &Path,
-    runtime_db_existed: bool,
+    projection_db_existed: bool,
     fix: bool,
 ) -> Result<()> {
     let outcome = atelier_app::health::doctor(atelier_app::Request {
@@ -1878,7 +1905,7 @@ pub fn doctor(
             repo_root: repo_root.to_path_buf(),
             state_dir: state_dir.to_path_buf(),
             db_path: db_path.to_path_buf(),
-            runtime_db_existed,
+            projection_db_existed,
             fix,
             diagnostics_enabled: crate::telemetry::diagnostics_enabled(),
         },
@@ -1932,25 +1959,13 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         "  projection_metadata: {}",
         if view.projection_fresh { "ok" } else { "stale" }
     );
-    println!("Runtime state:");
-    println!(
-        "  directory: {}",
-        if view.runtime_dir_ok { "ok" } else { "not ok" }
-    );
+    println!("Projection database:");
     println!(
         "  database: {}",
         if view.runtime_db_available {
             "ok"
         } else {
-            "missing (runtime projection artifact)"
-        }
-    );
-    println!(
-        "  local_tables: {}",
-        if view.runtime_tables_available {
-            "ok"
-        } else {
-            "not ok"
+            "missing"
         }
     );
     println!("  diagnostics: {}", view.diagnostics);

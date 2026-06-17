@@ -18,7 +18,7 @@ behind the lower target crate boundary.
 | `atelier-core` | Shared domain types, record IDs, typed relationships, workflow status/category vocabulary, and pure formatting helpers that do not touch the filesystem, SQLite, Clap, or Git. | External pure utility crates only. |
 | `atelier-workflow` | Repository-owned workflow policy loading, transition validation, readiness checks, and guidance text evaluation. | `atelier-core`. |
 | `atelier-records` | Canonical `.atelier/` Markdown record discovery, parsing, deterministic rendering, ID allocation, relationship rendering, and atomic tracked-file mutation. | `atelier-core`, `atelier-workflow` when validation needs workflow policy. |
-| `atelier-sqlite` | Rebuildable SQLite `ProjectionIndex` and local `RuntimeState` schema/query code for projection freshness, graph/search/list/status queries, diagnostics, and ignored runtime/cache recovery. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
+| `atelier-sqlite` | Rebuildable SQLite `ProjectionIndex` schema/query code for projection freshness and graph/search/list/status queries. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
 | `atelier-app` | Use-case orchestration for mission, issue, evidence, workflow, status, doctor, export, lint, worktree, branch, and rebuild operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`, `atelier-sqlite`. |
 | `atelier-cli` | The `atelier` binary, Clap parser, command dispatch telemetry, terminal rendering, process exit mapping, and CLI-only transcript formatting. | `atelier-app`, plus lower crates only for types explicitly re-exported by `atelier-app` contracts. |
 

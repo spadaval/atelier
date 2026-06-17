@@ -172,6 +172,75 @@ pub struct CanonicalIssueRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct RecordHeader {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub labels: Vec<String>,
+    pub relationships: Relationships,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Record {
+    Issue(IssueRecord),
+    Mission(MissionRecord),
+    Plan(PlanRecord),
+    Evidence(EvidenceRecord),
+    Milestone(MilestoneRecord),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IssueRecord {
+    pub header: RecordHeader,
+    pub issue_type: String,
+    pub priority: String,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub sections: IssueSections,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MissionRecord {
+    pub header: RecordHeader,
+    pub sections: MissionSections,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanRecord {
+    pub header: RecordHeader,
+    pub data: PlanRecordData,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EvidenceRecord {
+    pub header: RecordHeader,
+    pub data: EvidenceRecordData,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MilestoneRecord {
+    pub header: RecordHeader,
+    pub data: MilestoneRecordData,
+    pub body: String,
+}
+
+impl Record {
+    pub fn header(&self) -> &RecordHeader {
+        match self {
+            Record::Issue(record) => &record.header,
+            Record::Mission(record) => &record.header,
+            Record::Plan(record) => &record.header,
+            Record::Evidence(record) => &record.header,
+            Record::Milestone(record) => &record.header,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct IssueSections {
     pub description: String,
     pub outcome: String,
@@ -300,6 +369,64 @@ pub struct CanonicalDomainRecord {
     pub record: DomainRecord,
     pub labels: Vec<String>,
     pub relationships: Relationships,
+}
+
+impl CanonicalIssueRecord {
+    pub fn into_record(self) -> Record {
+        Record::Issue(IssueRecord {
+            header: RecordHeader {
+                kind: ISSUE_KIND.kind.to_string(),
+                id: self.issue.id,
+                title: self.issue.title,
+                status: self.issue.status,
+                labels: self.labels,
+                relationships: self.relationships,
+                created_at: self.issue.created_at,
+                updated_at: self.issue.updated_at,
+            },
+            issue_type: self.issue.issue_type,
+            priority: self.issue.priority,
+            closed_at: self.issue.closed_at,
+            sections: self.sections,
+        })
+    }
+}
+
+impl CanonicalDomainRecord {
+    pub fn to_record(&self) -> Result<Record> {
+        let header = RecordHeader {
+            kind: self.record.kind.clone(),
+            id: self.record.id.clone(),
+            title: self.record.title.clone(),
+            status: self.record.status.clone(),
+            labels: self.labels.clone(),
+            relationships: self.relationships.clone(),
+            created_at: self.record.created_at,
+            updated_at: self.record.updated_at,
+        };
+        match self.record.kind.as_str() {
+            "mission" => Ok(Record::Mission(MissionRecord {
+                header,
+                sections: mission_sections_from_domain_record(&self.record)?,
+            })),
+            "plan" => Ok(Record::Plan(PlanRecord {
+                header,
+                data: normalized_plan_data(&self.record.data_json)?,
+                body: self.record.body.clone().unwrap_or_default(),
+            })),
+            "evidence" => Ok(Record::Evidence(EvidenceRecord {
+                header,
+                data: normalized_evidence_data(&self.record.data_json)?,
+                summary: self.record.body.clone().unwrap_or_default(),
+            })),
+            "milestone" => Ok(Record::Milestone(MilestoneRecord {
+                header,
+                data: normalized_milestone_data(&self.record.data_json)?,
+                body: self.record.body.clone().unwrap_or_default(),
+            })),
+            other => bail!("Unsupported canonical record kind '{other}'"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -958,30 +1085,10 @@ pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
         "plan" => return render_plan_record(&record, &relationships, spec),
         _ => {}
     }
-
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.record.created_at.to_rfc3339()),
-    )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
-    write_json_scalar(&mut output, "data", &record.record.data_json)?;
-    write_yaml_relationships(&mut output, &relationships)?;
-    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
-    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.record.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
-    output.push('\n');
-    Ok(output)
+    bail!(
+        "Unsupported canonical record kind '{}' for typed rendering",
+        spec.kind
+    )
 }
 
 pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueRecord> {
@@ -1105,6 +1212,7 @@ pub fn parse_domain_record(
             display_state_path(&expected)
         );
     }
+    reject_forbidden_data_front_matter(&front_matter, relative)?;
     match spec.kind {
         "mission" => return parse_mission_domain_record(front_matter, body, relative, spec, id),
         "evidence" => return parse_evidence_domain_record(front_matter, body, relative, spec, id),
@@ -1114,29 +1222,24 @@ pub fn parse_domain_record(
         "plan" => return parse_plan_domain_record(front_matter, body, relative, spec, id),
         _ => {}
     }
-    let data_json = require_scalar(&front_matter, "data", relative)?;
-    let _: Value = serde_json::from_str(&data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    let relationships = parse_relationships(&front_matter, relative)?;
-    let body = if body.is_empty() {
-        None
-    } else {
-        Some(body.to_string())
-    };
-    Ok(CanonicalDomainRecord {
-        record: DomainRecord {
-            id,
-            kind: spec.kind.to_string(),
-            title: require_scalar(&front_matter, "title", relative)?,
-            status: require_scalar(&front_matter, "status", relative)?,
-            body,
-            data_json,
-            created_at: require_datetime(&front_matter, "created_at", relative)?,
-            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
-        },
-        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-        relationships,
-    })
+    bail!(
+        "Unsupported canonical record kind '{}' in {}",
+        spec.kind,
+        display_state_path(relative)
+    )
+}
+
+fn reject_forbidden_data_front_matter(
+    front_matter: &BTreeMap<String, Value>,
+    relative: &Path,
+) -> Result<()> {
+    if front_matter.contains_key("data") {
+        bail!(
+            "Forbidden data front matter in {}; use typed front matter and body sections instead",
+            display_state_path(relative)
+        );
+    }
+    Ok(())
 }
 
 fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Result<()> {
@@ -1254,28 +1357,6 @@ fn parse_mission_domain_record(
     validate_mission_status(&status, relative)?;
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-
-    if front_matter.contains_key("data") {
-        let data_json = require_scalar(&front_matter, "data", relative)?;
-        let sections = legacy_mission_sections(Some(body), &data_json, &title, relative)?;
-        let relationships = normalize_legacy_mission_relationships(relationships);
-        return Ok(CanonicalDomainRecord {
-            record: DomainRecord {
-                id,
-                kind: spec.kind.to_string(),
-                title,
-                status,
-                body: Some(render_mission_sections(&sections)),
-                data_json: MISSION_EMPTY_DATA_JSON.to_string(),
-                created_at,
-                updated_at,
-            },
-            labels: optional_string_array(&front_matter, "labels", relative)?
-                .filter(|labels| !labels.is_empty())
-                .unwrap_or_else(|| default_domain_labels("mission")),
-            relationships,
-        });
-    }
 
     reject_unexpected_mission_front_matter(&front_matter, relative)?;
     let labels = string_array(&front_matter, "labels", relative)?;
@@ -1396,38 +1477,29 @@ fn parse_evidence_domain_record(
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
 
-    let data_json = if front_matter.contains_key("data") {
-        let data_json = require_scalar(&front_matter, "data", relative)?;
-        serde_json::to_string(&normalized_evidence_data(&data_json)?)?
-    } else {
-        let mut data = EvidenceRecordData {
-            evidence_type: require_scalar(&front_matter, "evidence_type", relative)?,
-            captured_at: require_datetime(&front_matter, "captured_at", relative)?,
-            command: optional_scalar(&front_matter, "command")?,
-            path: optional_scalar(&front_matter, "path")?,
-            uri: optional_scalar(&front_matter, "uri")?,
-            producer: None,
-            proof_scope: optional_scalar(&front_matter, "proof_scope")?,
-            agent_identity: optional_scalar(&front_matter, "agent_identity")?,
-            independence_level: optional_scalar(&front_matter, "independence_level")?,
-            target: optional_yaml_value::<EvidenceTarget>(&front_matter, "target", relative)?,
-            residual_risks: optional_string_array(&front_matter, "residual_risks", relative)?
-                .unwrap_or_default(),
-            follow_up_ids: optional_string_array(&front_matter, "follow_up_ids", relative)?
-                .unwrap_or_default(),
-            exit_code: optional_i32(&front_matter, "exit_code", relative)?,
-            exit_status: optional_scalar(&front_matter, "exit_status")?,
-            success: optional_bool(&front_matter, "success", relative)?,
-            spawn_error: optional_scalar(&front_matter, "spawn_error")?,
-            output: optional_yaml_value::<EvidenceOutputSummary>(
-                &front_matter,
-                "output",
-                relative,
-            )?,
-        };
-        apply_evidence_body_sections(&mut data, body);
-        serde_json::to_string(&data)?
+    let mut data = EvidenceRecordData {
+        evidence_type: require_scalar(&front_matter, "evidence_type", relative)?,
+        captured_at: require_datetime(&front_matter, "captured_at", relative)?,
+        command: optional_scalar(&front_matter, "command")?,
+        path: optional_scalar(&front_matter, "path")?,
+        uri: optional_scalar(&front_matter, "uri")?,
+        producer: None,
+        proof_scope: optional_scalar(&front_matter, "proof_scope")?,
+        agent_identity: optional_scalar(&front_matter, "agent_identity")?,
+        independence_level: optional_scalar(&front_matter, "independence_level")?,
+        target: optional_yaml_value::<EvidenceTarget>(&front_matter, "target", relative)?,
+        residual_risks: optional_string_array(&front_matter, "residual_risks", relative)?
+            .unwrap_or_default(),
+        follow_up_ids: optional_string_array(&front_matter, "follow_up_ids", relative)?
+            .unwrap_or_default(),
+        exit_code: optional_i32(&front_matter, "exit_code", relative)?,
+        exit_status: optional_scalar(&front_matter, "exit_status")?,
+        success: optional_bool(&front_matter, "success", relative)?,
+        spawn_error: optional_scalar(&front_matter, "spawn_error")?,
+        output: optional_yaml_value::<EvidenceOutputSummary>(&front_matter, "output", relative)?,
     };
+    apply_evidence_body_sections(&mut data, body);
+    let data_json = serde_json::to_string(&data)?;
     let body = if body.is_empty() {
         None
     } else {
@@ -1513,19 +1585,11 @@ fn parse_milestone_domain_record(
     let status = require_scalar(&front_matter, "status", relative)?;
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-    let data = if front_matter.contains_key("data") {
-        normalized_milestone_data(&require_scalar(&front_matter, "data", relative)?)?
-    } else {
-        MilestoneRecordData {
-            desired_state: require_scalar(&front_matter, "desired_state", relative)?,
-            scope: optional_string_array(&front_matter, "scope", relative)?.unwrap_or_default(),
-            validation_criteria: optional_string_array(
-                &front_matter,
-                "validation_criteria",
-                relative,
-            )?
+    let data = MilestoneRecordData {
+        desired_state: require_scalar(&front_matter, "desired_state", relative)?,
+        scope: optional_string_array(&front_matter, "scope", relative)?.unwrap_or_default(),
+        validation_criteria: optional_string_array(&front_matter, "validation_criteria", relative)?
             .unwrap_or_default(),
-        }
     };
     let body = if body.is_empty() {
         None
@@ -1616,15 +1680,10 @@ fn parse_plan_domain_record(
     let status = require_scalar(&front_matter, "status", relative)?;
     let created_at = require_datetime(&front_matter, "created_at", relative)?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-    let mut data = if front_matter.contains_key("data") {
-        normalized_plan_data(&require_scalar(&front_matter, "data", relative)?)?
-    } else {
-        PlanRecordData {
-            revision: require_i64(&front_matter, "revision", relative)?,
-            owner: optional_scalar(&front_matter, "owner")?,
-            revisions: optional_yaml_value(&front_matter, "revisions", relative)?
-                .unwrap_or_default(),
-        }
+    let mut data = PlanRecordData {
+        revision: require_i64(&front_matter, "revision", relative)?,
+        owner: optional_scalar(&front_matter, "owner")?,
+        revisions: optional_yaml_value(&front_matter, "revisions", relative)?.unwrap_or_default(),
     };
     if data.revisions.is_empty() {
         data.revisions.push(atelier_core::PlanRevision {
@@ -2923,15 +2982,6 @@ fn write_yaml_scalar_if_some(output: &mut String, key: &str, value: Option<&str>
     Ok(())
 }
 
-fn write_json_scalar(output: &mut String, key: &str, value: &str) -> Result<()> {
-    let _: Value = serde_json::from_str(value)?;
-    output.push_str(key);
-    output.push_str(": ");
-    output.push_str(&serde_json::to_string(value)?);
-    output.push('\n');
-    Ok(())
-}
-
 fn write_yaml_i64(output: &mut String, key: &str, value: i64) {
     output.push_str(key);
     output.push_str(": ");
@@ -3774,7 +3824,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn legacy_plan_and_milestone_data_records_load_into_typed_front_matter() {
+    fn plan_and_milestone_records_reject_data_front_matter() {
         let plan_spec = canonical_record_kind("plan").unwrap();
         let plan_path = canonical_record_path(plan_spec, "atelier-pleg").unwrap();
         let plan_text = r#"---
@@ -3795,13 +3845,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Updated
 "#;
-        let plan = parse_domain_record(plan_text, &plan_path, plan_spec).unwrap();
-        let rendered_plan = render_domain_record(&plan).unwrap();
-
-        assert!(!rendered_plan.contains("\ndata: "));
-        assert!(rendered_plan.contains("revision: 2"));
-        assert!(rendered_plan.contains("owner: \"agent\""));
-        assert!(rendered_plan.contains("  body: \"Updated\""));
+        let error = parse_domain_record(plan_text, &plan_path, plan_spec).unwrap_err();
+        assert!(error.to_string().contains("Forbidden data front matter"));
 
         let milestone_spec = canonical_record_kind("milestone").unwrap();
         let milestone_path = canonical_record_path(milestone_spec, "atelier-mleg").unwrap();
@@ -3823,18 +3868,13 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Release gate
 "#;
-        let milestone =
-            parse_domain_record(milestone_text, &milestone_path, milestone_spec).unwrap();
-        let rendered_milestone = render_domain_record(&milestone).unwrap();
-
-        assert!(!rendered_milestone.contains("\ndata: "));
-        assert!(rendered_milestone.contains("desired_state: \"Release gate\""));
-        assert!(rendered_milestone.contains("scope:\n- \"CLI\""));
-        assert!(rendered_milestone.contains("validation_criteria:\n- \"Focused tests pass\""));
+        let error =
+            parse_domain_record(milestone_text, &milestone_path, milestone_spec).unwrap_err();
+        assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
     #[test]
-    fn legacy_evidence_data_record_loads_into_typed_front_matter() {
+    fn evidence_record_rejects_data_front_matter() {
         let spec = canonical_record_kind("evidence").unwrap();
         let path = canonical_record_path(spec, "atelier-eleg").unwrap();
         let text = r#"---
@@ -3858,23 +3898,8 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Legacy evidence summary.
 "#;
-        let parsed = parse_domain_record(text, &path, spec).unwrap();
-        let rendered = render_domain_record(&parsed).unwrap();
-
-        assert!(parsed
-            .relationships
-            .attachments
-            .iter()
-            .any(|attachment| attachment.kind == "issue"
-                && attachment.id == "atelier-proof"
-                && attachment.role == "validates"));
-        assert!(!rendered.contains("\ndata: "));
-        assert!(!rendered.contains("\noutput:"));
-        assert!(rendered.contains("evidence_type: \"validation\""));
-        assert!(rendered.contains("agent_identity: \"legacy agent\""));
-        assert!(rendered.contains("## Stdout\n\nBytes: 25\nTruncated: no"));
-        assert!(!rendered.contains("type: \"validates\""));
-        assert!(parse_domain_record(&rendered, &path, spec).is_ok());
+        let error = parse_domain_record(text, &path, spec).unwrap_err();
+        assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
     #[test]
@@ -3900,7 +3925,7 @@ Legacy evidence summary.
     }
 
     #[test]
-    fn legacy_mission_data_record_loads_into_typed_sections_and_relationships() {
+    fn mission_record_rejects_data_front_matter() {
         let spec = canonical_record_kind("mission").unwrap();
         let path = canonical_record_path(spec, "atelier-legd").unwrap();
         let text = r#"---
@@ -3937,40 +3962,8 @@ Legacy intent.
 
 Legacy missions used free-form body headings.
 "#;
-        let parsed = parse_domain_record(text, &path, spec).unwrap();
-        let rendered = render_domain_record(&parsed).unwrap();
-
-        assert_eq!(parsed.record.data_json, MISSION_EMPTY_DATA_JSON);
-        assert!(parsed
-            .record
-            .body
-            .as_deref()
-            .unwrap()
-            .contains("## Constraints\n\n- Keep scope focused."));
-        assert!(parsed.relationships.attachments.iter().any(|attachment| {
-            attachment.kind == "plan"
-                && attachment.id == "atelier-plan"
-                && attachment.role == "planned_by"
-        }));
-        assert!(parsed.relationships.relates.iter().any(|relation| {
-            relation.kind == "issue"
-                && relation.id == "atelier-work"
-                && relation.relation_type == "advances"
-        }));
-        assert!(parsed.relationships.relates.iter().any(|relation| {
-            relation.kind == "issue"
-                && relation.id == "atelier-vlid"
-                && relation.relation_type == "validates"
-        }));
-        assert!(parsed.relationships.relates.iter().any(|relation| {
-            relation.kind == "evidence"
-                && relation.id == "atelier-proof"
-                && relation.relation_type == "validates"
-        }));
-        assert!(!rendered.contains("\ndata: "));
-        assert!(rendered.contains("## Intent\n\nLegacy intent."));
-        assert!(rendered.contains("### Problem\n\nLegacy missions used free-form body headings."));
-        assert!(parse_domain_record(&rendered, &path, spec).is_ok());
+        let error = parse_domain_record(text, &path, spec).unwrap_err();
+        assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
     #[test]

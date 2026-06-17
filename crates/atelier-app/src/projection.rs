@@ -13,7 +13,7 @@ pub fn refresh_after_canonical_write(state_dir: &Path, db_path: &Path) -> Result
             state_dir.display()
         )
     })?;
-    super::rebuild::refresh_projection_preserving_runtime(state_dir, db_path).with_context(|| {
+    super::rebuild::refresh_projection(state_dir, db_path).with_context(|| {
         format!(
             "Canonical write succeeded but projection refresh failed for {}",
             state_dir.display()

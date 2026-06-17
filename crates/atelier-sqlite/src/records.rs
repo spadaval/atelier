@@ -1,10 +1,12 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::params;
 
 use super::{parse_datetime, validate_link_type, validate_record_kind, Database};
 use crate::record_id;
-use atelier_core::{DomainRecord, RecordLink};
+use atelier_core::{
+    DomainRecord, EvidenceRecordData, MilestoneRecordData, PlanRecordData, RecordLink,
+};
 use atelier_records as record_store;
 
 impl Database {
@@ -13,45 +15,177 @@ impl Database {
         kind: &str,
         title: &str,
         status: &str,
-        body: Option<&str>,
-        data_json: &str,
+        _body: Option<&str>,
+        _data_json: &str,
     ) -> Result<String> {
         record_store::validate_canonical_record_kind(kind)?;
-        let _: serde_json::Value = serde_json::from_str(data_json)?;
         let id = record_id::allocate_issue_id(|candidate| Ok(self.record_exists(candidate)?))?;
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO records (id, kind, title, status, body, data_json, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-            params![id, kind, title, status, body, data_json, now],
+            "INSERT INTO records (kind, id, title, status, created_at, updated_at, source_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5, '')",
+            params![kind, id, title, status, now],
         )?;
         Ok(id)
     }
 
     pub fn insert_record_rebuild(&self, record: &DomainRecord) -> Result<()> {
+        self.insert_record_rebuild_from_source(record, "")
+    }
+
+    pub fn insert_record_rebuild_from_source(
+        &self,
+        record: &DomainRecord,
+        source_path: &str,
+    ) -> Result<()> {
         record_store::validate_canonical_record_kind(&record.kind)?;
-        let _: serde_json::Value = serde_json::from_str(&record.data_json)?;
         self.conn.execute(
-            "INSERT INTO records (id, kind, title, status, body, data_json, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO records (kind, id, title, status, created_at, updated_at, source_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                record.id,
                 record.kind,
+                record.id,
                 record.title,
                 record.status,
-                record.body,
-                record.data_json,
                 record.created_at.to_rfc3339(),
                 record.updated_at.to_rfc3339(),
+                source_path,
             ],
         )?;
+        self.insert_typed_record_projection(record)?;
         Ok(())
+    }
+
+    pub fn replace_record(&self, record: &DomainRecord, source_path: &str) -> Result<()> {
+        self.transaction(|| {
+            self.remove_record(&record.kind, &record.id)?;
+            self.insert_record_rebuild_from_source(record, source_path)
+        })
+    }
+
+    pub fn remove_record(&self, kind: &str, id: &str) -> Result<()> {
+        validate_record_kind(kind)?;
+        record_id::validate_record_id(id)?;
+        self.conn.execute(
+            "DELETE FROM record_links
+             WHERE (source_kind = ?1 AND source_id = ?2)
+                OR (target_kind = ?1 AND target_id = ?2)",
+            params![kind, id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM record_labels WHERE kind = ?1 AND id = ?2",
+            params![kind, id],
+        )?;
+        match kind {
+            "evidence" => {
+                self.conn
+                    .execute("DELETE FROM evidence WHERE id = ?1", params![id])?;
+            }
+            "plan" => {
+                self.conn
+                    .execute("DELETE FROM plans WHERE id = ?1", params![id])?;
+            }
+            "milestone" => {
+                self.conn
+                    .execute("DELETE FROM milestones WHERE id = ?1", params![id])?;
+            }
+            _ => {}
+        }
+        self.conn.execute(
+            "DELETE FROM records WHERE kind = ?1 AND id = ?2",
+            params![kind, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_projected_record(&self, kind: &str, id: &str) -> Result<()> {
+        validate_record_kind(kind)?;
+        record_id::validate_record_id(id)?;
+        if kind == "issue" {
+            self.conn
+                .execute("DELETE FROM labels WHERE issue_id = ?1", params![id])?;
+            self.conn.execute(
+                "DELETE FROM dependencies WHERE blocker_id = ?1 OR blocked_id = ?1",
+                params![id],
+            )?;
+            self.conn.execute(
+                "DELETE FROM relations WHERE issue_id_1 = ?1 OR issue_id_2 = ?1",
+                params![id],
+            )?;
+            self.conn.execute(
+                "DELETE FROM record_links
+                 WHERE (source_kind = 'issue' AND source_id = ?1)
+                    OR (target_kind = 'issue' AND target_id = ?1)",
+                params![id],
+            )?;
+            self.conn
+                .execute("DELETE FROM issues WHERE id = ?1", params![id])?;
+        } else {
+            self.remove_record(kind, id)?;
+        }
+        Ok(())
+    }
+
+    pub fn replace_record_labels(&self, kind: &str, id: &str, labels: &[String]) -> Result<()> {
+        validate_record_kind(kind)?;
+        record_id::validate_record_id(id)?;
+        self.conn.execute(
+            "DELETE FROM record_labels WHERE kind = ?1 AND id = ?2",
+            params![kind, id],
+        )?;
+        for label in labels {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO record_labels (kind, id, label)
+                 VALUES (?1, ?2, ?3)",
+                params![kind, id, label],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn replace_outgoing_links(&self, kind: &str, id: &str, links: &[RecordLink]) -> Result<()> {
+        validate_record_kind(kind)?;
+        record_id::validate_record_id(id)?;
+        self.conn.execute(
+            "DELETE FROM record_links WHERE source_kind = ?1 AND source_id = ?2",
+            params![kind, id],
+        )?;
+        for link in links {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO record_links
+                 (source_kind, source_id, target_kind, target_id, relation_type, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    link.source_kind,
+                    link.source_id,
+                    link.target_kind,
+                    link.target_id,
+                    link.relation_type,
+                    link.created_at.to_rfc3339(),
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn records_linking_to(&self, kind: &str, id: &str) -> Result<Vec<RecordLink>> {
+        validate_record_kind(kind)?;
+        record_id::validate_record_id(id)?;
+        let mut stmt = self.conn.prepare(
+            "SELECT source_kind, source_id, target_kind, target_id, relation_type, created_at
+             FROM record_links
+             WHERE target_kind = ?1 AND target_id = ?2
+             ORDER BY source_kind, source_id, relation_type",
+        )?;
+        let rows = stmt.query_map(params![kind, id], link_from_row)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub fn get_record(&self, kind: &str, id: &str) -> Result<Option<DomainRecord>> {
         validate_record_kind(kind)?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, kind, title, status, body, data_json, created_at, updated_at
+            "SELECT id, kind, title, status, created_at, updated_at
              FROM records WHERE kind = ?1 AND id = ?2",
         )?;
         let record = stmt.query_row(params![kind, id], record_from_row).ok();
@@ -96,7 +230,7 @@ impl Database {
         let mut records = Vec::new();
         if let Some(status) = status {
             let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, body, data_json, created_at, updated_at
+                "SELECT id, kind, title, status, created_at, updated_at
                  FROM records WHERE kind = ?1 AND status = ?2 ORDER BY id",
             )?;
             let rows = stmt.query_map(params![kind, status], record_from_row)?;
@@ -105,7 +239,7 @@ impl Database {
             }
         } else {
             let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, body, data_json, created_at, updated_at
+                "SELECT id, kind, title, status, created_at, updated_at
                  FROM records WHERE kind = ?1 ORDER BY id",
             )?;
             let rows = stmt.query_map(params![kind], record_from_row)?;
@@ -172,6 +306,60 @@ impl Database {
     }
 }
 
+impl Database {
+    fn insert_typed_record_projection(&self, record: &DomainRecord) -> Result<()> {
+        match record.kind.as_str() {
+            "evidence" => {
+                let data: EvidenceRecordData = serde_json::from_str(&record.data_json)
+                    .with_context(|| {
+                        format!("invalid evidence projection data for {}", record.id)
+                    })?;
+                self.conn.execute(
+                    "INSERT INTO evidence
+                     (id, evidence_type, captured_at, command, path, uri, proof_scope,
+                      agent_identity, independence_level, exit_code, exit_status, success, spawn_error)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                    params![
+                        record.id,
+                        data.evidence_type,
+                        data.captured_at.to_rfc3339(),
+                        data.command,
+                        data.path,
+                        data.uri,
+                        data.proof_scope,
+                        data.agent_identity,
+                        data.independence_level,
+                        data.exit_code,
+                        data.exit_status,
+                        data.success.map(|value| if value { 1_i64 } else { 0_i64 }),
+                        data.spawn_error,
+                    ],
+                )?;
+            }
+            "plan" => {
+                let data: PlanRecordData = serde_json::from_str(&record.data_json)
+                    .with_context(|| format!("invalid plan projection data for {}", record.id))?;
+                self.conn.execute(
+                    "INSERT INTO plans (id, revision, owner) VALUES (?1, ?2, ?3)",
+                    params![record.id, data.revision, data.owner],
+                )?;
+            }
+            "milestone" => {
+                let data: MilestoneRecordData = serde_json::from_str(&record.data_json)
+                    .with_context(|| {
+                        format!("invalid milestone projection data for {}", record.id)
+                    })?;
+                self.conn.execute(
+                    "INSERT INTO milestones (id, desired_state) VALUES (?1, ?2)",
+                    params![record.id, data.desired_state],
+                )?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
 fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
     validate_record_kind(kind)?;
     record_id::validate_record_id(id)?;
@@ -192,10 +380,10 @@ fn record_from_row(row: &rusqlite::Row) -> rusqlite::Result<DomainRecord> {
         kind: row.get(1)?,
         title: row.get(2)?,
         status: row.get(3)?,
-        body: row.get(4)?,
-        data_json: row.get(5)?,
-        created_at: parse_datetime(row.get::<_, String>(6)?),
-        updated_at: parse_datetime(row.get::<_, String>(7)?),
+        body: None,
+        data_json: "{}".to_string(),
+        created_at: parse_datetime(row.get::<_, String>(4)?),
+        updated_at: parse_datetime(row.get::<_, String>(5)?),
     })
 }
 

@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use atelier_core::Issue;
 use atelier_records as record_store;
 
-const SCHEMA_VERSION: i32 = 18;
+const SCHEMA_VERSION: i32 = 20;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -52,12 +52,13 @@ pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
     "dependencies",
     "relations",
     "records",
+    "record_labels",
     "record_links",
-    "projection_index_sources",
+    "evidence",
+    "plans",
+    "milestones",
+    "projection_sources",
 ];
-
-/// SQLite tables that hold local-only runtime state and may be reset by rebuild.
-pub const RUNTIME_STATE_TABLES: &[&str] = &[];
 
 /// Transitional tables retained for command compatibility during migration.
 pub const COMPATIBILITY_TABLES: &[&str] = &[];
@@ -320,6 +321,8 @@ impl Database {
         self.migrate_first_class_record_tables(version);
         self.drop_removed_runtime_tables(version);
         self.drop_local_only_tables(version);
+        self.drop_runtime_metadata(version);
+        self.rebuild_projection_index_schema(version);
         Ok(())
     }
 
@@ -347,13 +350,20 @@ impl Database {
                     kind TEXT NOT NULL,
                     title TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'open',
-                    body TEXT,
-                    data_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    source_path TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
                 CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+                CREATE INDEX IF NOT EXISTS idx_records_source_path ON records(source_path);
+
+                CREATE TABLE IF NOT EXISTS record_labels (
+                    kind TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    PRIMARY KEY (kind, id, label)
+                );
 
                 CREATE TABLE IF NOT EXISTS record_links (
                     source_kind TEXT NOT NULL,
@@ -367,6 +377,30 @@ impl Database {
                 CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
                 CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
 
+                CREATE TABLE IF NOT EXISTS evidence (
+                    id TEXT PRIMARY KEY,
+                    evidence_type TEXT,
+                    captured_at TEXT,
+                    command TEXT,
+                    path TEXT,
+                    uri TEXT,
+                    proof_scope TEXT,
+                    agent_identity TEXT,
+                    independence_level TEXT,
+                    exit_code INTEGER,
+                    exit_status TEXT,
+                    success INTEGER,
+                    spawn_error TEXT
+                );
+                CREATE TABLE IF NOT EXISTS plans (
+                    id TEXT PRIMARY KEY,
+                    revision INTEGER,
+                    owner TEXT
+                );
+                CREATE TABLE IF NOT EXISTS milestones (
+                    id TEXT PRIMARY KEY,
+                    desired_state TEXT
+                );
                 "#,
             );
         }
@@ -401,6 +435,87 @@ impl Database {
                 DROP TABLE IF EXISTS sessions;
                 DROP TABLE IF EXISTS sessions_new;
                 DROP TABLE IF EXISTS work_associations;
+                "#,
+            );
+        }
+    }
+
+    fn drop_runtime_metadata(&self, version: i32) {
+        if version < 19 {
+            self.migrate("DROP TABLE IF EXISTS runtime_metadata");
+        }
+    }
+
+    fn rebuild_projection_index_schema(&self, version: i32) {
+        if version < 20 {
+            self.migrate_batch(
+                r#"
+                DROP TABLE IF EXISTS projection_index_sources;
+                DROP TABLE IF EXISTS projection_sources;
+                DROP TABLE IF EXISTS records;
+                DROP TABLE IF EXISTS record_labels;
+                DROP TABLE IF EXISTS record_links;
+                DROP TABLE IF EXISTS evidence;
+                DROP TABLE IF EXISTS plans;
+                DROP TABLE IF EXISTS milestones;
+
+                CREATE TABLE records (
+                    kind TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    PRIMARY KEY (kind, id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_records_kind ON records(kind);
+                CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
+                CREATE INDEX IF NOT EXISTS idx_records_source_path ON records(source_path);
+
+                CREATE TABLE record_labels (
+                    kind TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    PRIMARY KEY (kind, id, label)
+                );
+
+                CREATE TABLE record_links (
+                    source_kind TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    relation_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (source_kind, source_id, target_kind, target_id, relation_type)
+                );
+                CREATE INDEX IF NOT EXISTS idx_record_links_source ON record_links(source_kind, source_id);
+                CREATE INDEX IF NOT EXISTS idx_record_links_target ON record_links(target_kind, target_id);
+
+                CREATE TABLE evidence (
+                    id TEXT PRIMARY KEY,
+                    evidence_type TEXT,
+                    captured_at TEXT,
+                    command TEXT,
+                    path TEXT,
+                    uri TEXT,
+                    proof_scope TEXT,
+                    agent_identity TEXT,
+                    independence_level TEXT,
+                    exit_code INTEGER,
+                    exit_status TEXT,
+                    success INTEGER,
+                    spawn_error TEXT
+                );
+                CREATE TABLE plans (
+                    id TEXT PRIMARY KEY,
+                    revision INTEGER,
+                    owner TEXT
+                );
+                CREATE TABLE milestones (
+                    id TEXT PRIMARY KEY,
+                    desired_state TEXT
+                );
                 "#,
             );
         }
@@ -620,20 +735,6 @@ impl Database {
             "#,
         )?;
         Ok(())
-    }
-
-    pub fn runtime_state_tables_available(&self) -> Result<bool> {
-        for table in RUNTIME_STATE_TABLES {
-            let exists: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                rusqlite::params![table],
-                |row| row.get(0),
-            )?;
-            if exists == 0 {
-                return Ok(false);
-            }
-        }
-        Ok(true)
     }
 }
 
@@ -883,16 +984,16 @@ impl ProjectionIndex {
     }
 
     pub fn replace_sources(&self, sources: &[ProjectionSource]) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM projection_index_sources", [])?;
+        self.conn.execute("DELETE FROM projection_sources", [])?;
         for source in sources {
             self.conn.execute(
-                "INSERT INTO projection_index_sources (path, modified_unix_millis, len)
-                 VALUES (?1, ?2, ?3)",
+                "INSERT INTO projection_sources
+                 (path, kind, id, size_bytes, modified_micros, sha256, indexed_at)
+                 VALUES (?1, '', '', ?2, ?3, '', '')",
                 params![
                     source.path.to_string_lossy(),
-                    source.modified_unix_millis,
-                    source.len as i64
+                    source.len as i64,
+                    source.modified_unix_millis
                 ],
             )?;
         }
@@ -901,7 +1002,7 @@ impl ProjectionIndex {
 
     pub fn freshness(&self) -> Result<Vec<Freshness>> {
         let mut stmt = self.conn.prepare(
-            "SELECT path, modified_unix_millis, len FROM projection_index_sources ORDER BY path ASC",
+            "SELECT path, modified_micros, size_bytes FROM projection_sources ORDER BY path ASC",
         )?;
         let sources = stmt
             .query_map([], |row| {
@@ -953,10 +1054,14 @@ impl ProjectionIndex {
                 label TEXT NOT NULL,
                 PRIMARY KEY (issue_id, label)
             );
-            CREATE TABLE IF NOT EXISTS projection_index_sources (
+            CREATE TABLE IF NOT EXISTS projection_sources (
                 path TEXT PRIMARY KEY,
-                modified_unix_millis INTEGER NOT NULL,
-                len INTEGER NOT NULL
+                kind TEXT NOT NULL,
+                id TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                modified_micros INTEGER,
+                sha256 TEXT NOT NULL,
+                indexed_at TEXT NOT NULL
             );
             "#,
         )?;
@@ -984,11 +1089,10 @@ fn modified_unix_millis(metadata: &std::fs::Metadata) -> Result<i64> {
         .as_millis() as i64)
 }
 
-/// Table ownership in the single rebuildable runtime database.
+/// Table ownership in the rebuildable projection database.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TableOwner {
     Projection,
-    Runtime,
 }
 
 pub const PROJECTION_TABLES: &[&str] = &[
@@ -997,17 +1101,17 @@ pub const PROJECTION_TABLES: &[&str] = &[
     "dependencies",
     "relations",
     "records",
+    "record_labels",
     "record_links",
-    "projection_index_sources",
+    "evidence",
+    "plans",
+    "milestones",
+    "projection_sources",
 ];
-
-pub const RUNTIME_TABLES: &[&str] = &["runtime_metadata"];
 
 pub fn table_owner(table: &str) -> Option<TableOwner> {
     if PROJECTION_TABLES.contains(&table) {
         Some(TableOwner::Projection)
-    } else if RUNTIME_TABLES.contains(&table) {
-        Some(TableOwner::Runtime)
     } else {
         None
     }
@@ -1020,15 +1124,32 @@ mod projection_index_api_tests {
     #[test]
     fn schema_tables_have_explicit_ownership() {
         assert_eq!(table_owner("issues"), Some(TableOwner::Projection));
-        assert_eq!(table_owner("runtime_metadata"), Some(TableOwner::Runtime));
     }
 
     #[test]
     fn removed_tables_are_not_part_of_target_schema() {
+        assert_eq!(table_owner("runtime_metadata"), None);
         assert_eq!(table_owner("sessions"), None);
         assert_eq!(table_owner("work_associations"), None);
         assert_eq!(table_owner("comments"), None);
         assert_eq!(table_owner("claims"), None);
+    }
+
+    #[test]
+    fn opened_database_does_not_create_runtime_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(count, 0);
     }
 
     #[test]

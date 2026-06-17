@@ -8,7 +8,7 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use atelier_core::Issue;
+use atelier_core::{Issue, RecordLink};
 use atelier_records as record_store;
 use atelier_records::activity::IssueActivity;
 use atelier_records::{
@@ -38,21 +38,88 @@ struct RebuildProjection {
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(state_dir, db_path, &rebuild, None)?;
+    write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!("Rebuilt {} from {}", db_path.display(), state_dir.display());
     Ok(())
 }
 
-pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -> Result<()> {
+pub fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(state_dir, db_path, &rebuild, Some(db_path))?;
+    write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!(
         "Refreshed projection in {} from {}",
         db_path.display(),
         state_dir.display()
     );
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IncrementalRepair {
+    Repaired,
+    NeedsFullRebuild,
+}
+
+pub fn repair_incremental(
+    db: &Database,
+    state_dir: &Path,
+    report: &projection_index::FreshnessReport,
+) -> Result<IncrementalRepair> {
+    if report.problems.is_empty() {
+        return Ok(IncrementalRepair::Repaired);
+    }
+    if report.problems.len() > 32 {
+        return Ok(IncrementalRepair::NeedsFullRebuild);
+    }
+
+    let stored_sources = db.projection_sources()?;
+    let stored_by_path = stored_sources
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let store = record_store::RecordStore::new(state_dir);
+
+    db.transaction(|| {
+        for problem in &report.problems {
+            match problem {
+                projection_index::FreshnessProblem::MissingMetadata { .. } => {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                }
+                projection_index::FreshnessProblem::MissingSource { path } => {
+                    let Some(source) = stored_by_path.get(path.as_str()) else {
+                        return Ok(IncrementalRepair::NeedsFullRebuild);
+                    };
+                    db.remove_projected_record(&source.kind, &source.id)?;
+                    db.remove_projection_source(path)?;
+                }
+                projection_index::FreshnessProblem::ChangedSource { path }
+                | projection_index::FreshnessProblem::UnindexedSource { path } => {
+                    let Some(spec) = first_class_spec_for_path(path) else {
+                        return Ok(IncrementalRepair::NeedsFullRebuild);
+                    };
+                    let relative = Path::new(path);
+                    let record = store.load_domain_record(relative, spec).with_context(|| {
+                        format!(
+                            "Failed to parse changed canonical record {}",
+                            display_state_path(relative)
+                        )
+                    })?;
+                    db.replace_record(&record.record, path)?;
+                    db.replace_record_labels(
+                        &record.record.kind,
+                        &record.record.id,
+                        &record.labels,
+                    )?;
+                    let links = outgoing_record_links(&record);
+                    db.replace_outgoing_links(&record.record.kind, &record.record.id, &links)?;
+                    let source = projection_index::source_entry_for_path(state_dir, path)?;
+                    db.upsert_projection_source(&source)?;
+                }
+            }
+        }
+        Ok(IncrementalRepair::Repaired)
+    })
 }
 
 struct ProjectionRebuildLock {
@@ -575,7 +642,6 @@ fn write_rebuilt_database(
     state_dir: &Path,
     db_path: &Path,
     rebuild: &RebuildProjection,
-    preserve_runtime_from: Option<&Path>,
 ) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
         anyhow!(
@@ -621,7 +687,12 @@ fn write_rebuilt_database(
                 db.add_typed_relation(&source, &target, relation_type)?;
             }
             for record in &rebuild.records {
-                db.insert_record_rebuild(&record.record)?;
+                let spec = record_store::canonical_record_kind(&record.record.kind)?;
+                let source_path = record_store::canonical_record_path(spec, &record.record.id)?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                db.insert_record_rebuild_from_source(&record.record, &source_path)?;
+                db.replace_record_labels(&record.record.kind, &record.record.id, &record.labels)?;
             }
             for (source_kind, source_id, target_kind, target_id, relation_type) in
                 &rebuild.record_links
@@ -633,9 +704,6 @@ fn write_rebuilt_database(
                     target_id,
                     relation_type,
                 )?;
-            }
-            if let Some(source_db_path) = preserve_runtime_from.filter(|path| path.exists()) {
-                copy_runtime_state(&db, source_db_path)?;
             }
             Ok(())
         })?;
@@ -652,6 +720,52 @@ fn write_rebuilt_database(
     Ok(())
 }
 
+fn first_class_spec_for_path(path: &str) -> Option<&'static record_store::RecordKindSpec> {
+    let first = Path::new(path)
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())?;
+    record_store::FIRST_CLASS_RECORD_KINDS
+        .iter()
+        .find(|spec| spec.canonical_dir == Some(first))
+}
+
+fn outgoing_record_links(record: &CanonicalDomainRecord) -> Vec<RecordLink> {
+    let created_at = chrono::Utc::now();
+    let mut links = Vec::new();
+    for child in &record.relationships.children {
+        links.push(RecordLink {
+            source_kind: record.record.kind.clone(),
+            source_id: record.record.id.clone(),
+            target_kind: child.kind.clone(),
+            target_id: child.id.clone(),
+            relation_type: child_relation_type(&child.kind).to_string(),
+            created_at,
+        });
+    }
+    for attachment in &record.relationships.attachments {
+        links.push(RecordLink {
+            source_kind: record.record.kind.clone(),
+            source_id: record.record.id.clone(),
+            target_kind: attachment.kind.clone(),
+            target_id: attachment.id.clone(),
+            relation_type: attachment.role.clone(),
+            created_at,
+        });
+    }
+    for relation in &record.relationships.relates {
+        links.push(RecordLink {
+            source_kind: record.record.kind.clone(),
+            source_id: record.record.id.clone(),
+            target_kind: relation.kind.clone(),
+            target_id: relation.id.clone(),
+            relation_type: relation.relation_type.clone(),
+            created_at,
+        });
+    }
+    links
+}
+
 fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
     let file_name = db_path
         .file_name()
@@ -666,19 +780,6 @@ fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
         process::id(),
         nanos
     )))
-}
-
-fn copy_runtime_state(db: &Database, source_db_path: &Path) -> Result<()> {
-    let source = source_db_path.to_string_lossy();
-    db.conn
-        .execute("ATTACH DATABASE ?1 AS runtime_src", [&source.as_ref()])
-        .with_context(|| {
-            format!(
-                "Failed to attach runtime state {}",
-                source_db_path.display()
-            )
-        })?;
-    Ok(())
 }
 
 fn collect_record_relationship_links(
@@ -967,7 +1068,9 @@ mod tests {
 
     #[test]
     fn rebuild_round_trips_canonical_domain_records() {
-        let (db, dir) = setup_test_db();
+        let (_db, dir) = setup_test_db();
+        let state_dir = dir.path().join(".atelier");
+        let store = record_store::RecordStore::new(&state_dir);
         let mission_sections = record_store::mission_sections_from_inputs(
             "Mission",
             Some("Mission body"),
@@ -976,46 +1079,52 @@ mod tests {
             Vec::new(),
         );
         let mission_body = record_store::render_mission_sections(&mission_sections);
-        let mission_id = db
-            .create_record(
+        let mission_id = store
+            .create_domain_record(
                 "mission",
                 "Mission",
                 "ready",
                 Some(&mission_body),
                 record_store::MISSION_EMPTY_DATA_JSON,
             )
-            .unwrap();
-        let plan_id = db
-            .create_record(
+            .unwrap()
+            .record
+            .id;
+        let plan_id = store
+            .create_domain_record(
                 "plan",
                 "Plan",
                 "open",
                 Some("Plan body"),
                 r#"{"revision":1,"revisions":[{"revision":1,"reason":"initial","body":"Plan body"}]}"#,
             )
-            .unwrap();
-        let evidence_id = db
-            .create_record(
+            .unwrap()
+            .record
+            .id;
+        let evidence_id = store
+            .create_domain_record(
                 "evidence",
                 "Evidence",
                 "pass",
                 Some("Evidence body"),
                 r#"{"kind":"test","captured_at":"2026-06-15T12:00:00Z","result":"pass"}"#,
             )
+            .unwrap()
+            .record
+            .id;
+        store
+            .add_attachment_relationship("mission", &mission_id, "plan", &plan_id, "planned_by")
             .unwrap();
-        db.add_record_link("mission", &mission_id, "plan", &plan_id, "planned_by")
+        store
+            .add_attachment_relationship(
+                "evidence",
+                &evidence_id,
+                "mission",
+                &mission_id,
+                "validates",
+            )
             .unwrap();
-        db.add_record_link(
-            "evidence",
-            &evidence_id,
-            "mission",
-            &mission_id,
-            "validates",
-        )
-        .unwrap();
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
         let mission_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let mission_markdown = fs::read_to_string(&mission_path).unwrap();
         assert!(mission_markdown.contains("schema: \"atelier.mission\""));
@@ -1039,16 +1148,7 @@ mod tests {
 
         let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
-        assert!(mission
-            .body
-            .as_deref()
-            .unwrap()
-            .contains("## Intent\n\nMission body"));
-        assert!(mission
-            .body
-            .as_deref()
-            .unwrap()
-            .contains("## Constraints\n\n- keep contract"));
+        assert_eq!(mission.body, None);
         assert_eq!(mission.data_json, "{}");
         assert!(rebuilt.get_record("plan", &plan_id).unwrap().is_some());
         assert!(rebuilt
@@ -1094,6 +1194,9 @@ mod tests {
     fn rebuild_rejects_global_id_collision_across_record_kinds() {
         let (db, dir) = setup_test_db();
         let issue_id = db.create_issue("Issue", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        let store = record_store::RecordStore::new(&state_dir);
         let mission_sections = record_store::mission_sections_from_inputs(
             "Mission",
             Some("Mission body"),
@@ -1102,18 +1205,18 @@ mod tests {
             Vec::new(),
         );
         let mission_body = record_store::render_mission_sections(&mission_sections);
-        let mission_id = db
-            .create_record(
+        let mission_id = store
+            .create_domain_record(
                 "mission",
                 "Mission",
                 "ready",
                 Some(&mission_body),
                 record_store::MISSION_EMPTY_DATA_JSON,
             )
-            .unwrap();
+            .unwrap()
+            .record
+            .id;
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
         let old_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let new_path = state_dir.join("missions").join(format!("{issue_id}.md"));
         let mission_markdown = fs::read_to_string(&old_path).unwrap().replace(
@@ -1142,7 +1245,7 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_recreates_canonical_projection_without_runtime_state() {
+    fn rebuild_recreates_canonical_projection_without_local_only_state() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Runtime reset", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier");
@@ -1153,13 +1256,12 @@ mod tests {
         let rebuilt = Database::open(&db_path).unwrap();
 
         assert!(rebuilt.require_issue(&id).is_ok());
-        assert!(rebuilt.runtime_state_tables_available().unwrap());
         assert!(rebuilt.get_current_session().unwrap().is_none());
         assert!(rebuilt.get_active_work_association().unwrap().is_none());
     }
 
     #[test]
-    fn refresh_projection_rebuilds_without_runtime_state() {
+    fn refresh_projection_rebuilds_without_local_only_state() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::create_dir_all(db_path.parent().unwrap()).unwrap();
@@ -1172,7 +1274,7 @@ mod tests {
 
         drop(db);
 
-        refresh_projection_preserving_runtime(&state_dir, &db_path).unwrap();
+        refresh_projection(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
 
         assert!(refreshed.require_issue(&id).is_ok());

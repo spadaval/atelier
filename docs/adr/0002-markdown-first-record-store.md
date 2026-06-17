@@ -34,9 +34,9 @@ Atelier will use a Markdown-first persistence architecture:
   Control inputs. It is a metadata index for locating, sorting, filtering,
   traversing, and checking records, not a complete copy of Markdown bodies or
   rich record payloads.
-- `RuntimeState` owns local-only `.atelier/runtime/` and `.atelier/cache/`
-  state such as current work/session association, local agent identity, locks,
-  diagnostics, and caches.
+- Local diagnostics, locks, and UI caches are ignored local files outside the
+  canonical record tree. They must not be stored as tracker facts in SQLite or
+  define current work.
 
 Successful canonical mutations write Markdown records first, then refresh or
 mark stale the projection index. Normal durability must not depend on a later
@@ -54,8 +54,8 @@ the ordinary step that makes successful mutations durable.
 ## Consequences
 
 - Markdown record files are the source of truth for canonical project records.
-- SQLite remains the fast query and runtime engine, but canonical records must
-  be rebuildable from tracked `.atelier/` records.
+- SQLite remains the fast query engine, but every SQLite tracker fact must be
+  rebuildable from tracked `.atelier/` records.
 - Command implementations must avoid adding new SQLite-first canonical mutation
   paths.
 - Projection freshness becomes part of query correctness, not just handoff
