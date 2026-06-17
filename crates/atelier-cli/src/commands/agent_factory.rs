@@ -12,7 +12,7 @@ use crate::commands::issue_workflow::{
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Comment, DomainRecord, Issue};
+use atelier_core::{Comment, EvidenceRecord, Issue, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
@@ -642,7 +642,7 @@ fn render_transition_readiness(
     Ok(())
 }
 
-fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<DomainRecord>> {
+fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<EvidenceRecord>> {
     let mut evidence = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
@@ -656,14 +656,14 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Domai
             None
         };
         if let Some(evidence_id) = evidence_id {
-            evidence.push(
-                canonical_evidence_record(&evidence_id)?
-                    .unwrap_or(db.require_record("evidence", &evidence_id)?),
-            );
+            db.require_record("evidence", &evidence_id)?;
+            if let Some(record) = canonical_evidence_record(&evidence_id)? {
+                evidence.push(record);
+            }
         }
     }
-    evidence.sort_by(|a, b| a.id.cmp(&b.id));
-    evidence.dedup_by(|a, b| a.id == b.id);
+    evidence.sort_by(|a, b| a.header.id.cmp(&b.header.id));
+    evidence.dedup_by(|a, b| a.header.id == b.header.id);
     Ok(evidence)
 }
 
@@ -687,7 +687,7 @@ pub(crate) fn issue_evidence_gate_status(
 fn issue_evidence_gate_status_from_records(
     issue: &Issue,
     sections: Option<&IssueSections>,
-    evidence: &[DomainRecord],
+    evidence: &[EvidenceRecord],
 ) -> EvidenceGateStatus {
     if evidence.is_empty() {
         return evidence_gate(false, "no validating evidence link found");
@@ -696,13 +696,9 @@ fn issue_evidence_gate_status_from_records(
     let _ = issue;
     let _ = sections;
     let passing = evidence.iter().any(|record| {
-        serde_json::from_str::<atelier_core::EvidenceRecordData>(&record.data_json)
-            .map(|data| {
-                data.success.unwrap_or_else(|| {
-                    !matches!(record.status.as_str(), "blocked" | "fail" | "failed")
-                })
-            })
-            .unwrap_or_else(|_| !matches!(record.status.as_str(), "blocked" | "fail" | "failed"))
+        record.data.success.unwrap_or_else(|| {
+            !matches!(record.header.status.as_str(), "blocked" | "fail" | "failed")
+        })
     });
     if passing {
         evidence_gate(true, "passing validating evidence is linked")
@@ -711,15 +707,15 @@ fn issue_evidence_gate_status_from_records(
     }
 }
 
-fn canonical_evidence_record(id: &str) -> Result<Option<DomainRecord>> {
+fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
     let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
         return Ok(None);
     };
     let store = RecordStore::new(state_dir);
-    Ok(store
-        .load_domain_record_by_id("evidence", id)
-        .map(|record| Some(record.record))
-        .unwrap_or(None))
+    Ok(match store.load_record_by_id("evidence", id) {
+        Ok(Record::Evidence(record)) => Some(record),
+        Ok(_) | Err(_) => None,
+    })
 }
 
 fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {

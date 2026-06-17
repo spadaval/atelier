@@ -1,23 +1,25 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 use rusqlite::params;
 
 use super::{parse_datetime, validate_link_type, validate_record_kind, Database};
 use crate::record_id;
-use atelier_core::{
-    DomainRecord, EvidenceRecordData, MilestoneRecordData, PlanRecordData, RecordLink,
-};
+use atelier_core::{Record, RecordLink};
 use atelier_records as record_store;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordSummary {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub source_path: String,
+}
+
 impl Database {
-    pub fn create_record(
-        &self,
-        kind: &str,
-        title: &str,
-        status: &str,
-        _body: Option<&str>,
-        _data_json: &str,
-    ) -> Result<String> {
+    pub fn create_record(&self, kind: &str, title: &str, status: &str) -> Result<String> {
         record_store::validate_canonical_record_kind(kind)?;
         let id = record_id::allocate_issue_id(|candidate| Ok(self.record_exists(candidate)?))?;
         let now = Utc::now().to_rfc3339();
@@ -29,26 +31,27 @@ impl Database {
         Ok(id)
     }
 
-    pub fn insert_record_rebuild(&self, record: &DomainRecord) -> Result<()> {
+    pub fn insert_record_rebuild(&self, record: &Record) -> Result<()> {
         self.insert_record_rebuild_from_source(record, "")
     }
 
     pub fn insert_record_rebuild_from_source(
         &self,
-        record: &DomainRecord,
+        record: &Record,
         source_path: &str,
     ) -> Result<()> {
-        record_store::validate_canonical_record_kind(&record.kind)?;
+        let header = record.header();
+        record_store::validate_canonical_record_kind(&header.kind)?;
         self.conn.execute(
             "INSERT INTO records (kind, id, title, status, created_at, updated_at, source_path)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                record.kind,
-                record.id,
-                record.title,
-                record.status,
-                record.created_at.to_rfc3339(),
-                record.updated_at.to_rfc3339(),
+                header.kind,
+                header.id,
+                header.title,
+                header.status,
+                header.created_at.to_rfc3339(),
+                header.updated_at.to_rfc3339(),
                 source_path,
             ],
         )?;
@@ -56,9 +59,9 @@ impl Database {
         Ok(())
     }
 
-    pub fn replace_record(&self, record: &DomainRecord, source_path: &str) -> Result<()> {
+    pub fn replace_record(&self, record: &Record, source_path: &str) -> Result<()> {
         self.transaction(|| {
-            self.remove_record(&record.kind, &record.id)?;
+            self.remove_record(&record.header().kind, &record.header().id)?;
             self.insert_record_rebuild_from_source(record, source_path)
         })
     }
@@ -182,10 +185,10 @@ impl Database {
             .map_err(Into::into)
     }
 
-    pub fn get_record(&self, kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+    pub fn get_record(&self, kind: &str, id: &str) -> Result<Option<RecordSummary>> {
         validate_record_kind(kind)?;
         let mut stmt = self.conn.prepare(
-            "SELECT id, kind, title, status, created_at, updated_at
+            "SELECT kind, id, title, status, created_at, updated_at, source_path
              FROM records WHERE kind = ?1 AND id = ?2",
         )?;
         let record = stmt.query_row(params![kind, id], record_from_row).ok();
@@ -220,17 +223,17 @@ impl Database {
         Ok(kind)
     }
 
-    pub fn require_record(&self, kind: &str, id: &str) -> Result<DomainRecord> {
+    pub fn require_record(&self, kind: &str, id: &str) -> Result<RecordSummary> {
         self.get_record(kind, id)?
             .ok_or_else(|| anyhow::anyhow!("{} record {} not found", kind, id))
     }
 
-    pub fn list_records(&self, kind: &str, status: Option<&str>) -> Result<Vec<DomainRecord>> {
+    pub fn list_records(&self, kind: &str, status: Option<&str>) -> Result<Vec<RecordSummary>> {
         validate_record_kind(kind)?;
         let mut records = Vec::new();
         if let Some(status) = status {
             let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, created_at, updated_at
+                "SELECT kind, id, title, status, created_at, updated_at, source_path
                  FROM records WHERE kind = ?1 AND status = ?2 ORDER BY id",
             )?;
             let rows = stmt.query_map(params![kind, status], record_from_row)?;
@@ -239,7 +242,7 @@ impl Database {
             }
         } else {
             let mut stmt = self.conn.prepare(
-                "SELECT id, kind, title, status, created_at, updated_at
+                "SELECT kind, id, title, status, created_at, updated_at, source_path
                  FROM records WHERE kind = ?1 ORDER BY id",
             )?;
             let rows = stmt.query_map(params![kind], record_from_row)?;
@@ -307,20 +310,17 @@ impl Database {
 }
 
 impl Database {
-    fn insert_typed_record_projection(&self, record: &DomainRecord) -> Result<()> {
-        match record.kind.as_str() {
-            "evidence" => {
-                let data: EvidenceRecordData = serde_json::from_str(&record.data_json)
-                    .with_context(|| {
-                        format!("invalid evidence projection data for {}", record.id)
-                    })?;
+    fn insert_typed_record_projection(&self, record: &Record) -> Result<()> {
+        match record {
+            Record::Evidence(record) => {
+                let data = &record.data;
                 self.conn.execute(
                     "INSERT INTO evidence
                      (id, evidence_type, captured_at, command, path, uri, proof_scope,
                       agent_identity, independence_level, exit_code, exit_status, success, spawn_error)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                     params![
-                        record.id,
+                        record.header.id,
                         data.evidence_type,
                         data.captured_at.to_rfc3339(),
                         data.command,
@@ -336,22 +336,18 @@ impl Database {
                     ],
                 )?;
             }
-            "plan" => {
-                let data: PlanRecordData = serde_json::from_str(&record.data_json)
-                    .with_context(|| format!("invalid plan projection data for {}", record.id))?;
+            Record::Plan(record) => {
+                let data = &record.data;
                 self.conn.execute(
                     "INSERT INTO plans (id, revision, owner) VALUES (?1, ?2, ?3)",
-                    params![record.id, data.revision, data.owner],
+                    params![record.header.id, data.revision, data.owner],
                 )?;
             }
-            "milestone" => {
-                let data: MilestoneRecordData = serde_json::from_str(&record.data_json)
-                    .with_context(|| {
-                        format!("invalid milestone projection data for {}", record.id)
-                    })?;
+            Record::Milestone(record) => {
+                let data = &record.data;
                 self.conn.execute(
                     "INSERT INTO milestones (id, desired_state) VALUES (?1, ?2)",
-                    params![record.id, data.desired_state],
+                    params![record.header.id, data.desired_state],
                 )?;
             }
             _ => {}
@@ -374,16 +370,15 @@ fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn record_from_row(row: &rusqlite::Row) -> rusqlite::Result<DomainRecord> {
-    Ok(DomainRecord {
-        id: row.get(0)?,
-        kind: row.get(1)?,
+fn record_from_row(row: &rusqlite::Row) -> rusqlite::Result<RecordSummary> {
+    Ok(RecordSummary {
+        kind: row.get(0)?,
+        id: row.get(1)?,
         title: row.get(2)?,
         status: row.get(3)?,
-        body: None,
-        data_json: "{}".to_string(),
         created_at: parse_datetime(row.get::<_, String>(4)?),
         updated_at: parse_datetime(row.get::<_, String>(5)?),
+        source_path: row.get(6)?,
     })
 }
 

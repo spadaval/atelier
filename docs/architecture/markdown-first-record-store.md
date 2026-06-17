@@ -104,7 +104,7 @@ Common front matter ownership for first-class records (`issue`, `mission`,
 | `schema`, `schema_version`, `id`, `title`, `status`, `created_at`, `updated_at`, `labels`, `relationships` | Required | Shared record identity, lifecycle, timestamps, labels, and typed links. |
 | Canonical file path | Derived | Computed from record kind plus `id`; it is never duplicated in front matter. |
 | Status category, ready/done grouping, priority display label, reverse-link views, and query/projection rows | Derived | Commands and projections compute these from durable fields. |
-| Generic escaped payload fields such as `data` or `data_json` | Forbidden | Canonical Markdown readers reject generic payload blobs; record-kind contracts must expose typed front matter and body sections instead. |
+| Generic escaped payload fields | Forbidden | Canonical Markdown readers reject generic payload blobs; record-kind contracts must expose typed front matter and body sections instead. |
 | Duplicate convenience links such as `validates`, `targets`, `missions`, `contributing_work`, `depends_on`, or `blocked_by` | Forbidden unless a record-kind contract explicitly assigns them | Use `relationships` as the canonical cross-record surface. |
 
 ### Relationships

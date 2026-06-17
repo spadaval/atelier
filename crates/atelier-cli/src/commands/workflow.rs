@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
-use atelier_core::{EvidenceRecordData, Issue};
+use atelier_core::{EvidenceRecord, Issue, Record};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
 use atelier_sqlite::Database;
 
@@ -1618,7 +1618,7 @@ fn linked_evidence_records(
     db: &Database,
     issue_id: &str,
     required_kind: Option<&str>,
-) -> Result<Vec<atelier_core::DomainRecord>> {
+) -> Result<Vec<EvidenceRecord>> {
     let mut records = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
@@ -1634,30 +1634,12 @@ fn linked_evidence_records(
         let Some(evidence_id) = evidence_id else {
             continue;
         };
-        let record = canonical_evidence_record(&evidence_id)?
-            .unwrap_or(db.require_record("evidence", &evidence_id)?);
+        db.require_record("evidence", &evidence_id)?;
+        let Some(record) = canonical_evidence_record(&evidence_id)? else {
+            continue;
+        };
         if let Some(required_kind) = required_kind {
-            let data = serde_json::from_str::<EvidenceRecordData>(&record.data_json)
-                .unwrap_or_else(|_| EvidenceRecordData {
-                    evidence_type: String::new(),
-                    captured_at: chrono::Utc::now(),
-                    command: None,
-                    path: None,
-                    uri: None,
-                    producer: None,
-                    proof_scope: None,
-                    agent_identity: None,
-                    independence_level: None,
-                    residual_risks: Vec::new(),
-                    follow_up_ids: Vec::new(),
-                    exit_code: None,
-                    exit_status: None,
-                    success: None,
-                    spawn_error: None,
-                    output: None,
-                    target: None,
-                });
-            if data.evidence_type != required_kind {
+            if record.data.evidence_type != required_kind {
                 continue;
             }
         }
@@ -1666,15 +1648,15 @@ fn linked_evidence_records(
     Ok(records)
 }
 
-fn canonical_evidence_record(id: &str) -> Result<Option<atelier_core::DomainRecord>> {
+fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
     let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
         return Ok(None);
     };
     let store = RecordStore::new(state_dir);
-    Ok(store
-        .load_domain_record_by_id("evidence", id)
-        .map(|record| Some(record.record))
-        .unwrap_or(None))
+    Ok(match store.load_record_by_id("evidence", id) {
+        Ok(Record::Evidence(record)) => Some(record),
+        Ok(_) | Err(_) => None,
+    })
 }
 
 fn review_complete(

@@ -55,16 +55,335 @@ pub struct Relation {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct DomainRecord {
-    pub id: String,
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+pub struct RelationshipTarget {
     pub kind: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+pub struct AttachmentRelationship {
+    pub kind: String,
+    pub id: String,
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+pub struct RelatesRelationship {
+    pub kind: String,
+    pub id: String,
+    pub relation_type: String,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Relationships {
+    pub blocks: Vec<RelationshipTarget>,
+    pub children: Vec<RelationshipTarget>,
+    pub attachments: Vec<AttachmentRelationship>,
+    pub relates: Vec<RelatesRelationship>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RecordHeader {
+    pub kind: String,
+    pub id: String,
     pub title: String,
     pub status: String,
-    pub body: Option<String>,
-    pub data_json: String,
+    pub labels: Vec<String>,
+    pub relationships: Relationships,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Record {
+    Issue(IssueRecord),
+    Mission(MissionRecord),
+    Plan(PlanRecord),
+    Evidence(EvidenceRecord),
+    Milestone(MilestoneRecord),
+}
+
+impl Record {
+    pub fn header(&self) -> &RecordHeader {
+        match self {
+            Record::Issue(record) => &record.header,
+            Record::Mission(record) => &record.header,
+            Record::Plan(record) => &record.header,
+            Record::Evidence(record) => &record.header,
+            Record::Milestone(record) => &record.header,
+        }
+    }
+
+    pub fn header_mut(&mut self) -> &mut RecordHeader {
+        match self {
+            Record::Issue(record) => &mut record.header,
+            Record::Mission(record) => &mut record.header,
+            Record::Plan(record) => &mut record.header,
+            Record::Evidence(record) => &mut record.header,
+            Record::Milestone(record) => &mut record.header,
+        }
+    }
+
+    pub fn kind(&self) -> &str {
+        &self.header().kind
+    }
+
+    pub fn id(&self) -> &str {
+        &self.header().id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct IssueRecord {
+    pub header: RecordHeader,
+    pub issue_type: String,
+    pub priority: String,
+    pub closed_at: Option<DateTime<Utc>>,
+    pub sections: IssueSections,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MissionRecord {
+    pub header: RecordHeader,
+    pub sections: MissionSections,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PlanRecord {
+    pub header: RecordHeader,
+    pub data: PlanRecordData,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EvidenceRecord {
+    pub header: RecordHeader,
+    pub data: EvidenceRecordData,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MilestoneRecord {
+    pub header: RecordHeader,
+    pub data: MilestoneRecordData,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct IssueSections {
+    pub description: String,
+    pub outcome: String,
+    pub evidence: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum IssueSectionName {
+    Description,
+    Outcome,
+    Evidence,
+    Notes,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct IssueSectionState {
+    pub name: IssueSectionName,
+    pub required: bool,
+    pub present: bool,
+    pub empty: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MissionSections {
+    pub intent: String,
+    pub constraints: String,
+    pub risks: String,
+    pub validation: String,
+    pub terminal_notes: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum MissionSectionName {
+    Intent,
+    Constraints,
+    Risks,
+    Validation,
+    TerminalNotes,
+    Notes,
+}
+
+impl IssueSections {
+    pub const REQUIRED_NAMES: [IssueSectionName; 3] = [
+        IssueSectionName::Description,
+        IssueSectionName::Outcome,
+        IssueSectionName::Evidence,
+    ];
+
+    pub const ALL_NAMES: [IssueSectionName; 4] = [
+        IssueSectionName::Description,
+        IssueSectionName::Outcome,
+        IssueSectionName::Evidence,
+        IssueSectionName::Notes,
+    ];
+
+    pub fn unchecked_from_body(body: Option<&str>) -> Self {
+        if let Some(parsed) = body.and_then(parse_issue_sections_lenient) {
+            return parsed;
+        }
+        let description = body
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("No description provided.");
+        Self {
+            description: description.to_string(),
+            outcome: "Outcome was not specified.".to_string(),
+            evidence: "Evidence was not specified.".to_string(),
+            notes: None,
+        }
+    }
+
+    pub fn section(&self, name: IssueSectionName) -> Option<&str> {
+        match name {
+            IssueSectionName::Description => Some(&self.description),
+            IssueSectionName::Outcome => Some(&self.outcome),
+            IssueSectionName::Evidence => Some(&self.evidence),
+            IssueSectionName::Notes => self.notes.as_deref(),
+        }
+    }
+
+    pub fn section_states(&self) -> Vec<IssueSectionState> {
+        Self::ALL_NAMES
+            .into_iter()
+            .map(|name| {
+                let value = self.section(name);
+                IssueSectionState {
+                    name,
+                    required: name.required(),
+                    present: value.is_some(),
+                    empty: value.map(str::trim).is_none_or(str::is_empty),
+                }
+            })
+            .collect()
+    }
+
+    pub fn searchable_text(&self) -> String {
+        Self::ALL_NAMES
+            .into_iter()
+            .filter_map(|name| self.section(name))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
+    let mut current: Option<&str> = None;
+    let mut description = String::new();
+    let mut outcome = String::new();
+    let mut evidence = String::new();
+    let mut notes = String::new();
+
+    for line in body.lines() {
+        if let Some(heading) = line.strip_prefix("## ") {
+            current = match heading.trim() {
+                "Description" => Some("description"),
+                "Outcome" => Some("outcome"),
+                "Evidence" => Some("evidence"),
+                "Notes" => Some("notes"),
+                _ => return None,
+            };
+            break;
+        }
+    }
+
+    let mut current = current?;
+    for line in body.lines().skip_while(|line| !line.starts_with("## ")) {
+        if let Some(heading) = line.strip_prefix("## ") {
+            current = match heading.trim() {
+                "Description" => "description",
+                "Outcome" => "outcome",
+                "Evidence" => "evidence",
+                "Notes" => "notes",
+                _ => return None,
+            };
+            continue;
+        }
+        match current {
+            "description" => {
+                description.push_str(line);
+                description.push('\n');
+            }
+            "outcome" => {
+                outcome.push_str(line);
+                outcome.push('\n');
+            }
+            "evidence" => {
+                evidence.push_str(line);
+                evidence.push('\n');
+            }
+            "notes" => {
+                notes.push_str(line);
+                notes.push('\n');
+            }
+            _ => {}
+        }
+    }
+
+    let description = description.trim().to_string();
+    let outcome = outcome.trim().to_string();
+    let evidence = evidence.trim().to_string();
+    if description.is_empty() || outcome.is_empty() || evidence.is_empty() {
+        return None;
+    }
+    Some(IssueSections {
+        description,
+        outcome,
+        evidence,
+        notes: (!notes.trim().is_empty()).then(|| notes.trim().to_string()),
+    })
+}
+
+impl IssueSectionName {
+    pub fn title(self) -> &'static str {
+        match self {
+            IssueSectionName::Description => "Description",
+            IssueSectionName::Outcome => "Outcome",
+            IssueSectionName::Evidence => "Evidence",
+            IssueSectionName::Notes => "Notes",
+        }
+    }
+
+    pub fn required(self) -> bool {
+        matches!(
+            self,
+            IssueSectionName::Description | IssueSectionName::Outcome | IssueSectionName::Evidence
+        )
+    }
+}
+
+impl MissionSections {
+    pub const ALL_NAMES: [MissionSectionName; 6] = [
+        MissionSectionName::Intent,
+        MissionSectionName::Constraints,
+        MissionSectionName::Risks,
+        MissionSectionName::Validation,
+        MissionSectionName::TerminalNotes,
+        MissionSectionName::Notes,
+    ];
+}
+
+impl MissionSectionName {
+    pub fn title(self) -> &'static str {
+        match self {
+            MissionSectionName::Intent => "Intent",
+            MissionSectionName::Constraints => "Constraints",
+            MissionSectionName::Risks => "Risks",
+            MissionSectionName::Validation => "Validation",
+            MissionSectionName::TerminalNotes => "Terminal Notes",
+            MissionSectionName::Notes => "Notes",
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]

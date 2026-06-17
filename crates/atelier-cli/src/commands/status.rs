@@ -7,9 +7,9 @@ use std::process::Command;
 use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
-use atelier_core::{DomainRecord, Issue};
+use atelier_core::Issue;
 use atelier_records::activity::list_all_issue_activities;
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -323,7 +323,7 @@ impl MissionSnapshot {
 
 fn mission_snapshot(
     db: &Database,
-    mission: &DomainRecord,
+    mission: &RecordSummary,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<MissionSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -511,7 +511,7 @@ fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
 fn print_evidence_status(
     db: &Database,
     active_issues: &[Issue],
-    active_mission: Option<&DomainRecord>,
+    active_mission: Option<&RecordSummary>,
     mission_snapshot: Option<&MissionSnapshot>,
     ready: &[Issue],
 ) -> Result<()> {

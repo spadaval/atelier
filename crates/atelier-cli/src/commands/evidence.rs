@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use atelier_core::{
-    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
-    RecordLink,
+    EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
+    EvidenceTarget, Record, RecordLink,
 };
 use atelier_records::RecordStore;
 use atelier_sqlite::{validate_record_kind, Database};
@@ -88,14 +88,8 @@ pub fn add_returning_id(
         }),
     };
     let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(
-        KIND,
-        summary,
-        "recorded",
-        Some(summary),
-        &serde_json::to_string(&data)?,
-    )?;
-    let id = created.record.id.clone();
+    let created = store.create_evidence(summary, "recorded", summary, data)?;
+    let id = created.header.id.clone();
     refresh_projection(state_dir, db_path)?;
     Ok(id)
 }
@@ -173,31 +167,25 @@ pub fn capture(state_dir: &Path, db_path: &Path, options: CaptureOptions<'_>) ->
     };
 
     let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(
-        KIND,
-        &summary,
-        "recorded",
-        Some(&body),
-        &serde_json::to_string(&data)?,
-    )?;
+    let created = store.create_evidence(&summary, "recorded", &body, data)?;
     refresh_projection(state_dir, db_path)?;
     if let Some(target) = target {
         attach(
             state_dir,
             db_path,
-            &created.record.id,
+            &created.header.id,
             &target.display_kind,
             &target.id,
             &target.role,
         )?;
     }
     let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, &created.record.id)?;
-    print_record(&db, &record)
+    print_record(&db, &created)
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
-    let record = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
+    db.require_record(KIND, id)?;
+    let record = canonical_evidence_record(id)?;
     print_record(db, &record)
 }
 
@@ -295,12 +283,12 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
     print_heading("Evidence");
     println!("{} total", records.len());
     for record in records {
-        let record = canonical_record_detail(KIND, &record.id)?.unwrap_or(record);
-        let data = evidence_record_data(&record)?;
+        let record = canonical_evidence_record(&record.id)?;
+        let data = evidence_record_data(&record);
         let kind = data.evidence_type.as_str();
         let command = data.command.as_deref().unwrap_or("(manual)");
         let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = format_targets(db, &record.id, &data)?;
+        let targets = format_targets(db, &record.header.id, &data)?;
         let target = if targets.is_empty() {
             "(none)".to_string()
         } else {
@@ -308,24 +296,31 @@ pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
         };
         println!(
             "  {:<14} {:<13} {:<10} exit={} target={} command={} {}",
-            record.id, record.status, kind, exit_status, target, command, record.title
+            record.header.id,
+            record.header.status,
+            kind,
+            exit_status,
+            target,
+            command,
+            record.header.title
         );
     }
     Ok(())
 }
 
-pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
-    let record = canonical_record_detail(KIND, &record.id)?.unwrap_or_else(|| record.clone());
-    let data = evidence_record_data(&record)?;
+pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
+    let data = evidence_record_data(record);
     println!(
         "{} [evidence] {} - {}",
-        record.id, record.status, record.title
+        record.header.id, record.header.status, record.header.title
     );
     println!(
         "{}",
-        "=".repeat(record.id.len() + record.status.len() + record.title.len() + 15)
+        "=".repeat(
+            record.header.id.len() + record.header.status.len() + record.header.title.len() + 15
+        )
     );
-    println!("Status:      {}", record.status);
+    println!("Status:      {}", record.header.status);
     println!("Kind:        {}", data.evidence_type);
     println!("Captured:    {}", data.captured_at.to_rfc3339());
     if let Some(command) = data.command.as_deref() {
@@ -334,7 +329,7 @@ pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
     if let Some(exit_status) = data.exit_status.as_deref() {
         println!("Exit Status: {exit_status}");
     }
-    let targets = format_targets(db, &record.id, &data)?;
+    let targets = format_targets(db, &record.header.id, &data)?;
     if !targets.is_empty() {
         println!("Target:      {}", targets.join(", "));
     }
@@ -347,17 +342,13 @@ pub fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
     );
     println!("Path:        {}", data.path.as_deref().unwrap_or("(none)"));
     println!("URI:         {}", data.uri.as_deref().unwrap_or("(none)"));
-    println!("Created:     {}", record.created_at.to_rfc3339());
-    println!("Updated:     {}", record.updated_at.to_rfc3339());
+    println!("Created:     {}", record.header.created_at.to_rfc3339());
+    println!("Updated:     {}", record.header.updated_at.to_rfc3339());
     print_heading("Summary");
-    if let Some(summary) = &record.body {
-        if summary.is_empty() {
-            println!("(none)");
-        } else {
-            println!("{summary}");
-        }
-    } else {
+    if record.summary.is_empty() {
         println!("(none)");
+    } else {
+        println!("{}", record.summary);
     }
     print_output_summary(&data)?;
     Ok(())
@@ -368,12 +359,12 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
-fn evidence_record_data(record: &DomainRecord) -> Result<EvidenceRecordData> {
-    let mut data = serde_json::from_str::<EvidenceRecordData>(&record.data_json)?;
+fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {
+    let mut data = record.data.clone();
     if data.agent_identity.is_none() {
         data.agent_identity = data.producer.clone();
     }
-    Ok(data)
+    data
 }
 
 fn capture_target<'a>(
@@ -608,12 +599,15 @@ fn quote_command_arg(arg: &str) -> String {
     }
 }
 
-fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+fn canonical_evidence_record(id: &str) -> Result<EvidenceRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
+        bail!("Cannot locate canonical Atelier state directory");
     };
     let store = RecordStore::new(state_dir);
-    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+    match store.load_record_by_id(KIND, id)? {
+        Record::Evidence(record) => Ok(record),
+        other => bail!("Expected evidence record {id}, found {}", other.kind()),
+    }
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {

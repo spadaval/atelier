@@ -1338,8 +1338,7 @@ fn run() -> Result<()> {
                         )?;
                     }
                     let db = Database::open(&storage.db_path())?;
-                    let record = db.require_record("evidence", &evidence_id)?;
-                    commands::evidence::print_record(&db, &record)
+                    commands::evidence::show(&db, &evidence_id)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {

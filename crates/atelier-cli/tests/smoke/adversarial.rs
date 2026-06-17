@@ -95,29 +95,30 @@ fn test_boundary_label_over_129() {
 // (~32KB on Windows via CreateProcessW) prevents passing 64KB+ as CLI arguments.
 #[cfg(not(target_os = "windows"))]
 #[test]
-fn test_boundary_desc_exact_64k() {
+fn test_removed_description_flag_rejects_large_value() {
     let h = SmokeHarness::new();
     let desc = "b".repeat(65_536);
-    let result = h.run_ok(&["issue", "create", "Desc boundary test", "-d", &desc]);
-    assert!(result.stdout.contains("Created issue"));
+    let result = h.run(&["issue", "create", "Desc boundary test", "-d", &desc]);
+    assert!(!result.success, "issue create -d should be removed");
+    assert!(
+        result.stderr.contains("unexpected argument") || result.stderr.contains("Usage:"),
+        "Expected removed description flag to be rejected, got stderr: {}",
+        result.stderr
+    );
 }
 
 #[cfg(not(target_os = "windows"))]
 #[test]
-fn test_boundary_desc_over_64k() {
+fn test_removed_description_flag_rejects_oversized_value() {
     let h = SmokeHarness::new();
     let desc = "b".repeat(65_537);
     let result = h.run(&["issue", "create", "Desc boundary test", "-d", &desc]);
-    if result.success {
-        let show = h.run_ok(&["issue", "show", "1"]);
-        assert!(show.stdout.contains("Desc boundary test"));
-    } else {
-        assert!(
-            result.stderr.contains("exceeds") || result.stderr.contains("maximum length"),
-            "Expected error about description length, got stderr: {}",
-            result.stderr
-        );
-    }
+    assert!(!result.success, "issue create -d should be removed");
+    assert!(
+        result.stderr.contains("unexpected argument") || result.stderr.contains("Usage:"),
+        "Expected removed description flag to be rejected, got stderr: {}",
+        result.stderr
+    );
 }
 
 #[test]

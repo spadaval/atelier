@@ -5,6 +5,7 @@ mod labels;
 pub mod projection_index;
 mod record_id;
 mod records;
+pub use records::RecordSummary;
 mod relations;
 mod sessions;
 mod work;

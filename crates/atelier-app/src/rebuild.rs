@@ -8,12 +8,10 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use atelier_core::{Issue, RecordLink};
+use atelier_core::{Issue, Record, RecordLink};
 use atelier_records as record_store;
 use atelier_records::activity::IssueActivity;
-use atelier_records::{
-    CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
-};
+use atelier_records::{IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS};
 use atelier_sqlite::projection_index;
 use atelier_sqlite::Database;
 
@@ -28,7 +26,7 @@ struct CanonicalIssue {
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
-    records: Vec<CanonicalDomainRecord>,
+    records: Vec<Record>,
     child_edges: Vec<(String, String)>,
     dependency_edges: Vec<(String, String)>,
     relations: Vec<(String, String, String)>,
@@ -99,20 +97,20 @@ pub fn repair_incremental(
                         return Ok(IncrementalRepair::NeedsFullRebuild);
                     };
                     let relative = Path::new(path);
-                    let record = store.load_domain_record(relative, spec).with_context(|| {
+                    let record = store.load_record_at(relative, spec).with_context(|| {
                         format!(
                             "Failed to parse changed canonical record {}",
                             display_state_path(relative)
                         )
                     })?;
-                    db.replace_record(&record.record, path)?;
+                    db.replace_record(&record, path)?;
                     db.replace_record_labels(
-                        &record.record.kind,
-                        &record.record.id,
-                        &record.labels,
+                        &record.header().kind,
+                        &record.header().id,
+                        &record.header().labels,
                     )?;
                     let links = outgoing_record_links(&record);
-                    db.replace_outgoing_links(&record.record.kind, &record.record.id, &links)?;
+                    db.replace_outgoing_links(&record.header().kind, &record.header().id, &links)?;
                     let source = projection_index::source_entry_for_path(state_dir, path)?;
                     db.upsert_projection_source(&source)?;
                 }
@@ -218,7 +216,7 @@ struct ProjectionLoader<'a> {
     state_dir: &'a Path,
     store: record_store::RecordStore,
     issues: Vec<CanonicalIssue>,
-    records: Vec<CanonicalDomainRecord>,
+    records: Vec<Record>,
     issue_ids: BTreeSet<String>,
     global_ids: BTreeSet<String>,
     record_refs: BTreeSet<(String, String)>,
@@ -246,7 +244,7 @@ impl<'a> ProjectionLoader<'a> {
     fn load(mut self) -> Result<RebuildProjection> {
         self.load_issues()?;
         self.load_issue_activities()?;
-        self.load_domain_records()?;
+        self.load_records()?;
         ensure_no_unsupported_canonical_files(self.state_dir, &self.canonical_paths)?;
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
@@ -255,8 +253,9 @@ impl<'a> ProjectionLoader<'a> {
         validate_dependency_cycles(&dependency_edges)?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
-        self.records
-            .sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
+        self.records.sort_by(|a, b| {
+            (&a.header().kind, &a.header().id).cmp(&(&b.header().kind, &b.header().id))
+        });
         Ok(RebuildProjection {
             issues: self.issues,
             records: self.records,
@@ -307,33 +306,31 @@ impl<'a> ProjectionLoader<'a> {
         Ok(())
     }
 
-    fn load_domain_records(&mut self) -> Result<()> {
+    fn load_records(&mut self) -> Result<()> {
         for spec in FIRST_CLASS_RECORD_KINDS {
             for relative in discover_record_paths(self.state_dir, spec)? {
                 self.canonical_paths.insert(relative.clone());
-                let record = self.store.load_domain_record(&relative, spec)?;
-                self.register_domain_record(&record)?;
+                let record = self.store.load_record_at(&relative, spec)?;
+                self.register_record(&record)?;
                 self.records.push(record);
             }
         }
         Ok(())
     }
 
-    fn register_domain_record(&mut self, record: &CanonicalDomainRecord) -> Result<()> {
-        if !self.global_ids.insert(record.record.id.clone()) {
-            bail!(
-                "Duplicate record ID in canonical projection: {}",
-                record.record.id
-            );
+    fn register_record(&mut self, record: &Record) -> Result<()> {
+        let header = record.header();
+        if !self.global_ids.insert(header.id.clone()) {
+            bail!("Duplicate record ID in canonical projection: {}", header.id);
         }
         if !self
             .record_refs
-            .insert((record.record.kind.clone(), record.record.id.clone()))
+            .insert((header.kind.clone(), header.id.clone()))
         {
             bail!(
                 "Duplicate {} ID in canonical projection: {}",
-                record.record.kind,
-                record.record.id
+                header.kind,
+                header.id
             );
         }
         Ok(())
@@ -376,12 +373,13 @@ impl<'a> ProjectionLoader<'a> {
             )?;
         }
         for record in &self.records {
+            let header = record.header();
             collect_record_relationship_links(
                 &mut record_links,
                 &mut record_link_keys,
-                &record.record.kind,
-                &record.record.id,
-                &record.relationships,
+                &header.kind,
+                &header.id,
+                &header.relationships,
                 &self.issue_ids,
                 &self.record_refs,
             )?;
@@ -687,12 +685,13 @@ fn write_rebuilt_database(
                 db.add_typed_relation(&source, &target, relation_type)?;
             }
             for record in &rebuild.records {
-                let spec = record_store::canonical_record_kind(&record.record.kind)?;
-                let source_path = record_store::canonical_record_path(spec, &record.record.id)?
+                let header = record.header();
+                let spec = record_store::canonical_record_kind(&header.kind)?;
+                let source_path = record_store::canonical_record_path(spec, &header.id)?
                     .to_string_lossy()
                     .replace('\\', "/");
-                db.insert_record_rebuild_from_source(&record.record, &source_path)?;
-                db.replace_record_labels(&record.record.kind, &record.record.id, &record.labels)?;
+                db.insert_record_rebuild_from_source(record, &source_path)?;
+                db.replace_record_labels(&header.kind, &header.id, &header.labels)?;
             }
             for (source_kind, source_id, target_kind, target_id, relation_type) in
                 &rebuild.record_links
@@ -730,33 +729,34 @@ fn first_class_spec_for_path(path: &str) -> Option<&'static record_store::Record
         .find(|spec| spec.canonical_dir == Some(first))
 }
 
-fn outgoing_record_links(record: &CanonicalDomainRecord) -> Vec<RecordLink> {
+fn outgoing_record_links(record: &Record) -> Vec<RecordLink> {
     let created_at = chrono::Utc::now();
     let mut links = Vec::new();
-    for child in &record.relationships.children {
+    let header = record.header();
+    for child in &header.relationships.children {
         links.push(RecordLink {
-            source_kind: record.record.kind.clone(),
-            source_id: record.record.id.clone(),
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
             target_kind: child.kind.clone(),
             target_id: child.id.clone(),
             relation_type: child_relation_type(&child.kind).to_string(),
             created_at,
         });
     }
-    for attachment in &record.relationships.attachments {
+    for attachment in &header.relationships.attachments {
         links.push(RecordLink {
-            source_kind: record.record.kind.clone(),
-            source_id: record.record.id.clone(),
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
             target_kind: attachment.kind.clone(),
             target_id: attachment.id.clone(),
             relation_type: attachment.role.clone(),
             created_at,
         });
     }
-    for relation in &record.relationships.relates {
+    for relation in &header.relationships.relates {
         links.push(RecordLink {
-            source_kind: record.record.kind.clone(),
-            source_id: record.record.id.clone(),
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
             target_kind: relation.kind.clone(),
             target_id: relation.id.clone(),
             relation_type: relation.relation_type.clone(),
@@ -1078,39 +1078,58 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let mission_body = record_store::render_mission_sections(&mission_sections);
         let mission_id = store
-            .create_domain_record(
-                "mission",
-                "Mission",
-                "ready",
-                Some(&mission_body),
-                record_store::MISSION_EMPTY_DATA_JSON,
-            )
+            .create_mission("Mission", "ready", mission_sections)
             .unwrap()
-            .record
+            .header
             .id;
         let plan_id = store
-            .create_domain_record(
-                "plan",
+            .create_plan(
                 "Plan",
                 "open",
-                Some("Plan body"),
-                r#"{"revision":1,"revisions":[{"revision":1,"reason":"initial","body":"Plan body"}]}"#,
+                "Plan body",
+                atelier_core::PlanRecordData {
+                    revision: 1,
+                    owner: None,
+                    revisions: vec![atelier_core::PlanRevision {
+                        revision: 1,
+                        reason: "initial".to_string(),
+                        body: "Plan body".to_string(),
+                    }],
+                },
             )
             .unwrap()
-            .record
+            .header
             .id;
         let evidence_id = store
-            .create_domain_record(
-                "evidence",
+            .create_evidence(
                 "Evidence",
-                "pass",
-                Some("Evidence body"),
-                r#"{"kind":"test","captured_at":"2026-06-15T12:00:00Z","result":"pass"}"#,
+                "recorded",
+                "Evidence body",
+                atelier_core::EvidenceRecordData {
+                    evidence_type: "test".to_string(),
+                    captured_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                    command: None,
+                    path: None,
+                    uri: None,
+                    producer: None,
+                    proof_scope: None,
+                    agent_identity: None,
+                    independence_level: None,
+                    residual_risks: Vec::new(),
+                    follow_up_ids: Vec::new(),
+                    exit_code: None,
+                    exit_status: None,
+                    success: Some(true),
+                    spawn_error: None,
+                    output: None,
+                    target: None,
+                },
             )
             .unwrap()
-            .record
+            .header
             .id;
         store
             .add_attachment_relationship("mission", &mission_id, "plan", &plan_id, "planned_by")
@@ -1148,8 +1167,7 @@ mod tests {
 
         let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
-        assert_eq!(mission.body, None);
-        assert_eq!(mission.data_json, "{}");
+        assert_eq!(mission.kind, "mission");
         assert!(rebuilt.get_record("plan", &plan_id).unwrap().is_some());
         assert!(rebuilt
             .get_record("evidence", &evidence_id)
@@ -1177,13 +1195,7 @@ mod tests {
     fn record_table_rejects_non_canonical_record_kinds() {
         let (db, _dir) = setup_test_db();
         let error = db
-            .create_record(
-                "workflow_validator",
-                "Deferred validator",
-                "open",
-                None,
-                "{}",
-            )
+            .create_record("workflow_validator", "Deferred validator", "open")
             .unwrap_err();
         assert!(error
             .to_string()
@@ -1204,17 +1216,10 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let mission_body = record_store::render_mission_sections(&mission_sections);
         let mission_id = store
-            .create_domain_record(
-                "mission",
-                "Mission",
-                "ready",
-                Some(&mission_body),
-                record_store::MISSION_EMPTY_DATA_JSON,
-            )
+            .create_mission("Mission", "ready", mission_sections)
             .unwrap()
-            .record
+            .header
             .id;
 
         let old_path = state_dir.join("missions").join(format!("{mission_id}.md"));

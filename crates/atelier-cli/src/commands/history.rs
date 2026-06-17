@@ -3,12 +3,12 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_core::{Issue, RecordLink};
 use atelier_records::activity::{
     list_all_issue_activities, list_all_mission_activities, list_issue_activities,
     list_mission_activities, IssueActivity,
 };
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, RecordSummary};
 
 pub const DEFAULT_LIMIT: usize = 20;
 
@@ -51,7 +51,7 @@ struct HistoryRow {
 #[derive(Debug)]
 struct Lookup {
     issues: BTreeMap<String, Issue>,
-    records: BTreeMap<(String, String), DomainRecord>,
+    records: BTreeMap<(String, String), RecordSummary>,
 }
 
 pub fn run(db: &Database, state_dir: &Path, options: HistoryOptions) -> Result<()> {

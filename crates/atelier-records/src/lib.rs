@@ -8,8 +8,13 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use atelier_core::{
-    DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue,
-    MilestoneRecordData, PlanRecordData,
+    EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, MilestoneRecordData,
+    PlanRecordData,
+};
+pub use atelier_core::{
+    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections,
+    MilestoneRecord, MissionRecord, MissionSectionName, MissionSections, PlanRecord, Record,
+    RecordHeader,
 };
 
 pub mod activity;
@@ -171,183 +176,6 @@ pub struct CanonicalIssueRecord {
     pub relationships: Relationships,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct RecordHeader {
-    pub kind: String,
-    pub id: String,
-    pub title: String,
-    pub status: String,
-    pub labels: Vec<String>,
-    pub relationships: Relationships,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Record {
-    Issue(IssueRecord),
-    Mission(MissionRecord),
-    Plan(PlanRecord),
-    Evidence(EvidenceRecord),
-    Milestone(MilestoneRecord),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct IssueRecord {
-    pub header: RecordHeader,
-    pub issue_type: String,
-    pub priority: String,
-    pub closed_at: Option<DateTime<Utc>>,
-    pub sections: IssueSections,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MissionRecord {
-    pub header: RecordHeader,
-    pub sections: MissionSections,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PlanRecord {
-    pub header: RecordHeader,
-    pub data: PlanRecordData,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct EvidenceRecord {
-    pub header: RecordHeader,
-    pub data: EvidenceRecordData,
-    pub summary: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MilestoneRecord {
-    pub header: RecordHeader,
-    pub data: MilestoneRecordData,
-    pub body: String,
-}
-
-impl Record {
-    pub fn header(&self) -> &RecordHeader {
-        match self {
-            Record::Issue(record) => &record.header,
-            Record::Mission(record) => &record.header,
-            Record::Plan(record) => &record.header,
-            Record::Evidence(record) => &record.header,
-            Record::Milestone(record) => &record.header,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct IssueSections {
-    pub description: String,
-    pub outcome: String,
-    pub evidence: String,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum IssueSectionName {
-    Description,
-    Outcome,
-    Evidence,
-    Notes,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct IssueSectionState {
-    pub name: IssueSectionName,
-    pub required: bool,
-    pub present: bool,
-    pub empty: bool,
-}
-
-impl IssueSections {
-    pub const REQUIRED_NAMES: [IssueSectionName; 3] = [
-        IssueSectionName::Description,
-        IssueSectionName::Outcome,
-        IssueSectionName::Evidence,
-    ];
-
-    pub const ALL_NAMES: [IssueSectionName; 4] = [
-        IssueSectionName::Description,
-        IssueSectionName::Outcome,
-        IssueSectionName::Evidence,
-        IssueSectionName::Notes,
-    ];
-
-    pub fn unchecked_from_body(body: Option<&str>) -> Self {
-        if let Some(body) = body {
-            if let Ok(sections) = parse_issue_sections(body, Path::new("<input>")) {
-                return sections;
-            }
-        }
-
-        let description = body
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("No description provided.");
-        Self {
-            description: description.to_string(),
-            outcome: "Outcome was not specified.".to_string(),
-            evidence: "Evidence was not specified.".to_string(),
-            notes: None,
-        }
-    }
-
-    pub fn section(&self, name: IssueSectionName) -> Option<&str> {
-        match name {
-            IssueSectionName::Description => Some(&self.description),
-            IssueSectionName::Outcome => Some(&self.outcome),
-            IssueSectionName::Evidence => Some(&self.evidence),
-            IssueSectionName::Notes => self.notes.as_deref(),
-        }
-    }
-
-    pub fn section_states(&self) -> Vec<IssueSectionState> {
-        Self::ALL_NAMES
-            .into_iter()
-            .map(|name| {
-                let value = self.section(name);
-                IssueSectionState {
-                    name,
-                    required: name.required(),
-                    present: value.is_some(),
-                    empty: value.map(str::trim).is_none_or(str::is_empty),
-                }
-            })
-            .collect()
-    }
-
-    pub fn searchable_text(&self) -> String {
-        Self::ALL_NAMES
-            .into_iter()
-            .filter_map(|name| self.section(name))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-}
-
-impl IssueSectionName {
-    pub fn title(self) -> &'static str {
-        match self {
-            IssueSectionName::Description => "Description",
-            IssueSectionName::Outcome => "Outcome",
-            IssueSectionName::Evidence => "Evidence",
-            IssueSectionName::Notes => "Notes",
-        }
-    }
-
-    pub fn required(self) -> bool {
-        matches!(
-            self,
-            IssueSectionName::Description | IssueSectionName::Outcome | IssueSectionName::Evidence
-        )
-    }
-}
-
 pub fn issue_section_diagnostic(
     issue_id: Option<&str>,
     section: &str,
@@ -362,13 +190,6 @@ pub fn issue_section_diagnostic(
         "{detail} for issue {issue_id}, section {section}, path {}",
         display_state_path(relative)
     )
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CanonicalDomainRecord {
-    pub record: DomainRecord,
-    pub labels: Vec<String>,
-    pub relationships: Relationships,
 }
 
 impl CanonicalIssueRecord {
@@ -391,89 +212,6 @@ impl CanonicalIssueRecord {
         })
     }
 }
-
-impl CanonicalDomainRecord {
-    pub fn to_record(&self) -> Result<Record> {
-        let header = RecordHeader {
-            kind: self.record.kind.clone(),
-            id: self.record.id.clone(),
-            title: self.record.title.clone(),
-            status: self.record.status.clone(),
-            labels: self.labels.clone(),
-            relationships: self.relationships.clone(),
-            created_at: self.record.created_at,
-            updated_at: self.record.updated_at,
-        };
-        match self.record.kind.as_str() {
-            "mission" => Ok(Record::Mission(MissionRecord {
-                header,
-                sections: mission_sections_from_domain_record(&self.record)?,
-            })),
-            "plan" => Ok(Record::Plan(PlanRecord {
-                header,
-                data: normalized_plan_data(&self.record.data_json)?,
-                body: self.record.body.clone().unwrap_or_default(),
-            })),
-            "evidence" => Ok(Record::Evidence(EvidenceRecord {
-                header,
-                data: normalized_evidence_data(&self.record.data_json)?,
-                summary: self.record.body.clone().unwrap_or_default(),
-            })),
-            "milestone" => Ok(Record::Milestone(MilestoneRecord {
-                header,
-                data: normalized_milestone_data(&self.record.data_json)?,
-                body: self.record.body.clone().unwrap_or_default(),
-            })),
-            other => bail!("Unsupported canonical record kind '{other}'"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MissionSections {
-    pub intent: String,
-    pub constraints: String,
-    pub risks: String,
-    pub validation: String,
-    pub terminal_notes: Option<String>,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum MissionSectionName {
-    Intent,
-    Constraints,
-    Risks,
-    Validation,
-    TerminalNotes,
-    Notes,
-}
-
-impl MissionSections {
-    pub const ALL_NAMES: [MissionSectionName; 6] = [
-        MissionSectionName::Intent,
-        MissionSectionName::Constraints,
-        MissionSectionName::Risks,
-        MissionSectionName::Validation,
-        MissionSectionName::TerminalNotes,
-        MissionSectionName::Notes,
-    ];
-}
-
-impl MissionSectionName {
-    pub fn title(self) -> &'static str {
-        match self {
-            MissionSectionName::Intent => "Intent",
-            MissionSectionName::Constraints => "Constraints",
-            MissionSectionName::Risks => "Risks",
-            MissionSectionName::Validation => "Validation",
-            MissionSectionName::TerminalNotes => "Terminal Notes",
-            MissionSectionName::Notes => "Notes",
-        }
-    }
-}
-
-pub const MISSION_EMPTY_DATA_JSON: &str = "{}";
 
 pub struct RecordStore {
     state_dir: PathBuf,
@@ -515,17 +253,16 @@ impl RecordStore {
         self.load_issue(&issue_record_path(id))
     }
 
-    pub fn load_domain_record_by_id(&self, kind: &str, id: &str) -> Result<CanonicalDomainRecord> {
+    pub fn load_record_by_id(&self, kind: &str, id: &str) -> Result<Record> {
         record_id::validate_record_id(id)?;
+        if kind == ISSUE_KIND.kind {
+            return Ok(self.load_issue_by_id(id)?.into_record());
+        }
         let spec = canonical_record_kind(kind)?;
-        self.load_domain_record(&canonical_record_path(spec, id)?, spec)
+        self.load_record_at(&canonical_record_path(spec, id)?, spec)
     }
 
-    pub fn load_domain_record(
-        &self,
-        relative: &Path,
-        spec: &RecordKindSpec,
-    ) -> Result<CanonicalDomainRecord> {
+    pub fn load_record_at(&self, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
         let bytes = fs::read(self.state_dir.join(relative))
             .with_context(|| format!("Missing projection file {}", display_state_path(relative)))?;
         let text = String::from_utf8(bytes).with_context(|| {
@@ -534,7 +271,7 @@ impl RecordStore {
                 display_state_path(relative)
             )
         })?;
-        parse_domain_record(&text, relative, spec)
+        parse_record(&text, relative, spec)
     }
 
     pub fn load_issues(&self) -> Result<Vec<CanonicalIssueRecord>> {
@@ -558,7 +295,7 @@ impl RecordStore {
         record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
     }
 
-    pub fn allocate_domain_record_id(&self) -> Result<String> {
+    pub fn allocate_record_id(&self) -> Result<String> {
         record_id::allocate_issue_id(|candidate| self.canonical_id_exists(candidate))
     }
 
@@ -581,39 +318,137 @@ impl RecordStore {
         self.write_atomic(&relative, render_issue_record(record)?)
     }
 
-    pub fn create_domain_record(
+    pub fn create_mission(
         &self,
-        kind: &str,
         title: &str,
         status: &str,
-        body: Option<&str>,
-        data_json: &str,
-    ) -> Result<CanonicalDomainRecord> {
-        let _: Value = serde_json::from_str(data_json)?;
+        sections: MissionSections,
+    ) -> Result<MissionRecord> {
         let now = Utc::now();
-        let record = CanonicalDomainRecord {
-            record: DomainRecord {
-                id: self.allocate_domain_record_id()?,
-                kind: kind.to_string(),
+        let record = MissionRecord {
+            header: RecordHeader {
+                kind: "mission".to_string(),
+                id: self.allocate_record_id()?,
                 title: title.to_string(),
                 status: status.to_string(),
-                body: normalized_domain_body(kind, title, body, data_json)?,
-                data_json: normalized_domain_data_json(kind, data_json)?,
+                labels: default_record_labels("mission"),
+                relationships: Relationships::default(),
                 created_at: now,
                 updated_at: now,
             },
-            labels: default_domain_labels(kind),
-            relationships: Relationships::default(),
+            sections,
         };
-        self.write_domain_record_atomic(&record)?;
+        self.write_record_atomic(&Record::Mission(record.clone()))?;
         Ok(record)
     }
 
-    pub fn write_domain_record_atomic(&self, record: &CanonicalDomainRecord) -> Result<()> {
-        let spec = canonical_record_kind(&record.record.kind)?;
-        validate_domain_record(record, Path::new("<record>"), spec)?;
-        let relative = canonical_record_path(spec, &record.record.id)?;
-        self.write_atomic(&relative, render_domain_record(record)?)
+    pub fn create_plan(
+        &self,
+        title: &str,
+        status: &str,
+        body: &str,
+        data: PlanRecordData,
+    ) -> Result<PlanRecord> {
+        let now = Utc::now();
+        let record = PlanRecord {
+            header: RecordHeader {
+                kind: "plan".to_string(),
+                id: self.allocate_record_id()?,
+                title: title.to_string(),
+                status: status.to_string(),
+                labels: default_record_labels("plan"),
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            data,
+            body: body.to_string(),
+        };
+        self.write_record_atomic(&Record::Plan(record.clone()))?;
+        Ok(record)
+    }
+
+    pub fn create_evidence(
+        &self,
+        title: &str,
+        status: &str,
+        summary: &str,
+        data: EvidenceRecordData,
+    ) -> Result<EvidenceRecord> {
+        let now = Utc::now();
+        let record = EvidenceRecord {
+            header: RecordHeader {
+                kind: "evidence".to_string(),
+                id: self.allocate_record_id()?,
+                title: title.to_string(),
+                status: status.to_string(),
+                labels: default_record_labels("evidence"),
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            data,
+            summary: summary.to_string(),
+        };
+        self.write_record_atomic(&Record::Evidence(record.clone()))?;
+        Ok(record)
+    }
+
+    pub fn create_milestone(
+        &self,
+        title: &str,
+        status: &str,
+        body: &str,
+        data: MilestoneRecordData,
+    ) -> Result<MilestoneRecord> {
+        let now = Utc::now();
+        let record = MilestoneRecord {
+            header: RecordHeader {
+                kind: "milestone".to_string(),
+                id: self.allocate_record_id()?,
+                title: title.to_string(),
+                status: status.to_string(),
+                labels: default_record_labels("milestone"),
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            data,
+            body: body.to_string(),
+        };
+        self.write_record_atomic(&Record::Milestone(record.clone()))?;
+        Ok(record)
+    }
+
+    pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
+        let header = record.header();
+        if header.kind == ISSUE_KIND.kind {
+            let Record::Issue(issue) = record else {
+                bail!("Issue record kind must use Record::Issue");
+            };
+            let canonical = CanonicalIssueRecord {
+                issue: Issue {
+                    id: issue.header.id.clone(),
+                    title: issue.header.title.clone(),
+                    description: None,
+                    status: issue.header.status.clone(),
+                    issue_type: issue.issue_type.clone(),
+                    priority: issue.priority.clone(),
+                    parent_id: None,
+                    created_at: issue.header.created_at,
+                    updated_at: issue.header.updated_at,
+                    closed_at: issue.closed_at,
+                },
+                labels: issue.header.labels.clone(),
+                sections: issue.sections.clone(),
+                relationships: issue.header.relationships.clone(),
+            };
+            return self.write_issue_atomic(&canonical);
+        }
+        let spec = canonical_record_kind(&header.kind)?;
+        validate_record(record, Path::new("<record>"), spec)?;
+        let relative = canonical_record_path(spec, &header.id)?;
+        self.write_atomic(&relative, render_record(record)?)
     }
 
     pub fn add_attachment_relationship(
@@ -625,14 +460,23 @@ impl RecordStore {
         role: &str,
     ) -> Result<bool> {
         validate_link_type(role)?;
-        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+        let mut record = self.load_record_by_id(source_kind, source_id)?;
         let attachment = attachment_relationship(target_kind, target_id, role);
-        if record.relationships.attachments.contains(&attachment) {
+        if record
+            .header()
+            .relationships
+            .attachments
+            .contains(&attachment)
+        {
             return Ok(false);
         }
-        record.relationships.attachments.push(attachment);
-        record.record.updated_at = Utc::now();
-        self.write_domain_record_atomic(&record)?;
+        record
+            .header_mut()
+            .relationships
+            .attachments
+            .push(attachment);
+        record.header_mut().updated_at = Utc::now();
+        self.write_record_atomic(&record)?;
         Ok(true)
     }
 
@@ -645,14 +489,14 @@ impl RecordStore {
         relation_type: &str,
     ) -> Result<bool> {
         validate_relationship_type(relation_type)?;
-        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+        let mut record = self.load_record_by_id(source_kind, source_id)?;
         let relation = relates_relationship(target_kind, target_id, relation_type);
-        if record.relationships.relates.contains(&relation) {
+        if record.header().relationships.relates.contains(&relation) {
             return Ok(false);
         }
-        record.relationships.relates.push(relation);
-        record.record.updated_at = Utc::now();
-        self.write_domain_record_atomic(&record)?;
+        record.header_mut().relationships.relates.push(relation);
+        record.header_mut().updated_at = Utc::now();
+        self.write_record_atomic(&record)?;
         Ok(true)
     }
 
@@ -665,18 +509,22 @@ impl RecordStore {
         relation_type: &str,
     ) -> Result<bool> {
         validate_relationship_type(relation_type)?;
-        let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
-        let original_len = record.relationships.relates.len();
-        record.relationships.relates.retain(|existing| {
-            existing.kind != target_kind
-                || existing.id != target_id
-                || existing.relation_type != relation_type
-        });
-        if record.relationships.relates.len() == original_len {
+        let mut record = self.load_record_by_id(source_kind, source_id)?;
+        let original_len = record.header().relationships.relates.len();
+        record
+            .header_mut()
+            .relationships
+            .relates
+            .retain(|existing| {
+                existing.kind != target_kind
+                    || existing.id != target_id
+                    || existing.relation_type != relation_type
+            });
+        if record.header().relationships.relates.len() == original_len {
             return Ok(false);
         }
-        record.record.updated_at = Utc::now();
-        self.write_domain_record_atomic(&record)?;
+        record.header_mut().updated_at = Utc::now();
+        self.write_record_atomic(&record)?;
         Ok(true)
     }
 
@@ -796,16 +644,16 @@ impl RecordStore {
             }
             Ok(changed)
         } else {
-            let mut record = self.load_domain_record_by_id(source_kind, source_id)?;
+            let mut record = self.load_record_by_id(source_kind, source_id)?;
             let changed = add_relationship_to_bucket(
-                &mut record.relationships,
+                &mut record.header_mut().relationships,
                 target_kind,
                 target_id,
                 relation_type,
             );
             if changed {
-                record.record.updated_at = Utc::now();
-                self.write_domain_record_atomic(&record)?;
+                record.header_mut().updated_at = Utc::now();
+                self.write_record_atomic(&record)?;
             }
             Ok(changed)
         }
@@ -1064,16 +912,18 @@ fn render_issue_sections(sections: &IssueSections) -> String {
     normalize_body(&body)
 }
 
-pub fn render_domain_record(record: &CanonicalDomainRecord) -> Result<String> {
-    let spec = canonical_record_kind(&record.record.kind)?;
+pub fn render_record(record: &Record) -> Result<String> {
+    let spec = canonical_record_kind(&record.header().kind)?;
     let mut record = record.clone();
     if spec.kind == "mission" {
-        record.relationships = normalize_legacy_mission_relationships(record.relationships);
+        record.header_mut().relationships =
+            normalize_legacy_mission_relationships(record.header().relationships.clone());
     } else if spec.kind == "evidence" {
-        record.relationships = normalize_legacy_evidence_relationships(record.relationships);
+        record.header_mut().relationships =
+            normalize_legacy_evidence_relationships(record.header().relationships.clone());
     }
-    validate_domain_record(&record, Path::new("<record>"), spec)?;
-    let mut relationships = record.relationships.clone();
+    validate_record(&record, Path::new("<record>"), spec)?;
+    let mut relationships = record.header().relationships.clone();
     sort_relationships(&mut relationships);
 
     if spec.kind == "mission" {
@@ -1167,11 +1017,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     })
 }
 
-pub fn parse_domain_record(
-    text: &str,
-    relative: &Path,
-    spec: &RecordKindSpec,
-) -> Result<CanonicalDomainRecord> {
+pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
     let (front_matter, body) = split_front_matter(text, relative)?;
 
     let schema = require_scalar(&front_matter, "schema", relative)?;
@@ -1214,12 +1060,10 @@ pub fn parse_domain_record(
     }
     reject_forbidden_data_front_matter(&front_matter, relative)?;
     match spec.kind {
-        "mission" => return parse_mission_domain_record(front_matter, body, relative, spec, id),
-        "evidence" => return parse_evidence_domain_record(front_matter, body, relative, spec, id),
-        "milestone" => {
-            return parse_milestone_domain_record(front_matter, body, relative, spec, id)
-        }
-        "plan" => return parse_plan_domain_record(front_matter, body, relative, spec, id),
+        "mission" => return parse_mission_record(front_matter, body, relative, spec, id),
+        "evidence" => return parse_evidence_record(front_matter, body, relative, spec, id),
+        "milestone" => return parse_milestone_record(front_matter, body, relative, spec, id),
+        "plan" => return parse_plan_record(front_matter, body, relative, spec, id),
         _ => {}
     }
     bail!(
@@ -1260,24 +1104,20 @@ fn validate_issue_record(record: &CanonicalIssueRecord, relative: &Path) -> Resu
     Ok(())
 }
 
-fn validate_domain_record(
-    record: &CanonicalDomainRecord,
-    relative: &Path,
-    spec: &RecordKindSpec,
-) -> Result<()> {
-    if record.record.kind != spec.kind {
+fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> Result<()> {
+    if record.header().kind != spec.kind {
         bail!(
             "Record kind '{}' does not match expected kind '{}' in {}",
-            record.record.kind,
+            record.header().kind,
             spec.kind,
             display_state_path(relative)
         );
     }
-    record_id::validate_record_id(&record.record.id).with_context(|| {
+    record_id::validate_record_id(&record.header().id).with_context(|| {
         format!(
             "Invalid {} id '{}' in {}",
             spec.kind,
-            record.record.id,
+            record.header().id,
             display_state_path(relative)
         )
     })?;
@@ -1300,23 +1140,23 @@ fn validate_domain_record(
         }
         _ => {}
     }
-    let _: Value = serde_json::from_str(&record.record.data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    validate_relationships(&record.relationships, relative)?;
+    validate_relationships(&record.header().relationships, relative)?;
     Ok(())
 }
 
 fn render_mission_record(
-    record: &CanonicalDomainRecord,
+    record: &Record,
     relationships: &Relationships,
     spec: &RecordKindSpec,
 ) -> Result<String> {
-    let sections = mission_sections_from_domain_record(&record.record)?;
-    let mut labels = record.labels.clone();
+    let Record::Mission(record) = record else {
+        bail!("Expected mission record");
+    };
+    let mut labels = record.header.labels.clone();
     labels.sort();
     labels.dedup();
     if labels.is_empty() {
-        labels = default_domain_labels("mission");
+        labels = default_record_labels("mission");
     }
 
     let mut output = String::new();
@@ -1324,33 +1164,33 @@ fn render_mission_record(
     write_yaml_scalar(
         &mut output,
         "created_at",
-        Some(&record.record.created_at.to_rfc3339()),
+        Some(&record.header.created_at.to_rfc3339()),
     )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     write_yaml_relationships(&mut output, relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
     write_yaml_scalar(
         &mut output,
         "updated_at",
-        Some(&record.record.updated_at.to_rfc3339()),
+        Some(&record.header.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&render_mission_sections(&sections));
+    output.push_str(&render_mission_sections(&record.sections));
     output.push('\n');
     Ok(output)
 }
 
-fn parse_mission_domain_record(
+fn parse_mission_record(
     front_matter: BTreeMap<String, Value>,
     body: &str,
     relative: &Path,
     spec: &RecordKindSpec,
     id: String,
-) -> Result<CanonicalDomainRecord> {
+) -> Result<Record> {
     let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
@@ -1364,60 +1204,60 @@ fn parse_mission_domain_record(
     let sections = parse_mission_sections(body, relative)?;
     validate_mission_relationships(&relationships, relative)?;
 
-    Ok(CanonicalDomainRecord {
-        record: DomainRecord {
+    Ok(Record::Mission(MissionRecord {
+        header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
             title,
             status,
-            body: Some(render_mission_sections(&sections)),
-            data_json: MISSION_EMPTY_DATA_JSON.to_string(),
+            labels,
+            relationships,
             created_at,
             updated_at,
         },
-        labels,
-        relationships,
-    })
+        sections,
+    }))
 }
 
-fn validate_mission_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
-    validate_mission_status(&record.record.status, relative)?;
-    let labels = if record.labels.is_empty() {
-        default_domain_labels("mission")
-    } else {
-        record.labels.clone()
-    };
-    validate_sorted_unique("labels", &labels, relative)?;
-    let data: Value = serde_json::from_str(&record.record.data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    if data != Value::Object(Default::default()) {
+fn validate_mission_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Mission(record) = record else {
         bail!(
-            "Mission record {} must not serialize mission semantics as data JSON",
+            "Expected mission record in {}",
             display_state_path(relative)
         );
-    }
-    mission_sections_from_domain_record(&record.record)?;
-    validate_relationships(&record.relationships, relative)?;
-    validate_mission_relationships(&record.relationships, relative)?;
+    };
+    validate_mission_status(&record.header.status, relative)?;
+    let labels = if record.header.labels.is_empty() {
+        default_record_labels("mission")
+    } else {
+        record.header.labels.clone()
+    };
+    validate_sorted_unique("labels", &labels, relative)?;
+    parse_mission_sections(&render_mission_sections(&record.sections), relative)?;
+    validate_relationships(&record.header.relationships, relative)?;
+    validate_mission_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
 fn render_evidence_record(
-    record: &CanonicalDomainRecord,
+    record: &Record,
     relationships: &Relationships,
     spec: &RecordKindSpec,
 ) -> Result<String> {
-    let data = normalized_evidence_data(&record.record.data_json)?;
-    let body = render_evidence_body(record.record.body.as_deref(), &data);
+    let Record::Evidence(record) = record else {
+        bail!("Expected evidence record");
+    };
+    let data = normalized_evidence_data(record.data.clone());
+    let body = render_evidence_body(Some(&record.summary), &data);
 
     let mut output = String::new();
     output.push_str("---\n");
     write_yaml_scalar(
         &mut output,
         "created_at",
-        Some(&record.record.created_at.to_rfc3339()),
+        Some(&record.header.created_at.to_rfc3339()),
     )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
     write_yaml_scalar(&mut output, "evidence_type", Some(&data.evidence_type))?;
     write_yaml_scalar(
         &mut output,
@@ -1448,13 +1288,13 @@ fn render_evidence_record(
     write_yaml_scalar(
         &mut output,
         "status",
-        Some(normalized_evidence_status(&record.record.status)),
+        Some(normalized_evidence_status(&record.header.status)),
     )?;
-    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
     write_yaml_scalar(
         &mut output,
         "updated_at",
-        Some(&record.record.updated_at.to_rfc3339()),
+        Some(&record.header.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
     output.push_str(&body);
@@ -1462,13 +1302,13 @@ fn render_evidence_record(
     Ok(output)
 }
 
-fn parse_evidence_domain_record(
+fn parse_evidence_record(
     front_matter: BTreeMap<String, Value>,
     body: &str,
     relative: &Path,
     spec: &RecordKindSpec,
     id: String,
-) -> Result<CanonicalDomainRecord> {
+) -> Result<Record> {
     let relationships =
         normalize_legacy_evidence_relationships(parse_relationships(&front_matter, relative)?);
     let title = require_scalar(&front_matter, "title", relative)?;
@@ -1499,57 +1339,59 @@ fn parse_evidence_domain_record(
         output: optional_yaml_value::<EvidenceOutputSummary>(&front_matter, "output", relative)?,
     };
     apply_evidence_body_sections(&mut data, body);
-    let data_json = serde_json::to_string(&data)?;
-    let body = if body.is_empty() {
-        None
-    } else {
-        Some(body.to_string())
-    };
 
-    Ok(CanonicalDomainRecord {
-        record: DomainRecord {
+    Ok(Record::Evidence(EvidenceRecord {
+        header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
             title,
             status,
-            body,
-            data_json,
+            labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+            relationships,
             created_at,
             updated_at,
         },
-        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-        relationships,
-    })
+        data,
+        summary: body.to_string(),
+    }))
 }
 
-fn validate_evidence_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
-    let data = normalized_evidence_data(&record.record.data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
+fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Evidence(record) = record else {
+        bail!(
+            "Expected evidence record in {}",
+            display_state_path(relative)
+        );
+    };
+    let data = normalized_evidence_data(record.data.clone());
     if data.evidence_type.trim().is_empty() {
         bail!(
             "Evidence record {} must include evidence_type",
             display_state_path(relative)
         );
     }
-    validate_relationships(&record.relationships, relative)?;
+    validate_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
 fn render_milestone_record(
-    record: &CanonicalDomainRecord,
+    record: &Record,
     relationships: &Relationships,
     spec: &RecordKindSpec,
 ) -> Result<String> {
-    let data = normalized_milestone_data(&record.record.data_json)?;
+    let Record::Milestone(record) = record else {
+        bail!("Expected milestone record");
+    };
+    let data = &record.data;
 
     let mut output = String::new();
     output.push_str("---\n");
     write_yaml_scalar(
         &mut output,
         "created_at",
-        Some(&record.record.created_at.to_rfc3339()),
+        Some(&record.header.created_at.to_rfc3339()),
     )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
     write_yaml_scalar(&mut output, "desired_state", Some(&data.desired_state))?;
     write_yaml_array(&mut output, "scope", &data.scope)?;
     write_yaml_array(
@@ -1560,26 +1402,26 @@ fn render_milestone_record(
     write_yaml_relationships(&mut output, relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
     write_yaml_scalar(
         &mut output,
         "updated_at",
-        Some(&record.record.updated_at.to_rfc3339()),
+        Some(&record.header.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push_str(&normalize_body(&record.body));
     output.push('\n');
     Ok(output)
 }
 
-fn parse_milestone_domain_record(
+fn parse_milestone_record(
     front_matter: BTreeMap<String, Value>,
     body: &str,
     relative: &Path,
     spec: &RecordKindSpec,
     id: String,
-) -> Result<CanonicalDomainRecord> {
+) -> Result<Record> {
     let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
@@ -1591,90 +1433,83 @@ fn parse_milestone_domain_record(
         validation_criteria: optional_string_array(&front_matter, "validation_criteria", relative)?
             .unwrap_or_default(),
     };
-    let body = if body.is_empty() {
-        None
-    } else {
-        Some(body.to_string())
-    };
-
-    Ok(CanonicalDomainRecord {
-        record: DomainRecord {
+    Ok(Record::Milestone(MilestoneRecord {
+        header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
             title,
             status,
-            body,
-            data_json: serde_json::to_string(&data)?,
+            labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+            relationships,
             created_at,
             updated_at,
         },
-        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-        relationships,
-    })
+        data,
+        body: body.to_string(),
+    }))
 }
 
-fn validate_milestone_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
-    let data = normalized_milestone_data(&record.record.data_json)
-        .with_context(|| format!("Invalid milestone data in {}", display_state_path(relative)))?;
-    if data.desired_state.trim().is_empty()
-        && record
-            .record
-            .body
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .is_empty()
-    {
+fn validate_milestone_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Milestone(record) = record else {
+        bail!(
+            "Expected milestone record in {}",
+            display_state_path(relative)
+        );
+    };
+    if record.data.desired_state.trim().is_empty() && record.body.trim().is_empty() {
         bail!(
             "Milestone record {} must include desired_state or body",
             display_state_path(relative)
         );
     }
-    validate_relationships(&record.relationships, relative)?;
+    validate_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
 fn render_plan_record(
-    record: &CanonicalDomainRecord,
+    record: &Record,
     relationships: &Relationships,
     spec: &RecordKindSpec,
 ) -> Result<String> {
-    let data = normalized_plan_data(&record.record.data_json)?;
+    let Record::Plan(record) = record else {
+        bail!("Expected plan record");
+    };
+    let data = normalized_plan_data(record.data.clone());
 
     let mut output = String::new();
     output.push_str("---\n");
     write_yaml_scalar(
         &mut output,
         "created_at",
-        Some(&record.record.created_at.to_rfc3339()),
+        Some(&record.header.created_at.to_rfc3339()),
     )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.record.id))?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
     write_yaml_i64(&mut output, "revision", data.revision);
     write_yaml_scalar(&mut output, "owner", data.owner.as_deref())?;
     write_plan_revisions(&mut output, &data.revisions)?;
     write_yaml_relationships(&mut output, relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
     output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.record.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.record.title))?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
     write_yaml_scalar(
         &mut output,
         "updated_at",
-        Some(&record.record.updated_at.to_rfc3339()),
+        Some(&record.header.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&normalize_body(record.record.body.as_deref().unwrap_or("")));
+    output.push_str(&normalize_body(&record.body));
     output.push('\n');
     Ok(output)
 }
 
-fn parse_plan_domain_record(
+fn parse_plan_record(
     front_matter: BTreeMap<String, Value>,
     body: &str,
     relative: &Path,
     spec: &RecordKindSpec,
     id: String,
-) -> Result<CanonicalDomainRecord> {
+) -> Result<Record> {
     let relationships = parse_relationships(&front_matter, relative)?;
     let title = require_scalar(&front_matter, "title", relative)?;
     let status = require_scalar(&front_matter, "status", relative)?;
@@ -1702,25 +1537,27 @@ fn parse_plan_domain_record(
         Some(body.to_string())
     };
 
-    Ok(CanonicalDomainRecord {
-        record: DomainRecord {
+    Ok(Record::Plan(PlanRecord {
+        header: RecordHeader {
             id,
             kind: spec.kind.to_string(),
             title,
             status,
-            body,
-            data_json: serde_json::to_string(&data)?,
+            labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
+            relationships,
             created_at,
             updated_at,
         },
-        labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-        relationships,
-    })
+        data,
+        body: body.unwrap_or_default(),
+    }))
 }
 
-fn validate_plan_record(record: &CanonicalDomainRecord, relative: &Path) -> Result<()> {
-    let data = normalized_plan_data(&record.record.data_json)
-        .with_context(|| format!("Invalid plan data in {}", display_state_path(relative)))?;
+fn validate_plan_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Plan(record) = record else {
+        bail!("Expected plan record in {}", display_state_path(relative));
+    };
+    let data = normalized_plan_data(record.data.clone());
     if data.revision < 1 {
         bail!(
             "Plan record {} must have a positive revision",
@@ -1743,7 +1580,7 @@ fn validate_plan_record(record: &CanonicalDomainRecord, relative: &Path) -> Resu
             display_state_path(relative)
         );
     }
-    validate_relationships(&record.relationships, relative)?;
+    validate_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
@@ -1876,57 +1713,14 @@ fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> 
     relationships
 }
 
-fn default_domain_labels(kind: &str) -> Vec<String> {
+fn default_record_labels(kind: &str) -> Vec<String> {
     match kind {
         "mission" => vec!["mission".to_string()],
         _ => Vec::new(),
     }
 }
 
-fn normalized_domain_data_json(kind: &str, data_json: &str) -> Result<String> {
-    let _: Value = serde_json::from_str(data_json)?;
-    if kind == "mission" {
-        Ok(MISSION_EMPTY_DATA_JSON.to_string())
-    } else if kind == "evidence" {
-        Ok(serde_json::to_string(&normalized_evidence_data(
-            data_json,
-        )?)?)
-    } else if kind == "milestone" {
-        Ok(serde_json::to_string(&normalized_milestone_data(
-            data_json,
-        )?)?)
-    } else if kind == "plan" {
-        Ok(serde_json::to_string(&normalized_plan_data(data_json)?)?)
-    } else {
-        Ok(data_json.to_string())
-    }
-}
-
-fn normalized_domain_body(
-    kind: &str,
-    title: &str,
-    body: Option<&str>,
-    data_json: &str,
-) -> Result<Option<String>> {
-    if kind != "mission" {
-        return Ok(body.map(str::to_string));
-    }
-    let sections = if data_json == MISSION_EMPTY_DATA_JSON {
-        if let Some(body) = body {
-            parse_mission_sections(body, Path::new("<record>")).unwrap_or_else(|_| {
-                mission_sections_from_inputs(title, Some(body), Vec::new(), Vec::new(), Vec::new())
-            })
-        } else {
-            mission_sections_from_inputs(title, body, Vec::new(), Vec::new(), Vec::new())
-        }
-    } else {
-        legacy_mission_sections(body, data_json, title, Path::new("<record>"))?
-    };
-    Ok(Some(render_mission_sections(&sections)))
-}
-
-fn normalized_evidence_data(data_json: &str) -> Result<EvidenceRecordData> {
-    let mut data: EvidenceRecordData = serde_json::from_str(data_json)?;
+fn normalized_evidence_data(mut data: EvidenceRecordData) -> EvidenceRecordData {
     if data.agent_identity.is_none() {
         data.agent_identity = data.producer.clone();
     }
@@ -1940,7 +1734,7 @@ fn normalized_evidence_data(data_json: &str) -> Result<EvidenceRecordData> {
         data.independence_level = None;
     }
     data.follow_up_ids.sort();
-    Ok(data)
+    data
 }
 
 fn normalized_evidence_status(status: &str) -> &str {
@@ -1950,17 +1744,12 @@ fn normalized_evidence_status(status: &str) -> &str {
     }
 }
 
-fn normalized_milestone_data(data_json: &str) -> Result<MilestoneRecordData> {
-    serde_json::from_str(data_json).map_err(Into::into)
-}
-
-pub fn normalized_plan_data(data_json: &str) -> Result<PlanRecordData> {
-    let mut data: PlanRecordData = serde_json::from_str(data_json)?;
+pub fn normalized_plan_data(mut data: PlanRecordData) -> PlanRecordData {
     if data.revision < 1 {
         data.revision = 1;
     }
     data.revisions.sort_by_key(|revision| revision.revision);
-    Ok(data)
+    data
 }
 
 pub fn mission_sections_from_inputs(
@@ -1982,21 +1771,6 @@ pub fn mission_sections_from_inputs(
         terminal_notes: None,
         notes: None,
     }
-}
-
-pub fn mission_sections_from_domain_record(record: &DomainRecord) -> Result<MissionSections> {
-    let relative = canonical_record_kind("mission")
-        .and_then(|spec| canonical_record_path(spec, &record.id))
-        .unwrap_or_else(|_| PathBuf::from("<record>"));
-    if record.data_json == MISSION_EMPTY_DATA_JSON {
-        return parse_mission_sections(record.body.as_deref().unwrap_or(""), &relative);
-    }
-    legacy_mission_sections(
-        record.body.as_deref(),
-        &record.data_json,
-        &record.title,
-        &relative,
-    )
 }
 
 pub fn render_mission_sections(sections: &MissionSections) -> String {
@@ -2134,46 +1908,6 @@ fn required_mission_section(
     })
 }
 
-fn legacy_mission_sections(
-    body: Option<&str>,
-    data_json: &str,
-    title: &str,
-    relative: &Path,
-) -> Result<MissionSections> {
-    let data: Value = serde_json::from_str(data_json)
-        .with_context(|| format!("Invalid data JSON in {}", display_state_path(relative)))?;
-    Ok(MissionSections {
-        intent: legacy_mission_intent(body, title),
-        constraints: mission_list_section(value_string_array(&data, "constraints"), "- None."),
-        risks: mission_list_section(value_string_array(&data, "risks"), "- None."),
-        validation: mission_list_section(
-            value_string_array(&data, "validation"),
-            "- Validation was not specified.",
-        ),
-        terminal_notes: value_string_array(&data, "terminal_notes")
-            .into_iter()
-            .next()
-            .filter(|value| !value.trim().is_empty()),
-        notes: None,
-    })
-}
-
-fn legacy_mission_intent(body: Option<&str>, title: &str) -> String {
-    let Some(body) = body.map(str::trim).filter(|value| !value.is_empty()) else {
-        return title.to_string();
-    };
-    body.lines()
-        .map(|line| {
-            if let Some(rest) = line.strip_prefix("## ") {
-                format!("### {rest}")
-            } else {
-                line.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn mission_list_section(values: Vec<String>, empty: &str) -> String {
     if values.is_empty() {
         return empty.to_string();
@@ -2190,16 +1924,6 @@ fn mission_list_section(values: Vec<String>, empty: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn value_string_array(data: &Value, key: &str) -> Vec<String> {
-    data.get(key)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 fn add_relationship_to_bucket(
@@ -3416,7 +3140,27 @@ mod tests {
         }
     }
 
-    fn mission_record(id: &str) -> CanonicalDomainRecord {
+    fn record_header(
+        kind: &str,
+        id: &str,
+        title: &str,
+        status: &str,
+        labels: Vec<String>,
+        relationships: Relationships,
+    ) -> RecordHeader {
+        RecordHeader {
+            id: id.to_string(),
+            kind: kind.to_string(),
+            title: title.to_string(),
+            status: status.to_string(),
+            labels,
+            relationships,
+            created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
+            updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
+        }
+    }
+
+    fn mission_record(id: &str) -> Record {
         let sections = MissionSections {
             intent: "Repair mission records.".to_string(),
             constraints: "- Keep command output readable.".to_string(),
@@ -3425,55 +3169,52 @@ mod tests {
             terminal_notes: Some("Closed with validation evidence.".to_string()),
             notes: Some("Handoff context.".to_string()),
         };
-        CanonicalDomainRecord {
-            record: DomainRecord {
-                id: id.to_string(),
-                kind: "mission".to_string(),
-                title: "Typed Mission".to_string(),
-                status: "ready".to_string(),
-                body: Some(render_mission_sections(&sections)),
-                data_json: MISSION_EMPTY_DATA_JSON.to_string(),
-                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
-                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
-            },
-            labels: vec!["mission".to_string()],
-            relationships: Relationships {
-                blocks: Vec::new(),
-                children: Vec::new(),
-                attachments: vec![
-                    AttachmentRelationship {
-                        kind: "milestone".to_string(),
-                        id: "atelier-cpnt".to_string(),
-                        role: "has_checkpoint".to_string(),
-                    },
-                    AttachmentRelationship {
-                        kind: "plan".to_string(),
-                        id: "atelier-plan".to_string(),
-                        role: "planned_by".to_string(),
-                    },
-                ],
-                relates: vec![
-                    RelatesRelationship {
-                        kind: "issue".to_string(),
-                        id: "atelier-blok".to_string(),
-                        relation_type: "blocked_by".to_string(),
-                    },
-                    RelatesRelationship {
-                        kind: "issue".to_string(),
-                        id: "atelier-supp".to_string(),
-                        relation_type: "related".to_string(),
-                    },
-                    RelatesRelationship {
-                        kind: "issue".to_string(),
-                        id: "atelier-work".to_string(),
-                        relation_type: "advances".to_string(),
-                    },
-                ],
-            },
-        }
+        Record::Mission(MissionRecord {
+            header: record_header(
+                "mission",
+                id,
+                "Typed Mission",
+                "ready",
+                vec!["mission".to_string()],
+                Relationships {
+                    blocks: Vec::new(),
+                    children: Vec::new(),
+                    attachments: vec![
+                        AttachmentRelationship {
+                            kind: "milestone".to_string(),
+                            id: "atelier-cpnt".to_string(),
+                            role: "has_checkpoint".to_string(),
+                        },
+                        AttachmentRelationship {
+                            kind: "plan".to_string(),
+                            id: "atelier-plan".to_string(),
+                            role: "planned_by".to_string(),
+                        },
+                    ],
+                    relates: vec![
+                        RelatesRelationship {
+                            kind: "issue".to_string(),
+                            id: "atelier-blok".to_string(),
+                            relation_type: "blocked_by".to_string(),
+                        },
+                        RelatesRelationship {
+                            kind: "issue".to_string(),
+                            id: "atelier-supp".to_string(),
+                            relation_type: "related".to_string(),
+                        },
+                        RelatesRelationship {
+                            kind: "issue".to_string(),
+                            id: "atelier-work".to_string(),
+                            relation_type: "advances".to_string(),
+                        },
+                    ],
+                },
+            ),
+            sections,
+        })
     }
 
-    fn evidence_record(id: &str) -> CanonicalDomainRecord {
+    fn evidence_record(id: &str) -> Record {
         let data = EvidenceRecordData {
             evidence_type: "validation".to_string(),
             captured_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 30, 0).unwrap(),
@@ -3493,32 +3234,30 @@ mod tests {
             output: None,
             target: None,
         };
-        CanonicalDomainRecord {
-            record: DomainRecord {
-                id: id.to_string(),
-                kind: "evidence".to_string(),
-                title: "RecordStore evidence proof".to_string(),
-                status: "recorded".to_string(),
-                body: Some("RecordStore evidence proof summary.".to_string()),
-                data_json: serde_json::to_string(&data).unwrap(),
-                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
-                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
-            },
-            labels: Vec::new(),
-            relationships: Relationships {
-                blocks: Vec::new(),
-                children: Vec::new(),
-                attachments: vec![AttachmentRelationship {
-                    kind: "issue".to_string(),
-                    id: "atelier-proof".to_string(),
-                    role: "validates".to_string(),
-                }],
-                relates: Vec::new(),
-            },
-        }
+        Record::Evidence(EvidenceRecord {
+            header: record_header(
+                "evidence",
+                id,
+                "RecordStore evidence proof",
+                "recorded",
+                Vec::new(),
+                Relationships {
+                    blocks: Vec::new(),
+                    children: Vec::new(),
+                    attachments: vec![AttachmentRelationship {
+                        kind: "issue".to_string(),
+                        id: "atelier-proof".to_string(),
+                        role: "validates".to_string(),
+                    }],
+                    relates: Vec::new(),
+                },
+            ),
+            data,
+            summary: "RecordStore evidence proof summary.".to_string(),
+        })
     }
 
-    fn milestone_record(id: &str) -> CanonicalDomainRecord {
+    fn milestone_record(id: &str) -> Record {
         let data = MilestoneRecordData {
             desired_state: "Typed milestone contract is in place.".to_string(),
             scope: vec![
@@ -3527,23 +3266,21 @@ mod tests {
             ],
             validation_criteria: vec!["RecordStore round-trip passes.".to_string()],
         };
-        CanonicalDomainRecord {
-            record: DomainRecord {
-                id: id.to_string(),
-                kind: "milestone".to_string(),
-                title: "Typed Milestone".to_string(),
-                status: "open".to_string(),
-                body: Some("Typed milestone contract is in place.".to_string()),
-                data_json: serde_json::to_string(&data).unwrap(),
-                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
-                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
-            },
-            labels: Vec::new(),
-            relationships: Relationships::default(),
-        }
+        Record::Milestone(MilestoneRecord {
+            header: record_header(
+                "milestone",
+                id,
+                "Typed Milestone",
+                "open",
+                Vec::new(),
+                Relationships::default(),
+            ),
+            data,
+            body: "Typed milestone contract is in place.".to_string(),
+        })
     }
 
-    fn plan_record(id: &str) -> CanonicalDomainRecord {
+    fn plan_record(id: &str) -> Record {
         let data = PlanRecordData {
             revision: 2,
             owner: Some("planning".to_string()),
@@ -3560,20 +3297,18 @@ mod tests {
                 },
             ],
         };
-        CanonicalDomainRecord {
-            record: DomainRecord {
-                id: id.to_string(),
-                kind: "plan".to_string(),
-                title: "Typed Plan".to_string(),
-                status: "open".to_string(),
-                body: Some("Refined plan.".to_string()),
-                data_json: serde_json::to_string(&data).unwrap(),
-                created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
-                updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
-            },
-            labels: Vec::new(),
-            relationships: Relationships::default(),
-        }
+        Record::Plan(PlanRecord {
+            header: record_header(
+                "plan",
+                id,
+                "Typed Plan",
+                "open",
+                Vec::new(),
+                Relationships::default(),
+            ),
+            data,
+            body: "Refined plan.".to_string(),
+        })
     }
 
     fn sectioned_issue_text(id: &str, body: &str) -> String {
@@ -3706,12 +3441,12 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let mut issue = issue_record("atelier-iss1");
         issue.relationships = Relationships::default();
         let mut plan = plan_record("atelier-pln1");
-        plan.relationships = Relationships::default();
+        plan.header_mut().relationships = Relationships::default();
         let mut evidence = evidence_record("atelier-evd1");
-        evidence.relationships = Relationships::default();
+        evidence.header_mut().relationships = Relationships::default();
         store.write_issue_atomic(&issue).unwrap();
-        store.write_domain_record_atomic(&plan).unwrap();
-        store.write_domain_record_atomic(&evidence).unwrap();
+        store.write_record_atomic(&plan).unwrap();
+        store.write_record_atomic(&evidence).unwrap();
 
         assert!(store
             .add_record_relationship(
@@ -3747,11 +3482,11 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let record = mission_record("atelier-miss");
         let spec = canonical_record_kind("mission").unwrap();
         let path = canonical_record_path(spec, "atelier-miss").unwrap();
-        let text = render_domain_record(&record).unwrap();
-        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+        let text = render_record(&record).unwrap();
+        let parsed = parse_record(&text, &path, spec).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert_eq!(render_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.mission\""));
         assert!(text.contains("labels:\n- \"mission\"\n"));
         assert!(!text.contains("\ndata: "));
@@ -3770,11 +3505,11 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let record = evidence_record("atelier-evdn");
         let spec = canonical_record_kind("evidence").unwrap();
         let path = canonical_record_path(spec, "atelier-evdn").unwrap();
-        let text = render_domain_record(&record).unwrap();
-        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+        let text = render_record(&record).unwrap();
+        let parsed = parse_record(&text, &path, spec).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert_eq!(render_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.evidence\""));
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("evidence_type: \"validation\""));
@@ -3792,11 +3527,11 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let record = plan_record("atelier-plnn");
         let spec = canonical_record_kind("plan").unwrap();
         let path = canonical_record_path(spec, "atelier-plnn").unwrap();
-        let text = render_domain_record(&record).unwrap();
-        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+        let text = render_record(&record).unwrap();
+        let parsed = parse_record(&text, &path, spec).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert_eq!(render_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.plan\""));
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("revision: 2"));
@@ -3811,11 +3546,11 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let record = milestone_record("atelier-mile");
         let spec = canonical_record_kind("milestone").unwrap();
         let path = canonical_record_path(spec, "atelier-mile").unwrap();
-        let text = render_domain_record(&record).unwrap();
-        let parsed = parse_domain_record(&text, &path, spec).unwrap();
+        let text = render_record(&record).unwrap();
+        let parsed = parse_record(&text, &path, spec).unwrap();
 
         assert_eq!(parsed, record);
-        assert_eq!(render_domain_record(&parsed).unwrap(), text);
+        assert_eq!(render_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.milestone\""));
         assert!(!text.contains("\ndata: "));
         assert!(text.contains("desired_state: \"Typed milestone contract is in place.\""));
@@ -3845,7 +3580,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Updated
 "#;
-        let error = parse_domain_record(plan_text, &plan_path, plan_spec).unwrap_err();
+        let error = parse_record(plan_text, &plan_path, plan_spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
 
         let milestone_spec = canonical_record_kind("milestone").unwrap();
@@ -3868,8 +3603,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Release gate
 "#;
-        let error =
-            parse_domain_record(milestone_text, &milestone_path, milestone_spec).unwrap_err();
+        let error = parse_record(milestone_text, &milestone_path, milestone_spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
@@ -3898,7 +3632,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
 Legacy evidence summary.
 "#;
-        let error = parse_domain_record(text, &path, spec).unwrap_err();
+        let error = parse_record(text, &path, spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
@@ -3906,6 +3640,7 @@ Legacy evidence summary.
     fn mission_render_normalizes_legacy_evidence_attachments() {
         let mut record = mission_record("atelier-miss");
         record
+            .header_mut()
             .relationships
             .attachments
             .push(AttachmentRelationship {
@@ -3914,7 +3649,7 @@ Legacy evidence summary.
                 role: "validates".to_string(),
             });
 
-        let text = render_domain_record(&record).unwrap();
+        let text = render_record(&record).unwrap();
 
         assert!(text.contains(
             "  relates:\n  - kind: \"evidence\"\n    id: \"atelier-prof\"\n    type: \"validates\"\n"
@@ -3962,7 +3697,7 @@ Legacy intent.
 
 Legacy missions used free-form body headings.
 "#;
-        let error = parse_domain_record(text, &path, spec).unwrap_err();
+        let error = parse_record(text, &path, spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
     }
 

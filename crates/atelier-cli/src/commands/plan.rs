@@ -6,7 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{
-    DomainRecord, EvidenceRecordData, Issue, MilestoneRecordData, PlanRecordData, PlanRevision,
+    EvidenceRecordData, Issue, MilestoneRecordData, PlanRecord, PlanRecordData, PlanRevision,
+    Record,
 };
 use atelier_records::{
     is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
@@ -34,16 +35,15 @@ pub fn create(
         }],
     };
     let store = RecordStore::new(state_dir);
-    let created =
-        store.create_domain_record(KIND, title, "open", body, &serde_json::to_string(&data)?)?;
+    let created = store.create_plan(title, "open", body.unwrap_or(""), data)?;
     refresh_projection(state_dir, db_path)?;
     let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, &created.record.id)?;
-    print_record(&db, &record)
+    print_record(&db, &created)
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
-    let record = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
+    db.require_record(KIND, id)?;
+    let record = canonical_plan_record(id)?;
     print_record(&db, &record)
 }
 
@@ -70,8 +70,11 @@ pub fn revise(
     reason: Option<&str>,
 ) -> Result<()> {
     let store = RecordStore::new(state_dir);
-    let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut data = atelier_records::normalized_plan_data(&current.record.data_json)?;
+    let mut current = match store.load_record_by_id(KIND, id)? {
+        Record::Plan(record) => record,
+        other => bail!("Expected plan record {id}, found {}", other.kind()),
+    };
+    let mut data = atelier_records::normalized_plan_data(current.data.clone());
     let next_revision = data.revision + 1;
     data.revision = next_revision;
     data.revisions.push(PlanRevision {
@@ -79,14 +82,13 @@ pub fn revise(
         reason: reason.unwrap_or("revision").to_string(),
         body: body.to_string(),
     });
-    current.record.body = Some(body.to_string());
-    current.record.data_json = serde_json::to_string(&data)?;
-    current.record.updated_at = chrono::Utc::now();
-    store.write_domain_record_atomic(&current)?;
+    current.body = body.to_string();
+    current.data = data;
+    current.header.updated_at = chrono::Utc::now();
+    store.write_record_atomic(&Record::Plan(current.clone()))?;
     refresh_projection(state_dir, db_path)?;
     let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, id)?;
-    print_record(&db, &record)
+    print_record(&db, &current)
 }
 
 pub fn link(
@@ -172,33 +174,33 @@ pub fn apply(
     print_apply_summary(summary)
 }
 
-fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
-    let record = canonical_record_detail(KIND, &record.id)?.unwrap_or_else(|| record.clone());
-    println!("{} [plan] {} - {}", record.id, record.status, record.title);
+fn print_record(db: &Database, record: &PlanRecord) -> Result<()> {
+    println!(
+        "{} [plan] {} - {}",
+        record.header.id, record.header.status, record.header.title
+    );
     println!(
         "{}",
-        "=".repeat(record.id.len() + record.status.len() + record.title.len() + 11)
+        "=".repeat(
+            record.header.id.len() + record.header.status.len() + record.header.title.len() + 11
+        )
     );
-    println!("Status:   {}", record.status);
-    println!("Revision: {}", data_revision(&record).unwrap_or(1));
-    println!("Created:  {}", record.created_at.to_rfc3339());
-    println!("Updated:  {}", record.updated_at.to_rfc3339());
-    let links = db.list_record_links(KIND, &record.id)?;
+    println!("Status:   {}", record.header.status);
+    println!("Revision: {}", record.data.revision);
+    println!("Created:  {}", record.header.created_at.to_rfc3339());
+    println!("Updated:  {}", record.header.updated_at.to_rfc3339());
+    let links = db.list_record_links(KIND, &record.header.id)?;
     println!("Links:    {}", links.len());
     print_heading("Body");
-    if let Some(body) = &record.body {
-        if !body.is_empty() {
-            println!("{body}");
-        } else {
-            println!("(none)");
-        }
+    if !record.body.is_empty() {
+        println!("{}", record.body);
     } else {
         println!("(none)");
     }
     if !links.is_empty() {
         print_heading("Links");
         for link in links {
-            let (kind, id) = if link.source_kind == KIND && link.source_id == record.id {
+            let (kind, id) = if link.source_kind == KIND && link.source_id == record.header.id {
                 (link.target_kind, link.target_id)
             } else {
                 (link.source_kind, link.source_id)
@@ -212,10 +214,6 @@ fn print_record(db: &Database, record: &DomainRecord) -> Result<()> {
 fn print_heading(title: &str) {
     println!("{title}");
     println!("{}", "-".repeat(title.len()));
-}
-
-fn data_revision(record: &DomainRecord) -> Result<i64> {
-    Ok(atelier_records::normalized_plan_data(&record.data_json)?.revision)
 }
 
 #[derive(Debug, Deserialize)]
@@ -910,13 +908,43 @@ fn create_bulk_record(
     labels: Vec<String>,
 ) -> Result<()> {
     let status = if kind == "mission" { "ready" } else { "open" };
-    let mut record =
-        store.create_domain_record(kind, title, status, body, &serde_json::to_string(&data)?)?;
+    let mut record = match kind {
+        "mission" => Record::Mission(store.create_mission(
+            title,
+            status,
+            atelier_records::mission_sections_from_inputs(
+                title,
+                body,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+        )?),
+        "plan" => Record::Plan(store.create_plan(
+            title,
+            status,
+            body.unwrap_or(""),
+            serde_json::from_value::<PlanRecordData>(data)?,
+        )?),
+        "evidence" => Record::Evidence(store.create_evidence(
+            title,
+            "recorded",
+            body.unwrap_or(title),
+            serde_json::from_value::<EvidenceRecordData>(data)?,
+        )?),
+        "milestone" => Record::Milestone(store.create_milestone(
+            title,
+            status,
+            body.unwrap_or(""),
+            serde_json::from_value::<MilestoneRecordData>(data)?,
+        )?),
+        other => bail!("Unsupported bulk record kind '{other}'"),
+    };
     if !labels.is_empty() {
-        record.labels = labels;
-        store.write_domain_record_atomic(&record)?;
+        record.header_mut().labels = labels;
+        store.write_record_atomic(&record)?;
     }
-    let id = record.record.id;
+    let id = record.header().id.clone();
     resolved.insert(
         client_ref.to_string(),
         ResolvedRef {
@@ -1100,12 +1128,15 @@ fn created_key(kind: &str) -> &str {
     }
 }
 
-fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+fn canonical_plan_record(id: &str) -> Result<PlanRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
+        bail!("Cannot locate canonical Atelier state directory");
     };
     let store = RecordStore::new(state_dir);
-    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+    match store.load_record_by_id(KIND, id)? {
+        Record::Plan(record) => Ok(record),
+        other => bail!("Expected plan record {id}, found {}", other.kind()),
+    }
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
