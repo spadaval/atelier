@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Define and rework declarative bundle apply semantics"
-updated_at: "2026-06-17T21:28:50.388960834+00:00"
+updated_at: "2026-06-17T22:17:29.966492657+00:00"
 ---
 
 ## Description
@@ -62,7 +62,7 @@ surface should be `atelier bundle preview <file>` and
 
 ## Evidence
 
-- Fixture tests cover valid apply, validation-only, preview, rejected
+- Fixture tests cover valid apply, confirmation-required apply, preview, rejected
   plan/milestone inputs, duplicate client refs, missing refs, invalid workflow
   statuses, and mid-apply failure atomicity.
 - Command transcripts show the new command accepts a real file path and rejects

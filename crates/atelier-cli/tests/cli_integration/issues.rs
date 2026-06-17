@@ -639,6 +639,90 @@ fn test_bundle_preview_rejects_plan_and_milestone_resources() {
 }
 
 #[test]
+fn test_bundle_preview_rejects_duplicate_client_refs() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("duplicate-client-ref-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Duplicate client ref bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.duplicate",
+        "title": "Duplicate one",
+        "issue_type": "task",
+        "priority": "high"
+      },
+      {
+        "client_ref": "issue.duplicate",
+        "title": "Duplicate two",
+        "issue_type": "task",
+        "priority": "high"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject duplicate client_ref"
+    );
+    assert!(
+        stderr.contains("Duplicate client_ref 'issue.duplicate'"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_missing_client_ref() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("missing-client-ref-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Missing client ref bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.ref-user",
+        "title": "Missing reference user",
+        "issue_type": "task",
+        "priority": "high",
+        "depends_on": [{ "client_ref": "issue.missing" }]
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "bundle preview should reject missing client_ref");
+    assert!(
+        stderr.contains("Reference 'issue.missing' for issue.ref-user does not resolve"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn test_bundle_preview_rejects_status_outside_workflow_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
