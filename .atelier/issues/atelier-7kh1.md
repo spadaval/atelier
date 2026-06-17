@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T21:55:14.841976763+00:00"
+status: "done"
 title: "Document declarative bundle apply contract and semantics"
-updated_at: "2026-06-17T21:51:11.359849421+00:00"
+updated_at: "2026-06-17T21:55:14.841976763+00:00"
 ---
 
 ## Description
