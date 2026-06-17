@@ -7,8 +7,6 @@ mod record_id;
 mod records;
 pub use records::RecordSummary;
 mod relations;
-mod sessions;
-mod work;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -157,7 +155,7 @@ pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
 }
 
 pub struct Database {
-    pub conn: Connection,
+    pub(crate) conn: Connection,
     pub(crate) path: PathBuf,
 }
 

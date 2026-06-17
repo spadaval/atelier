@@ -1227,8 +1227,6 @@ mod tests {
         let rebuilt = Database::open(&db_path).unwrap();
 
         assert!(rebuilt.require_issue(&id).is_ok());
-        assert!(rebuilt.get_current_session().unwrap().is_none());
-        assert!(rebuilt.get_active_work_association().unwrap().is_none());
     }
 
     #[test]
@@ -1249,8 +1247,6 @@ mod tests {
         let refreshed = Database::open(&db_path).unwrap();
 
         assert!(refreshed.require_issue(&id).is_ok());
-        assert!(refreshed.get_current_session().unwrap().is_none());
-        assert!(refreshed.get_active_work_association().unwrap().is_none());
     }
 
     #[test]

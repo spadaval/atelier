@@ -301,12 +301,12 @@ fn add_preservation_comments(
         .unwrap_or("1970-01-01T00:00:00Z");
     if let Some(notes) = record.notes.as_deref() {
         if !notes.trim().is_empty() {
-            db.add_comment_at(id, notes.trim(), "note", created_at)?;
+            db.record_legacy_import_comment_at(id, notes.trim(), "note", created_at)?;
         }
     }
     if let Some(reason) = record.close_reason.as_deref() {
         if !reason.trim().is_empty() {
-            db.add_comment_at(id, reason.trim(), "close-reason", created_at)?;
+            db.record_legacy_import_comment_at(id, reason.trim(), "close-reason", created_at)?;
         }
     }
 

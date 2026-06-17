@@ -380,7 +380,7 @@ fn issue_object_from_parts(
         None => None,
     };
 
-    let raw_comments = db.get_comments(&issue.id)?;
+    let raw_comments = db.list_legacy_import_comments(&issue.id)?;
     let imported_owner = comment_metadata_value(&raw_comments, "owner");
     let imported_assignee = comment_metadata_value(&raw_comments, "assignee");
     let close_reason = comment_metadata_value(&raw_comments, "Close reason")

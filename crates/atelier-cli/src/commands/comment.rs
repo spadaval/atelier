@@ -29,7 +29,7 @@ pub fn run(db: &Database, issue_id: &str, content: &str, kind: &str) -> Result<(
             KNOWN_COMMENT_KINDS.join(", ")
         );
     }
-    db.add_comment(issue_id, content, kind)?;
+    db.record_legacy_import_comment(issue_id, content, kind)?;
     crate::commands::activity_log::record_comment(issue_id, kind, content)?;
     println!("Added comment to issue {}", format_issue_id(issue_id));
     Ok(())
@@ -97,7 +97,7 @@ mod tests {
         let result = run(&db, &issue_id, "This is a comment", "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].content, "This is a comment");
         assert_eq!(comments[0].kind, "note");
@@ -121,7 +121,7 @@ mod tests {
         run(&db, &issue_id, "Second comment", "note").unwrap();
         run(&db, &issue_id, "Third comment", "note").unwrap();
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 3);
         assert_eq!(comments[0].content, "First comment");
         assert_eq!(comments[1].content, "Second comment");
@@ -136,7 +136,7 @@ mod tests {
         let result = run(&db, &issue_id, "", "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].content, "");
     }
@@ -150,7 +150,7 @@ mod tests {
         let result = run(&db, &issue_id, unicode_content, "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].content, unicode_content);
     }
 
@@ -163,7 +163,7 @@ mod tests {
         let result = run(&db, &issue_id, &long_content, "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].content.len(), 100000);
     }
 
@@ -176,7 +176,7 @@ mod tests {
         let result = run(&db, &issue_id, multiline, "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].content, multiline);
     }
 
@@ -189,7 +189,7 @@ mod tests {
         let result = run(&db, &issue_id, special, "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].content, special);
     }
 
@@ -202,7 +202,7 @@ mod tests {
         run(&db, &issue_id, malicious, "note").unwrap();
 
         // Verify comment was stored literally, not executed
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].content, malicious);
 
@@ -221,7 +221,7 @@ mod tests {
         let result = run(&db, &issue_id, "Comment on closed issue", "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 1);
     }
 
@@ -234,7 +234,7 @@ mod tests {
         let result = run(&db, &issue_id, with_null, "note");
         assert!(result.is_ok());
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].content, with_null);
     }
 
@@ -245,7 +245,7 @@ mod tests {
 
         run(&db, &issue_id, "A plan was made", "plan").unwrap();
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments[0].kind, "plan");
     }
 
@@ -288,7 +288,7 @@ mod tests {
         run(&db, &issue_id, "Comment 0", "note").unwrap();
         run(&db, &issue_id, "Comment 1", "note").unwrap();
 
-        let comments = db.get_comments(issue_id).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id).unwrap();
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].content, "Comment 0");
         assert_eq!(comments[1].content, "Comment 1");

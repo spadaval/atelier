@@ -19,7 +19,7 @@ fn title_description_priority_label_and_comment_roundtrip() {
         )
         .unwrap();
     db.add_label(&id, "label-1").unwrap();
-    db.add_comment(&id, "Comment with punctuation.", "note")
+    db.record_legacy_import_comment(&id, "Comment with punctuation.", "note")
         .unwrap();
 
     let issue = db.get_issue(&id).unwrap().unwrap();
@@ -31,7 +31,7 @@ fn title_description_priority_label_and_comment_roundtrip() {
     assert_eq!(issue.priority, "critical");
     assert!(db.get_labels(&id).unwrap().contains(&"label-1".to_string()));
     assert_eq!(
-        db.get_comments(&id).unwrap()[0].content,
+        db.list_legacy_import_comments(&id).unwrap()[0].content,
         "Comment with punctuation."
     );
 }
@@ -58,20 +58,6 @@ fn create_close_reopen_search_and_blocking_examples() {
         .unwrap()
         .iter()
         .any(|issue| issue.id == source_id));
-}
-
-#[test]
-fn session_issue_delete_cascade_has_no_runtime_session_state() {
-    let (db, _dir) = setup_test_db();
-    let issue_id = db.create_issue("Session issue", None, "medium").unwrap();
-    let session_id = db.start_session().unwrap();
-    db.set_session_issue(session_id, &issue_id).unwrap();
-
-    assert_eq!(session_id, 0);
-    assert!(db.get_current_session().unwrap().is_none());
-
-    db.delete_issue(&issue_id).unwrap();
-    assert!(db.get_current_session().unwrap().is_none());
 }
 
 proptest! {

@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Narrow atelier-sqlite Database projection interface"
-updated_at: "2026-06-17T19:38:08.783848744+00:00"
+updated_at: "2026-06-17T23:08:48.063940024+00:00"
 ---
 
 ## Description
