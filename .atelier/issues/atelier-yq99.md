@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T22:20:08.058236897+00:00"
+status: "done"
 title: "Document workflow crate ownership contract"
-updated_at: "2026-06-17T22:18:30.697709586+00:00"
+updated_at: "2026-06-17T22:20:08.058236897+00:00"
 ---
 
 ## Description
