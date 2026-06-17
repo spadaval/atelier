@@ -78,6 +78,19 @@
 - Mission Control: the target projection or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
+- Session: a durable, optional coordination record for one agent's bounded work
+  interval, role, linked issue or mission context, and handoff activity. A
+  session can explain who did what and when, but it does not define current
+  work and it is not required for every issue.
+- Typed field: a workflow-policy-owned issue field with a declared name, type,
+  cardinality, validation rules, and projection contract. Typed fields are
+  authored as first-class canonical issue data only when the active workflow
+  policy defines them; they are not generic attachments or escaped JSON blobs.
+- Pull request artifact: a Forgejo review object linked from issue state,
+  normally through the typed `forge_pr` field. It records remote review state
+  such as URL, number, author, merge state, and unresolved comment status for
+  validators and review commands. It is a review artifact, not an Atelier
+  workflow transition.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -135,6 +148,21 @@
   is derived from canonical `in_progress` issue status in the checkout's
   tracked Markdown records, not from runtime work associations or a parallel
   hidden claim system.
+- Durable sessions and current work are also distinct. A session can be linked
+  to the work an agent is doing, but the source of truth for current work stays
+  the checkout's canonical `in_progress` issue set. Ending a session does not
+  close, block, or abandon an issue; workflow transitions do that.
+- Session records and local command diagnostics serve different purposes.
+  Sessions are bounded, durable coordination records when the operator wants
+  handoff visibility. Local command diagnostics are ignored runtime telemetry
+  for command health and are not exported work records.
+- Pull request artifacts and validators are distinct. `atelier pr` commands
+  operate on Forgejo review artifacts and record their issue linkage, while
+  workflow validators such as `linked_pr_merged` only read PR state to decide
+  whether an Atelier transition is allowed.
+- Typed fields and evidence attachments are distinct. The `forge_pr` typed
+  field stores the active PR artifact state for an issue; evidence attachments
+  prove claims with command transcripts, reviews, or validation records.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are

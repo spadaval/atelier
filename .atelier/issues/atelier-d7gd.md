@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:50:17.117119906+00:00"
+status: "done"
 title: "Update CONTEXT for Session, Typed field, and Pull request artifact"
-updated_at: "2026-06-17T17:59:47.067548016+00:00"
+updated_at: "2026-06-17T23:50:17.117119906+00:00"
 ---
 
 ## Description

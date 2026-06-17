@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:51:48.470181424+00:00"
+status: "done"
 title: "Write ADR for session-aware PR coordination boundaries"
-updated_at: "2026-06-17T17:59:44.803704296+00:00"
+updated_at: "2026-06-17T23:51:48.470181424+00:00"
 ---
 
 ## Description

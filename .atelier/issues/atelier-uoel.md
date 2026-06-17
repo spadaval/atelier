@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:49:16.868441842+00:00"
+status: "done"
 title: "Update product docs for sessions, PR commands, fields, sudo identity, and validators"
-updated_at: "2026-06-17T17:59:49.363591102+00:00"
+updated_at: "2026-06-17T23:49:16.868441842+00:00"
 ---
 
 ## Description

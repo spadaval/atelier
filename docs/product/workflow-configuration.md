@@ -1,6 +1,8 @@
 # Workflow Configuration Contract
 
-Version 1 issue workflow policy is a fixed repository artifact:
+Version 1 issue workflow policy is a fixed repository artifact. Schema version
+2 keeps the same fixed path and adds workflow-owned typed issue field
+definitions:
 
 ```text
 .atelier/workflow.yaml
@@ -44,6 +46,12 @@ Version 1 workflow policy applies to issues only. The contract defines:
 
 Version 1 does not define mission, milestone, plan, or evidence lifecycles.
 Those records keep their own product contracts outside `.atelier/workflow.yaml`.
+
+Schema version 2 still applies to issue workflow policy, but it also lets the
+repository define typed issue fields that commands and validators can validate.
+Typed fields are not generic attachments and are not escaped payload blobs in
+canonical Markdown. They are named schema entries owned by workflow policy, and
+issue records may author only fields that the active policy defines.
 
 ## Fixed V1 Shape
 
@@ -330,6 +338,54 @@ Version 1 built-in validator names are fixed:
 
 Unknown built-in names, missing required params, wrong param types, and
 unexpected params are strict configuration errors.
+
+Schema version 2 adds the `linked_pr_merged` built-in validator for Forgejo PR
+review artifacts. It is a read-only external-state gate: it inspects the
+configured active PR field for the issue, asks Forgejo whether that PR is
+merged and whether unresolved required review state remains, and then reports an
+actionable pass or failure. It never opens, comments on, reviews, merges, or
+transitions a PR, and it never changes Atelier issue workflow status. Operators
+use `atelier pr ...` commands for review-artifact actions and `atelier issue
+transition ...` for Atelier workflow transitions.
+
+## Schema Version 2 Typed Fields
+
+Schema version 2 keeps the fixed `.atelier/workflow.yaml` location and the v1
+workflow shape, then adds a top-level typed-field catalog. Field definitions are
+workflow-policy-owned schema, so `atelier lint`, issue parsing, projection
+rebuilds, command help, and validators all read the same contract.
+
+```yaml
+schema: atelier.workflow
+schema_version: 2
+
+fields:
+  forge_pr:
+    applies_to: [issue]
+    type: object
+    required: false
+    single: true
+    properties:
+      forge: { type: string, required: true }
+      owner: { type: string, required: true }
+      repo: { type: string, required: true }
+      number: { type: integer, required: true }
+      url: { type: string, required: true }
+      state: { type: string, enum: [open, merged, closed], required: true }
+      head: { type: string, required: false }
+      base: { type: string, required: false }
+      author: { type: string, required: false }
+```
+
+`forge_pr` is the standard field for one active Forgejo PR artifact owned by an
+issue. It is a typed issue field rather than an evidence attachment because it
+represents mutable review-artifact state that validators read. Evidence remains
+the durable proof envelope for command transcripts and validation results.
+
+Typed fields must be deterministic in canonical Markdown, must reject unknown
+field names under strict policy validation, and must have projection columns or
+structured projection payloads only where documented by architecture. They must
+not become a compatibility escape hatch for arbitrary JSON.
 
 ## Guidance Templates
 
