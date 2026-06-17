@@ -113,6 +113,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `mission` | Create, focus, inspect, close, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; completion uses `close --reason` after gates pass; other lifecycle edits stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `mission close <id> --reason "..."`, `history --mission <id>`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
+| `session` | Manage durable, optional agent session records for handoff and coordination. | `begin`, `show`, `list`, and `end` name the session, linked issue or mission context, role, state, and bounded recent activity. Sessions never define current work and never replace issue workflow status. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
+| `pr` | Manage Forgejo pull request review artifacts associated with issue work. | `open`, `status`, `show`, `comments`, `comment`, and `review` name the linked issue, remote PR URL/number, author identity, review state, unresolved inline comment count, and next review command. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR ID/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
 
@@ -464,7 +466,7 @@ Removed command surfaces:
   `update`, `block`, `unblock`, `search`, `relate`, `related`, and `tree`; use
   `atelier issue ...`.
 - Flat timer aliases such as `stop`, and the `timer` group.
-- Legacy groups `archive`, `milestone`, `session`, `daemon`, `cpitd`, `usage`,
+- Legacy groups `archive`, `milestone`, `daemon`, `cpitd`, `usage`,
   `agent`, `locks`, and `sync`.
 - Backup `import` and `export --format json|markdown`; use
   `init --import-beads` for the standard repo-local predecessor import.
@@ -474,7 +476,7 @@ Removed command surfaces:
 When a removed or commonly retried command is rejected, the CLI lets Clap report
 the path as unknown or invalid without a compatibility guidance shim. Examples
 include `finish`, `current-work`, `issue new`, `work start`, `archive`,
-`session`, and `timer`. `workflow check` remains a hidden low-level diagnostic;
+and `timer`. `workflow check` remains a hidden low-level diagnostic;
 unsupported forms such as JSON mode fail as ordinary invalid arguments instead
 of teaching a legacy workflow path.
 
@@ -487,9 +489,17 @@ product workflow or root help. Public orientation commands such as
 `atelier status`, `atelier doctor`, `atelier lint`, and record-specific repair
 guidance should absorb routine cache recovery.
 
-Internal helpers may remain only when a core workflow still uses them. For
-example, session rows may remain an implementation detail of checkout context
-or runtime diagnostics, but there is no `session` command.
+Session commands are visible only for durable optional session records. They
+must not reintroduce the removed runtime session/current-work model: current
+work remains the checkout's canonical `in_progress` issue set, and sessions are
+handoff metadata linked to work.
+
+PR commands are visible only for review artifacts. They may create, inspect,
+comment on, and review Forgejo pull requests, including sudo-mode role
+authorship when repository configuration maps an Atelier role to a Forgejo
+user. They must not close, start, or otherwise transition Atelier issues.
+Workflow validators such as `linked_pr_merged` read external PR state and
+return actionable pass/fail guidance through transition/status surfaces.
 
 ## Integration Or Experimental
 
@@ -538,7 +548,7 @@ atelier issue note atelier-isd5 "CLI surface examples checked against root help.
 ```
 
 If an operator retries removed names such as workflow check/init, finish,
-archive, session, timer, current-work, issue new, top-level dep, generic link,
+archive, timer, current-work, issue new, top-level dep, generic link,
 import-beads, export, rebuild, or integrations during normal work, the supported
 path is to stop and choose the record-specific command above. Low-level export,
 rebuild, predecessor import, and workflow diagnostics may still exist for
