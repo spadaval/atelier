@@ -17,6 +17,12 @@ pub use atelier_core::{
 };
 
 pub mod activity;
+pub mod document;
+pub mod evidence;
+pub mod issue;
+pub mod mission;
+pub mod store;
+pub mod validation;
 
 mod record_id;
 mod record_kinds;
@@ -3030,6 +3036,22 @@ updated_at: "2026-06-10T13:00:00+00:00"
             canonical_record_path(spec, "atelier-genr").unwrap(),
             issue_record_path("atelier-genr")
         );
+    }
+
+    #[test]
+    fn ownership_modules_expose_supported_record_boundaries() {
+        let record = issue::CanonicalIssueRecord {
+            ..issue_record("atelier-mods")
+        };
+        let text = issue::render_issue_record(&record).unwrap();
+        assert!(document::split_document(&text).is_some());
+        assert_eq!(
+            mission::MissionSectionName::Validation.title(),
+            "Validation"
+        );
+        let _store = store::RecordStore::new(tempdir().unwrap().path());
+        validation::validate_priority("high").unwrap();
+        let _: Option<evidence::EvidenceOutputSummary> = None;
     }
 
     #[test]

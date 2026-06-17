@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split RecordStore by durable record ownership"
-updated_at: "2026-06-17T19:37:52.466199572+00:00"
+updated_at: "2026-06-17T23:23:54.754933046+00:00"
 ---
 
 ## Description
