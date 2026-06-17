@@ -24,8 +24,8 @@ mod relationships;
 
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
-    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, FIRST_CLASS_RECORD_KINDS,
-    ISSUE_KIND,
+    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
+    FIRST_CLASS_RECORD_KINDS, ISSUE_KIND,
 };
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
@@ -236,14 +236,12 @@ impl RecordStore {
 
     pub fn load_issue_by_id(&self, id: &str) -> Result<CanonicalIssueRecord> {
         record_id::validate_record_id(id)?;
-        self.load_issue(&issue_record_path(id))
+        let spec = canonical_record_kind(ISSUE_KIND.kind)?;
+        self.load_issue(&canonical_record_path(spec, id)?)
     }
 
     pub fn load_record_by_id(&self, kind: &str, id: &str) -> Result<Record> {
         record_id::validate_record_id(id)?;
-        if kind == ISSUE_KIND.kind {
-            return Ok(self.load_issue_by_id(id)?.into_record());
-        }
         let spec = canonical_record_kind(kind)?;
         self.load_record_at(&canonical_record_path(spec, id)?, spec)
     }
@@ -300,7 +298,8 @@ impl RecordStore {
 
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
         validate_issue_record(record, Path::new("<record>"))?;
-        let relative = issue_record_path(&record.issue.id);
+        let spec = canonical_record_kind(ISSUE_KIND.kind)?;
+        let relative = canonical_record_path(spec, &record.issue.id)?;
         self.write_atomic(&relative, render_issue_record(record)?)
     }
 
@@ -356,31 +355,7 @@ impl RecordStore {
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
         let header = record.header();
-        if header.kind == ISSUE_KIND.kind {
-            let Record::Issue(issue) = record else {
-                bail!("Issue record kind must use Record::Issue");
-            };
-            let canonical = CanonicalIssueRecord {
-                issue: Issue {
-                    id: issue.header.id.clone(),
-                    title: issue.header.title.clone(),
-                    description: None,
-                    status: issue.header.status.clone(),
-                    issue_type: issue.issue_type.clone(),
-                    priority: issue.priority.clone(),
-                    parent_id: None,
-                    created_at: issue.header.created_at,
-                    updated_at: issue.header.updated_at,
-                    closed_at: issue.closed_at,
-                },
-                labels: issue.header.labels.clone(),
-                sections: issue.sections.clone(),
-                relationships: issue.header.relationships.clone(),
-            };
-            return self.write_issue_atomic(&canonical);
-        }
         let spec = canonical_record_kind(&header.kind)?;
-        validate_record(record, Path::new("<record>"), spec)?;
         let relative = canonical_record_path(spec, &header.id)?;
         self.write_atomic(&relative, render_record(record)?)
     }
@@ -827,6 +802,29 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     Ok(output)
 }
 
+fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueRecord> {
+    let Record::Issue(issue) = record else {
+        bail!("Issue record kind must use Record::Issue");
+    };
+    Ok(CanonicalIssueRecord {
+        issue: Issue {
+            id: issue.header.id.clone(),
+            title: issue.header.title.clone(),
+            description: None,
+            status: issue.header.status.clone(),
+            issue_type: issue.issue_type.clone(),
+            priority: issue.priority.clone(),
+            parent_id: None,
+            created_at: issue.header.created_at,
+            updated_at: issue.header.updated_at,
+            closed_at: issue.closed_at,
+        },
+        labels: issue.header.labels.clone(),
+        sections: issue.sections.clone(),
+        relationships: issue.header.relationships.clone(),
+    })
+}
+
 fn render_issue_sections(sections: &IssueSections) -> String {
     let mut body = format!(
         "## Description\n\n{}\n\n## Outcome\n\n{}\n\n## Evidence\n\n{}",
@@ -848,6 +846,9 @@ fn render_issue_sections(sections: &IssueSections) -> String {
 
 pub fn render_record(record: &Record) -> Result<String> {
     let spec = canonical_record_kind(&record.header().kind)?;
+    if spec.kind == ISSUE_KIND.kind {
+        return render_issue_record(&canonical_issue_record_from_record(record)?);
+    }
     let mut record = record.clone();
     if spec.kind == "mission" {
         record.header_mut().relationships =
@@ -950,6 +951,10 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
 }
 
 pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
+    if spec.kind == ISSUE_KIND.kind {
+        return Ok(parse_issue_record(text, relative)?.into_record());
+    }
+
     let (front_matter, body) = split_front_matter(text, relative)?;
 
     let schema = require_scalar(&front_matter, "schema", relative)?;
@@ -2932,7 +2937,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
     #[test]
     fn registered_first_class_record_kinds_have_canonical_contracts() {
-        let contracts = FIRST_CLASS_RECORD_KINDS
+        let canonical_contracts = CANONICAL_RECORD_KINDS
             .iter()
             .map(|spec| {
                 (
@@ -2945,12 +2950,27 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .collect::<Vec<_>>();
 
         assert_eq!(
-            contracts,
+            canonical_contracts,
             vec![
+                ("issue", "atelier.issue", 1, Some("issues")),
                 ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
             ]
         );
+        for (kind, _, _, _) in canonical_contracts {
+            assert!(validate_canonical_record_kind(kind).is_ok());
+            let spec = canonical_record_kind(kind).unwrap();
+            assert_eq!(
+                canonical_record_path(spec, "atelier-abcd").unwrap(),
+                PathBuf::from(spec.canonical_dir.unwrap()).join("atelier-abcd.md")
+            );
+        }
+
+        let generic_contracts = FIRST_CLASS_RECORD_KINDS
+            .iter()
+            .map(|spec| spec.kind)
+            .collect::<Vec<_>>();
+        assert_eq!(generic_contracts, vec!["mission", "evidence"]);
     }
 
     #[test]
@@ -2991,6 +3011,25 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
         assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
         assert!(!text.contains("closed_at:"));
+    }
+
+    #[test]
+    fn issue_record_uses_generic_canonical_record_dispatch() {
+        let record = issue_record("atelier-genr").into_record();
+        let text = render_record(&record).unwrap();
+        let spec = canonical_record_kind("issue").unwrap();
+        let parsed = parse_record(
+            &text,
+            &canonical_record_path(spec, "atelier-genr").unwrap(),
+            spec,
+        )
+        .unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(
+            canonical_record_path(spec, "atelier-genr").unwrap(),
+            issue_record_path("atelier-genr")
+        );
     }
 
     #[test]
