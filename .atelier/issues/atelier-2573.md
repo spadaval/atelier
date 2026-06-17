@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T23:12:11.753877519+00:00"
+status: "done"
 title: "Narrow atelier-sqlite Database projection interface"
-updated_at: "2026-06-17T23:08:48.063940024+00:00"
+updated_at: "2026-06-17T23:12:11.753877519+00:00"
 ---
 
 ## Description
