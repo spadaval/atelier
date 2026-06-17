@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Update CONTEXT for Session, Typed field, and Pull request artifact"
-updated_at: "2026-06-17T17:59:47.067548016+00:00"
+updated_at: "2026-06-17T23:49:25.359727886+00:00"
 ---
 
 ## Description
