@@ -41,9 +41,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Add durable optional sessions"
-updated_at: "2026-06-17T18:00:20.779222533+00:00"
+updated_at: "2026-06-17T23:53:05.274865117+00:00"
 ---
 
 ## Description
