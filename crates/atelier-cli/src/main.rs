@@ -4,6 +4,7 @@ use atelier_app::command_storage::{
     canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
     lint_db, projection_query_db, state_and_db_paths, CommandStorageAccess,
 };
+use atelier_core::IssuePriority;
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -662,12 +663,7 @@ fn issue_create_parts(
             (priority.to_string(), None, None)
         };
 
-    if !commands::create::validate_priority(&final_priority) {
-        bail!(
-            "Invalid priority '{}'. Must be one of: low, medium, high, critical",
-            final_priority
-        );
-    }
+    IssuePriority::from_cli_input(&final_priority)?;
     let final_issue_type = match (issue_type, template_issue_type) {
         (Some(explicit), Some(default)) if explicit != default => {
             bail!(

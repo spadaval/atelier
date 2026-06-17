@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use atelier_core::{EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue};
+use atelier_core::{
+    EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
+    ISSUE_PRIORITY_LABELS,
+};
 pub use atelier_core::{
     EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
     MissionSectionName, MissionSections, Record, RecordHeader,
@@ -81,7 +84,7 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "related",
 ];
 
-pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
+pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 pub const MAX_LABEL_LEN: usize = 128;
 
@@ -100,15 +103,9 @@ pub fn validate_status(status: &str) -> Result<()> {
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if VALID_PRIORITIES.contains(&priority) {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid priority '{}'. Valid values: {}",
-            priority,
-            VALID_PRIORITIES.join(", ")
-        )
-    }
+    IssuePriority::from_cli_input(priority)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 pub fn validate_issue_type(issue_type: &str) -> Result<()> {
@@ -2737,24 +2734,15 @@ fn write_relates_relationships(output: &mut String, values: &[RelatesRelationshi
 }
 
 fn canonical_priority(priority: &str) -> String {
-    match priority {
-        "critical" => "P0".to_string(),
-        "high" => "P1".to_string(),
-        "medium" => "P2".to_string(),
-        "low" => "P3".to_string(),
-        other => other.to_string(),
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.canonical_token().to_string())
+        .unwrap_or_else(|_| priority.to_string())
 }
 
 fn db_priority(priority: &str) -> Result<String> {
-    match priority {
-        "P0" => Ok("critical".to_string()),
-        "P1" => Ok("high".to_string()),
-        "P2" => Ok("medium".to_string()),
-        "P3" => Ok("low".to_string()),
-        "critical" | "high" | "medium" | "low" => Ok(priority.to_string()),
-        other => bail!("unsupported canonical priority '{}'", other),
-    }
+    IssuePriority::from_canonical_token(priority)
+        .map(|priority| priority.label().to_string())
+        .map_err(Into::into)
 }
 
 fn normalize_body(body: &str) -> String {
@@ -2991,6 +2979,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.issue\""));
         assert!(text.contains("schema_version: 1"));
+        assert!(text.contains("priority: \"P1\""));
         assert!(text.contains("relationships:\n"));
         assert!(text.contains("  blocks:\n  - kind: \"issue\"\n    id: \"atelier-bbbb\"\n"));
         assert!(text.contains("  children:\n  - kind: \"issue\"\n    id: \"atelier-aaaa\"\n"));
@@ -3295,6 +3284,16 @@ Legacy missions used free-form body headings.
         let message = error.to_string();
         assert!(message.contains("acceptance"));
         assert!(message.contains("evidence_required"));
+    }
+
+    #[test]
+    fn issue_parser_contract_rejects_label_priority_in_canonical_markdown() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body)
+            .replace("priority: \"P1\"", "priority: \"high\"");
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error.to_string().contains("Invalid priority"));
     }
 
     #[test]

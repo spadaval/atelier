@@ -107,6 +107,7 @@ fn test_list_issues_filter_by_priority() {
     let high_issues = db.list_issues(None, None, Some("high")).unwrap();
     assert_eq!(high_issues.len(), 1);
     assert_eq!(high_issues[0].priority, "high");
+    assert!(db.list_issues(None, None, Some("P1")).is_err());
 }
 
 #[test]

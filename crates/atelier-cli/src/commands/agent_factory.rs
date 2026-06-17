@@ -11,7 +11,7 @@ use crate::commands::issue_workflow::{
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Comment, EvidenceRecord, Issue, Record};
+use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
@@ -891,13 +891,9 @@ fn status_rank(status: &str) -> u8 {
 }
 
 fn priority_rank(priority: &str) -> u8 {
-    match priority {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.sort_rank())
+        .unwrap_or(4)
 }
 
 fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> Result<()> {
@@ -2023,15 +2019,9 @@ pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if atelier_sqlite::VALID_PRIORITIES.contains(&priority) {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid priority '{}'. Valid values: {}",
-            priority,
-            atelier_sqlite::VALID_PRIORITIES.join(", ")
-        )
-    }
+    IssuePriority::from_cli_input(priority)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 #[cfg(test)]

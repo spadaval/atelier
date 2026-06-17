@@ -4,8 +4,118 @@
 //! dependencies. Concrete domain types move here as the migration advances.
 
 use chrono::{DateTime, Utc};
+use std::fmt;
 
 pub type IssueId = String;
+
+pub const ISSUE_PRIORITY_LABELS: &[&str] = &["critical", "high", "medium", "low"];
+
+#[derive(
+    Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+pub enum IssuePriority {
+    P0,
+    P1,
+    P2,
+    P3,
+}
+
+impl IssuePriority {
+    pub fn canonical_token(self) -> &'static str {
+        match self {
+            Self::P0 => "P0",
+            Self::P1 => "P1",
+            Self::P2 => "P2",
+            Self::P3 => "P3",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::P0 => "critical",
+            Self::P1 => "high",
+            Self::P2 => "medium",
+            Self::P3 => "low",
+        }
+    }
+
+    pub fn sort_rank(self) -> u8 {
+        match self {
+            Self::P0 => 0,
+            Self::P1 => 1,
+            Self::P2 => 2,
+            Self::P3 => 3,
+        }
+    }
+
+    pub fn score_weight(self) -> i32 {
+        match self {
+            Self::P0 => 4,
+            Self::P1 => 3,
+            Self::P2 => 2,
+            Self::P3 => 1,
+        }
+    }
+
+    pub fn from_canonical_token(value: &str) -> Result<Self, ParseIssuePriorityError> {
+        match value {
+            "P0" => Ok(Self::P0),
+            "P1" => Ok(Self::P1),
+            "P2" => Ok(Self::P2),
+            "P3" => Ok(Self::P3),
+            other => Err(ParseIssuePriorityError::new(other)),
+        }
+    }
+
+    pub fn from_label(value: &str) -> Result<Self, ParseIssuePriorityError> {
+        match value {
+            "critical" => Ok(Self::P0),
+            "high" => Ok(Self::P1),
+            "medium" => Ok(Self::P2),
+            "low" => Ok(Self::P3),
+            other => Err(ParseIssuePriorityError::new(other)),
+        }
+    }
+
+    pub fn from_cli_input(value: &str) -> Result<Self, ParseIssuePriorityError> {
+        Self::from_label(value)
+    }
+
+    pub fn from_beads_numeric(value: i64) -> Option<Self> {
+        match value {
+            0 => Some(Self::P0),
+            1 => Some(Self::P1),
+            2 => Some(Self::P2),
+            3 | 4 => Some(Self::P3),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ParseIssuePriorityError {
+    value: String,
+}
+
+impl ParseIssuePriorityError {
+    fn new(value: &str) -> Self {
+        Self {
+            value: value.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for ParseIssuePriorityError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Invalid priority '{}'. Valid values: critical, high, medium, low",
+            self.value
+        )
+    }
+}
+
+impl std::error::Error for ParseIssuePriorityError {}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Issue {
@@ -548,5 +658,68 @@ mod tests {
         let id = RecordId::new("atelier-abcd").unwrap();
         assert!(RecordRelation::new("", id.clone(), "blocks").is_err());
         assert!(RecordRelation::new("issue", id, " ").is_err());
+    }
+
+    #[test]
+    fn issue_priority_maps_tokens_labels_and_ranks() {
+        let cases = [
+            (IssuePriority::P0, "P0", "critical", 0, 4),
+            (IssuePriority::P1, "P1", "high", 1, 3),
+            (IssuePriority::P2, "P2", "medium", 2, 2),
+            (IssuePriority::P3, "P3", "low", 3, 1),
+        ];
+
+        for (priority, token, label, rank, weight) in cases {
+            assert_eq!(priority.canonical_token(), token);
+            assert_eq!(priority.label(), label);
+            assert_eq!(priority.sort_rank(), rank);
+            assert_eq!(priority.score_weight(), weight);
+            assert_eq!(
+                IssuePriority::from_canonical_token(token).unwrap(),
+                priority
+            );
+            assert_eq!(IssuePriority::from_label(label).unwrap(), priority);
+            assert_eq!(IssuePriority::from_cli_input(label).unwrap(), priority);
+        }
+    }
+
+    #[test]
+    fn issue_priority_maps_beads_numeric_values() {
+        assert_eq!(
+            IssuePriority::from_beads_numeric(0),
+            Some(IssuePriority::P0)
+        );
+        assert_eq!(
+            IssuePriority::from_beads_numeric(1),
+            Some(IssuePriority::P1)
+        );
+        assert_eq!(
+            IssuePriority::from_beads_numeric(2),
+            Some(IssuePriority::P2)
+        );
+        assert_eq!(
+            IssuePriority::from_beads_numeric(3),
+            Some(IssuePriority::P3)
+        );
+        assert_eq!(
+            IssuePriority::from_beads_numeric(4),
+            Some(IssuePriority::P3)
+        );
+        assert_eq!(IssuePriority::from_beads_numeric(5), None);
+    }
+
+    #[test]
+    fn issue_priority_rejects_wrong_vocabulary_for_context() {
+        let label_error = IssuePriority::from_label("P1").unwrap_err();
+        assert_eq!(
+            label_error.to_string(),
+            "Invalid priority 'P1'. Valid values: critical, high, medium, low"
+        );
+
+        let token_error = IssuePriority::from_canonical_token("high").unwrap_err();
+        assert_eq!(
+            token_error.to_string(),
+            "Invalid priority 'high'. Valid values: critical, high, medium, low"
+        );
     }
 }

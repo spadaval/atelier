@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::record_id;
 use crate::utils::format_issue_id;
-use atelier_core::Issue;
+use atelier_core::{Issue, IssuePriority};
 use atelier_sqlite::Database;
 
 #[derive(Debug, Deserialize)]
@@ -271,19 +271,15 @@ fn imported_description(record: &BeadsIssue) -> String {
 }
 
 fn import_priority(priority: i64, source_id: &str, lossy_fields: &mut Vec<LossyField>) -> String {
-    match priority {
-        0 => "critical",
-        1 => "high",
-        2 => "medium",
-        3 | 4 => "low",
-        other => {
-            lossy_fields.push(lossy(
-                source_id,
-                "priority",
-                format!("mapped unsupported numeric priority {other} to medium"),
-            ));
-            "medium"
-        }
+    if let Some(priority) = IssuePriority::from_beads_numeric(priority) {
+        priority.label()
+    } else {
+        lossy_fields.push(lossy(
+            source_id,
+            "priority",
+            format!("mapped unsupported numeric priority {priority} to medium"),
+        ));
+        IssuePriority::P2.label()
     }
     .to_string()
 }
