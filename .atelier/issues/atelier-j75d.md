@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T23:45:38.286531051+00:00"
+status: "done"
 title: "Reconcile app/CLI boundary with live code"
-updated_at: "2026-06-17T23:27:46.749901900+00:00"
+updated_at: "2026-06-17T23:45:38.286531051+00:00"
 ---
 
 ## Description
