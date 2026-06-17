@@ -24,9 +24,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-17T22:17:59.511855748+00:00"
+status: "done"
 title: "Define and rework declarative bundle apply semantics"
-updated_at: "2026-06-17T22:17:29.966492657+00:00"
+updated_at: "2026-06-17T22:17:59.511855748+00:00"
 ---
 
 ## Description
