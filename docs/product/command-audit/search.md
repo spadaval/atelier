@@ -9,7 +9,7 @@ Primary question: "How do I find the record when I do not know the ID?"
 - Name: Correct.
 - Documentation: Correct as an orientation helper.
 - Design: Currently issue-text oriented by help text. If search now covers
-  missions, plans, or evidence, the docs and output should say "records" rather
+  missions or evidence, the docs and output should say "records" rather
   than "issues."
 - Output hierarchy: Echoed query, bounded matches, kind/status cues, drill-down
   commands.

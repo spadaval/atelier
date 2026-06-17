@@ -75,7 +75,7 @@ Required sections for mission detail views:
 
 - identity and status;
 - body, constraints, risks, and validation expectations when present;
-- plans, milestones, and evidence summaries;
+- planning/checkpoint references from mission prose and evidence summaries;
 - mission blockers with open blockers visibly marked;
 - linked work grouped by ready, blocked, done, and backlog;
 - evidence gaps;
@@ -175,7 +175,9 @@ their need:
   views.
 - Read canonical records under `.atelier/` when durable tracker state is
   needed. These Markdown records are the reviewable, mergeable source of truth
-  for issues, missions, milestones, plans, evidence, and activity sidecars.
+  for issues, missions, evidence, and activity sidecars. Planning and
+  checkpoint intent lives in the accountable record prose or referenced
+  repository Markdown artifacts until first-class records are reintroduced.
 - Use health commands for handoff gates. `atelier lint` and `atelier doctor`
   are the supported noninteractive checks for invalid tracker state, degraded
   local runtime, and repair guidance. Low-level projection repair commands are

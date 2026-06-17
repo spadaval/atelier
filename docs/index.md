@@ -38,14 +38,15 @@
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
   provenance, inherited module boundaries, preservation expectations, and
   deferred migration areas.
-- [docs/product/work-model.md](product/work-model.md): mission,
-  milestone, epic, issue, workflow validator, and evidence relationships.
+- [docs/product/work-model.md](product/work-model.md): mission, deferred
+  checkpoint semantics, epic, issue, workflow validator, and evidence
+  relationships.
 - [docs/product/validation.md](product/validation.md): product language for
   outcomes, proof, evidence, validation, closeout, and proof visibility in
   normal operator surfaces.
-- [docs/product/milestone-records.md](product/milestone-records.md):
-  first-class checkpoint record fields, validation model, evidence links, and
-  command-surface ownership.
+- [docs/product/milestone-records.md](product/milestone-records.md): deferred
+  checkpoint semantics and the v1 rule that validation data stays on issues,
+  epics, missions, and evidence.
 - [docs/product/workflow-configuration.md](product/workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   guidance templates, strict errors, and starter workflow examples.

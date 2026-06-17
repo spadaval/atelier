@@ -369,7 +369,7 @@ than through Agent Factory prose alone.
   or runtime-state migration proof as appropriate.
 - Export/rebuild changes should prove deterministic output and derived-state
   repair behavior.
-- Workflow, validator, evidence, mission, milestone, or plan changes should
+- Workflow, validator, evidence, mission, checkpoint-prose, or planning-artifact changes should
   include human-output transcript evidence and projection/rebuild proof when
   machine-readable state is involved.
 - Mission completion proof should show linked work closed, evidence attached to

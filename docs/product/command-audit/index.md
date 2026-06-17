@@ -28,8 +28,8 @@ and boundary decisions.
 
 - Worker: implements assigned work and leaves durable handoff context.
 - Reviewer: reviews code, checks proof, and performs validation.
-- Manager/orchestrator: creates and coordinates work, missions, plans,
-  subagents, branches, and workspaces.
+- Manager/orchestrator: creates and coordinates work, missions, ordinary
+  planning artifacts, subagents, branches, and workspaces.
 - Admin: configures, repairs, migrates, and performs explicit maintenance on
   Atelier itself.
 

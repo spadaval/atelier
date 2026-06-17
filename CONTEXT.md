@@ -61,9 +61,9 @@
 - Guidance: advisory workflow text rendered near an action, status, or failure
   to explain the next operator move. Guidance informs; validators decide.
 - Mission: a high-level objective that may span multiple epics, issues,
-  milestones, plans, agents, and runs. It is also the shared background
-  workspace boundary: one mission normally owns one shared worktree for
-  coordinated agent work.
+  evidence records, agents, and deferred session/run metadata. It is also the
+  shared background workspace boundary: one mission normally owns one shared
+  worktree for coordinated agent work.
 - Epic: the normal branch and review boundary beneath a mission. One epic
   normally owns one reviewable branch or PR-equivalent changeset.
 - Issue: a durable accountability unit and implementation slice. It does not
@@ -71,17 +71,20 @@
   review.
 - Blocking relationship: an issue-owned relationship where one issue prevents
   another issue from being ready.
-- Milestone: a validated intermediate checkpoint state with scope boundaries,
-  validation criteria, accepted evidence, and completion state. It is not a
-  work container or super-epic.
+- Milestone/checkpoint semantics: a deferred v1 concept for validated
+  intermediate target states. Checkpoint intent may be described in mission,
+  epic, issue, or evidence bodies, but there is no active first-class
+  `.atelier/milestones/` record table or milestone command surface.
 - Mission Control: the target projection or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
-- Plan: durable execution intent that matters beyond ephemeral context.
+- Plan: execution intent that matters beyond ephemeral context. In v1, plans are
+  ordinary Markdown artifacts or prose referenced from accountable work or
+  evidence; they are not first-class `.atelier/plans/` records.
 - Run: execution metadata for a session or slice of work, not the primary unit
   of product planning.
 - Graph: the cross-record relationship shape among missions, issues, blockers,
-  plans, evidence, and other first-class records.
+  evidence, and other first-class records.
 - Current work: the set of canonical issue records in one checkout's tracked
   `.atelier/` tree whose workflow status is `in_progress`, interpreted with the
   mission worktree and epic branch context visible in that checkout. Different
@@ -120,12 +123,14 @@
 - Blocking relationships represent issue readiness, not a separate dependency
   domain. Canonical state groups record relationships under `relationships`:
   use `blocks` for issue-owned blockers, `children` for hierarchy and mission
-  work, `attachments` for plans/evidence, and `relates` for peer semantic
+  work, `attachments` for evidence, and `relates` for peer semantic
   relationships.
-- Missions, milestone checkpoint records, plans, evidence, and runs are target
-  first-class concepts, not just labels on issues.
-- Validators belong to workflow policy, not to milestone records. Milestones
-  own validation criteria; validators enforce transitions.
+- Missions, issues, evidence, workflow policy, and activity sidecars are the v1
+  first-class durable concepts. Milestone/checkpoint records, first-class plan
+  records, and runs/sessions remain deferred until a later contract reintroduces
+  them directly.
+- Validators belong to workflow policy. Checkpoint or plan prose may describe
+  desired proof, but validators enforce issue transitions.
 - Durable claim/assignment and current work are easy to confuse. Current work
   is derived from canonical `in_progress` issue status in the checkout's
   tracked Markdown records, not from runtime work associations or a parallel
