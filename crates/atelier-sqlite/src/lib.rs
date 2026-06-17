@@ -7,8 +7,6 @@ mod record_id;
 mod records;
 pub use records::RecordSummary;
 mod relations;
-mod sessions;
-mod work;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -16,7 +14,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::Issue;
+use atelier_core::{Issue, IssuePriority, ISSUE_PRIORITY_LABELS};
 use atelier_records as record_store;
 
 const SCHEMA_VERSION: i32 = 20;
@@ -61,7 +59,7 @@ pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
 pub const COMPATIBILITY_TABLES: &[&str] = &[];
 
 /// Valid values for issue priority.
-pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
+pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 
 /// Valid values for canonical issue type.
 pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
@@ -89,15 +87,9 @@ pub fn validate_status(status: &str) -> Result<()> {
 
 /// Validate that a priority value is known, returning an error if not.
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if VALID_PRIORITIES.contains(&priority) {
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "Invalid priority '{}'. Valid values: {}",
-            priority,
-            VALID_PRIORITIES.join(", ")
-        )
-    }
+    IssuePriority::from_cli_input(priority)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 /// Validate that an issue type value is known, returning an error if not.
@@ -157,7 +149,7 @@ pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
 }
 
 pub struct Database {
-    pub conn: Connection,
+    pub(crate) conn: Connection,
     pub(crate) path: PathBuf,
 }
 

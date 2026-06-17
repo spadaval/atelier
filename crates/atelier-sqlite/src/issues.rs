@@ -5,7 +5,7 @@ use rusqlite::params;
 use super::{issue_from_row, validate_issue_type, validate_priority, validate_status, Database};
 use super::{MAX_DESCRIPTION_LEN, MAX_TITLE_LEN};
 use crate::record_id;
-use atelier_core::Issue;
+use atelier_core::{Issue, IssuePriority};
 
 impl Database {
     pub fn insert_issue_rebuild(&self, issue: &Issue) -> Result<()> {
@@ -204,7 +204,9 @@ impl Database {
 
         if let Some(priority) = priority_filter {
             conditions.push("i.priority = ?".to_string());
-            params_vec.push(Box::new(priority.to_string()));
+            params_vec.push(Box::new(
+                IssuePriority::from_cli_input(priority)?.label().to_string(),
+            ));
         }
 
         if !conditions.is_empty() {

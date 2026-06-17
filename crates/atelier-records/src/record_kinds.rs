@@ -31,6 +31,22 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
     },
 ];
 
+pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
+    ISSUE_KIND,
+    RecordKindSpec {
+        kind: "mission",
+        schema: "atelier.mission",
+        schema_version: 1,
+        canonical_dir: Some("missions"),
+    },
+    RecordKindSpec {
+        kind: "evidence",
+        schema: "atelier.evidence",
+        schema_version: 1,
+        canonical_dir: Some("evidence"),
+    },
+];
+
 pub const NON_CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
     kind: "workflow_validator",
     schema: "atelier.workflow_validator",
@@ -39,14 +55,14 @@ pub const NON_CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
 }];
 
 pub fn record_kind(kind: &str) -> Option<&'static RecordKindSpec> {
-    std::iter::once(&ISSUE_KIND)
-        .chain(FIRST_CLASS_RECORD_KINDS.iter())
+    CANONICAL_RECORD_KINDS
+        .iter()
         .chain(NON_CANONICAL_RECORD_KINDS.iter())
         .find(|spec| spec.kind == kind)
 }
 
 pub fn canonical_record_kind(kind: &str) -> Result<&'static RecordKindSpec> {
-    let Some(spec) = FIRST_CLASS_RECORD_KINDS
+    let Some(spec) = CANONICAL_RECORD_KINDS
         .iter()
         .find(|spec| spec.kind == kind && spec.canonical_dir.is_some())
     else {
@@ -82,23 +98,20 @@ pub fn canonical_record_path(spec: &RecordKindSpec, id: &str) -> Result<PathBuf>
 }
 
 pub fn issue_record_path(id: &str) -> PathBuf {
-    PathBuf::from(ISSUE_KIND.canonical_dir.expect("issue has canonical dir"))
-        .join(format!("{id}.md"))
+    canonical_record_path(&ISSUE_KIND, id).expect("issue has canonical dir")
 }
 
 pub fn canonical_record_dirs() -> Vec<&'static str> {
-    std::iter::once(ISSUE_KIND.canonical_dir.expect("issue has canonical dir"))
-        .chain(
-            FIRST_CLASS_RECORD_KINDS
-                .iter()
-                .filter_map(|spec| spec.canonical_dir),
-        )
+    CANONICAL_RECORD_KINDS
+        .iter()
+        .filter_map(|spec| spec.canonical_dir)
         .collect()
 }
 
 fn all_record_kind_names() -> Vec<&'static str> {
-    std::iter::once(ISSUE_KIND.kind)
-        .chain(FIRST_CLASS_RECORD_KINDS.iter().map(|spec| spec.kind))
+    CANONICAL_RECORD_KINDS
+        .iter()
+        .map(|spec| spec.kind)
         .chain(NON_CANONICAL_RECORD_KINDS.iter().map(|spec| spec.kind))
         .collect()
 }

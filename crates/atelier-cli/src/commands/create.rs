@@ -1,4 +1,4 @@
-const VALID_PRIORITIES: [&str; 4] = ["low", "medium", "high", "critical"];
+use atelier_core::IssuePriority;
 
 /// Built-in issue templates
 pub struct Template {
@@ -64,7 +64,7 @@ pub fn list_templates() -> Vec<&'static str> {
 }
 
 pub fn validate_priority(priority: &str) -> bool {
-    VALID_PRIORITIES.contains(&priority)
+    IssuePriority::from_cli_input(priority).is_ok()
 }
 
 #[cfg(test)]

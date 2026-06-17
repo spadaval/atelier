@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:23:17.629422676+00:00"
+status: "done"
 title: "Fix canonical record-kind APIs so issues are not special-cased"
-updated_at: "2026-06-17T20:03:45.912615253+00:00"
+updated_at: "2026-06-17T23:23:17.629422676+00:00"
 ---
 
 ## Description

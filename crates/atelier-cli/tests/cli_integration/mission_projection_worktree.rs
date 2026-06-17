@@ -2389,7 +2389,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
         |markdown, _issue_id| markdown.replace("priority: \"P2\"", "priority: \"urgent\""),
         &[
             "Invalid priority",
-            "unsupported canonical priority 'urgent'",
+            "Invalid priority 'urgent'. Valid values: critical, high, medium, low",
         ],
     );
     assert_lint_rejects_issue_edit(

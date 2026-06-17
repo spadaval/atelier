@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:19:24.013452677+00:00"
+status: "done"
 title: "Unify canonical priority representation"
-updated_at: "2026-06-17T19:38:00.579999845+00:00"
+updated_at: "2026-06-17T23:19:24.013452677+00:00"
 ---
 
 ## Description

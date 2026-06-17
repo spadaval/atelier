@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::utils::format_issue_id;
-use atelier_core::Issue;
+use atelier_core::{Issue, IssuePriority};
 use atelier_sqlite::Database;
 
 /// Progress tuple: (completed subissues, total subissues)
@@ -12,13 +12,9 @@ type ScoredIssue = (Issue, i32, Progress);
 
 /// Priority order for sorting (higher = more important)
 fn priority_weight(priority: &str) -> i32 {
-    match priority {
-        "critical" => 4,
-        "high" => 3,
-        "medium" => 2,
-        "low" => 1,
-        _ => 0,
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.score_weight())
+        .unwrap_or(0)
 }
 
 /// Calculate progress for issues with subissues

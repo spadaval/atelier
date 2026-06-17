@@ -7,13 +7,22 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use atelier_core::{EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue};
+use atelier_core::{
+    EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, IssuePriority,
+    ISSUE_PRIORITY_LABELS,
+};
 pub use atelier_core::{
     EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
     MissionSectionName, MissionSections, Record, RecordHeader,
 };
 
 pub mod activity;
+pub mod document;
+pub mod evidence;
+pub mod issue;
+pub mod mission;
+pub mod store;
+pub mod validation;
 
 mod record_id;
 mod record_kinds;
@@ -21,8 +30,8 @@ mod relationships;
 
 pub use record_kinds::{
     canonical_record_dirs, canonical_record_kind, canonical_record_path, issue_record_path,
-    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, FIRST_CLASS_RECORD_KINDS,
-    ISSUE_KIND,
+    validate_canonical_record_kind, validate_record_kind, RecordKindSpec, CANONICAL_RECORD_KINDS,
+    FIRST_CLASS_RECORD_KINDS, ISSUE_KIND,
 };
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
@@ -81,7 +90,7 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "related",
 ];
 
-pub const VALID_PRIORITIES: &[&str] = &["low", "medium", "high", "critical"];
+pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 pub const MAX_LABEL_LEN: usize = 128;
 
@@ -100,15 +109,9 @@ pub fn validate_status(status: &str) -> Result<()> {
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if VALID_PRIORITIES.contains(&priority) {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid priority '{}'. Valid values: {}",
-            priority,
-            VALID_PRIORITIES.join(", ")
-        )
-    }
+    IssuePriority::from_cli_input(priority)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 pub fn validate_issue_type(issue_type: &str) -> Result<()> {
@@ -239,14 +242,12 @@ impl RecordStore {
 
     pub fn load_issue_by_id(&self, id: &str) -> Result<CanonicalIssueRecord> {
         record_id::validate_record_id(id)?;
-        self.load_issue(&issue_record_path(id))
+        let spec = canonical_record_kind(ISSUE_KIND.kind)?;
+        self.load_issue(&canonical_record_path(spec, id)?)
     }
 
     pub fn load_record_by_id(&self, kind: &str, id: &str) -> Result<Record> {
         record_id::validate_record_id(id)?;
-        if kind == ISSUE_KIND.kind {
-            return Ok(self.load_issue_by_id(id)?.into_record());
-        }
         let spec = canonical_record_kind(kind)?;
         self.load_record_at(&canonical_record_path(spec, id)?, spec)
     }
@@ -303,7 +304,8 @@ impl RecordStore {
 
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
         validate_issue_record(record, Path::new("<record>"))?;
-        let relative = issue_record_path(&record.issue.id);
+        let spec = canonical_record_kind(ISSUE_KIND.kind)?;
+        let relative = canonical_record_path(spec, &record.issue.id)?;
         self.write_atomic(&relative, render_issue_record(record)?)
     }
 
@@ -359,31 +361,7 @@ impl RecordStore {
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
         let header = record.header();
-        if header.kind == ISSUE_KIND.kind {
-            let Record::Issue(issue) = record else {
-                bail!("Issue record kind must use Record::Issue");
-            };
-            let canonical = CanonicalIssueRecord {
-                issue: Issue {
-                    id: issue.header.id.clone(),
-                    title: issue.header.title.clone(),
-                    description: None,
-                    status: issue.header.status.clone(),
-                    issue_type: issue.issue_type.clone(),
-                    priority: issue.priority.clone(),
-                    parent_id: None,
-                    created_at: issue.header.created_at,
-                    updated_at: issue.header.updated_at,
-                    closed_at: issue.closed_at,
-                },
-                labels: issue.header.labels.clone(),
-                sections: issue.sections.clone(),
-                relationships: issue.header.relationships.clone(),
-            };
-            return self.write_issue_atomic(&canonical);
-        }
         let spec = canonical_record_kind(&header.kind)?;
-        validate_record(record, Path::new("<record>"), spec)?;
         let relative = canonical_record_path(spec, &header.id)?;
         self.write_atomic(&relative, render_record(record)?)
     }
@@ -830,6 +808,29 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     Ok(output)
 }
 
+fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueRecord> {
+    let Record::Issue(issue) = record else {
+        bail!("Issue record kind must use Record::Issue");
+    };
+    Ok(CanonicalIssueRecord {
+        issue: Issue {
+            id: issue.header.id.clone(),
+            title: issue.header.title.clone(),
+            description: None,
+            status: issue.header.status.clone(),
+            issue_type: issue.issue_type.clone(),
+            priority: issue.priority.clone(),
+            parent_id: None,
+            created_at: issue.header.created_at,
+            updated_at: issue.header.updated_at,
+            closed_at: issue.closed_at,
+        },
+        labels: issue.header.labels.clone(),
+        sections: issue.sections.clone(),
+        relationships: issue.header.relationships.clone(),
+    })
+}
+
 fn render_issue_sections(sections: &IssueSections) -> String {
     let mut body = format!(
         "## Description\n\n{}\n\n## Outcome\n\n{}\n\n## Evidence\n\n{}",
@@ -851,6 +852,9 @@ fn render_issue_sections(sections: &IssueSections) -> String {
 
 pub fn render_record(record: &Record) -> Result<String> {
     let spec = canonical_record_kind(&record.header().kind)?;
+    if spec.kind == ISSUE_KIND.kind {
+        return render_issue_record(&canonical_issue_record_from_record(record)?);
+    }
     let mut record = record.clone();
     if spec.kind == "mission" {
         record.header_mut().relationships =
@@ -953,6 +957,10 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
 }
 
 pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
+    if spec.kind == ISSUE_KIND.kind {
+        return Ok(parse_issue_record(text, relative)?.into_record());
+    }
+
     let (front_matter, body) = split_front_matter(text, relative)?;
 
     let schema = require_scalar(&front_matter, "schema", relative)?;
@@ -2737,24 +2745,15 @@ fn write_relates_relationships(output: &mut String, values: &[RelatesRelationshi
 }
 
 fn canonical_priority(priority: &str) -> String {
-    match priority {
-        "critical" => "P0".to_string(),
-        "high" => "P1".to_string(),
-        "medium" => "P2".to_string(),
-        "low" => "P3".to_string(),
-        other => other.to_string(),
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.canonical_token().to_string())
+        .unwrap_or_else(|_| priority.to_string())
 }
 
 fn db_priority(priority: &str) -> Result<String> {
-    match priority {
-        "P0" => Ok("critical".to_string()),
-        "P1" => Ok("high".to_string()),
-        "P2" => Ok("medium".to_string()),
-        "P3" => Ok("low".to_string()),
-        "critical" | "high" | "medium" | "low" => Ok(priority.to_string()),
-        other => bail!("unsupported canonical priority '{}'", other),
-    }
+    IssuePriority::from_canonical_token(priority)
+        .map(|priority| priority.label().to_string())
+        .map_err(Into::into)
 }
 
 fn normalize_body(body: &str) -> String {
@@ -2944,7 +2943,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
 
     #[test]
     fn registered_first_class_record_kinds_have_canonical_contracts() {
-        let contracts = FIRST_CLASS_RECORD_KINDS
+        let canonical_contracts = CANONICAL_RECORD_KINDS
             .iter()
             .map(|spec| {
                 (
@@ -2957,12 +2956,27 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .collect::<Vec<_>>();
 
         assert_eq!(
-            contracts,
+            canonical_contracts,
             vec![
+                ("issue", "atelier.issue", 1, Some("issues")),
                 ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
             ]
         );
+        for (kind, _, _, _) in canonical_contracts {
+            assert!(validate_canonical_record_kind(kind).is_ok());
+            let spec = canonical_record_kind(kind).unwrap();
+            assert_eq!(
+                canonical_record_path(spec, "atelier-abcd").unwrap(),
+                PathBuf::from(spec.canonical_dir.unwrap()).join("atelier-abcd.md")
+            );
+        }
+
+        let generic_contracts = FIRST_CLASS_RECORD_KINDS
+            .iter()
+            .map(|spec| spec.kind)
+            .collect::<Vec<_>>();
+        assert_eq!(generic_contracts, vec!["mission", "evidence"]);
     }
 
     #[test]
@@ -2991,6 +3005,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
         assert!(text.contains("schema: \"atelier.issue\""));
         assert!(text.contains("schema_version: 1"));
+        assert!(text.contains("priority: \"P1\""));
         assert!(text.contains("relationships:\n"));
         assert!(text.contains("  blocks:\n  - kind: \"issue\"\n    id: \"atelier-bbbb\"\n"));
         assert!(text.contains("  children:\n  - kind: \"issue\"\n    id: \"atelier-aaaa\"\n"));
@@ -3002,6 +3017,41 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
         assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
         assert!(!text.contains("closed_at:"));
+    }
+
+    #[test]
+    fn issue_record_uses_generic_canonical_record_dispatch() {
+        let record = issue_record("atelier-genr").into_record();
+        let text = render_record(&record).unwrap();
+        let spec = canonical_record_kind("issue").unwrap();
+        let parsed = parse_record(
+            &text,
+            &canonical_record_path(spec, "atelier-genr").unwrap(),
+            spec,
+        )
+        .unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(
+            canonical_record_path(spec, "atelier-genr").unwrap(),
+            issue_record_path("atelier-genr")
+        );
+    }
+
+    #[test]
+    fn ownership_modules_expose_supported_record_boundaries() {
+        let record = issue::CanonicalIssueRecord {
+            ..issue_record("atelier-mods")
+        };
+        let text = issue::render_issue_record(&record).unwrap();
+        assert!(document::split_document(&text).is_some());
+        assert_eq!(
+            mission::MissionSectionName::Validation.title(),
+            "Validation"
+        );
+        let _store = store::RecordStore::new(tempdir().unwrap().path());
+        validation::validate_priority("high").unwrap();
+        let _: Option<evidence::EvidenceOutputSummary> = None;
     }
 
     #[test]
@@ -3295,6 +3345,16 @@ Legacy missions used free-form body headings.
         let message = error.to_string();
         assert!(message.contains("acceptance"));
         assert!(message.contains("evidence_required"));
+    }
+
+    #[test]
+    fn issue_parser_contract_rejects_label_priority_in_canonical_markdown() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.\n\n## Evidence\n\n- `atelier lint atelier-abcd` passes.";
+        let text = sectioned_issue_text("atelier-abcd", body)
+            .replace("priority: \"P1\"", "priority: \"high\"");
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
+        assert!(error.to_string().contains("Invalid priority"));
     }
 
     #[test]

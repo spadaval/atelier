@@ -107,6 +107,7 @@ fn test_list_issues_filter_by_priority() {
     let high_issues = db.list_issues(None, None, Some("high")).unwrap();
     assert_eq!(high_issues.len(), 1);
     assert_eq!(high_issues[0].priority, "high");
+    assert!(db.list_issues(None, None, Some("P1")).is_err());
 }
 
 #[test]
@@ -301,12 +302,15 @@ fn test_add_and_get_comments() {
 
     let id = db.create_issue("Test issue", None, "medium").unwrap();
 
-    let comment_id = db.add_comment(&id, "First comment", "note").unwrap();
+    let comment_id = db
+        .record_legacy_import_comment(&id, "First comment", "note")
+        .unwrap();
     assert!(comment_id > 0);
 
-    db.add_comment(&id, "Second comment", "note").unwrap();
+    db.record_legacy_import_comment(&id, "Second comment", "note")
+        .unwrap();
 
-    let comments = db.get_comments(&id).unwrap();
+    let comments = db.list_legacy_import_comments(&id).unwrap();
     assert_eq!(comments.len(), 2);
     assert_eq!(comments[0].content, "First comment");
     assert_eq!(comments[1].content, "Second comment");
@@ -408,28 +412,6 @@ fn test_blocked_becomes_ready_when_blocker_closed() {
     assert!(ready_issues.iter().any(|i| i.id == blocked));
 }
 
-// ==================== Sessions Tests ====================
-
-#[test]
-fn test_session_runtime_adapter_is_removed() {
-    let (db, _dir) = setup_test_db();
-
-    let id = db.start_session().unwrap();
-    assert_eq!(id, 0);
-    assert!(db.get_current_session().unwrap().is_none());
-}
-
-#[test]
-fn test_set_session_issue_is_removed_noop() {
-    let (db, _dir) = setup_test_db();
-
-    let issue_id = db.create_issue("Test issue", None, "medium").unwrap();
-    let session_id = db.start_session().unwrap();
-
-    db.set_session_issue(session_id, &issue_id).unwrap();
-    assert!(db.get_current_session().unwrap().is_none());
-}
-
 // ==================== Search Tests ====================
 
 #[test]
@@ -467,7 +449,7 @@ fn test_search_issues_ignores_activity_sidecars() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Some issue", None, "medium").unwrap();
-    db.add_comment(&id, "Found the root cause in authentication module", "note")
+    db.record_legacy_import_comment(&id, "Found the root cause in authentication module", "note")
         .unwrap();
 
     let results = db.search_issues("authentication").unwrap();
@@ -590,9 +572,10 @@ fn test_sql_injection_in_comment() {
     let id = db.create_issue("Test", None, "medium").unwrap();
     let malicious = "comment'); DELETE FROM comments; --";
 
-    db.add_comment(&id, malicious, "note").unwrap();
+    db.record_legacy_import_comment(&id, malicious, "note")
+        .unwrap();
 
-    let comments = db.get_comments(&id).unwrap();
+    let comments = db.list_legacy_import_comments(&id).unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].content, malicious);
 }
@@ -670,12 +653,14 @@ fn test_delete_issue_cascades_comments() {
     let (db, _dir) = setup_test_db();
 
     let id = db.create_issue("Test", None, "medium").unwrap();
-    db.add_comment(&id, "Comment 1", "note").unwrap();
-    db.add_comment(&id, "Comment 2", "note").unwrap();
+    db.record_legacy_import_comment(&id, "Comment 1", "note")
+        .unwrap();
+    db.record_legacy_import_comment(&id, "Comment 2", "note")
+        .unwrap();
 
     db.delete_issue(&id).unwrap();
 
-    let comments = db.get_comments(&id).unwrap();
+    let comments = db.list_legacy_import_comments(&id).unwrap();
     assert!(comments.is_empty());
 }
 

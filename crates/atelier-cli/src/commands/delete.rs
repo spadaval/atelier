@@ -130,15 +130,15 @@ mod tests {
     fn test_delete_cascades_comments() {
         let (db, _dir) = setup_test_db();
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
-        db.add_comment(issue_id.as_str(), "Comment 1", "note")
+        db.record_legacy_import_comment(issue_id.as_str(), "Comment 1", "note")
             .unwrap();
-        db.add_comment(issue_id.as_str(), "Comment 2", "note")
+        db.record_legacy_import_comment(issue_id.as_str(), "Comment 2", "note")
             .unwrap();
 
         run_force(&db, issue_id.as_str()).unwrap();
 
         // Comments should be gone
-        let comments = db.get_comments(issue_id.as_str()).unwrap();
+        let comments = db.list_legacy_import_comments(issue_id.as_str()).unwrap();
         assert!(comments.is_empty());
     }
 
@@ -224,16 +224,19 @@ mod tests {
         let issue_id = db.create_issue("Test", None, "medium").unwrap();
         db.add_label(issue_id.as_str(), "one").unwrap();
         db.add_label(issue_id.as_str(), "two").unwrap();
-        db.add_comment(issue_id.as_str(), "Comment 1", "note")
+        db.record_legacy_import_comment(issue_id.as_str(), "Comment 1", "note")
             .unwrap();
-        db.add_comment(issue_id.as_str(), "Comment 2", "note")
+        db.record_legacy_import_comment(issue_id.as_str(), "Comment 2", "note")
             .unwrap();
 
         run_force(&db, issue_id.as_str()).unwrap();
 
         assert!(db.get_issue(issue_id.as_str()).unwrap().is_none());
         assert!(db.get_labels(issue_id.as_str()).unwrap().is_empty());
-        assert!(db.get_comments(issue_id.as_str()).unwrap().is_empty());
+        assert!(db
+            .list_legacy_import_comments(issue_id.as_str())
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

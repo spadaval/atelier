@@ -486,15 +486,11 @@ fn source_identity(relative: &str) -> Result<(String, String)> {
         .next()
         .and_then(|component| component.as_os_str().to_str())
         .ok_or_else(|| anyhow!("canonical source path has no directory: {relative}"))?;
-    let kind = if dir == record_store::ISSUE_KIND.canonical_dir.expect("issue dir") {
-        record_store::ISSUE_KIND.kind.to_string()
-    } else {
-        record_store::FIRST_CLASS_RECORD_KINDS
-            .iter()
-            .find(|spec| spec.canonical_dir == Some(dir))
-            .map(|spec| spec.kind.to_string())
-            .ok_or_else(|| anyhow!("canonical source path has unknown directory: {relative}"))?
-    };
+    let kind = record_store::CANONICAL_RECORD_KINDS
+        .iter()
+        .find(|spec| spec.canonical_dir == Some(dir))
+        .map(|spec| spec.kind.to_string())
+        .ok_or_else(|| anyhow!("canonical source path has unknown directory: {relative}"))?;
     let id = path
         .file_stem()
         .and_then(|stem| stem.to_str())

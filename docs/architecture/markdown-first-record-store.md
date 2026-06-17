@@ -324,10 +324,19 @@ file named with a UTC microsecond timestamp ID:
 writers append deterministic `-01`, `-02`, and later suffixes while refusing to
 overwrite an existing file.
 
+Decision: canonical activity sidecar APIs belong in `atelier-records`, not in
+`atelier-sqlite`. `atelier-records::activity` is the storage boundary for the
+sidecar schema and filesystem operations; higher layers may wrap those APIs for
+use-case orchestration, but the rebuildable SQLite projection must not read or
+write `.atelier/issues/<id>.activity/*.md` as a comment adapter.
+
 Ownership is intentionally split:
 
 - `src/activity.rs` owns sidecar schema, parsing, ID allocation, atomic
   create-new writes, ordering, and validation.
+- `atelier-app` may expose command-oriented issue-note, import, history, and
+  evidence-attachment workflows that coordinate activity writes with
+  projection refresh, workflow checks, and rendered outcomes.
 - `src/commands/activity_log.rs` is a thin CLI adapter that converts command
   events into sidecar events. Its cwd-based `.atelier` discovery is tolerated
   only at the command boundary for callers that do not already carry a
@@ -335,9 +344,15 @@ Ownership is intentionally split:
 - `RecordStore` owns first-class issue, mission, and evidence records. It must
   not absorb activity event payloads or project activity into record
   `relationships`.
-- `export`, `rebuild`, `lint`, `history`, and issue detail views consume
-  sidecars through the activity API. The runtime projection does not index
-  sidecar payloads as source rows.
+- `export`, `rebuild`, `lint`, `history`, import preservation, issue note
+  commands, issue detail views, and tests consume sidecars through
+  `atelier-records::activity` directly or through app-level workflows built on
+  that API.
+- `atelier-sqlite::Database` owns projection queries only. Its legacy
+  `add_comment*` and `get_comments` helpers are compatibility residue until
+  storage-boundary cleanup removes or confines them; they are not the target
+  sidecar API for new command, import, history, or test code.
+- The runtime projection does not index sidecar payloads as source rows.
 
 Activity front matter uses `schema: "atelier.activity"` and
 `schema_version: 1` with these required fields:
@@ -413,6 +428,16 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 The remaining compatibility residue is internal: several inherited SQLite
 mutation helpers are still compiled for unit tests, imports, and repair flows,
 but normal public durable commands no longer call export to become recoverable.
+
+Current caller map for activity sidecars:
+
+| Caller | Destination boundary | Notes |
+| --- | --- | --- |
+| `atelier-records/src/activity.rs` | Canonical owner | Owns sidecar paths, schema, parsing, rendering, timestamp ID allocation, listing, and create-new writes. |
+| CLI `issue note`, `issue comment`, work lifecycle, transition, evidence attachment, and bundle note adapters | App/CLI orchestration over `atelier-records::activity` | Command code converts user actions into typed activity events; follow-on app extraction should move orchestration upward without changing the storage owner. |
+| `atelier history`, issue show recent activity, Agent Factory status helpers, `export`, `rebuild`, and `lint` | Read-only consumers over `atelier-records::activity` | These surfaces may combine projection rows with sidecar events, but sidecar files remain the canonical history payload. |
+| `import-beads` preservation notes and close reasons | App/import workflow over `atelier-records::activity` | Imported predecessor comments are migration input and should be written as activity sidecars, preserving source timestamps when available. |
+| `atelier-sqlite/src/comments.rs` | Removal target for `atelier-2573` | Current read/write use of `create_issue_activity` and `list_issue_activities` blurs the projection boundary and should be removed or confined to compatibility tests/import scaffolding. |
 
 ## Projection Refresh After Canonical Writes
 

@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
+use atelier_core::IssuePriority;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkRowState {
     Ready,
@@ -161,13 +163,9 @@ fn state_rank(state: WorkRowState) -> u8 {
 }
 
 pub(crate) fn priority_rank(priority: &str) -> u8 {
-    match priority {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.sort_rank())
+        .unwrap_or(4)
 }
 
 #[cfg(test)]
