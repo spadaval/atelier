@@ -1924,6 +1924,39 @@ fn test_issue_list_ready_treats_internal_epic_blockers_as_ready() {
 }
 
 #[test]
+fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Ready child"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sequenced child"]);
+    run_atelier(dir.path(), &["issue", "block", "3", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Active item"]);
+    let active_id = issue_ref(dir.path(), 4);
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    assert!(success, "start active issue failed: {stderr}");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(
+        status_out.contains("Ready work:    2"),
+        "status should still count the parent epic and ready child:\n{status_out}"
+    );
+
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "ready list failed: {stderr}");
+    assert!(ready_out.contains("Parent epic"), "{ready_out}");
+    assert!(ready_out.contains("Ready child"), "{ready_out}");
+    assert!(!ready_out.contains("Sequenced child"), "{ready_out}");
+    assert!(!ready_out.contains("Active item"), "{ready_out}");
+}
+
+#[test]
 fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
