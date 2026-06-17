@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T23:44:16.357365357+00:00"
+status: "done"
 title: "Reduce CLI command modules to renderers and adapters"
-updated_at: "2026-06-17T23:38:25.265057326+00:00"
+updated_at: "2026-06-17T23:44:16.357365357+00:00"
 ---
 
 ## Description
