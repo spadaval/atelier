@@ -1,0 +1,36 @@
+{
+  "description": "Invalid fixture for bundle diagnostics.",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.invalid",
+        "depends_on": [
+          {
+            "client_ref": "missing.issue"
+          }
+        ],
+        "description": "This resource has an unsupported operation and unresolved reference.",
+        "issue_type": "task",
+        "operation": "update",
+        "priority": "high",
+        "title": "Invalid bundle issue"
+      }
+    ],
+    "milestones": [
+      {
+        "client_ref": "milestone.not-v1",
+        "title": "Rejected v1 milestone"
+      }
+    ],
+    "plans": [
+      {
+        "body": "Plans are Markdown artifacts, not v1 bundle resources.",
+        "client_ref": "plan.not-v1",
+        "title": "Rejected v1 plan"
+      }
+    ]
+  },
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid bundle fixture"
+}

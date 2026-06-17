@@ -28,7 +28,8 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier graph impact/tree`
 - `atelier mission create/show/list/status/close/update/note`
 - `atelier mission add-work/unlink/add-blocker`
-- `atelier plan create/show/list/revise/link/apply`
+- `atelier plan create/show/list/revise/link`
+- `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier history`
 - `atelier issue note <id> "..."`
@@ -111,7 +112,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
 | `graph` | Inspect cross-record hierarchy and downstream impact shape. | `impact` prints a bounded downstream set across mission and issue relationships; `tree` prints compact mission/issue hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `mission show <id>`, `issue show <id>`, `issue list --blocked`. |
 | `mission` | Create, focus, inspect, close, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; completion uses `close --reason` after gates pass; other lifecycle edits stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `mission close <id> --reason "..."`, `history --mission <id>`. |
-| `plan` | Author, inspect, revise, link, and apply durable plans. | `show` and `list` are readable plan views; `apply` prints preview or created-record summaries rather than raw JSON internals. | Plan IDs, affected-record counts, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
+| `plan` | Author, inspect, revise, and link durable plans. | `show` and `list` are readable plan views; mutation output names the plan record and linked targets. | Plan IDs, target IDs, and status tokens. | `plan show <id>`, `mission show <id>`, `history`. |
+| `bundle` | Preview and apply one-shot graph bundles from files. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
@@ -235,16 +237,18 @@ defaults still apply when `--parent` or a matching explicit `--issue-type` is
 supplied. Conflicting type choices fail with guidance rather than silently
 creating a surprising record.
 
-First-class mission, milestone, plan, evidence, relationship, and work lifecycle
+First-class mission, evidence, relationship, and work lifecycle
 commands are now core as a staged implementation. Mission,
-milestone, plan, evidence, and issue lifecycle mutations write canonical
+evidence, and issue lifecycle mutations write canonical
 Markdown through RecordStore before refreshing the SQLite projection; local
 projection repair is normally transparent or routed through `doctor --fix`.
-`atelier plan apply` validates authored
-bulk-plan JSON, supports dry-run and validate-only previews, creates issue and
-record graphs in canonical Markdown, normalizes issue dependency fields, writes
-canonical relationship buckets, and refreshes the projection after successful
-canonical writes. `atelier mission show` is the rich mission detail read:
+`atelier bundle preview <file>` validates authored bundle JSON from a real file
+path and prints a non-mutating deterministic preview. `atelier bundle apply
+<file> --yes` applies create-only v1 bundle resources, creates record graphs in
+canonical Markdown, normalizes issue dependency fields, writes canonical
+relationship buckets, refreshes projection state after successful canonical
+writes, and reports recovery detail if an unexpected apply failure leaves any
+created IDs. `atelier mission show` is the rich mission detail read:
 it summarizes linked plans, milestones, evidence, and work grouped by ready,
 blocked, done, and backlog state. `atelier mission status [<id>]` is the
 mission-control CLI surface for active mission health, mission proof gaps,
@@ -518,7 +522,8 @@ generic relationship verb.
 | Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
 | Inspect cross-record impact or hierarchy | mission or issue ID for impact; all records for tree | `atelier graph impact <mission-or-issue-id>` and `atelier graph tree --compact` | Graph commands inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
 | Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
-| Create or relate durable plans | plan, mission, issue, and evidence IDs as required by the subcommand | `atelier plan create`, `atelier plan show <plan-id>`, `atelier plan link <plan-id> <kind>/<id>`, and `atelier plan apply <plan-id>` | Plans own authored execution graphs. Plan links do not replace issue blockers or mission work links. |
+| Create or relate durable plans | plan, mission, issue, and evidence IDs as required by the subcommand | `atelier plan create`, `atelier plan show <plan-id>`, and `atelier plan link <plan-id> <kind>/<id>` | Plans are Markdown artifacts referenced by accountable work or evidence. Plan links do not replace issue blockers or mission work links. |
+| Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file> --yes` | Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |
 | Inspect or repair epic review branches | epic or issue ID | `atelier branch status`, `atelier branch for-epic <epic-id>`, and `atelier branch merge <epic-id>` | Branch helpers are advanced Git lifecycle surfaces. Routine workers usually use `atelier start` and issue close. |
 | Inspect first-class evidence, plan, or milestone records | evidence, plan, or milestone ID | `atelier evidence show <evidence-id>`, `atelier plan show <plan-id>`, or the milestone surface when enabled | These records are supporting artifacts. Issue commands should reject their IDs with corrective wrong-kind guidance. |
 

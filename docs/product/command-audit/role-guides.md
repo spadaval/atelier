@@ -50,7 +50,7 @@ atelier issue close <id> --reason "..."
 ```
 
 Worker guide should hide or de-emphasize setup, maintenance, raw diagnostics,
-bulk plan apply, branch merge, and destructive record deletion.
+bundle apply, branch merge, and destructive record deletion.
 
 ## Reviewer Guide
 
@@ -96,8 +96,8 @@ atelier graph tree --compact
 atelier worktree for-mission <mission-id>
 ```
 
-Manager guide should include `plan apply --dry-run` and
-`plan apply --validate-only` as advanced bulk-planning commands, not as the
+Manager guide should include `bundle preview <file>` and
+`bundle apply <file> --yes` as advanced bundle graph commands, not as the
 ordinary way to make every issue. Explicit branch commands belong in advanced
 repair and diagnostic guidance; normal branch preparation belongs to
 `atelier start <id>`.

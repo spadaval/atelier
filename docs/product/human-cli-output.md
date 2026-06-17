@@ -189,7 +189,7 @@ their need:
   `atelier graph tree --compact`, and issue blocker commands over scraping
   broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
-  specific document defines that contract, such as bulk-plan input JSON or a
+  specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
 
 Full human output is allowed to change for readability, grouping, width, color,
