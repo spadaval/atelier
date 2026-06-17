@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T22:05:53.505825161+00:00"
+status: "done"
 title: "Move graph creation off plan apply and into bundle commands"
-updated_at: "2026-06-17T21:55:57.159981074+00:00"
+updated_at: "2026-06-17T22:05:53.505825161+00:00"
 ---
 
 ## Description
