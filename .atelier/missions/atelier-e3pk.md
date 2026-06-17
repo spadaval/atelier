@@ -7,30 +7,12 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-6375"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-7g43"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-98mo"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-c5oz"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-hw9t"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-tovs"
-    type: "advances"
+  relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
-title: "Add session-aware Forgejo PR coordination"
-updated_at: "2026-06-17T17:59:36.325625604+00:00"
+status: "draft"
+title: "Superseded by 0v3f: Add session-aware Forgejo PR coordination"
+updated_at: "2026-06-17T21:43:44.680857129+00:00"
 ---
 
 ## Intent
