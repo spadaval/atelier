@@ -87,8 +87,8 @@ validation.
 
 ## Command Surface
 
-Milestones are first-class checkpoint records, not an inherited issue lifecycle
-subsystem. They are created today through `atelier plan apply` bulk-plan input
-and rendered under `.atelier/milestones/`. A future dedicated checkpoint command
-must target this record contract directly rather than restoring the deleted
-legacy `milestone` command group.
+Milestone/checkpoint semantics are deferred for v1 and are not a validation-data
+destination for bundle apply. A future dedicated checkpoint command or record
+surface must target this record contract directly rather than restoring the
+deleted legacy `milestone` command group or smuggling milestones into the v1
+bundle resource set.

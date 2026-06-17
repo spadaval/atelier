@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T22:06:16.964703333+00:00"
+status: "done"
 title: "Enforce v1 bundle schema without plans or milestones"
-updated_at: "2026-06-17T21:28:57.366313869+00:00"
+updated_at: "2026-06-17T22:06:16.964703333+00:00"
 ---
 
 ## Description

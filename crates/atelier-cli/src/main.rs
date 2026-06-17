@@ -30,7 +30,8 @@ Issues:
 
 Missions and planning:
   mission       Create, list, show, status, close, and update durable missions
-  plan          Create, apply, revise, list, and link durable plans
+  plan          Create, revise, list, and link durable plans
+  bundle        Preview and apply one-shot graph bundle files
 
 Records:
   evidence      Capture validation evidence
@@ -176,6 +177,12 @@ enum Commands {
     Plan {
         #[command(subcommand)]
         action: PlanCommands,
+    },
+
+    /// One-shot graph bundle files
+    Bundle {
+        #[command(subcommand)]
+        action: BundleCommands,
     },
 
     /// First-class evidence records
@@ -521,14 +528,6 @@ enum PlanCommands {
     },
     /// Show a plan
     Show { id: String },
-    /// Apply an authored bulk plan JSON file
-    Apply {
-        input: String,
-        #[arg(long)]
-        dry_run: bool,
-        #[arg(long)]
-        validate_only: bool,
-    },
     /// List plans
     List {
         #[arg(short, long)]
@@ -548,6 +547,18 @@ enum PlanCommands {
         target_id: String,
         #[arg(short = 't', long = "type", default_value = "planned_by")]
         relation_type: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum BundleCommands {
+    /// Preview an authored bundle JSON file without mutating tracker state
+    Preview { input: String },
+    /// Apply an authored bundle JSON file
+    Apply {
+        input: String,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -1232,21 +1243,6 @@ fn run() -> Result<()> {
                 let db = projection_query_db()?;
                 commands::plan::show(&db, &id)
             }
-            PlanCommands::Apply {
-                input,
-                dry_run,
-                validate_only,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                commands::plan::apply(
-                    storage.db(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &input,
-                    dry_run,
-                    validate_only,
-                )
-            }
             PlanCommands::List { status } => {
                 let db = projection_query_db()?;
                 commands::plan::list(&db, status.as_deref())
@@ -1276,6 +1272,23 @@ fn run() -> Result<()> {
                     &target_kind,
                     &target_id,
                     &relation_type,
+                )
+            }
+        },
+
+        Commands::Bundle { action } => match action {
+            BundleCommands::Preview { input } => {
+                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                commands::bundle::preview(storage.db(), &input)
+            }
+            BundleCommands::Apply { input, yes } => {
+                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                commands::bundle::apply(
+                    storage.db(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    &input,
+                    yes,
                 )
             }
         },
@@ -1592,10 +1605,13 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Plan { action } => match action {
             PlanCommands::Create { .. } => "plan create",
             PlanCommands::Show { .. } => "plan show",
-            PlanCommands::Apply { .. } => "plan apply",
             PlanCommands::List { .. } => "plan list",
             PlanCommands::Revise { .. } => "plan revise",
             PlanCommands::Link { .. } => "plan link",
+        },
+        Commands::Bundle { action } => match action {
+            BundleCommands::Preview { .. } => "bundle preview",
+            BundleCommands::Apply { .. } => "bundle apply",
         },
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record { .. } => "evidence record",

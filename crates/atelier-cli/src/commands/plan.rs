@@ -5,10 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{
-    EvidenceRecordData, Issue, MilestoneRecordData, PlanRecord, PlanRecordData, PlanRevision,
-    Record,
-};
+use atelier_core::{EvidenceRecordData, Issue, PlanRecord, PlanRecordData, PlanRevision, Record};
+use atelier_records::activity::{create_issue_activity, ActivityEventType};
 use atelier_records::{
     is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
 };
@@ -128,50 +126,29 @@ fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
 }
 
-pub fn apply(
+pub fn preview_bundle(db: &Database, input: &str) -> Result<()> {
+    let bundle = load_bundle(input)?;
+    validate_bundle(db, &bundle)?;
+    print_bundle_summary(preview_bundle_summary(&bundle))
+}
+
+pub fn apply_bundle(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     input: &str,
-    dry_run_override: bool,
-    validate_only_override: bool,
+    yes: bool,
 ) -> Result<()> {
-    let bytes = fs::read(input).with_context(|| format!("Failed to read bulk plan {input}"))?;
-    let plan: BulkPlan = serde_json::from_slice(&bytes)
-        .with_context(|| format!("Failed to parse bulk plan {input} as JSON"))?;
-    let options = plan.effective_options(dry_run_override, validate_only_override);
-    validate_bulk_plan(db, &plan)?;
-
-    if options.validate_only {
-        print_apply_summary(json!({
-            "applied": false,
-            "dry_run": false,
-            "validate_only": true,
-            "records": {},
-            "relationships": 0,
-            "message": "bulk plan is valid"
-        }))?;
-        return Ok(());
+    if !yes {
+        bail!("bundle apply requires --yes");
     }
+    let bundle = load_bundle(input)?;
+    validate_bundle(db, &bundle)?;
 
-    if options.dry_run {
-        let preview = dry_run_preview(&plan);
-        print_apply_summary(preview)?;
-        return Ok(());
-    }
+    let summary = apply_bundle_file(db, state_dir, &bundle)?;
+    refresh_projection(state_dir, db_path)?;
 
-    let summary = apply_bulk_plan(db, state_dir, &plan)?;
-    match options.export.as_str() {
-        "auto" => refresh_projection(state_dir, db_path)?,
-        "check_only" => {
-            atelier_app::rebuild::validate_canonical_state(state_dir)?;
-            refresh_projection(state_dir, db_path)?;
-        }
-        "skip" => refresh_projection(state_dir, db_path)?,
-        other => bail!("Invalid export option '{other}'"),
-    }
-
-    print_apply_summary(summary)
+    print_bundle_summary(summary)
 }
 
 fn print_record(db: &Database, record: &PlanRecord) -> Result<()> {
@@ -216,72 +193,44 @@ fn print_heading(title: &str) {
     println!("{}", "-".repeat(title.len()));
 }
 
+fn load_bundle(input: &str) -> Result<BundleFile> {
+    let bytes = fs::read(input).with_context(|| format!("Failed to read bundle file {input}"))?;
+    serde_json::from_slice(&bytes)
+        .with_context(|| format!("Failed to parse bundle {input} as JSON"))
+}
+
 #[derive(Debug, Deserialize)]
-struct BulkPlan {
+#[serde(deny_unknown_fields)]
+struct BundleFile {
     schema: String,
     schema_version: i64,
     title: String,
     #[serde(default)]
     description: Option<String>,
+    #[serde(rename = "metadata", default)]
+    _metadata: Value,
     #[serde(default)]
-    apply: BulkApplyOptions,
-    #[serde(default)]
-    records: BulkRecords,
-    #[serde(default)]
-    links: Vec<Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BulkApplyOptions {
-    #[serde(default)]
-    dry_run: bool,
-    #[serde(default = "default_on_conflict")]
-    on_conflict: String,
-    #[serde(default = "default_true")]
-    atomic: bool,
-    #[serde(default = "default_export")]
-    export: String,
-    #[serde(default)]
-    validate_only: bool,
-}
-
-impl Default for BulkApplyOptions {
-    fn default() -> Self {
-        Self {
-            dry_run: false,
-            on_conflict: default_on_conflict(),
-            atomic: true,
-            export: default_export(),
-            validate_only: false,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct EffectiveApplyOptions {
-    dry_run: bool,
-    validate_only: bool,
-    export: String,
+    resources: BundleResources,
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct BulkRecords {
+#[serde(deny_unknown_fields)]
+struct BundleResources {
     #[serde(default)]
-    issues: Vec<BulkIssue>,
+    issues: Vec<BundleIssue>,
     #[serde(default)]
-    missions: Vec<BulkMission>,
+    missions: Vec<BundleMission>,
     #[serde(default)]
-    milestones: Vec<BulkMilestone>,
-    #[serde(default)]
-    plans: Vec<BulkPlanRecord>,
-    #[serde(default)]
-    evidence: Vec<BulkEvidence>,
+    evidence: Vec<BundleEvidence>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BulkIssue {
+#[serde(deny_unknown_fields)]
+struct BundleIssue {
     client_ref: String,
     title: String,
+    #[serde(default)]
+    operation: Option<String>,
     #[serde(default)]
     description: Option<String>,
     #[serde(default = "default_issue_type")]
@@ -293,81 +242,54 @@ struct BulkIssue {
     #[serde(default)]
     labels: Vec<String>,
     #[serde(default)]
-    parent: Option<BulkRef>,
+    parent: Option<BundleRef>,
     #[serde(default)]
-    depends_on: Vec<BulkRef>,
+    depends_on: Vec<BundleRef>,
     #[serde(default)]
-    blocks: Vec<BulkRef>,
+    blocks: Vec<BundleRef>,
     #[serde(default)]
-    notes: Vec<BulkNote>,
+    notes: Vec<BundleNote>,
     #[serde(default)]
-    acceptance: Vec<String>,
+    outcome: Vec<String>,
     #[serde(default)]
-    evidence_required: Vec<String>,
+    evidence: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BulkMission {
+#[serde(deny_unknown_fields)]
+struct BundleMission {
     client_ref: String,
     title: String,
+    #[serde(default)]
+    operation: Option<String>,
     #[serde(default)]
     body: Option<String>,
     #[serde(default)]
     labels: Vec<String>,
     #[serde(default)]
-    work: Vec<BulkRef>,
-    #[serde(default)]
-    plans: Vec<BulkRef>,
-    #[serde(default)]
-    milestones: Vec<BulkRef>,
+    work: Vec<BundleRef>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BulkMilestone {
+#[serde(deny_unknown_fields)]
+struct BundleEvidence {
     client_ref: String,
     title: String,
     #[serde(default)]
-    desired_state: String,
-    #[serde(default)]
-    scope: Vec<String>,
-    #[serde(default)]
-    validation_criteria: Vec<String>,
-    #[serde(default)]
-    missions: Vec<BulkRef>,
-    #[serde(default)]
-    contributing_work: Vec<BulkRef>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BulkPlanRecord {
-    client_ref: String,
-    title: String,
-    #[serde(default)]
-    body: String,
-    #[serde(default)]
-    owner: Option<String>,
-    #[serde(default)]
-    applies_to: Vec<BulkRef>,
-    #[serde(default)]
-    supersedes: Vec<BulkRef>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BulkEvidence {
-    client_ref: String,
-    title: String,
+    operation: Option<String>,
     evidence_type: String,
     result: String,
     #[serde(default)]
     body: String,
     #[serde(default)]
-    validates: Vec<BulkRef>,
+    validates: Vec<BundleRef>,
     #[serde(default)]
     artifact: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct BulkRef {
+#[serde(deny_unknown_fields)]
+struct BundleRef {
     #[serde(default)]
     client_ref: Option<String>,
     #[serde(default)]
@@ -375,7 +297,8 @@ struct BulkRef {
 }
 
 #[derive(Debug, Deserialize)]
-struct BulkNote {
+#[serde(deny_unknown_fields)]
+struct BundleNote {
     body: String,
     #[serde(default)]
     author: Option<String>,
@@ -389,31 +312,22 @@ struct ResolvedRef {
     id: String,
 }
 
-fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
-    if plan.schema != "atelier.bulk-plan" {
-        bail!("Invalid bulk plan schema '{}'", plan.schema);
+fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
+    if bundle.schema != "atelier.bundle" {
+        bail!("Invalid bundle schema '{}'", bundle.schema);
     }
-    if plan.schema_version != 1 {
+    if bundle.schema_version != 1 {
         bail!(
-            "Unsupported bulk plan schema_version {}",
-            plan.schema_version
+            "Unsupported bundle schema_version {}",
+            bundle.schema_version
         );
     }
-    if plan.title.trim().is_empty() {
-        bail!("Bulk plan title cannot be empty");
-    }
-    if !["fail", "skip_existing", "update_existing"].contains(&plan.apply.on_conflict.as_str()) {
-        bail!("Invalid on_conflict option '{}'", plan.apply.on_conflict);
-    }
-    if !plan.apply.atomic {
-        bail!("Non-atomic bulk apply is not supported");
-    }
-    if !["auto", "skip", "check_only"].contains(&plan.apply.export.as_str()) {
-        bail!("Invalid export option '{}'", plan.apply.export);
+    if bundle.title.trim().is_empty() {
+        bail!("Bundle title cannot be empty");
     }
 
     let mut refs = BTreeSet::new();
-    for (client_ref, kind) in plan.client_refs() {
+    for (client_ref, kind) in bundle.client_refs() {
         validate_client_ref(&client_ref)?;
         if !refs.insert(client_ref.clone()) {
             bail!("Duplicate client_ref '{}'", client_ref);
@@ -424,47 +338,29 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
         validate_record_kind(kind)?;
     }
 
-    for issue in &plan.records.issues {
+    for issue in &bundle.resources.issues {
+        validate_operation(issue.operation.as_deref(), &issue.client_ref)?;
         if issue.title.trim().is_empty() {
             bail!("Issue {} title cannot be empty", issue.client_ref);
         }
         validate_issue_type(&issue.issue_type)?;
         validate_priority(&issue.priority)?;
         if let Some(status) = &issue.status {
-            validate_status(status)?;
+            validate_bundle_issue_status(status)?;
         }
-        validate_refs_exist(db, plan, issue.parent.iter(), &issue.client_ref)?;
-        validate_refs_exist(db, plan, issue.depends_on.iter(), &issue.client_ref)?;
-        validate_refs_exist(db, plan, issue.blocks.iter(), &issue.client_ref)?;
+        validate_refs_exist(db, bundle, issue.parent.iter(), &issue.client_ref)?;
+        validate_refs_exist(db, bundle, issue.depends_on.iter(), &issue.client_ref)?;
+        validate_refs_exist(db, bundle, issue.blocks.iter(), &issue.client_ref)?;
     }
-    for mission in &plan.records.missions {
+    for mission in &bundle.resources.missions {
+        validate_operation(mission.operation.as_deref(), &mission.client_ref)?;
         if mission.title.trim().is_empty() {
             bail!("Mission {} title cannot be empty", mission.client_ref);
         }
-        validate_refs_exist(db, plan, mission.plans.iter(), &mission.client_ref)?;
-        validate_refs_exist(db, plan, mission.milestones.iter(), &mission.client_ref)?;
-        validate_refs_exist(db, plan, mission.work.iter(), &mission.client_ref)?;
+        validate_refs_exist(db, bundle, mission.work.iter(), &mission.client_ref)?;
     }
-    for milestone in &plan.records.milestones {
-        if milestone.title.trim().is_empty() {
-            bail!("Milestone {} title cannot be empty", milestone.client_ref);
-        }
-        validate_refs_exist(db, plan, milestone.missions.iter(), &milestone.client_ref)?;
-        validate_refs_exist(
-            db,
-            plan,
-            milestone.contributing_work.iter(),
-            &milestone.client_ref,
-        )?;
-    }
-    for record in &plan.records.plans {
-        if record.title.trim().is_empty() {
-            bail!("Plan {} title cannot be empty", record.client_ref);
-        }
-        validate_refs_exist(db, plan, record.applies_to.iter(), &record.client_ref)?;
-        validate_refs_exist(db, plan, record.supersedes.iter(), &record.client_ref)?;
-    }
-    for evidence in &plan.records.evidence {
+    for evidence in &bundle.resources.evidence {
+        validate_operation(evidence.operation.as_deref(), &evidence.client_ref)?;
         if evidence.title.trim().is_empty() {
             bail!("Evidence {} title cannot be empty", evidence.client_ref);
         }
@@ -491,24 +387,105 @@ fn validate_bulk_plan(db: &Database, plan: &BulkPlan) -> Result<()> {
                 evidence.client_ref
             );
         }
-        validate_refs_exist(db, plan, evidence.validates.iter(), &evidence.client_ref)?;
-    }
-    if !plan.links.is_empty() {
-        bail!("Top-level bulk-plan links are no longer supported; use domain fields such as issue blocks/depends_on, mission plans/milestones, plan applies_to, or evidence validates");
+        validate_refs_exist(db, bundle, evidence.validates.iter(), &evidence.client_ref)?;
     }
     Ok(())
 }
 
-fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<Value> {
+fn validate_operation(operation: Option<&str>, client_ref: &str) -> Result<()> {
+    match operation.unwrap_or("create") {
+        "create" => Ok(()),
+        other => {
+            bail!("Unsupported operation '{other}' for {client_ref}; v1 bundles are create-only")
+        }
+    }
+}
+
+fn validate_bundle_issue_status(status: &str) -> Result<()> {
+    validate_status(status)?;
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok(());
+    }
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if policy.statuses.contains_key(status) {
+        Ok(())
+    } else {
+        bail!(
+            "Invalid bundle issue status '{status}'; status is not defined in .atelier/workflow.yaml"
+        )
+    }
+}
+
+fn workflow_initial_issue_status(issue_type: &str) -> Result<String> {
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    if !policy_path.exists() {
+        return Ok("todo".to_string());
+    }
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    Ok(policy
+        .workflow_for_issue_type(issue_type)?
+        .initial_status
+        .clone())
+}
+
+fn apply_bundle_file(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
+    let stage_parent = state_dir
+        .parent()
+        .with_context(|| format!("Cannot determine parent for {}", state_dir.display()))?;
+    let stage = create_bundle_stage_dir(stage_parent)?;
+    let result = (|| {
+        copy_state_tree(state_dir, &stage)?;
+        let summary = apply_bundle_to_state(db, &stage, bundle)?;
+        install_bundle_stage(&stage, state_dir)?;
+        Ok(summary)
+    })();
+    let _ = fs::remove_dir_all(&stage);
+    result
+}
+
+fn create_bundle_stage_dir(parent: &Path) -> Result<PathBuf> {
+    let base = format!(
+        ".atelier-bundle-stage-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    for suffix in 0..=99 {
+        let candidate = if suffix == 0 {
+            parent.join(&base)
+        } else {
+            parent.join(format!("{base}-{suffix:02}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Failed to create {}", candidate.display()))
+            }
+        }
+    }
+    bail!(
+        "Failed to allocate bundle staging directory in {}",
+        parent.display()
+    )
+}
+
+fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
     let store = RecordStore::new(state_dir);
 
-    for issue in &plan.records.issues {
+    for issue in &bundle.resources.issues {
         let description = issue_description(issue);
         let now = chrono::Utc::now();
         let id = store.allocate_issue_id()?;
-        let status = issue.status.as_deref().unwrap_or("open").to_string();
+        let status = match &issue.status {
+            Some(status) => status.clone(),
+            None => workflow_initial_issue_status(&issue.issue_type)?,
+        };
         let sections = IssueSections::unchecked_from_body(description.as_deref());
         let record = CanonicalIssueRecord {
             issue: Issue {
@@ -534,7 +511,15 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
                 _ => note.body.clone(),
             };
             let _ = &note.created_at;
-            super::activity_log::record_note(&id, &body)?;
+            create_issue_activity(
+                state_dir,
+                &id,
+                ActivityEventType::Note,
+                &current_actor(),
+                chrono::Utc::now(),
+                "Added note",
+                &body,
+            )?;
         }
         resolved.insert(
             issue.client_ref.clone(),
@@ -552,7 +537,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             }));
     }
 
-    for mission in &plan.records.missions {
+    for mission in &bundle.resources.missions {
         create_bulk_record(
             &store,
             &mut resolved,
@@ -565,47 +550,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             mission_labels(mission),
         )?;
     }
-    for milestone in &plan.records.milestones {
-        let data = MilestoneRecordData {
-            desired_state: milestone.desired_state.clone(),
-            scope: milestone.scope.clone(),
-            validation_criteria: milestone.validation_criteria.clone(),
-        };
-        create_bulk_record(
-            &store,
-            &mut resolved,
-            &mut created,
-            &milestone.client_ref,
-            "milestone",
-            &milestone.title,
-            Some(&milestone.desired_state),
-            serde_json::to_value(data)?,
-            Vec::new(),
-        )?;
-    }
-    for record in &plan.records.plans {
-        let data = PlanRecordData {
-            revision: 1,
-            owner: record.owner.clone(),
-            revisions: vec![PlanRevision {
-                revision: 1,
-                reason: "bulk_apply".to_string(),
-                body: record.body.clone(),
-            }],
-        };
-        create_bulk_record(
-            &store,
-            &mut resolved,
-            &mut created,
-            &record.client_ref,
-            "plan",
-            &record.title,
-            Some(&record.body),
-            serde_json::to_value(data)?,
-            Vec::new(),
-        )?;
-    }
-    for evidence in &plan.records.evidence {
+    for evidence in &bundle.resources.evidence {
         let data = EvidenceRecordData {
             evidence_type: evidence.evidence_type.clone(),
             captured_at: chrono::Utc::now(),
@@ -638,10 +583,10 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
         )?;
     }
 
-    for issue in &plan.records.issues {
-        let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&issue.client_ref))?;
+    for issue in &bundle.resources.issues {
+        let source = resolved_ref(db, bundle, &resolved, &BundleRef::client(&issue.client_ref))?;
         if let Some(parent) = &issue.parent {
-            let parent = resolved_ref(db, plan, &resolved, parent)?;
+            let parent = resolved_ref(db, bundle, &resolved, parent)?;
             if parent.kind != "issue" {
                 bail!(
                     "Issue parent for {} must resolve to an issue",
@@ -651,7 +596,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             store.add_issue_child(&parent.id, &source.id)?;
         }
         for blocker in &issue.depends_on {
-            let blocker = resolved_ref(db, plan, &resolved, blocker)?;
+            let blocker = resolved_ref(db, bundle, &resolved, blocker)?;
             if blocker.kind != "issue" {
                 bail!(
                     "depends_on for {} must resolve to an issue",
@@ -661,7 +606,7 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
             store.add_issue_block(&source.id, &blocker.id)?;
         }
         for blocked in &issue.blocks {
-            let blocked = resolved_ref(db, plan, &resolved, blocked)?;
+            let blocked = resolved_ref(db, bundle, &resolved, blocked)?;
             if blocked.kind != "issue" {
                 bail!("blocks for {} must resolve to an issue", issue.client_ref);
             }
@@ -670,112 +615,150 @@ fn apply_bulk_plan(db: &Database, state_dir: &Path, plan: &BulkPlan) -> Result<V
     }
 
     let mut relationship_count = 0usize;
-    for mission in &plan.records.missions {
-        let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&mission.client_ref))?;
+    for mission in &bundle.resources.missions {
+        let source = resolved_ref(
+            db,
+            bundle,
+            &resolved,
+            &BundleRef::client(&mission.client_ref),
+        )?;
         for target in &mission.work {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "advances")?;
-            relationship_count += 1;
-        }
-        for target in &mission.plans {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "planned_by")?;
-            relationship_count += 1;
-        }
-        for target in &mission.milestones {
-            add_resolved_link(
-                db,
-                &store,
-                plan,
-                &resolved,
-                &source,
-                target,
-                "has_checkpoint",
-            )?;
+            add_resolved_link(db, &store, bundle, &resolved, &source, target, "advances")?;
             relationship_count += 1;
         }
     }
-    for milestone in &plan.records.milestones {
-        let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&milestone.client_ref))?;
-        for target in &milestone.missions {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "advances")?;
-            relationship_count += 1;
-        }
-        for target in &milestone.contributing_work {
-            let contributor = resolved_ref(db, plan, &resolved, target)?;
-            add_relationship(&store, &contributor, &source, "contributes_to")?;
-            relationship_count += 1;
-        }
-    }
-    for record in &plan.records.plans {
-        let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&record.client_ref))?;
-        for target in &record.applies_to {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "planned_by")?;
-            relationship_count += 1;
-        }
-        for target in &record.supersedes {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "supersedes")?;
-            relationship_count += 1;
-        }
-    }
-    for evidence in &plan.records.evidence {
-        let source = resolved_ref(db, plan, &resolved, &BulkRef::client(&evidence.client_ref))?;
+    for evidence in &bundle.resources.evidence {
+        let source = resolved_ref(
+            db,
+            bundle,
+            &resolved,
+            &BundleRef::client(&evidence.client_ref),
+        )?;
         for target in &evidence.validates {
-            add_resolved_link(db, &store, plan, &resolved, &source, target, "validates")?;
+            add_resolved_link(db, &store, bundle, &resolved, &source, target, "validates")?;
             relationship_count += 1;
         }
     }
 
     Ok(json!({
         "applied": true,
-        "dry_run": false,
-        "validate_only": false,
-        "title": plan.title,
-        "description": plan.description,
+        "preview": false,
+        "title": bundle.title,
+        "description": bundle.description,
         "records": created,
         "relationships": relationship_count,
     }))
 }
 
-impl BulkPlan {
-    fn effective_options(
-        &self,
-        dry_run_override: bool,
-        validate_only_override: bool,
-    ) -> EffectiveApplyOptions {
-        EffectiveApplyOptions {
-            dry_run: self.apply.dry_run || dry_run_override,
-            validate_only: self.apply.validate_only || validate_only_override,
-            export: self.apply.export.clone(),
+fn copy_state_tree(source: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let name = entry.file_name();
+        if matches!(
+            name.to_str(),
+            Some("runtime" | "cache" | "locks" | "diagnostics")
+        ) {
+            continue;
+        }
+        let source_path = entry.path();
+        let dest_path = dest.join(&name);
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &dest_path)?;
+        } else {
+            fs::copy(&source_path, &dest_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    dest_path.display()
+                )
+            })?;
         }
     }
+    Ok(())
+}
 
+fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("Failed to create {}", dest.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("Failed to read {}", source.display()))?
+    {
+        let entry = entry?;
+        let source_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &dest_path)?;
+        } else {
+            fs::copy(&source_path, &dest_path).with_context(|| {
+                format!(
+                    "Failed to copy {} to {}",
+                    source_path.display(),
+                    dest_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn install_bundle_stage(stage: &Path, state_dir: &Path) -> Result<()> {
+    for name in ["issues", "missions", "evidence"] {
+        replace_dir_from_stage(&stage.join(name), &state_dir.join(name))?;
+    }
+    Ok(())
+}
+
+fn replace_dir_from_stage(staged: &Path, dest: &Path) -> Result<()> {
+    let backup = dest.with_extension("bundle-backup");
+    if backup.exists() {
+        fs::remove_dir_all(&backup)
+            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+    }
+    if dest.exists() {
+        fs::rename(dest, &backup).with_context(|| {
+            format!("Failed to move {} to {}", dest.display(), backup.display())
+        })?;
+    }
+    let result = fs::rename(staged, dest)
+        .with_context(|| format!("Failed to install staged {}", dest.display()));
+    if let Err(err) = result {
+        if backup.exists() && !dest.exists() {
+            let _ = fs::rename(&backup, dest);
+        }
+        return Err(err);
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup)
+            .with_context(|| format!("Failed to remove {}", backup.display()))?;
+    }
+    Ok(())
+}
+
+fn current_actor() -> String {
+    std::env::var("ATELIER_AGENT")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "agent".to_string())
+}
+
+impl BundleFile {
     fn client_refs(&self) -> Vec<(String, &'static str)> {
         let mut refs = Vec::new();
         refs.extend(
-            self.records
+            self.resources
                 .issues
                 .iter()
                 .map(|record| (record.client_ref.clone(), "issue")),
         );
         refs.extend(
-            self.records
+            self.resources
                 .missions
                 .iter()
                 .map(|record| (record.client_ref.clone(), "mission")),
         );
         refs.extend(
-            self.records
-                .milestones
-                .iter()
-                .map(|record| (record.client_ref.clone(), "milestone")),
-        );
-        refs.extend(
-            self.records
-                .plans
-                .iter()
-                .map(|record| (record.client_ref.clone(), "plan")),
-        );
-        refs.extend(
-            self.records
+            self.resources
                 .evidence
                 .iter()
                 .map(|record| (record.client_ref.clone(), "evidence")),
@@ -790,7 +773,7 @@ impl BulkPlan {
     }
 }
 
-impl BulkRef {
+impl BundleRef {
     fn client(client_ref: &str) -> Self {
         Self {
             client_ref: Some(client_ref.to_string()),
@@ -818,25 +801,25 @@ fn validate_client_ref(client_ref: &str) -> Result<()> {
 
 fn validate_refs_exist<'a>(
     db: &Database,
-    plan: &BulkPlan,
-    refs: impl Iterator<Item = &'a BulkRef>,
+    bundle: &BundleFile,
+    refs: impl Iterator<Item = &'a BundleRef>,
     owner: &str,
 ) -> Result<()> {
     for reference in refs {
-        validate_ref_exists(db, plan, reference, owner)?;
+        validate_ref_exists(db, bundle, reference, owner)?;
     }
     Ok(())
 }
 
 fn validate_ref_exists(
     db: &Database,
-    plan: &BulkPlan,
-    reference: &BulkRef,
+    bundle: &BundleFile,
+    reference: &BundleRef,
     owner: &str,
 ) -> Result<()> {
     match (&reference.client_ref, &reference.id) {
         (Some(client_ref), None) => {
-            if plan.client_kind(client_ref).is_none() {
+            if bundle.client_kind(client_ref).is_none() {
                 bail!(
                     "Reference '{}' for {} does not resolve in this file",
                     client_ref,
@@ -863,13 +846,7 @@ fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
             id: issue_id,
         });
     }
-    for kind in [
-        "mission",
-        "milestone",
-        "plan",
-        "evidence",
-        "workflow_validator",
-    ] {
+    for kind in ["mission", "evidence", "workflow_validator"] {
         if db.get_record(kind, id)?.is_some() {
             return Ok(ResolvedRef {
                 kind: kind.to_string(),
@@ -882,9 +859,9 @@ fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
 
 fn resolved_ref(
     db: &Database,
-    _plan: &BulkPlan,
+    _bundle: &BundleFile,
     resolved: &BTreeMap<String, ResolvedRef>,
-    reference: &BulkRef,
+    reference: &BundleRef,
 ) -> Result<ResolvedRef> {
     match (&reference.client_ref, &reference.id) {
         (Some(client_ref), None) => resolved
@@ -920,25 +897,13 @@ fn create_bulk_record(
                 Vec::new(),
             ),
         )?),
-        "plan" => Record::Plan(store.create_plan(
-            title,
-            status,
-            body.unwrap_or(""),
-            serde_json::from_value::<PlanRecordData>(data)?,
-        )?),
         "evidence" => Record::Evidence(store.create_evidence(
             title,
             "recorded",
             body.unwrap_or(title),
             serde_json::from_value::<EvidenceRecordData>(data)?,
         )?),
-        "milestone" => Record::Milestone(store.create_milestone(
-            title,
-            status,
-            body.unwrap_or(""),
-            serde_json::from_value::<MilestoneRecordData>(data)?,
-        )?),
-        other => bail!("Unsupported bulk record kind '{other}'"),
+        other => bail!("Unsupported bundle record kind '{other}'"),
     };
     if !labels.is_empty() {
         record.header_mut().labels = labels;
@@ -962,13 +927,13 @@ fn create_bulk_record(
 fn add_resolved_link(
     db: &Database,
     store: &RecordStore,
-    plan: &BulkPlan,
+    bundle: &BundleFile,
     resolved: &BTreeMap<String, ResolvedRef>,
     source: &ResolvedRef,
-    target: &BulkRef,
+    target: &BundleRef,
     relation_type: &str,
 ) -> Result<()> {
-    let target = resolved_ref(db, plan, resolved, target)?;
+    let target = resolved_ref(db, bundle, resolved, target)?;
     add_relationship(store, source, &target, relation_type)?;
     Ok(())
 }
@@ -989,22 +954,22 @@ fn add_relationship(
     Ok(())
 }
 
-fn issue_description(issue: &BulkIssue) -> Option<String> {
+fn issue_description(issue: &BundleIssue) -> Option<String> {
     let description = issue
         .description
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("Imported bulk-plan issue.");
-    let outcome = if issue.acceptance.is_empty() {
-        "Outcome was not specified in the bulk plan.".to_string()
+        .unwrap_or("Imported bundle issue.");
+    let outcome = if issue.outcome.is_empty() {
+        "Outcome was not specified in the bundle.".to_string()
     } else {
-        bullet_list(&issue.acceptance)
+        bullet_list(&issue.outcome)
     };
-    let evidence = if issue.evidence_required.is_empty() {
-        "Evidence was not specified in the bulk plan.".to_string()
+    let evidence = if issue.evidence.is_empty() {
+        "Evidence was not specified in the bundle.".to_string()
     } else {
-        bullet_list(&issue.evidence_required)
+        bullet_list(&issue.evidence)
     };
     Some(format!(
         "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n{evidence}"
@@ -1019,9 +984,9 @@ fn bullet_list(values: &[String]) -> String {
         .join("\n")
 }
 
-fn dry_run_preview(plan: &BulkPlan) -> Value {
+fn preview_bundle_summary(bundle: &BundleFile) -> Value {
     let mut records = BTreeMap::<String, Vec<Value>>::new();
-    for (client_ref, kind) in plan.client_refs() {
+    for (client_ref, kind) in bundle.client_refs() {
         records
             .entry(format!("{kind}s"))
             .or_default()
@@ -1029,38 +994,33 @@ fn dry_run_preview(plan: &BulkPlan) -> Value {
     }
     json!({
         "applied": false,
-        "dry_run": true,
-        "validate_only": false,
-        "title": plan.title,
-        "description": plan.description,
+        "preview": true,
+        "title": bundle.title,
+        "description": bundle.description,
         "records": records,
         "relationships": 0,
     })
 }
 
-fn print_apply_summary(summary: Value) -> Result<()> {
-    let validate_only = summary["validate_only"].as_bool().unwrap_or(false);
-    let dry_run = summary["dry_run"].as_bool().unwrap_or(false);
-    if validate_only {
-        println!("Bulk plan is valid.");
-    } else if dry_run {
-        println!("Bulk plan preview is valid.");
+fn print_bundle_summary(summary: Value) -> Result<()> {
+    let preview = summary["preview"].as_bool().unwrap_or(false);
+    if preview {
+        println!("Bundle preview is valid.");
     } else {
-        println!("Bulk plan applied.");
+        println!("Bundle applied.");
     }
 
     println!(
         "Applied:       {}",
         summary["applied"].as_bool().unwrap_or(false)
     );
-    println!("Dry run:       {dry_run}");
-    println!("Validate only: {validate_only}");
+    println!("Preview:       {preview}");
 
     if let Some(records) = summary["records"].as_object() {
         println!();
         println!("Records");
         println!("-------");
-        for key in ["issues", "missions", "milestones", "plans", "evidence"] {
+        for key in ["issues", "missions", "evidence"] {
             let count = records
                 .get(key)
                 .and_then(|value| value.as_array())
@@ -1088,7 +1048,7 @@ fn print_apply_summary(summary: Value) -> Result<()> {
         println!("  atelier mission show {id}");
         println!("  atelier lint");
         println!("  atelier doctor");
-    } else if !validate_only && !dry_run {
+    } else if !preview {
         println!();
         println!("Next Commands");
         println!("-------------");
@@ -1111,7 +1071,7 @@ fn sorted(mut values: Vec<String>) -> Vec<String> {
     values
 }
 
-fn mission_labels(mission: &BulkMission) -> Vec<String> {
+fn mission_labels(mission: &BundleMission) -> Vec<String> {
     let mut labels = mission.labels.clone();
     labels.push("mission".to_string());
     sorted(labels)
@@ -1121,8 +1081,6 @@ fn created_key(kind: &str) -> &str {
     match kind {
         "evidence" => "evidence",
         "mission" => "missions",
-        "milestone" => "milestones",
-        "plan" => "plans",
         "issue" => "issues",
         _ => kind,
     }
@@ -1141,18 +1099,6 @@ fn canonical_plan_record(id: &str) -> Result<PlanRecord> {
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
     atelier_app::storage_layout::find_canonical_dir_from_cwd()
-}
-
-fn default_on_conflict() -> String {
-    "fail".to_string()
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_export() -> String {
-    "auto".to_string()
 }
 
 fn default_issue_type() -> String {

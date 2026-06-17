@@ -9,9 +9,9 @@
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
   canonical `.atelier/` record file, ignored projection/cache, compatibility, and
   rebuild layout.
-- [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
-  versioned JSON contract, validation diagnostics, dry-run preview shape, and
-  fixtures for authored bulk graph plans.
+- [docs/spec/bundle/schema.md](spec/bundle/schema.md):
+  versioned JSON contract, validation diagnostics, preview output shape, and
+  fixtures for authored bundle graph deltas.
 - [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
   minimum human command, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
