@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-17T22:28:35.523404698+00:00"
+status: "done"
 title: "Move workflow parsing and transition semantics into atelier-workflow"
-updated_at: "2026-06-17T22:20:35.750709295+00:00"
+updated_at: "2026-06-17T22:28:35.523404698+00:00"
 ---
 
 ## Description
