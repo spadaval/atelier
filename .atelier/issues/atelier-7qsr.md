@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove first-class plan and milestone records"
-updated_at: "2026-06-17T20:03:31.616979507+00:00"
+updated_at: "2026-06-17T22:43:38.636167012+00:00"
 ---
 
 ## Description

@@ -5,122 +5,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{EvidenceRecordData, Issue, PlanRecord, PlanRecordData, PlanRevision, Record};
+use atelier_core::{EvidenceRecordData, Issue, Record};
 use atelier_records::activity::{create_issue_activity, ActivityEventType};
-use atelier_records::{
-    is_attachment_role, CanonicalIssueRecord, IssueSections, RecordStore, Relationships,
-};
+use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{
     validate_issue_type, validate_priority, validate_record_kind, validate_status, Database,
 };
-
-const KIND: &str = "plan";
-
-pub fn create(
-    state_dir: &Path,
-    db_path: &Path,
-    title: &str,
-    body: Option<&str>,
-    reason: Option<&str>,
-) -> Result<()> {
-    let data = PlanRecordData {
-        revision: 1,
-        owner: None,
-        revisions: vec![PlanRevision {
-            revision: 1,
-            reason: reason.unwrap_or("initial").to_string(),
-            body: body.unwrap_or("").to_string(),
-        }],
-    };
-    let store = RecordStore::new(state_dir);
-    let created = store.create_plan(title, "open", body.unwrap_or(""), data)?;
-    refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    print_record(&db, &created)
-}
-
-pub fn show(db: &Database, id: &str) -> Result<()> {
-    db.require_record(KIND, id)?;
-    let record = canonical_plan_record(id)?;
-    print_record(&db, &record)
-}
-
-pub fn list(db: &Database, status: Option<&str>) -> Result<()> {
-    let records = db.list_records(KIND, status)?;
-    if records.is_empty() {
-        print_heading("Plans");
-        println!("(none)");
-        return Ok(());
-    }
-    print_heading("Plans");
-    println!("{} total", records.len());
-    for record in records {
-        println!("  {:<14} {:<10} {}", record.id, record.status, record.title);
-    }
-    Ok(())
-}
-
-pub fn revise(
-    state_dir: &Path,
-    db_path: &Path,
-    id: &str,
-    body: &str,
-    reason: Option<&str>,
-) -> Result<()> {
-    let store = RecordStore::new(state_dir);
-    let mut current = match store.load_record_by_id(KIND, id)? {
-        Record::Plan(record) => record,
-        other => bail!("Expected plan record {id}, found {}", other.kind()),
-    };
-    let mut data = atelier_records::normalized_plan_data(current.data.clone());
-    let next_revision = data.revision + 1;
-    data.revision = next_revision;
-    data.revisions.push(PlanRevision {
-        revision: next_revision,
-        reason: reason.unwrap_or("revision").to_string(),
-        body: body.to_string(),
-    });
-    current.body = body.to_string();
-    current.data = data;
-    current.header.updated_at = chrono::Utc::now();
-    store.write_record_atomic(&Record::Plan(current.clone()))?;
-    refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    print_record(&db, &current)
-}
-
-pub fn link(
-    state_dir: &Path,
-    db_path: &Path,
-    id: &str,
-    target_kind: &str,
-    target_id: &str,
-    relation_type: &str,
-) -> Result<()> {
-    let db = Database::open(db_path)?;
-    db.require_record(KIND, id)?;
-    validate_record_ref(&db, target_kind, target_id)?;
-    drop(db);
-    let store = RecordStore::new(state_dir);
-    if is_attachment_role(relation_type) {
-        store.add_attachment_relationship(KIND, id, target_kind, target_id, relation_type)?;
-    } else {
-        store.add_relates_relationship(KIND, id, target_kind, target_id, relation_type)?;
-    }
-    refresh_projection(state_dir, db_path)?;
-    println!("Linked plan {id} {relation_type} {target_kind} {target_id}");
-    Ok(())
-}
-
-fn validate_record_ref(db: &Database, kind: &str, id: &str) -> Result<()> {
-    validate_record_kind(kind)?;
-    if kind == "issue" {
-        db.require_issue(id)?;
-    } else {
-        db.require_record(kind, id)?;
-    }
-    Ok(())
-}
 
 fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
@@ -149,48 +39,6 @@ pub fn apply_bundle(
     refresh_projection(state_dir, db_path)?;
 
     print_bundle_summary(summary)
-}
-
-fn print_record(db: &Database, record: &PlanRecord) -> Result<()> {
-    println!(
-        "{} [plan] {} - {}",
-        record.header.id, record.header.status, record.header.title
-    );
-    println!(
-        "{}",
-        "=".repeat(
-            record.header.id.len() + record.header.status.len() + record.header.title.len() + 11
-        )
-    );
-    println!("Status:   {}", record.header.status);
-    println!("Revision: {}", record.data.revision);
-    println!("Created:  {}", record.header.created_at.to_rfc3339());
-    println!("Updated:  {}", record.header.updated_at.to_rfc3339());
-    let links = db.list_record_links(KIND, &record.header.id)?;
-    println!("Links:    {}", links.len());
-    print_heading("Body");
-    if !record.body.is_empty() {
-        println!("{}", record.body);
-    } else {
-        println!("(none)");
-    }
-    if !links.is_empty() {
-        print_heading("Links");
-        for link in links {
-            let (kind, id) = if link.source_kind == KIND && link.source_id == record.header.id {
-                (link.target_kind, link.target_id)
-            } else {
-                (link.source_kind, link.source_id)
-            };
-            println!("  {} {} {}", link.relation_type, kind, id);
-        }
-    }
-    Ok(())
-}
-
-fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
 }
 
 fn load_bundle(input: &str) -> Result<BundleFile> {
@@ -1079,21 +927,6 @@ fn created_key(kind: &str) -> &str {
         "issue" => "issues",
         _ => kind,
     }
-}
-
-fn canonical_plan_record(id: &str) -> Result<PlanRecord> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Cannot locate canonical Atelier state directory");
-    };
-    let store = RecordStore::new(state_dir);
-    match store.load_record_by_id(KIND, id)? {
-        Record::Plan(record) => Ok(record),
-        other => bail!("Expected plan record {id}, found {}", other.kind()),
-    }
-}
-
-fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
-    atelier_app::storage_layout::find_canonical_dir_from_cwd()
 }
 
 fn default_issue_type() -> String {

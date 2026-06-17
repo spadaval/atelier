@@ -108,7 +108,9 @@ fn print_role_index() {
     println!("-----");
     println!("  worker    Implement assigned or ready issue work.");
     println!("  reviewer  Check proof, review outputs, and validate transitions.");
-    println!("  manager   Create, organize, and coordinate missions, plans, and work.");
+    println!(
+        "  manager   Create, organize, and coordinate missions, planning artifacts, and work."
+    );
     println!("  admin     Set up, repair, migrate, and maintain Atelier state.");
     println!();
     println!("Commands");

@@ -84,14 +84,6 @@ impl Database {
                 self.conn
                     .execute("DELETE FROM evidence WHERE id = ?1", params![id])?;
             }
-            "plan" => {
-                self.conn
-                    .execute("DELETE FROM plans WHERE id = ?1", params![id])?;
-            }
-            "milestone" => {
-                self.conn
-                    .execute("DELETE FROM milestones WHERE id = ?1", params![id])?;
-            }
             _ => {}
         }
         self.conn.execute(
@@ -334,20 +326,6 @@ impl Database {
                         data.success.map(|value| if value { 1_i64 } else { 0_i64 }),
                         data.spawn_error,
                     ],
-                )?;
-            }
-            Record::Plan(record) => {
-                let data = &record.data;
-                self.conn.execute(
-                    "INSERT INTO plans (id, revision, owner) VALUES (?1, ?2, ?3)",
-                    params![record.header.id, data.revision, data.owner],
-                )?;
-            }
-            Record::Milestone(record) => {
-                let data = &record.data;
-                self.conn.execute(
-                    "INSERT INTO milestones (id, desired_state) VALUES (?1, ?2)",
-                    params![record.header.id, data.desired_state],
                 )?;
             }
             _ => {}

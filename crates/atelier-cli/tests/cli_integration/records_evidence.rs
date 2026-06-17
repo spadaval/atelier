@@ -900,28 +900,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(success, "mission update failed: {stderr}");
     assert!(mission_update.contains("Status: ready"));
 
-    let (success, plan_out, stderr) = run_atelier(
-        dir.path(),
-        &["plan", "create", "Execution plan", "--body", "Do the thing"],
-    );
-    assert!(success, "plan create failed: {stderr}");
-    assert!(plan_out.contains("[plan] open - Execution plan"));
-    let plan_id = record_id_by_title(dir.path(), "plans", "Execution plan");
-    let plan_id = plan_id.as_str();
-    let (success, revise_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "plan",
-            "revise",
-            plan_id,
-            "Do the thing, then verify the projection.",
-            "--reason",
-            "projection-first",
-        ],
-    );
-    assert!(success, "plan revise failed: {stderr}");
-    assert!(revise_out.contains("Revision: 2"));
-
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &["evidence", "record", "--kind", "test", "cargo test passed"],
@@ -956,19 +934,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
         "unknown ID should not imply a wrong-kind match: {stderr}"
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "plan",
-            "link",
-            plan_id,
-            "mission",
-            mission_id,
-            "--type",
-            "planned_by",
-        ],
-    );
-    assert!(success, "mission-plan link failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["evidence", "attach", evidence_id, "mission", mission_id],
@@ -1038,19 +1003,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
         "  - kind: \"issue\"\n    id: \"{issue_id}\"\n    type: \"advances\""
     )));
 
-    let plan_path = dir
-        .path()
-        .join(".atelier")
-        .join("plans")
-        .join(format!("{plan_id}.md"));
-    let plan_markdown = std::fs::read_to_string(&plan_path).unwrap();
-    assert!(plan_markdown.contains("schema: \"atelier.plan\""));
-    assert!(!plan_markdown.contains("\ndata: "));
-    assert!(plan_markdown.contains("Do the thing, then verify the projection."));
-    assert!(plan_markdown.contains("revision: 2"));
-    assert!(plan_markdown.contains("reason: \"projection-first\""));
-    assert!(plan_markdown.contains(&format!("id: \"{mission_id}\"")));
-
     let evidence_path = dir
         .path()
         .join(".atelier")
@@ -1068,13 +1020,12 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    assert!(view_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(view_out.contains("Records: evidence=1"));
     assert!(view_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
     assert!(view_out.contains(&blocker_id));
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    assert!(show_out.contains("Plans"));
     assert!(show_out.contains("Evidence"));
     assert!(show_out.contains("Mission Blockers"));
 
@@ -1084,10 +1035,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("Constraints"));
     assert!(human_out.contains("Keep issues accountable"));
     assert!(human_out.contains("Progress"));
-    assert!(human_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(human_out.contains("Records: evidence=1"));
     assert!(human_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
-    assert!(human_out.contains("Plans"));
-    assert!(human_out.contains("Execution plan"));
     assert!(human_out.contains("Evidence"));
     assert!(human_out.contains("cargo test passed"));
     assert!(human_out.contains("Mission Blockers"));
@@ -1100,20 +1049,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("(none)"));
     assert!(human_out.contains("Next Commands"));
     assert!(human_out.contains("atelier mission status"));
-
-    let (success, plan_show, stderr) = run_atelier(dir.path(), &["plan", "show", plan_id]);
-    assert!(success, "human plan show failed: {stderr}");
-    assert!(plan_show.contains(&format!("{plan_id} [plan] open - Execution plan")));
-    assert!(plan_show.contains("Revision: 2"));
-    assert!(plan_show.contains("Body"));
-    assert!(plan_show.contains("Do the thing, then verify the projection."));
-    assert!(plan_show.contains("Links:"));
-
-    let (success, plan_list, stderr) = run_atelier(dir.path(), &["plan", "list"]);
-    assert!(success, "human plan list failed: {stderr}");
-    assert!(plan_list.contains("Plans"));
-    assert!(plan_list.contains("1 total"));
-    assert!(plan_list.contains("Execution plan"));
 
     let (success, evidence_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", evidence_id]);

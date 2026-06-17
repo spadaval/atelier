@@ -933,19 +933,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "plan",
-            "create",
-            "Canonical plan",
-            "--body",
-            "Canonical plan body",
-        ],
-    );
-    assert!(success, "plan create failed: {stderr}");
-    let plan_id = record_id_by_title(dir.path(), "plans", "Canonical plan");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
             "evidence",
             "record",
             "--kind",
@@ -963,18 +950,8 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     )
     .unwrap();
     conn.execute(
-        "UPDATE records SET title = 'SQLite plan title', status = 'sqlite_status' WHERE id = ?1",
-        [plan_id.as_str()],
-    )
-    .unwrap();
-    conn.execute(
         "UPDATE records SET title = 'SQLite evidence title', status = 'sqlite_status' WHERE id = ?1",
         [evidence_id.as_str()],
-    )
-    .unwrap();
-    conn.execute(
-        "UPDATE plans SET revision = 99 WHERE id = ?1",
-        [plan_id.as_str()],
     )
     .unwrap();
 
@@ -985,13 +962,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(!mission_out.contains("SQLite mission title"));
     assert!(!mission_out.contains("sqlite_status"));
 
-    let (success, plan_out, stderr) = run_atelier(dir.path(), &["plan", "show", &plan_id]);
-    assert!(success, "plan show failed: {stderr}");
-    assert!(plan_out.contains("Canonical plan body"));
-    assert!(plan_out.contains("Revision: 1"));
-    assert!(!plan_out.contains("SQLite plan title"));
-    assert!(!plan_out.contains("Revision: 99"));
-
     let (success, evidence_out, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
@@ -1000,6 +970,31 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(evidence_out.contains("Kind:        test"));
     assert!(!evidence_out.contains("SQLite evidence summary"));
     assert!(!evidence_out.contains("Kind:        sqlite"));
+
+    for args in [
+        vec![
+            "plan",
+            "create",
+            "Canonical plan",
+            "--body",
+            "Canonical plan body",
+        ],
+        vec!["plan", "show", "atelier-plnn"],
+        vec!["plan", "list"],
+        vec!["plan", "revise", "atelier-plnn", "body"],
+        vec!["plan", "link", "atelier-plnn", "mission", &mission_id],
+    ] {
+        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(
+            !success,
+            "removed plan command unexpectedly succeeded: {args:?}"
+        );
+        assert!(
+            stderr.contains("unrecognized subcommand 'plan'"),
+            "removed plan command should be rejected by clap: {stderr}"
+        );
+    }
+    assert!(!dir.path().join(".atelier/plans").exists());
 }
 
 #[test]
