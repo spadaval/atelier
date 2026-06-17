@@ -30,7 +30,6 @@ Issues:
 
 Missions and planning:
   mission       Create, list, show, status, close, and update durable missions
-  plan          Create, revise, list, and link durable plans
   bundle        Preview and apply one-shot graph bundle files
 
 Records:
@@ -171,12 +170,6 @@ enum Commands {
     Mission {
         #[command(subcommand)]
         action: MissionCommands,
-    },
-
-    /// First-class durable plan records
-    Plan {
-        #[command(subcommand)]
-        action: PlanCommands,
     },
 
     /// One-shot graph bundle files
@@ -455,7 +448,7 @@ enum MissionCommands {
         #[arg(long)]
         validation: Vec<String>,
     },
-    /// Show a mission with linked plans, work, blockers, and evidence
+    /// Show a mission with linked work, blockers, and evidence
     Show { id: String },
     /// Focus a mission as the active orchestration context
     Start {
@@ -514,40 +507,6 @@ enum MissionCommands {
     Unlink { id: String, issue: String },
     /// Add an issue blocker to a mission
     AddBlocker { id: String, issue: String },
-}
-
-#[derive(Subcommand)]
-enum PlanCommands {
-    /// Create a durable plan
-    Create {
-        title: String,
-        #[arg(short, long)]
-        body: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Show a plan
-    Show { id: String },
-    /// List plans
-    List {
-        #[arg(short, long)]
-        status: Option<String>,
-    },
-    /// Add a new plan revision
-    Revise {
-        id: String,
-        body: String,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Link a plan to a target record
-    Link {
-        id: String,
-        target_kind: String,
-        target_id: String,
-        #[arg(short = 't', long = "type", default_value = "planned_by")]
-        relation_type: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -789,7 +748,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
         "issue" | "epic" => Some("atelier issue show"),
         "mission" => Some("atelier mission show"),
-        "plan" => Some("atelier plan show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
@@ -1222,60 +1180,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Plan { action } => match action {
-            PlanCommands::Create {
-                title,
-                body,
-                reason,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                commands::plan::create(
-                    &state_dir,
-                    &db_path,
-                    &title,
-                    body.as_deref(),
-                    reason.as_deref(),
-                )
-            }
-            PlanCommands::Show { id } => {
-                let db = projection_query_db()?;
-                commands::plan::show(&db, &id)
-            }
-            PlanCommands::List { status } => {
-                let db = projection_query_db()?;
-                commands::plan::list(&db, status.as_deref())
-            }
-            PlanCommands::Revise { id, body, reason } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                commands::plan::revise(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &id,
-                    &body,
-                    reason.as_deref(),
-                )
-            }
-            PlanCommands::Link {
-                id,
-                target_kind,
-                target_id,
-                relation_type,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let target_id = resolve_record_arg(storage.db(), &target_kind, &target_id)?;
-                commands::plan::link(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &id,
-                    &target_kind,
-                    &target_id,
-                    &relation_type,
-                )
-            }
-        },
-
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
                 let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
@@ -1601,13 +1505,6 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::AddWork { .. } => "mission add-work",
             MissionCommands::Unlink { .. } => "mission unlink",
             MissionCommands::AddBlocker { .. } => "mission add-blocker",
-        },
-        Commands::Plan { action } => match action {
-            PlanCommands::Create { .. } => "plan create",
-            PlanCommands::Show { .. } => "plan show",
-            PlanCommands::List { .. } => "plan list",
-            PlanCommands::Revise { .. } => "plan revise",
-            PlanCommands::Link { .. } => "plan link",
         },
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",

@@ -521,9 +521,7 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
     db.require_record(KIND, id)?;
     let mission = canonical_mission_record(id)?;
     let links = db.list_record_links(KIND, id)?;
-    let mut plans = Vec::new();
     let mut evidence = Vec::new();
-    let mut milestones = Vec::new();
     let mut mission_blockers = Vec::new();
     let mut supporting = Vec::new();
     let mut seen_records = BTreeSet::new();
@@ -541,23 +539,11 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
             continue;
         };
         match kind {
-            "plan"
-                if link.relation_type == "planned_by"
-                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
-            {
-                plans.push(record_summary(db, kind, linked_id)?)
-            }
             "evidence"
                 if link.relation_type == "validates"
                     && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
             {
                 evidence.push(record_summary(db, kind, linked_id)?)
-            }
-            "milestone"
-                if link.relation_type == "has_checkpoint"
-                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
-            {
-                milestones.push(record_summary(db, kind, linked_id)?)
             }
             "issue" => {
                 if link.relation_type == "blocked_by" {
@@ -604,15 +590,7 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
         }
     }
 
-    render_mission_show_human(
-        &mission,
-        &plans,
-        &milestones,
-        &evidence,
-        &work,
-        &mission_blockers,
-        &supporting,
-    )?;
+    render_mission_show_human(&mission, &evidence, &work, &mission_blockers, &supporting)?;
     Ok(())
 }
 
@@ -2144,8 +2122,6 @@ fn plural_noun(count: usize, noun: &str) -> String {
 
 fn render_mission_show_human(
     mission: &MissionRecord,
-    plans: &[Value],
-    milestones: &[Value],
     evidence: &[Value],
     work: &BTreeMap<String, Vec<Value>>,
     mission_blockers: &[Value],
@@ -2181,12 +2157,7 @@ fn render_mission_show_human(
     }
 
     print_mission_heading("Progress");
-    println!(
-        "Records: plans={} milestones={} evidence={}",
-        plans.len(),
-        milestones.len(),
-        evidence.len()
-    );
+    println!("Records: evidence={}", evidence.len());
     println!(
         "Work: ready={} blocked={} done={} backlog={}",
         work_bucket_len(work, "ready"),
@@ -2196,8 +2167,6 @@ fn render_mission_show_human(
     );
     println!("Mission Blockers: {}", mission_blockers.len());
 
-    print_record_group("Plans", plans);
-    print_record_group("Milestones", milestones);
     print_record_group("Evidence", evidence);
     print_mission_blockers(mission_blockers);
     print_work_groups(work);

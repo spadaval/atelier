@@ -1,7 +1,6 @@
 pub use atelier_core::{
     Comment, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
-    Issue, IssueId, MilestoneRecordData, PlanRecordData, PlanRevision, RecordLink, Relation,
-    Session, WorkAssociation,
+    Issue, IssueId, RecordLink, Relation, Session, WorkAssociation,
 };
 
 #[cfg(test)]

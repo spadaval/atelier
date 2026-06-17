@@ -23,7 +23,6 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "maintenance",
     "mission",
     "note",
-    "plan",
     "workflow",
     "worktree",
 ];
@@ -37,6 +36,7 @@ const REMOVED_ROOTS: &[&str] = &[
     "link",
     "locks",
     "milestone",
+    "plan",
     "session",
     "sync",
     "timer",

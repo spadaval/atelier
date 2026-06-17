@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T22:43:06.506911616+00:00"
+status: "done"
 title: "Document plan and milestone removal contract"
-updated_at: "2026-06-17T20:03:24.347689663+00:00"
+updated_at: "2026-06-17T22:43:06.506911616+00:00"
 ---
 
 ## Description

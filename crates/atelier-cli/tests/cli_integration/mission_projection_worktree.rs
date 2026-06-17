@@ -159,12 +159,9 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         success,
         "ready list with blocked transition should remain readable: {stderr}"
     );
+    assert!(blocked_ready_out.contains(&ready_id), "{blocked_ready_out}");
     assert!(
-        !blocked_ready_out.contains(&ready_id),
-        "{blocked_ready_out}"
-    );
-    assert!(
-        blocked_ready_out.contains("No issues found."),
+        blocked_ready_out.contains("Ready transition"),
         "{blocked_ready_out}"
     );
 
@@ -2602,7 +2599,7 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
     assert!(success, "mission show after bundle apply failed: {stderr}");
-    assert!(view_out.contains("Records: plans=0 milestones=0 evidence=1"));
+    assert!(view_out.contains("Records: evidence=1"));
     assert!(view_out.contains("Work: ready=0 blocked=0 done=0 backlog=1"));
     let mission_markdown = std::fs::read_to_string(
         dir.path()

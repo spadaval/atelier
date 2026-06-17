@@ -33,9 +33,7 @@ pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &[
 pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "advances",
     "blocked_by",
-    "has_checkpoint",
     "contributes_to",
-    "planned_by",
     "validates",
     "evidenced_by",
     "implements",
@@ -56,8 +54,6 @@ pub const CANONICAL_PROJECTION_TABLES: &[&str] = &[
     "record_labels",
     "record_links",
     "evidence",
-    "plans",
-    "milestones",
     "projection_sources",
 ];
 
@@ -393,15 +389,6 @@ impl Database {
                     success INTEGER,
                     spawn_error TEXT
                 );
-                CREATE TABLE IF NOT EXISTS plans (
-                    id TEXT PRIMARY KEY,
-                    revision INTEGER,
-                    owner TEXT
-                );
-                CREATE TABLE IF NOT EXISTS milestones (
-                    id TEXT PRIMARY KEY,
-                    desired_state TEXT
-                );
                 "#,
             );
         }
@@ -507,15 +494,6 @@ impl Database {
                     exit_status TEXT,
                     success INTEGER,
                     spawn_error TEXT
-                );
-                CREATE TABLE plans (
-                    id TEXT PRIMARY KEY,
-                    revision INTEGER,
-                    owner TEXT
-                );
-                CREATE TABLE milestones (
-                    id TEXT PRIMARY KEY,
-                    desired_state TEXT
                 );
                 "#,
             );
@@ -1105,8 +1083,6 @@ pub const PROJECTION_TABLES: &[&str] = &[
     "record_labels",
     "record_links",
     "evidence",
-    "plans",
-    "milestones",
     "projection_sources",
 ];
 

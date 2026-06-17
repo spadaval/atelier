@@ -431,21 +431,15 @@ fn classify_record_link_for_owner(
 }
 
 fn is_child_relation(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "advances" | "contributes_to" | "implements" | "has_checkpoint"
-    )
+    matches!(relation_type, "advances" | "contributes_to" | "implements")
 }
 
 fn is_attachment_kind(kind: &str) -> bool {
-    matches!(kind, "plan" | "evidence" | "milestone")
+    matches!(kind, "evidence")
 }
 
 fn is_attachment_role(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
-    )
+    matches!(relation_type, "validates" | "evidenced_by")
 }
 
 fn issue_record_path(id: &str) -> PathBuf {

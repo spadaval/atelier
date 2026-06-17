@@ -320,7 +320,7 @@ impl Lookup {
             .map(|issue| (issue.id.clone(), issue))
             .collect();
         let mut records = BTreeMap::new();
-        for kind in ["mission", "milestone", "plan", "evidence"] {
+        for kind in ["mission", "evidence"] {
             for record in db.list_records(kind, None)? {
                 records.insert((record.kind.clone(), record.id.clone()), record);
             }

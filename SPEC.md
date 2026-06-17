@@ -82,10 +82,6 @@ Atelier should implement this storage contract:
       20260611T160930000000Z.md
   missions/
     atelier-k7mq.md
-  milestones/
-    atelier-4x9t.md
-  plans/
-    atelier-p3v6.md
   evidence/
     atelier-n8da.md
   runtime/              # ignored local runtime state
@@ -124,9 +120,9 @@ Atelier uses one canonical, human-facing ID for every durable record:
 ```
 
 For this repository, examples are `atelier-z1p8`, `atelier-k7mq`, and
-`atelier-4x9t`. Record kind is metadata, not part of identity, so issues,
-missions, milestones, plans, and evidence share the same ID shape. Titles are
-mutable text and must never be identity.
+`atelier-n8da`. Record kind is metadata, not part of identity, so issues,
+missions, evidence, and future durable record kinds share the same ID shape.
+Titles are mutable text and must never be identity.
 
 This replaces typed numeric target IDs such as `ISS-0001` or `MIS-0001` and
 separate shorthand IDs such as `#53`. The cutover should migrate existing
@@ -142,8 +138,9 @@ to be an issue.
 
 A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain intent, constraints,
-active milestones, linked plans, status, validation expectations, and current
-health. A mission is also the normal shared background workspace boundary: one
+current risks, status, validation expectations, linked accountable work,
+supporting evidence, and current health. A mission is also the normal shared
+background workspace boundary: one
 mission owns one shared Git worktree or equivalent background checkout where
 coordinated agents can operate on related epics without creating a new checkout
 for every implementation issue.
@@ -162,21 +159,13 @@ mapping directly to a PR-equivalent branch. Epic review and validation gates
 own the parent judgment for the grouped change; child issues contribute local
 proof rather than each carrying an independent review requirement by default.
 
-### Milestone
+### Checkpoint Semantics
 
-A milestone is a validated intermediate checkpoint state. It is not a work
-container or super-epic, and it is not merely a vague point on a roadmap. A
-milestone should define:
-
-- Desired state.
-- Scope boundaries.
-- Validation criteria.
-- Linked work.
-- Required or accepted evidence.
-- Completion state.
-
-Epics and tasks may contribute to a milestone, and evidence may validate a
-milestone's criteria. The milestone itself should remain a target-state record.
+Milestone/checkpoint records are deferred for v1. Checkpoint intent may be
+described in mission, epic, issue, or evidence bodies when it helps operators,
+but there is no active `.atelier/milestones/` canonical record table, milestone
+workflow, or milestone command surface in v1. Validation and outcome data stay
+on accountable issues, epics, missions, and evidence records.
 
 ### Issue
 
@@ -188,23 +177,22 @@ implementation issue is a local slice on its parent epic branch. It closes with
 the proof named by its `Evidence` section unless the issue itself is a review,
 validation, migration, or other explicitly risk-escalated item.
 
-### Plan
+### Plans
 
-A plan records intended execution when that intent matters beyond ephemeral
-context. Plans should be stored when they create scope, coordinate multiple
-agents, define sequencing, explain decisions, or survive across sessions. Scratch
-plans can remain ephemeral.
-
-Plans must be adaptable. The tool should make plan drift visible and allow plans
-to be revised with reasons as new facts emerge.
+Plans are ordinary Markdown artifacts or prose inside accountable work and
+evidence records in v1. They may still be durable when committed to the
+repository, but they are not `.atelier/plans/` records and they do not have a
+first-class plan command group. Reference plan Markdown by path or prose from a
+mission, epic, issue, or evidence body when the execution intent matters beyond
+ephemeral context.
 
 ### Evidence
 
 Evidence records prove that accountable work, review, validation, or migration
 happened. Evidence may point to test results, logs, screenshots, videos, API
 responses, benchmark output, review notes, or generated reports. Normal evidence
-targets issue-shaped work because issues own accountability; mission,
-milestone, and epic readiness is derived from linked implementation,
+targets issue-shaped work because issues own accountability; mission and epic
+readiness is derived from linked implementation,
 validation, and review work rather than direct parent attachments.
 
 Evidence metadata should include:
@@ -260,13 +248,15 @@ one `relationships` section with four buckets:
 
 - `blocks` for operational issue readiness blockers.
 - `children` for hierarchy, scope, and mission work.
-- `attachments` for owned supporting records such as plans and evidence.
+- `attachments` for owned supporting records such as evidence.
 - `relates` for peer semantic relationships such as related, duplicates,
   supersedes, derived_from, and implements.
 
 Domain commands own relationship mutations. For example, issue blocking,
-mission work, evidence attachment, and plan linkage should be surfaced through
-their domain command groups instead of a public generic `link` command.
+mission work, and evidence attachment should be surfaced through their domain
+command groups instead of a public generic `link` command. Plan Markdown may be
+referenced by path or prose in record bodies; it is not a relationship table in
+v1.
 
 ## Workflows
 
@@ -357,9 +347,7 @@ Atelier should support three layers of process:
 Examples:
 
 - Required evidence before `done`.
-- Required plan before implementation for large missions.
 - Warning when a summary is too long or too vague.
-- Warning when a milestone lacks validation criteria.
 - Error when durable records or derived projections are stale.
 - Error when a workflow transition is invalid.
 - Warning when implementation starts on `main`.
@@ -535,8 +523,6 @@ atelier mission create
 atelier mission status
 atelier mission show atelier-k7mq
 atelier mission add-work atelier-k7mq atelier-z1p8
-atelier milestone create
-atelier plan create
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier lint
@@ -576,10 +562,11 @@ machine-readable source of truth, not command-result JSON.
 
 ### Milestone 4: Domain Model Upgrade
 
-- Add first-class missions, milestone checkpoint records, plans, evidence,
-  workflow validators, and runs.
+- Add first-class missions, evidence, workflow validators, and deferred
+  session/run metadata.
 - Add canonical relationship buckets and domain-specific relationship commands.
-- Keep compatibility migration paths where reasonable.
+- Keep milestone/checkpoint records and first-class plan records deferred until
+  a later contract reintroduces them directly.
 
 ### Milestone 5: Workflows And Rules
 
@@ -591,7 +578,7 @@ machine-readable source of truth, not command-result JSON.
 ### Milestone 6: Mission Control Projection
 
 - Add JSON projections for active missions, agents, blockers, workflow
-  validator failures, evidence, branches, and plan drift.
+  validator failures, evidence, branches, and artifact-update drift.
 - Defer rich UI until projections are useful.
 
 ## Open Questions

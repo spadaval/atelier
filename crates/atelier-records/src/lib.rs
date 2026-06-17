@@ -7,14 +7,10 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use atelier_core::{
-    EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue, MilestoneRecordData,
-    PlanRecordData,
-};
+use atelier_core::{EvidenceOutputSummary, EvidenceRecordData, EvidenceTarget, Issue};
 pub use atelier_core::{
-    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections,
-    MilestoneRecord, MissionRecord, MissionSectionName, MissionSections, PlanRecord, Record,
-    RecordHeader,
+    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
+    MissionSectionName, MissionSections, Record, RecordHeader,
 };
 
 pub mod activity;
@@ -40,7 +36,6 @@ pub enum RecordKind {
     Evidence,
     Issue,
     Mission,
-    Plan,
 }
 
 impl RecordKind {
@@ -49,7 +44,6 @@ impl RecordKind {
             Self::Evidence => "evidence",
             Self::Issue => "issues",
             Self::Mission => "missions",
-            Self::Plan => "plans",
         }
     }
 }
@@ -76,9 +70,7 @@ pub const WELL_KNOWN_RELATION_TYPES: &[&str] = &["related", "assumption", "falsi
 pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "advances",
     "blocked_by",
-    "has_checkpoint",
     "contributes_to",
-    "planned_by",
     "validates",
     "evidenced_by",
     "implements",
@@ -162,10 +154,7 @@ pub fn validate_relationship_type(relation_type: &str) -> Result<()> {
 }
 
 pub fn is_attachment_role(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
-    )
+    matches!(relation_type, "validates" | "evidenced_by")
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -342,32 +331,6 @@ impl RecordStore {
         Ok(record)
     }
 
-    pub fn create_plan(
-        &self,
-        title: &str,
-        status: &str,
-        body: &str,
-        data: PlanRecordData,
-    ) -> Result<PlanRecord> {
-        let now = Utc::now();
-        let record = PlanRecord {
-            header: RecordHeader {
-                kind: "plan".to_string(),
-                id: self.allocate_record_id()?,
-                title: title.to_string(),
-                status: status.to_string(),
-                labels: default_record_labels("plan"),
-                relationships: Relationships::default(),
-                created_at: now,
-                updated_at: now,
-            },
-            data,
-            body: body.to_string(),
-        };
-        self.write_record_atomic(&Record::Plan(record.clone()))?;
-        Ok(record)
-    }
-
     pub fn create_evidence(
         &self,
         title: &str,
@@ -391,32 +354,6 @@ impl RecordStore {
             summary: summary.to_string(),
         };
         self.write_record_atomic(&Record::Evidence(record.clone()))?;
-        Ok(record)
-    }
-
-    pub fn create_milestone(
-        &self,
-        title: &str,
-        status: &str,
-        body: &str,
-        data: MilestoneRecordData,
-    ) -> Result<MilestoneRecord> {
-        let now = Utc::now();
-        let record = MilestoneRecord {
-            header: RecordHeader {
-                kind: "milestone".to_string(),
-                id: self.allocate_record_id()?,
-                title: title.to_string(),
-                status: status.to_string(),
-                labels: default_record_labels("milestone"),
-                relationships: Relationships::default(),
-                created_at: now,
-                updated_at: now,
-            },
-            data,
-            body: body.to_string(),
-        };
-        self.write_record_atomic(&Record::Milestone(record.clone()))?;
         Ok(record)
     }
 
@@ -931,8 +868,6 @@ pub fn render_record(record: &Record) -> Result<String> {
     }
     match spec.kind {
         "evidence" => return render_evidence_record(&record, &relationships, spec),
-        "milestone" => return render_milestone_record(&record, &relationships, spec),
-        "plan" => return render_plan_record(&record, &relationships, spec),
         _ => {}
     }
     bail!(
@@ -1062,8 +997,6 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
     match spec.kind {
         "mission" => return parse_mission_record(front_matter, body, relative, spec, id),
         "evidence" => return parse_evidence_record(front_matter, body, relative, spec, id),
-        "milestone" => return parse_milestone_record(front_matter, body, relative, spec, id),
-        "plan" => return parse_plan_record(front_matter, body, relative, spec, id),
         _ => {}
     }
     bail!(
@@ -1128,14 +1061,6 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
     match spec.kind {
         "evidence" => {
             validate_evidence_record(record, relative)?;
-            return Ok(());
-        }
-        "milestone" => {
-            validate_milestone_record(record, relative)?;
-            return Ok(());
-        }
-        "plan" => {
-            validate_plan_record(record, relative)?;
             return Ok(());
         }
         _ => {}
@@ -1374,216 +1299,6 @@ fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
     Ok(())
 }
 
-fn render_milestone_record(
-    record: &Record,
-    relationships: &Relationships,
-    spec: &RecordKindSpec,
-) -> Result<String> {
-    let Record::Milestone(record) = record else {
-        bail!("Expected milestone record");
-    };
-    let data = &record.data;
-
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.header.created_at.to_rfc3339()),
-    )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
-    write_yaml_scalar(&mut output, "desired_state", Some(&data.desired_state))?;
-    write_yaml_array(&mut output, "scope", &data.scope)?;
-    write_yaml_array(
-        &mut output,
-        "validation_criteria",
-        &data.validation_criteria,
-    )?;
-    write_yaml_relationships(&mut output, relationships)?;
-    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
-    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.header.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&normalize_body(&record.body));
-    output.push('\n');
-    Ok(output)
-}
-
-fn parse_milestone_record(
-    front_matter: BTreeMap<String, Value>,
-    body: &str,
-    relative: &Path,
-    spec: &RecordKindSpec,
-    id: String,
-) -> Result<Record> {
-    let relationships = parse_relationships(&front_matter, relative)?;
-    let title = require_scalar(&front_matter, "title", relative)?;
-    let status = require_scalar(&front_matter, "status", relative)?;
-    let created_at = require_datetime(&front_matter, "created_at", relative)?;
-    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-    let data = MilestoneRecordData {
-        desired_state: require_scalar(&front_matter, "desired_state", relative)?,
-        scope: optional_string_array(&front_matter, "scope", relative)?.unwrap_or_default(),
-        validation_criteria: optional_string_array(&front_matter, "validation_criteria", relative)?
-            .unwrap_or_default(),
-    };
-    Ok(Record::Milestone(MilestoneRecord {
-        header: RecordHeader {
-            id,
-            kind: spec.kind.to_string(),
-            title,
-            status,
-            labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-            relationships,
-            created_at,
-            updated_at,
-        },
-        data,
-        body: body.to_string(),
-    }))
-}
-
-fn validate_milestone_record(record: &Record, relative: &Path) -> Result<()> {
-    let Record::Milestone(record) = record else {
-        bail!(
-            "Expected milestone record in {}",
-            display_state_path(relative)
-        );
-    };
-    if record.data.desired_state.trim().is_empty() && record.body.trim().is_empty() {
-        bail!(
-            "Milestone record {} must include desired_state or body",
-            display_state_path(relative)
-        );
-    }
-    validate_relationships(&record.header.relationships, relative)?;
-    Ok(())
-}
-
-fn render_plan_record(
-    record: &Record,
-    relationships: &Relationships,
-    spec: &RecordKindSpec,
-) -> Result<String> {
-    let Record::Plan(record) = record else {
-        bail!("Expected plan record");
-    };
-    let data = normalized_plan_data(record.data.clone());
-
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.header.created_at.to_rfc3339()),
-    )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
-    write_yaml_i64(&mut output, "revision", data.revision);
-    write_yaml_scalar(&mut output, "owner", data.owner.as_deref())?;
-    write_plan_revisions(&mut output, &data.revisions)?;
-    write_yaml_relationships(&mut output, relationships)?;
-    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
-    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.header.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&normalize_body(&record.body));
-    output.push('\n');
-    Ok(output)
-}
-
-fn parse_plan_record(
-    front_matter: BTreeMap<String, Value>,
-    body: &str,
-    relative: &Path,
-    spec: &RecordKindSpec,
-    id: String,
-) -> Result<Record> {
-    let relationships = parse_relationships(&front_matter, relative)?;
-    let title = require_scalar(&front_matter, "title", relative)?;
-    let status = require_scalar(&front_matter, "status", relative)?;
-    let created_at = require_datetime(&front_matter, "created_at", relative)?;
-    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-    let mut data = PlanRecordData {
-        revision: require_i64(&front_matter, "revision", relative)?,
-        owner: optional_scalar(&front_matter, "owner")?,
-        revisions: optional_yaml_value(&front_matter, "revisions", relative)?.unwrap_or_default(),
-    };
-    if data.revisions.is_empty() {
-        data.revisions.push(atelier_core::PlanRevision {
-            revision: data.revision,
-            reason: "canonical".to_string(),
-            body: body.to_string(),
-        });
-    }
-    let body = if body.is_empty() {
-        data.revisions
-            .iter()
-            .find(|revision| revision.revision == data.revision)
-            .map(|revision| revision.body.clone())
-            .filter(|body| !body.is_empty())
-    } else {
-        Some(body.to_string())
-    };
-
-    Ok(Record::Plan(PlanRecord {
-        header: RecordHeader {
-            id,
-            kind: spec.kind.to_string(),
-            title,
-            status,
-            labels: optional_string_array(&front_matter, "labels", relative)?.unwrap_or_default(),
-            relationships,
-            created_at,
-            updated_at,
-        },
-        data,
-        body: body.unwrap_or_default(),
-    }))
-}
-
-fn validate_plan_record(record: &Record, relative: &Path) -> Result<()> {
-    let Record::Plan(record) = record else {
-        bail!("Expected plan record in {}", display_state_path(relative));
-    };
-    let data = normalized_plan_data(record.data.clone());
-    if data.revision < 1 {
-        bail!(
-            "Plan record {} must have a positive revision",
-            display_state_path(relative)
-        );
-    }
-    if data.revisions.is_empty() {
-        bail!(
-            "Plan record {} must include at least one revision",
-            display_state_path(relative)
-        );
-    }
-    if !data
-        .revisions
-        .iter()
-        .any(|revision| revision.revision == data.revision)
-    {
-        bail!(
-            "Plan record {} current revision is missing from revisions",
-            display_state_path(relative)
-        );
-    }
-    validate_relationships(&record.header.relationships, relative)?;
-    Ok(())
-}
-
 fn validate_mission_status(status: &str, relative: &Path) -> Result<()> {
     match status {
         "draft" | "ready" | "active" | "closed" => Ok(()),
@@ -1603,16 +1318,13 @@ fn validate_mission_relationships(relationships: &Relationships, relative: &Path
         );
     }
     for attachment in &relationships.attachments {
-        match (attachment.kind.as_str(), attachment.role.as_str()) {
-            ("milestone", "has_checkpoint") | ("plan", "planned_by") => {}
-            _ => bail!(
-                "Invalid mission attachment {} {} ({}) in {}; use typed mission relationship semantics",
-                attachment.kind,
-                attachment.id,
-                attachment.role,
-                display_state_path(relative)
-            ),
-        }
+        bail!(
+            "Invalid mission attachment {} {} ({}) in {}; mission attachments are not active v1 relationship storage",
+            attachment.kind,
+            attachment.id,
+            attachment.role,
+            display_state_path(relative)
+        );
     }
     for relation in &relationships.relates {
         if relation.kind == "issue" {
@@ -1683,9 +1395,6 @@ fn normalize_legacy_mission_relationships(mut relationships: Relationships) -> R
                     relation_type: attachment.role,
                 });
             }
-            ("plan", "planned_by") | ("milestone", "has_checkpoint") => {
-                normalized_attachments.push(attachment);
-            }
             _ => normalized_attachments.push(attachment),
         }
     }
@@ -1742,14 +1451,6 @@ fn normalized_evidence_status(status: &str) -> &str {
         "pass" | "fail" | "blocked" | "deferred" => "recorded",
         other => other,
     }
-}
-
-pub fn normalized_plan_data(mut data: PlanRecordData) -> PlanRecordData {
-    if data.revision < 1 {
-        data.revision = 1;
-    }
-    data.revisions.sort_by_key(|revision| revision.revision);
-    data
 }
 
 pub fn mission_sections_from_inputs(
@@ -2706,13 +2407,6 @@ fn write_yaml_scalar_if_some(output: &mut String, key: &str, value: Option<&str>
     Ok(())
 }
 
-fn write_yaml_i64(output: &mut String, key: &str, value: i64) {
-    output.push_str(key);
-    output.push_str(": ");
-    output.push_str(&value.to_string());
-    output.push('\n');
-}
-
 fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result<()> {
     output.push_str(key);
     if values.is_empty() {
@@ -2731,30 +2425,6 @@ fn write_yaml_array(output: &mut String, key: &str, values: &[String]) -> Result
 fn write_yaml_array_if_not_empty(output: &mut String, key: &str, values: &[String]) -> Result<()> {
     if !values.is_empty() {
         write_yaml_array(output, key, values)?;
-    }
-    Ok(())
-}
-
-fn write_plan_revisions(
-    output: &mut String,
-    revisions: &[atelier_core::PlanRevision],
-) -> Result<()> {
-    output.push_str("revisions");
-    if revisions.is_empty() {
-        output.push_str(": []\n");
-        return Ok(());
-    }
-    output.push_str(":\n");
-    for revision in revisions {
-        output.push_str("- revision: ");
-        output.push_str(&revision.revision.to_string());
-        output.push('\n');
-        output.push_str("  reason: ");
-        output.push_str(&serde_json::to_string(&revision.reason)?);
-        output.push('\n');
-        output.push_str("  body: ");
-        output.push_str(&serde_json::to_string(&revision.body)?);
-        output.push('\n');
     }
     Ok(())
 }
@@ -3179,18 +2849,7 @@ mod tests {
                 Relationships {
                     blocks: Vec::new(),
                     children: Vec::new(),
-                    attachments: vec![
-                        AttachmentRelationship {
-                            kind: "milestone".to_string(),
-                            id: "atelier-cpnt".to_string(),
-                            role: "has_checkpoint".to_string(),
-                        },
-                        AttachmentRelationship {
-                            kind: "plan".to_string(),
-                            id: "atelier-plan".to_string(),
-                            role: "planned_by".to_string(),
-                        },
-                    ],
+                    attachments: Vec::new(),
                     relates: vec![
                         RelatesRelationship {
                             kind: "issue".to_string(),
@@ -3257,60 +2916,6 @@ mod tests {
         })
     }
 
-    fn milestone_record(id: &str) -> Record {
-        let data = MilestoneRecordData {
-            desired_state: "Typed milestone contract is in place.".to_string(),
-            scope: vec![
-                "Canonical front matter".to_string(),
-                "Projection metadata".to_string(),
-            ],
-            validation_criteria: vec!["RecordStore round-trip passes.".to_string()],
-        };
-        Record::Milestone(MilestoneRecord {
-            header: record_header(
-                "milestone",
-                id,
-                "Typed Milestone",
-                "open",
-                Vec::new(),
-                Relationships::default(),
-            ),
-            data,
-            body: "Typed milestone contract is in place.".to_string(),
-        })
-    }
-
-    fn plan_record(id: &str) -> Record {
-        let data = PlanRecordData {
-            revision: 2,
-            owner: Some("planning".to_string()),
-            revisions: vec![
-                atelier_core::PlanRevision {
-                    revision: 1,
-                    reason: "initial".to_string(),
-                    body: "Initial plan.".to_string(),
-                },
-                atelier_core::PlanRevision {
-                    revision: 2,
-                    reason: "refine".to_string(),
-                    body: "Refined plan.".to_string(),
-                },
-            ],
-        };
-        Record::Plan(PlanRecord {
-            header: record_header(
-                "plan",
-                id,
-                "Typed Plan",
-                "open",
-                Vec::new(),
-                Relationships::default(),
-            ),
-            data,
-            body: "Refined plan.".to_string(),
-        })
-    }
-
     fn sectioned_issue_text(id: &str, body: &str) -> String {
         format!(
             r#"---
@@ -3355,11 +2960,18 @@ updated_at: "2026-06-10T13:00:00+00:00"
             contracts,
             vec![
                 ("mission", "atelier.mission", 1, Some("missions")),
-                ("milestone", "atelier.milestone", 1, Some("milestones")),
-                ("plan", "atelier.plan", 1, Some("plans")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
             ]
         );
+    }
+
+    #[test]
+    fn plan_and_milestone_record_kinds_are_deferred() {
+        for kind in ["plan", "milestone"] {
+            assert!(validate_record_kind(kind).is_err());
+            assert!(validate_canonical_record_kind(kind).is_err());
+            assert!(canonical_record_kind(kind).is_err());
+        }
     }
 
     #[test]
@@ -3440,40 +3052,24 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let store = RecordStore::new(dir.path());
         let mut issue = issue_record("atelier-iss1");
         issue.relationships = Relationships::default();
-        let mut plan = plan_record("atelier-pln1");
-        plan.header_mut().relationships = Relationships::default();
         let mut evidence = evidence_record("atelier-evd1");
         evidence.header_mut().relationships = Relationships::default();
         store.write_issue_atomic(&issue).unwrap();
-        store.write_record_atomic(&plan).unwrap();
         store.write_record_atomic(&evidence).unwrap();
 
         assert!(store
             .add_record_relationship(
                 "issue",
                 "atelier-iss1",
-                "plan",
-                "atelier-pln1",
-                "planned_by",
-            )
-            .unwrap());
-        assert!(store
-            .add_record_relationship(
-                "plan",
-                "atelier-pln1",
                 "evidence",
                 "atelier-evd1",
-                "derived_from",
+                "validates",
             )
             .unwrap());
 
         let issue_text = fs::read_to_string(dir.path().join("issues/atelier-iss1.md")).unwrap();
         assert!(issue_text.contains(
-            "attachments:\n  - kind: \"plan\"\n    id: \"atelier-pln1\"\n    role: \"planned_by\""
-        ));
-        let plan_text = fs::read_to_string(dir.path().join("plans/atelier-pln1.md")).unwrap();
-        assert!(plan_text.contains(
-            "relates:\n  - kind: \"evidence\"\n    id: \"atelier-evd1\"\n    type: \"derived_from\""
+            "attachments:\n  - kind: \"evidence\"\n    id: \"atelier-evd1\"\n    role: \"validates\""
         ));
     }
 
@@ -3520,91 +3116,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("RecordStore evidence proof summary."));
         assert!(!text.contains("output:"));
         assert!(!text.contains(&format!("{}: null", "target")));
-    }
-
-    #[test]
-    fn plan_record_renders_and_parses_deterministically_without_data_blob() {
-        let record = plan_record("atelier-plnn");
-        let spec = canonical_record_kind("plan").unwrap();
-        let path = canonical_record_path(spec, "atelier-plnn").unwrap();
-        let text = render_record(&record).unwrap();
-        let parsed = parse_record(&text, &path, spec).unwrap();
-
-        assert_eq!(parsed, record);
-        assert_eq!(render_record(&parsed).unwrap(), text);
-        assert!(text.contains("schema: \"atelier.plan\""));
-        assert!(!text.contains("\ndata: "));
-        assert!(text.contains("revision: 2"));
-        assert!(text.contains("owner: \"planning\""));
-        assert!(text.contains("revisions:\n- revision: 1\n  reason: \"initial\""));
-        assert!(text.contains("  body: \"Refined plan.\""));
-        assert!(text.contains("Refined plan."));
-    }
-
-    #[test]
-    fn milestone_record_renders_and_parses_deterministically_without_data_blob() {
-        let record = milestone_record("atelier-mile");
-        let spec = canonical_record_kind("milestone").unwrap();
-        let path = canonical_record_path(spec, "atelier-mile").unwrap();
-        let text = render_record(&record).unwrap();
-        let parsed = parse_record(&text, &path, spec).unwrap();
-
-        assert_eq!(parsed, record);
-        assert_eq!(render_record(&parsed).unwrap(), text);
-        assert!(text.contains("schema: \"atelier.milestone\""));
-        assert!(!text.contains("\ndata: "));
-        assert!(text.contains("desired_state: \"Typed milestone contract is in place.\""));
-        assert!(text.contains("scope:\n- \"Canonical front matter\""));
-        assert!(text.contains("validation_criteria:\n- \"RecordStore round-trip passes.\""));
-    }
-
-    #[test]
-    fn plan_and_milestone_records_reject_data_front_matter() {
-        let plan_spec = canonical_record_kind("plan").unwrap();
-        let plan_path = canonical_record_path(plan_spec, "atelier-pleg").unwrap();
-        let plan_text = r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-pleg"
-data: "{\"owner\":\"agent\",\"revision\":2,\"revisions\":[{\"body\":\"Initial\",\"reason\":\"initial\",\"revision\":1},{\"body\":\"Updated\",\"reason\":\"revise\",\"revision\":2}]}"
-relationships:
-  attachments: []
-  blocks: []
-  children: []
-  relates: []
-schema: "atelier.plan"
-schema_version: 1
-status: "open"
-title: "Legacy Plan"
-updated_at: "2026-06-10T13:00:00+00:00"
----
-
-Updated
-"#;
-        let error = parse_record(plan_text, &plan_path, plan_spec).unwrap_err();
-        assert!(error.to_string().contains("Forbidden data front matter"));
-
-        let milestone_spec = canonical_record_kind("milestone").unwrap();
-        let milestone_path = canonical_record_path(milestone_spec, "atelier-mleg").unwrap();
-        let milestone_text = r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-mleg"
-data: "{\"desired_state\":\"Release gate\",\"scope\":[\"CLI\"],\"validation_criteria\":[\"Focused tests pass\"]}"
-relationships:
-  attachments: []
-  blocks: []
-  children: []
-  relates: []
-schema: "atelier.milestone"
-schema_version: 1
-status: "open"
-title: "Legacy Milestone"
-updated_at: "2026-06-10T13:00:00+00:00"
----
-
-Release gate
-"#;
-        let error = parse_record(milestone_text, &milestone_path, milestone_spec).unwrap_err();
-        assert!(error.to_string().contains("Forbidden data front matter"));
     }
 
     #[test]
@@ -3678,9 +3189,6 @@ relationships:
   - kind: "evidence"
     id: "atelier-proof"
     role: "validates"
-  - kind: "plan"
-    id: "atelier-plan"
-    role: "planned_by"
   blocks: []
   children: []
   relates: []

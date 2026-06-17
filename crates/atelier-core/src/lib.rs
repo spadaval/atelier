@@ -99,9 +99,7 @@ pub struct RecordHeader {
 pub enum Record {
     Issue(IssueRecord),
     Mission(MissionRecord),
-    Plan(PlanRecord),
     Evidence(EvidenceRecord),
-    Milestone(MilestoneRecord),
 }
 
 impl Record {
@@ -109,9 +107,7 @@ impl Record {
         match self {
             Record::Issue(record) => &record.header,
             Record::Mission(record) => &record.header,
-            Record::Plan(record) => &record.header,
             Record::Evidence(record) => &record.header,
-            Record::Milestone(record) => &record.header,
         }
     }
 
@@ -119,9 +115,7 @@ impl Record {
         match self {
             Record::Issue(record) => &mut record.header,
             Record::Mission(record) => &mut record.header,
-            Record::Plan(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
-            Record::Milestone(record) => &mut record.header,
         }
     }
 
@@ -150,24 +144,10 @@ pub struct MissionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct PlanRecord {
-    pub header: RecordHeader,
-    pub data: PlanRecordData,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
     pub summary: String,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct MilestoneRecord {
-    pub header: RecordHeader,
-    pub data: MilestoneRecordData,
-    pub body: String,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -384,32 +364,6 @@ impl MissionSectionName {
             MissionSectionName::Notes => "Notes",
         }
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PlanRevision {
-    pub revision: i64,
-    pub reason: String,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PlanRecordData {
-    pub revision: i64,
-    #[serde(default)]
-    pub owner: Option<String>,
-    #[serde(default)]
-    pub revisions: Vec<PlanRevision>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct MilestoneRecordData {
-    #[serde(default)]
-    pub desired_state: String,
-    #[serde(default)]
-    pub scope: Vec<String>,
-    #[serde(default)]
-    pub validation_criteria: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]

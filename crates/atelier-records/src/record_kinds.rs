@@ -24,18 +24,6 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
         canonical_dir: Some("missions"),
     },
     RecordKindSpec {
-        kind: "milestone",
-        schema: "atelier.milestone",
-        schema_version: 1,
-        canonical_dir: Some("milestones"),
-    },
-    RecordKindSpec {
-        kind: "plan",
-        schema: "atelier.plan",
-        schema_version: 1,
-        canonical_dir: Some("plans"),
-    },
-    RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
         schema_version: 1,

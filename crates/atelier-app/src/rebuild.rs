@@ -888,10 +888,8 @@ fn push_record_link(
 }
 
 fn child_relation_type(target_kind: &str) -> &'static str {
-    match target_kind {
-        "milestone" => "has_checkpoint",
-        _ => "advances",
-    }
+    let _ = target_kind;
+    "advances"
 }
 
 fn ensure_record_exists(
@@ -1083,24 +1081,6 @@ mod tests {
             .unwrap()
             .header
             .id;
-        let plan_id = store
-            .create_plan(
-                "Plan",
-                "open",
-                "Plan body",
-                atelier_core::PlanRecordData {
-                    revision: 1,
-                    owner: None,
-                    revisions: vec![atelier_core::PlanRevision {
-                        revision: 1,
-                        reason: "initial".to_string(),
-                        body: "Plan body".to_string(),
-                    }],
-                },
-            )
-            .unwrap()
-            .header
-            .id;
         let evidence_id = store
             .create_evidence(
                 "Evidence",
@@ -1132,9 +1112,6 @@ mod tests {
             .header
             .id;
         store
-            .add_attachment_relationship("mission", &mission_id, "plan", &plan_id, "planned_by")
-            .unwrap();
-        store
             .add_attachment_relationship(
                 "evidence",
                 &evidence_id,
@@ -1152,9 +1129,6 @@ mod tests {
         assert!(mission_markdown.contains("labels:\n- \"mission\"\n"));
         assert!(mission_markdown.contains("## Intent\n\nMission body"));
         assert!(mission_markdown.contains("## Constraints\n\n- keep contract"));
-        assert!(mission_markdown.contains(&format!(
-            "  attachments:\n  - kind: \"plan\"\n    id: \"{plan_id}\"\n    role: \"planned_by\"\n"
-        )));
         assert!(!mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
 
         let evidence_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
@@ -1168,20 +1142,12 @@ mod tests {
         let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
         assert_eq!(mission.kind, "mission");
-        assert!(rebuilt.get_record("plan", &plan_id).unwrap().is_some());
         assert!(rebuilt
             .get_record("evidence", &evidence_id)
             .unwrap()
             .is_some());
 
         let mission_links = rebuilt.list_record_links("mission", &mission_id).unwrap();
-        assert!(mission_links.iter().any(|link| {
-            link.source_kind == "mission"
-                && link.source_id == mission_id
-                && link.target_kind == "plan"
-                && link.target_id == plan_id
-                && link.relation_type == "planned_by"
-        }));
         assert!(mission_links.iter().any(|link| {
             link.source_kind == "evidence"
                 && link.source_id == evidence_id

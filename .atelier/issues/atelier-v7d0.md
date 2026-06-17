@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:01:03.522503786+00:00"
+status: "done"
 title: "Remove milestone record support and checkpoint storage"
-updated_at: "2026-06-17T20:03:29.276303235+00:00"
+updated_at: "2026-06-17T23:01:03.522503786+00:00"
 ---
 
 ## Description

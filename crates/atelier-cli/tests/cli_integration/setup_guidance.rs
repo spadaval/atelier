@@ -595,7 +595,7 @@ fn test_top_level_help_only_shows_core_commands() {
     }
 
     for command in [
-        "init", "man", "status", "start", "issue", "mission", "plan", "evidence", "history",
+        "init", "man", "status", "start", "issue", "mission", "bundle", "evidence", "history",
         "worktree", "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");

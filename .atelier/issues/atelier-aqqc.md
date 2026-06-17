@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:03:53.009622351+00:00"
+status: "done"
 title: "Update docs and tests after plan and milestone removal"
-updated_at: "2026-06-17T20:03:31.616201608+00:00"
+updated_at: "2026-06-17T23:03:53.009622351+00:00"
 ---
 
 ## Description

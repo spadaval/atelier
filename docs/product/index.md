@@ -17,12 +17,13 @@ that can be implemented and validated.
 
 ## Workflow Model
 
-- [Work Model](work-model.md): mission, milestone, epic, issue, workflow
-  validator, and evidence relationships.
+- [Work Model](work-model.md): mission, deferred checkpoint semantics, epic,
+  issue, workflow validator, and evidence relationships.
 - [Validation](validation.md): product language for outcomes, proof, evidence,
   validation, terminal checks, and proof visibility in normal operator surfaces.
-- [Milestone Records](milestone-records.md): first-class checkpoint record
-  fields, validation model, evidence links, and command-surface ownership.
+- [Milestone Records](milestone-records.md): deferred checkpoint semantics and
+  the v1 rule that validation data stays on issues, epics, missions, and
+  evidence.
 - [Workflow Configuration Contract](workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
   guidance templates, strict errors, and starter workflow examples.
