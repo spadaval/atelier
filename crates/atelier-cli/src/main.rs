@@ -1069,7 +1069,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 // ============================================================================
 
 fn main() -> Result<()> {
+    load_dotenv()?;
     run()
+}
+
+fn load_dotenv() -> Result<()> {
+    match dotenvy::dotenv() {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn run() -> Result<()> {
