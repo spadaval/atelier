@@ -34,7 +34,7 @@ commands transition issues as a side effect.
 2. Current work remains workflow-derived.
    The current-work set is still the set of canonical issue records in the
    checkout whose workflow status is `in_progress`, interpreted with branch and
-   mission context. Viewing or ending a session must not close, block, or
+   mission context. Inspecting a derived session view must not close, block, or
    unassign an issue.
 
 3. Forgejo PRs are review artifacts.
