@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T17:55:11.827708787+00:00"
+status: "done"
 title: "Resolve PR target context and one-active enforcement"
-updated_at: "2026-06-18T17:50:02.863188526+00:00"
+updated_at: "2026-06-18T17:55:11.827708787+00:00"
 ---
 
 ## Description
