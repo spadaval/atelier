@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:15:53.129546321+00:00"
+status: "done"
 title: "Update repo workflow policy to require linked_pr_merged for epic closeout"
-updated_at: "2026-06-17T18:00:56.462015759+00:00"
+updated_at: "2026-06-18T01:15:53.129546321+00:00"
 ---
 
 ## Description
