@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T00:38:49.273833726+00:00"
+status: "done"
 title: "Add canonical issue field parsing, rendering, validation, and projection support"
-updated_at: "2026-06-17T18:00:01.688899039+00:00"
+updated_at: "2026-06-18T00:38:49.273833726+00:00"
 ---
 
 ## Description
