@@ -8,8 +8,9 @@ use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
-use atelier_core::Issue;
+use atelier_core::{Issue, SessionRecord};
 use atelier_records::activity::list_all_issue_activities;
+use atelier_records::RecordStore;
 use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -20,6 +21,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .map(|issue| issue.id.as_str())
         .collect::<BTreeSet<_>>();
     let active_mission = commands::mission::active_mission(db)?;
+    let active_sessions = active_session_records(state_dir)?;
     let current_missions = db
         .list_records("mission", None)?
         .into_iter()
@@ -87,6 +89,20 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
         None if current_missions.is_empty() => println!("Active mission: none"),
         None => println!("Active mission: none ({} current)", current_missions.len()),
+    }
+    if active_sessions.is_empty() {
+        println!("Active sessions: none");
+    } else {
+        println!("Active sessions: {}", active_sessions.len());
+        for session in &active_sessions {
+            println!(
+                "  {} {} {} -> {}",
+                session.header.id,
+                session.data.role,
+                session.data.session_kind,
+                commands::session::format_target(session.data.target.as_ref())
+            );
+        }
     }
 
     if !export_stale.is_empty() {
@@ -289,6 +305,16 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Check tracker records (projection is stale): atelier lint");
     }
     Ok(())
+}
+
+fn active_session_records(state_dir: &Path) -> Result<Vec<SessionRecord>> {
+    let mut sessions = RecordStore::new(state_dir)
+        .load_sessions()?
+        .into_iter()
+        .filter(|session| session.header.status == "active")
+        .collect::<Vec<_>>();
+    sessions.sort_by(|left, right| left.header.id.cmp(&right.header.id));
+    Ok(sessions)
 }
 
 #[derive(Default)]

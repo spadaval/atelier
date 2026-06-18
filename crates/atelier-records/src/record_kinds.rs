@@ -29,6 +29,12 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
         schema_version: 1,
         canonical_dir: Some("evidence"),
     },
+    RecordKindSpec {
+        kind: "session",
+        schema: "atelier.session",
+        schema_version: 1,
+        canonical_dir: Some("sessions"),
+    },
 ];
 
 pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
@@ -44,6 +50,12 @@ pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
         schema: "atelier.evidence",
         schema_version: 1,
         canonical_dir: Some("evidence"),
+    },
+    RecordKindSpec {
+        kind: "session",
+        schema: "atelier.session",
+        schema_version: 1,
+        canonical_dir: Some("sessions"),
     },
 ];
 

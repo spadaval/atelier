@@ -3,17 +3,18 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use atelier_core::{Issue, RecordLink};
+use atelier_core::{Issue, RecordLink, SessionRecord};
 use atelier_records::activity::{
     list_all_issue_activities, list_all_mission_activities, list_issue_activities,
     list_mission_activities, IssueActivity,
 };
+use atelier_records::RecordStore;
 use atelier_sqlite::{Database, RecordSummary};
 
 pub const DEFAULT_LIMIT: usize = 20;
 
 const SOURCE_BOUNDARY: &str =
-    "canonical .atelier issue activity, records, evidence, and record links; local runtime diagnostics excluded";
+    "canonical .atelier issue activity, records, evidence, sessions, and record links; local runtime diagnostics excluded";
 
 #[derive(Debug, Clone)]
 pub struct HistoryOptions {
@@ -296,6 +297,14 @@ fn collect_rows(db: &Database, state_dir: &Path, scope: &HistoryScope) -> Result
         });
     }
 
+    for session in RecordStore::new(state_dir)
+        .load_sessions()?
+        .into_iter()
+        .filter(|session| scope.includes_session(session))
+    {
+        rows.extend(session_rows(session));
+    }
+
     for link in db
         .list_all_record_links()?
         .into_iter()
@@ -310,6 +319,55 @@ fn collect_rows(db: &Database, state_dir: &Path, scope: &HistoryScope) -> Result
             .then(a.sort_key.cmp(&b.sort_key))
     });
     Ok(rows)
+}
+
+impl HistoryScope {
+    fn includes_session(&self, session: &SessionRecord) -> bool {
+        if self.record_ids.is_none() && self.issue_ids.is_none() {
+            return true;
+        }
+        if self.includes_record("session", &session.header.id) {
+            return true;
+        }
+        match session.data.target.as_ref() {
+            Some(target) if target.kind == "issue" => self.includes_issue(&target.id),
+            Some(target) => self.includes_record(&target.kind, &target.id),
+            None => false,
+        }
+    }
+}
+
+fn session_rows(session: SessionRecord) -> Vec<HistoryRow> {
+    let target = crate::commands::session::format_target(session.data.target.as_ref());
+    let mut rows = vec![HistoryRow {
+        timestamp: session.data.started_at,
+        event_kind: "session_started".to_string(),
+        actor: None,
+        target_kind: "session".to_string(),
+        target_id: session.header.id.clone(),
+        title: session.header.title.clone(),
+        summary: format!(
+            "Started {} {} session for {}",
+            session.data.role, session.data.session_kind, target
+        ),
+        sort_key: format!("session/{}/started", session.header.id),
+    }];
+    if let Some(ended_at) = session.data.ended_at {
+        rows.push(HistoryRow {
+            timestamp: ended_at,
+            event_kind: "session_ended".to_string(),
+            actor: None,
+            target_kind: "session".to_string(),
+            target_id: session.header.id.clone(),
+            title: session.header.title,
+            summary: format!(
+                "Ended {} {} session for {}",
+                session.data.role, session.data.session_kind, target
+            ),
+            sort_key: format!("session/{}/ended", session.header.id),
+        });
+    }
+    rows
 }
 
 impl Lookup {

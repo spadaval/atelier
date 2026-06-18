@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::commands;
 use atelier_app::command_storage::{command_storage, CommandStorageAccess};
+use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
@@ -48,6 +49,7 @@ struct Snapshot {
     repo: String,
     active_mission: Option<String>,
     current_work: Vec<String>,
+    active_sessions: Vec<String>,
     ready_count: usize,
     stale_count: usize,
 }
@@ -86,6 +88,20 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         .into_iter()
         .map(|issue| format!("{} - {}", issue.id, issue.title))
         .collect();
+    let active_sessions = RecordStore::new(state_dir)
+        .load_sessions()?
+        .into_iter()
+        .filter(|session| session.header.status == "active")
+        .map(|session| {
+            format!(
+                "{} {} {} -> {}",
+                session.header.id,
+                session.data.role,
+                session.data.session_kind,
+                commands::session::format_target(session.data.target.as_ref())
+            )
+        })
+        .collect();
     let ready_count = db.list_ready_issues()?.len();
     let stale_count = atelier_app::export::canonical_stale_entries(db, state_dir)?.len();
     let tracker = if stale_count == 0 { "current" } else { "stale" }.to_string();
@@ -94,6 +110,7 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         repo: repo.to_string(),
         active_mission,
         current_work,
+        active_sessions,
         ready_count,
         stale_count,
     })
@@ -158,6 +175,20 @@ fn print_current_state(snapshot: Option<&Snapshot>, state_error: Option<&str>) {
                     );
                 }
             }
+            if snapshot.active_sessions.is_empty() {
+                println!("  Active sessions: none");
+            } else {
+                println!("  Active sessions: {}", snapshot.active_sessions.len());
+                for session in snapshot.active_sessions.iter().take(3) {
+                    println!("    {session}");
+                }
+                if snapshot.active_sessions.len() > 3 {
+                    println!(
+                        "    ... and {} more session(s)",
+                        snapshot.active_sessions.len() - 3
+                    );
+                }
+            }
             println!("  Ready work:     {}", snapshot.ready_count);
         }
         None => {
@@ -179,8 +210,8 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 .unwrap_or(false)
             {
                 println!("  1. atelier status - Review the checkout's current-work set.");
-                println!("  2. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
-                println!("  3. atelier issue transition <id> --options - Inspect allowed next workflow steps.");
+                println!("  2. atelier session list --active - Review active session context.");
+                println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
@@ -219,6 +250,7 @@ fn print_normal_loop(role: Role) {
     match role {
         Role::Worker => {
             println!("  atelier status");
+            println!("  atelier session list --active");
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
             println!("  atelier start <id>");

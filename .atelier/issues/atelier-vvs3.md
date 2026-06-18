@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T00:12:39.849138177+00:00"
+status: "done"
 title: "Show active sessions in status, man, and history surfaces"
-updated_at: "2026-06-17T18:00:20.778411303+00:00"
+updated_at: "2026-06-18T00:12:39.849138177+00:00"
 ---
 
 ## Description

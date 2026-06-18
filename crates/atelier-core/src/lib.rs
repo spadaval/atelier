@@ -210,6 +210,7 @@ pub enum Record {
     Issue(IssueRecord),
     Mission(MissionRecord),
     Evidence(EvidenceRecord),
+    Session(SessionRecord),
 }
 
 impl Record {
@@ -218,6 +219,7 @@ impl Record {
             Record::Issue(record) => &record.header,
             Record::Mission(record) => &record.header,
             Record::Evidence(record) => &record.header,
+            Record::Session(record) => &record.header,
         }
     }
 
@@ -226,6 +228,7 @@ impl Record {
             Record::Issue(record) => &mut record.header,
             Record::Mission(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
+            Record::Session(record) => &mut record.header,
         }
     }
 
@@ -258,6 +261,29 @@ pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SessionRecord {
+    pub header: RecordHeader,
+    pub data: SessionRecordData,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SessionRecordData {
+    pub agent_identity: Option<String>,
+    pub role: String,
+    pub subskill: Option<String>,
+    pub target: Option<SessionTarget>,
+    pub session_kind: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SessionTarget {
+    pub kind: String,
+    pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

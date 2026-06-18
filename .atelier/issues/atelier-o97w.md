@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T00:02:00.283143669+00:00"
+status: "done"
 title: "Add session begin, show, list, and end commands"
-updated_at: "2026-06-17T18:00:15.473104611+00:00"
+updated_at: "2026-06-18T00:02:00.283143669+00:00"
 ---
 
 ## Description

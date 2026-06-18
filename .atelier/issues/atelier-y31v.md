@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-17T23:57:50.735971554+00:00"
+status: "done"
 title: "Add canonical session records and bounded session activity"
-updated_at: "2026-06-17T18:00:12.896603007+00:00"
+updated_at: "2026-06-17T23:57:50.735971554+00:00"
 ---
 
 ## Description

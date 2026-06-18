@@ -13,7 +13,8 @@ use atelier_core::{
 };
 pub use atelier_core::{
     EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
-    MissionSectionName, MissionSections, Record, RecordHeader,
+    MissionSectionName, MissionSections, Record, RecordHeader, SessionRecord, SessionRecordData,
+    SessionTarget,
 };
 
 pub mod activity;
@@ -45,6 +46,7 @@ pub enum RecordKind {
     Evidence,
     Issue,
     Mission,
+    Session,
 }
 
 impl RecordKind {
@@ -53,6 +55,7 @@ impl RecordKind {
             Self::Evidence => "evidence",
             Self::Issue => "issues",
             Self::Mission => "missions",
+            Self::Session => "sessions",
         }
     }
 }
@@ -93,6 +96,29 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
 pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 pub const MAX_LABEL_LEN: usize = 128;
+pub const SESSION_ACTIVITY_LIMIT_BYTES: usize = 4096;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct BoundedSessionActivitySummary {
+    pub summary: String,
+    pub bytes: usize,
+    pub truncated: bool,
+}
+
+pub fn bounded_session_activity_summary(input: &[u8]) -> BoundedSessionActivitySummary {
+    let bytes = input.len();
+    let truncated = bytes > SESSION_ACTIVITY_LIMIT_BYTES;
+    let bounded = if truncated {
+        &input[..SESSION_ACTIVITY_LIMIT_BYTES]
+    } else {
+        input
+    };
+    BoundedSessionActivitySummary {
+        summary: String::from_utf8_lossy(bounded).to_string(),
+        bytes,
+        truncated,
+    }
+}
 
 pub fn validate_status(status: &str) -> Result<()> {
     let mut chars = status.chars();
@@ -357,6 +383,67 @@ impl RecordStore {
         };
         self.write_record_atomic(&Record::Evidence(record.clone()))?;
         Ok(record)
+    }
+
+    pub fn create_session(
+        &self,
+        title: &str,
+        role: &str,
+        agent_identity: Option<String>,
+        subskill: Option<String>,
+        target: Option<SessionTarget>,
+        session_kind: &str,
+    ) -> Result<SessionRecord> {
+        let now = Utc::now();
+        let record = SessionRecord {
+            header: RecordHeader {
+                kind: "session".to_string(),
+                id: self.allocate_record_id()?,
+                title: title.to_string(),
+                status: "active".to_string(),
+                labels: default_record_labels("session"),
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            data: SessionRecordData {
+                agent_identity,
+                role: role.to_string(),
+                subskill,
+                target,
+                session_kind: session_kind.to_string(),
+                started_at: now,
+                ended_at: None,
+            },
+        };
+        self.write_record_atomic(&Record::Session(record.clone()))?;
+        Ok(record)
+    }
+
+    pub fn load_sessions(&self) -> Result<Vec<SessionRecord>> {
+        let spec = canonical_record_kind("session")?;
+        let Some(dir) = spec.canonical_dir else {
+            return Ok(Vec::new());
+        };
+        let root = self.state_dir.join(dir);
+        if !root.exists() {
+            return Ok(Vec::new());
+        }
+        let mut records = Vec::new();
+        for entry in fs::read_dir(&root)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("md") {
+                continue;
+            }
+            let relative = PathBuf::from(dir).join(entry.file_name());
+            match self.load_record_at(&relative, spec)? {
+                Record::Session(record) => records.push(record),
+                other => bail!("Expected session record, found {}", other.kind()),
+            }
+        }
+        records.sort_by(|a, b| a.header.id.cmp(&b.header.id));
+        Ok(records)
     }
 
     pub fn write_record_atomic(&self, record: &Record) -> Result<()> {
@@ -872,6 +959,7 @@ pub fn render_record(record: &Record) -> Result<String> {
     }
     match spec.kind {
         "evidence" => return render_evidence_record(&record, &relationships, spec),
+        "session" => return render_session_record(&record, &relationships, spec),
         _ => {}
     }
     bail!(
@@ -1005,6 +1093,7 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
     match spec.kind {
         "mission" => return parse_mission_record(front_matter, body, relative, spec, id),
         "evidence" => return parse_evidence_record(front_matter, body, relative, spec, id),
+        "session" => return parse_session_record(front_matter, relative, spec, id),
         _ => {}
     }
     bail!(
@@ -1069,6 +1158,10 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
     match spec.kind {
         "evidence" => {
             validate_evidence_record(record, relative)?;
+            return Ok(());
+        }
+        "session" => {
+            validate_session_record(record, relative)?;
             return Ok(());
         }
         _ => {}
@@ -1287,6 +1380,148 @@ fn parse_evidence_record(
         data,
         summary: body.to_string(),
     }))
+}
+
+fn render_session_record(
+    record: &Record,
+    relationships: &Relationships,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let Record::Session(record) = record else {
+        bail!("Expected session record");
+    };
+    let mut labels = record.header.labels.clone();
+    labels.sort();
+    labels.dedup();
+    if labels.is_empty() {
+        labels = default_record_labels("session");
+    }
+
+    let mut output = String::new();
+    output.push_str("---\n");
+    write_yaml_scalar(
+        &mut output,
+        "agent_identity",
+        record.data.agent_identity.as_deref(),
+    )?;
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.header.created_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar_if_some(
+        &mut output,
+        "ended_at",
+        record
+            .data
+            .ended_at
+            .map(|value| value.to_rfc3339())
+            .as_deref(),
+    )?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
+    write_yaml_array(&mut output, "labels", &labels)?;
+    write_yaml_scalar(&mut output, "role", Some(&record.data.role))?;
+    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "session_kind", Some(&record.data.session_kind))?;
+    write_yaml_scalar(
+        &mut output,
+        "started_at",
+        Some(&record.data.started_at.to_rfc3339()),
+    )?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
+    write_yaml_scalar_if_some(&mut output, "subskill", record.data.subskill.as_deref())?;
+    write_session_target_if_some(&mut output, record.data.target.as_ref())?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.header.updated_at.to_rfc3339()),
+    )?;
+    output.push_str("---\n");
+    Ok(output)
+}
+
+fn parse_session_record(
+    front_matter: BTreeMap<String, Value>,
+    relative: &Path,
+    spec: &RecordKindSpec,
+    id: String,
+) -> Result<Record> {
+    let relationships = parse_relationships(&front_matter, relative)?;
+    let title = require_scalar(&front_matter, "title", relative)?;
+    let status = require_scalar(&front_matter, "status", relative)?;
+    validate_session_status(&status, relative)?;
+    let labels = string_array(&front_matter, "labels", relative)?;
+    validate_sorted_unique("labels", &labels, relative)?;
+    let created_at = require_datetime(&front_matter, "created_at", relative)?;
+    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
+    let started_at = require_datetime(&front_matter, "started_at", relative)?;
+    let ended_at = optional_datetime(&front_matter, "ended_at", relative)?;
+    let target = optional_yaml_value::<SessionTarget>(&front_matter, "target", relative)?;
+
+    Ok(Record::Session(SessionRecord {
+        header: RecordHeader {
+            id,
+            kind: spec.kind.to_string(),
+            title,
+            status,
+            labels,
+            relationships,
+            created_at,
+            updated_at,
+        },
+        data: SessionRecordData {
+            agent_identity: optional_scalar(&front_matter, "agent_identity")?,
+            role: require_scalar(&front_matter, "role", relative)?,
+            subskill: optional_scalar(&front_matter, "subskill")?,
+            target,
+            session_kind: require_scalar(&front_matter, "session_kind", relative)?,
+            started_at,
+            ended_at,
+        },
+    }))
+}
+
+fn validate_session_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Session(record) = record else {
+        bail!(
+            "Expected session record in {}",
+            display_state_path(relative)
+        );
+    };
+    validate_session_status(&record.header.status, relative)?;
+    if record.data.role.trim().is_empty() {
+        bail!(
+            "Session role cannot be empty in {}",
+            display_state_path(relative)
+        );
+    }
+    if record.data.session_kind.trim().is_empty() {
+        bail!(
+            "Session kind cannot be empty in {}",
+            display_state_path(relative)
+        );
+    }
+    if let Some(target) = &record.data.target {
+        validate_record_kind(&target.kind)?;
+        record_id::validate_record_id(&target.id)?;
+    }
+    validate_relationships(&record.header.relationships, relative)?;
+    Ok(())
+}
+
+fn validate_session_status(status: &str, relative: &Path) -> Result<()> {
+    if matches!(status, "active" | "ended") {
+        Ok(())
+    } else {
+        bail!(
+            "Invalid session status '{}' in {}; expected active or ended",
+            status,
+            display_state_path(relative)
+        )
+    }
 }
 
 fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
@@ -2461,6 +2696,20 @@ fn write_evidence_target_if_some(
     Ok(())
 }
 
+fn write_session_target_if_some(output: &mut String, target: Option<&SessionTarget>) -> Result<()> {
+    let Some(target) = target else {
+        return Ok(());
+    };
+    output.push_str("target:\n");
+    output.push_str("  kind: ");
+    output.push_str(&serde_json::to_string(&target.kind)?);
+    output.push('\n');
+    output.push_str("  id: ");
+    output.push_str(&serde_json::to_string(&target.id)?);
+    output.push('\n');
+    Ok(())
+}
+
 fn render_evidence_body(body: Option<&str>, data: &EvidenceRecordData) -> String {
     let normalized = normalize_body(body.unwrap_or(""));
     if data.output.is_none() || evidence_body_has_transcript_sections(&normalized) {
@@ -2961,6 +3210,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
                 ("issue", "atelier.issue", 1, Some("issues")),
                 ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
+                ("session", "atelier.session", 1, Some("sessions")),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
@@ -2976,7 +3226,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["mission", "evidence"]);
+        assert_eq!(generic_contracts, vec!["mission", "evidence", "session"]);
     }
 
     #[test]
@@ -3636,5 +3886,69 @@ Legacy missions used free-form body headings.
         assert!(error.to_string().contains("Invalid issue id"));
         assert!(!dir.path().join(".atelier").join("escaped.md").exists());
         assert!(!dir.path().join("escaped.md").exists());
+    }
+
+    #[test]
+    fn session_records_round_trip_through_store() {
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path().join(".atelier"));
+
+        let record = store
+            .create_session(
+                "Worker session",
+                "worker",
+                Some("codex".to_string()),
+                Some("implementer".to_string()),
+                Some(SessionTarget {
+                    kind: "issue".to_string(),
+                    id: "atelier-abcd".to_string(),
+                }),
+                "mutating",
+            )
+            .unwrap();
+
+        assert_eq!(record.header.kind, "session");
+        assert_eq!(record.header.status, "active");
+        assert_eq!(record.data.role, "worker");
+        let sessions = store.load_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].header.id, record.header.id);
+
+        let text = render_record(&Record::Session(record.clone())).unwrap();
+        let parsed = parse_record(
+            &text,
+            &PathBuf::from("sessions").join(format!("{}.md", record.header.id)),
+            canonical_record_kind("session").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(render_record(&parsed).unwrap(), text);
+    }
+
+    #[test]
+    fn session_activity_summaries_are_bounded() {
+        let bytes = vec![b'a'; SESSION_ACTIVITY_LIMIT_BYTES + 10];
+
+        let summary = bounded_session_activity_summary(&bytes);
+
+        assert!(summary.truncated);
+        assert_eq!(summary.bytes, SESSION_ACTIVITY_LIMIT_BYTES + 10);
+        assert_eq!(summary.summary.len(), SESSION_ACTIVITY_LIMIT_BYTES);
+    }
+
+    #[test]
+    fn canonical_record_kinds_include_sessions() {
+        let kinds = CANONICAL_RECORD_KINDS
+            .iter()
+            .map(|spec| spec.kind)
+            .collect::<Vec<_>>();
+
+        assert!(kinds.contains(&"session"));
+        assert_eq!(
+            canonical_record_kind("session")
+                .unwrap()
+                .canonical_dir
+                .unwrap(),
+            "sessions"
+        );
     }
 }

@@ -656,6 +656,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
+- `atelier session`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
 - `atelier maintenance delete`
@@ -1165,6 +1166,8 @@ mod legacy_surfaces;
 mod mission_projection_worktree;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
+#[path = "cli_integration/sessions.rs"]
+mod sessions;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]
