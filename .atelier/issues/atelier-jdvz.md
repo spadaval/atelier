@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "validation"
 title: "Epic: Update PR behavior for issue-event attribution"
-updated_at: "2026-06-18T16:45:49.885129841+00:00"
+updated_at: "2026-06-18T18:13:29.829775469+00:00"
 ---
 
 ## Description
