@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: End-to-end validation and readiness"
-updated_at: "2026-06-17T18:01:06.284444365+00:00"
+updated_at: "2026-06-18T18:26:13.971119723+00:00"
 ---
 
 ## Description
