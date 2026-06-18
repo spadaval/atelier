@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:03:12.342988973+00:00"
+status: "done"
 title: "Render live unresolved inline PR comments without mirroring bodies"
-updated_at: "2026-06-17T18:00:43.374903240+00:00"
+updated_at: "2026-06-18T01:03:12.342988973+00:00"
 ---
 
 ## Description
