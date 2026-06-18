@@ -9,6 +9,7 @@ pub mod forgejo;
 pub mod health;
 pub mod init;
 pub mod lint;
+pub mod pr;
 pub mod project_config;
 pub mod projection;
 pub mod rebuild;

@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T23:34:37.505101138+00:00"
+status: "done"
 title: "Record Forgejo merge-policy boundary for Atelier PR commands"
-updated_at: "2026-06-18T22:42:09.947786211+00:00"
+updated_at: "2026-06-18T23:34:37.505101138+00:00"
 ---
 
 ## Description

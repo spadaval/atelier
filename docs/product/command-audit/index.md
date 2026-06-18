@@ -27,7 +27,8 @@ and boundary decisions.
 ## Roles
 
 - Worker: implements assigned work and leaves durable handoff context.
-- Reviewer: reviews code, checks proof, and performs validation.
+- Reviewer: reviews code and checks proof.
+- Validator: runs explicit validation work and records validation proof.
 - Manager/orchestrator: creates and coordinates work, missions, ordinary
   planning artifacts, subagents, branches, and workspaces.
 - Admin: configures, repairs, migrates, and performs explicit maintenance on
