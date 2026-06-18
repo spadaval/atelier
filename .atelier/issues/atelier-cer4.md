@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add PR merge command behavior without workflow side effects"
-updated_at: "2026-06-18T16:45:49.884319364+00:00"
+updated_at: "2026-06-18T18:02:33.958434610+00:00"
 ---
 
 ## Description

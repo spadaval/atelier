@@ -660,6 +660,13 @@ enum PrCommands {
         #[arg(long)]
         issue: Option<String>,
     },
+    /// Merge or confirm the linked Forgejo PR without changing Atelier workflow state
+    Merge {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+    },
     /// List live PR review comments
     Comments {
         #[arg(long)]
@@ -1497,6 +1504,14 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     issue.as_deref(),
                 ),
+                PrCommands::Merge { issue, role } => commands::pr::merge(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                ),
                 PrCommands::Comments { issue, unresolved } => commands::pr::comments(
                     storage.db(),
                     storage.repo_root(),
@@ -1747,6 +1762,7 @@ fn command_identity(command: &Commands) -> &'static str {
             PrCommands::Open { .. } => "pr open",
             PrCommands::Status { .. } => "pr status",
             PrCommands::Show { .. } => "pr show",
+            PrCommands::Merge { .. } => "pr merge",
             PrCommands::Comments { .. } => "pr comments",
             PrCommands::Comment { .. } => "pr comment",
             PrCommands::Review { .. } => "pr review",
