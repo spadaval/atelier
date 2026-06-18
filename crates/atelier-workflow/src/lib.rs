@@ -164,6 +164,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "review_complete",
     "epic_child_proof_complete",
     "validation_criteria_satisfied",
+    "linked_pr_merged",
     "no_open_blockers",
     "no_blocking_lints",
     "git_worktree_clean",
