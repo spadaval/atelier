@@ -13,9 +13,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Simplify workflow configuration schema v3"
-updated_at: "2026-06-18T20:33:51.644556158+00:00"
+updated_at: "2026-06-18T21:21:15.857732961+00:00"
 ---
 
 ## Intent
@@ -34,3 +34,7 @@ Simplify Atelier workflow configuration so workflows own issue type applicabilit
 ## Validation
 
 - Docs, ADR, CONTEXT, starter config, parser tests, PR tests, migrated .atelier/workflow.yaml, lint, doctor, export check, and focused workflow/PR tests prove schema v3 readiness.
+
+## Terminal Notes
+
+- Close reason: Schema v3 workflow configuration simplification is implemented, documented, validated, and committed.
