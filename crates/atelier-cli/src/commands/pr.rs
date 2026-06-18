@@ -28,6 +28,7 @@ pub fn open(
     target_branch: &str,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
+    ensure_no_linked_forge_pr(db, repo_root, &issue_id)?;
     let config_path = repo_root.join(".atelier/config.toml");
     let config = ProjectConfig::load(repo_root)?;
     let forgejo = config.require_forgejo(&config_path)?.clone();
@@ -267,14 +268,14 @@ fn print_forge_pr_summary(issue_id: &str, value: &Value) {
 
 fn infer_issue_id(
     db: &Database,
-    state_dir: &Path,
+    _state_dir: &Path,
     repo_root: &Path,
     issue_ref: Option<&str>,
 ) -> Result<String> {
     if let Some(issue_ref) = issue_ref {
         return resolve_id(db, issue_ref);
     }
-    if let Some(issue_id) = active_session_issue(state_dir)? {
+    if let Some(issue_id) = issue_from_current_linked_pr_branch(db, repo_root)? {
         return Ok(issue_id);
     }
     if let Some(issue_id) = issue_from_current_owner_branch(db, repo_root)? {
@@ -292,7 +293,9 @@ fn infer_issue_id(
         .collect::<Vec<_>>();
     match active.as_slice() {
         [one] => Ok(one.clone()),
-        [] => bail!("pr_target_missing: pass --issue <id>, start a session linked to an issue, or run from an owner branch"),
+        [] => bail!(
+            "pr_target_missing: pass --issue <id>, run from a linked PR source branch, or run from an owner branch"
+        ),
         _ => bail!(
             "pr_target_ambiguous: multiple active issues found ({}); pass --issue <id>",
             active.join(", ")
@@ -300,24 +303,37 @@ fn infer_issue_id(
     }
 }
 
-fn active_session_issue(state_dir: &Path) -> Result<Option<String>> {
-    let sessions = RecordStore::new(state_dir).load_sessions()?;
-    let active = sessions
-        .into_iter()
-        .filter(|session| session.header.status == "active")
-        .filter_map(|session| session.data.target)
-        .filter(|target| target.kind == "issue")
-        .map(|target| target.id)
-        .collect::<BTreeSet<_>>();
-    if active.len() == 1 {
-        Ok(active.into_iter().next())
-    } else {
-        Ok(None)
+fn ensure_no_linked_forge_pr(db: &Database, repo_root: &Path, issue_id: &str) -> Result<()> {
+    let policy = workflow_policy::load(repo_root)?;
+    let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if workflow_policy::effective_forge_pr_field(db, issue_id)?.is_some() {
+        bail!(
+            "forge_pr_active: issue {} already has a linked forge_pr; inspect `atelier pr status --issue {}` before opening another PR",
+            resolution.owner_id,
+            resolution.owner_id
+        );
     }
+    Ok(())
+}
+
+fn issue_from_current_linked_pr_branch(db: &Database, repo_root: &Path) -> Result<Option<String>> {
+    let branch = current_branch(repo_root)?;
+    let policy = workflow_policy::load(repo_root)?;
+    let mut owners = BTreeSet::new();
+    for issue in db.list_issues(Some("all"), None, None)? {
+        let Some(field) = workflow_policy::effective_forge_pr_field(db, &issue.id)? else {
+            continue;
+        };
+        if field.get("source_branch").and_then(Value::as_str) == Some(branch.as_str()) {
+            let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+            owners.insert(resolution.owner_id);
+        }
+    }
+    resolve_single_branch_target("linked PR source branch", &branch, owners)
 }
 
 fn issue_from_current_owner_branch(db: &Database, repo_root: &Path) -> Result<Option<String>> {
-    let branch = current_branch()?;
+    let branch = current_branch(repo_root)?;
     let policy = workflow_policy::load(repo_root)?;
     let mut owners = BTreeSet::new();
     for issue in db.list_issues(Some("all"), None, None)? {
@@ -327,15 +343,30 @@ fn issue_from_current_owner_branch(db: &Database, repo_root: &Path) -> Result<Op
             }
         }
     }
-    if owners.len() == 1 {
-        Ok(owners.into_iter().next())
-    } else {
-        Ok(None)
+    resolve_single_branch_target("owner branch", &branch, owners)
+}
+
+fn resolve_single_branch_target(
+    context: &str,
+    branch: &str,
+    owners: BTreeSet<String>,
+) -> Result<Option<String>> {
+    match owners.len() {
+        0 => Ok(None),
+        1 => Ok(owners.into_iter().next()),
+        _ => bail!(
+            "pr_target_ambiguous: current {} {} matches multiple owners ({}); pass --issue <id>",
+            context,
+            branch,
+            owners.into_iter().collect::<Vec<_>>().join(", ")
+        ),
     }
 }
 
-fn current_branch() -> Result<String> {
+fn current_branch(repo_root: &Path) -> Result<String> {
     let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
         .args(["branch", "--show-current"])
         .output()
         .context("failed to inspect current git branch")?;
@@ -386,6 +417,9 @@ mod tests {
     use super::*;
     use atelier_app::forgejo::ForgejoPullRequest;
     use atelier_app::project_config::{ForgejoConfig, ForgejoSudoUsers};
+    use atelier_core::Issue;
+    use chrono::Utc;
+    use std::collections::BTreeMap;
     use tempfile::tempdir;
 
     fn forgejo_config() -> ForgejoConfig {
@@ -404,11 +438,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn persist_forge_pr_writes_owner_epic_field_and_child_inherits() {
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join(".atelier/runtime/state.db");
-        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+    fn write_workflow(repo_root: &Path) {
         let workflow = atelier_app::workflow_policy::STARTER_POLICY_YAML
             .replace("schema_version: 1", "schema_version: 2")
             .replace("base_branch: main", "base_branch: master")
@@ -418,7 +448,232 @@ fields:
     type: object
     required: [provider, host, owner, repo, number, url, source_branch, target_branch]
 "#;
-        std::fs::write(dir.path().join(".atelier/workflow.yaml"), workflow).unwrap();
+        std::fs::create_dir_all(repo_root.join(".atelier")).unwrap();
+        std::fs::write(repo_root.join(".atelier/workflow.yaml"), workflow).unwrap();
+    }
+
+    fn setup_repo_on_branch(branch: &str) -> tempfile::TempDir {
+        let dir = tempdir().unwrap();
+        write_workflow(dir.path());
+        assert!(Command::new("git")
+            .args(["init", "-b", "master"])
+            .current_dir(dir.path())
+            .status()
+            .unwrap()
+            .success());
+        if branch != "master" {
+            assert!(Command::new("git")
+                .args(["checkout", "-b", branch])
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success());
+        }
+        dir
+    }
+
+    fn insert_issue(
+        db: &Database,
+        id: &str,
+        issue_type: &str,
+        status: &str,
+        parent_id: Option<&str>,
+        fields: BTreeMap<String, Value>,
+    ) {
+        let now = Utc::now();
+        db.insert_issue_rebuild(&Issue {
+            id: id.to_string(),
+            title: id.to_string(),
+            description: None,
+            status: status.to_string(),
+            issue_type: issue_type.to_string(),
+            priority: "medium".to_string(),
+            fields,
+            parent_id: parent_id.map(str::to_string),
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+    }
+
+    fn forge_pr_fields(source_branch: &str, number: u64) -> BTreeMap<String, Value> {
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            FORGE_PR_FIELD.to_string(),
+            json!({
+                "provider": "forgejo",
+                "host": "forge.example.test",
+                "owner": "tools",
+                "repo": "atelier",
+                "number": number,
+                "url": format!("https://forge.example.test/tools/atelier/pulls/{number}"),
+                "source_branch": source_branch,
+                "target_branch": "master",
+            }),
+        );
+        fields
+    }
+
+    fn session_record(state_dir: &Path, target_id: &str) {
+        let session_dir = state_dir.join("sessions");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(
+            session_dir.join("atelier-session.md"),
+            format!(
+                r#"---
+id: session-test
+type: session
+status: active
+created_at: "2026-06-18T00:00:00Z"
+updated_at: "2026-06-18T00:00:00Z"
+target:
+  kind: issue
+  id: {target_id}
+---
+"#
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn infer_issue_id_prefers_linked_pr_source_branch_over_active_work() {
+        let dir = setup_repo_on_branch("codex/linked-pr");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        insert_issue(
+            &db,
+            "atelier-epic",
+            "epic",
+            "todo",
+            None,
+            forge_pr_fields("codex/linked-pr", 42),
+        );
+        insert_issue(
+            &db,
+            "atelier-active",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+
+        let issue_id = infer_issue_id(&db, &dir.path().join(".atelier"), dir.path(), None).unwrap();
+
+        assert_eq!(issue_id, "atelier-epic");
+    }
+
+    #[test]
+    fn infer_issue_id_uses_owner_branch_before_active_work() {
+        let dir = setup_repo_on_branch("epic/atelier-epic");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        insert_issue(&db, "atelier-epic", "epic", "todo", None, BTreeMap::new());
+        insert_issue(
+            &db,
+            "atelier-active",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+
+        let issue_id = infer_issue_id(&db, &dir.path().join(".atelier"), dir.path(), None).unwrap();
+
+        assert_eq!(issue_id, "atelier-epic");
+    }
+
+    #[test]
+    fn infer_issue_id_rejects_ambiguous_active_work() {
+        let dir = setup_repo_on_branch("master");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        insert_issue(
+            &db,
+            "atelier-one",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+        insert_issue(
+            &db,
+            "atelier-two",
+            "feature",
+            "review",
+            None,
+            BTreeMap::new(),
+        );
+
+        let error = infer_issue_id(&db, &dir.path().join(".atelier"), dir.path(), None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("pr_target_ambiguous"));
+        assert!(error.contains("atelier-one"));
+        assert!(error.contains("atelier-two"));
+    }
+
+    #[test]
+    fn infer_issue_id_does_not_use_active_session_target() {
+        let dir = setup_repo_on_branch("master");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        insert_issue(
+            &db,
+            "atelier-session",
+            "feature",
+            "todo",
+            None,
+            BTreeMap::new(),
+        );
+        insert_issue(
+            &db,
+            "atelier-active",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+        session_record(&dir.path().join(".atelier"), "atelier-session");
+
+        let issue_id = infer_issue_id(&db, &dir.path().join(".atelier"), dir.path(), None).unwrap();
+
+        assert_eq!(issue_id, "atelier-active");
+    }
+
+    #[test]
+    fn ensure_no_linked_forge_pr_enforces_one_active_pr_per_owner() {
+        let dir = setup_repo_on_branch("master");
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        insert_issue(
+            &db,
+            "atelier-epic",
+            "epic",
+            "todo",
+            None,
+            forge_pr_fields("codex/linked-pr", 42),
+        );
+        insert_issue(
+            &db,
+            "atelier-child",
+            "feature",
+            "in_progress",
+            Some("atelier-epic"),
+            BTreeMap::new(),
+        );
+
+        let error = ensure_no_linked_forge_pr(&db, dir.path(), "atelier-child")
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("forge_pr_active"));
+        assert!(error.contains("atelier-epic"));
+    }
+
+    #[test]
+    fn persist_forge_pr_writes_owner_epic_field_and_child_inherits() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
         let db = Database::open(&db_path).unwrap();
         let epic = db
             .create_issue_with_type("Epic", None, "medium", "epic")
