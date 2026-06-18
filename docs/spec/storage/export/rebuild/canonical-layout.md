@@ -399,7 +399,7 @@ Allowed mission front matter:
 | `relationships` | object | Required; contains `attachments`, `blocks`, `children`, and `relates`. |
 | `schema` | string | Required; exactly `atelier.mission`. |
 | `schema_version` | integer | Required; exactly `1` until a migration changes it. |
-| `status` | string | Required; one of `draft`, `ready`, `active`, or `closed`. |
+| `status` | string | Required; one of `draft`, `ready`, `active`, `superseded`, or `closed`. |
 | `title` | string | Required human-readable mission title. |
 | `updated_at` | string | Required UTC RFC 3339 timestamp. |
 

@@ -203,13 +203,18 @@ answer. A consolidation that merely moves ritual into a new umbrella command,
 adds mandatory ceremony to ordinary work, or hides the domain next action behind
 diagnostic jargon fails this check.
 
-Mission lifecycle statuses are `draft`, `ready`, `active`, and `closed`.
+Mission lifecycle statuses are `draft`, `ready`, `active`, `superseded`, and
+`closed`.
 Mission creation defaults to `ready`; `atelier mission start <id>` transitions
 the selected mission to `active` and transitions any previous active mission
 back to `ready` when `--switch` is supplied. Mission commands do not accept
 `open` as a mission-status alias and do not read legacy `data.active` state;
 committed mission records should be migrated directly to the lifecycle status
 they mean.
+Use `superseded` for a mission whose execution has been replaced by another
+mission; it is hidden from default current mission lists like `closed`, but
+remains visible with `atelier mission list --status superseded` or
+`--status all`.
 
 Mission completion uses `atelier mission close <id> --reason "..."`, which runs
 the mission completion gates before it commits the lifecycle change and records
@@ -300,7 +305,7 @@ names the operator-facing blocker class and the next domain command.
 workflow/config validity, `issue transition --options` owns issue-level
 readiness inspection, and `mission status` owns mission completion inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
-`AGENTS.md`, `AGENTFACTORY.md`, product command docs, visible root help, and
+`AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier lint` or an explicitly
 named development-only diagnostic, not a required normal workflow command.
 `atelier evidence record` is the normal evidence-recording surface. It records

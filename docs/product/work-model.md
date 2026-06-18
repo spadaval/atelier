@@ -89,7 +89,9 @@ mission completion is computed from closed linked work, clear mission blockers,
 configured health gates, and workflow approval on accountable child work;
 mission `Validation` prose guides human completion and validation but is not
 parsed as a coded evidence contract.
-Missions keep the built-in lifecycle `draft`, `ready`, `active`, and `closed`;
+Missions keep the built-in lifecycle `draft`, `ready`, `active`, `superseded`,
+and `closed`; `superseded` means another mission has replaced the execution
+scope and hides from default current mission lists without claiming completion.
 Atelier does not add a configurable mission workflow graph. Issues and epics
 remain the workflow-owned records: they move through normal issue transitions
 until a terminal done-category status is allowed.

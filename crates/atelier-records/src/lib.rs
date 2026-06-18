@@ -1549,9 +1549,9 @@ fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
 
 fn validate_mission_status(status: &str, relative: &Path) -> Result<()> {
     match status {
-        "draft" | "ready" | "active" | "closed" => Ok(()),
+        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(()),
         _ => bail!(
-            "Invalid mission status '{}' in {}; valid values: draft, ready, active, closed",
+            "Invalid mission status '{}' in {}; valid values: draft, ready, active, superseded, closed",
             status,
             display_state_path(relative)
         ),
