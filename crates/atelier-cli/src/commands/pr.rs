@@ -13,6 +13,7 @@ use atelier_records::{issue_record_path, RecordStore};
 use atelier_sqlite::Database;
 use serde_json::{json, Value};
 
+use crate::commands::activity_log;
 use crate::commands::agent_factory::resolve_id;
 
 pub fn open(
@@ -44,6 +45,16 @@ pub fn open(
     );
     let pull = client.open_pull(role, title, body, source_branch, target_branch)?;
     let owner_id = persist_forge_pr(db, state_dir, db_path, &issue_id, &forgejo, &pull)?;
+    record_pr_action(
+        repo_root,
+        state_dir,
+        db,
+        &owner_id,
+        role,
+        "open",
+        &forgejo,
+        pull.number,
+    )?;
     println!("PR:      {}", pull.url);
     println!("Issue:   {issue_id}");
     println!("Owner:   {owner_id}");
@@ -146,6 +157,10 @@ pub fn comment(
         UreqForgejoTransport::new(&forgejo.host, token),
     );
     let comment = client.comment_pull(role, number, body)?;
+    let owner_id = branch_owner_id(db, repo_root, &issue_id)?;
+    record_pr_action(
+        repo_root, state_dir, db, &owner_id, role, "comment", &forgejo, number,
+    )?;
     println!("Comment: {}", comment.id);
     println!("Issue:   {issue_id}");
     Ok(())
@@ -171,6 +186,10 @@ pub fn review(
         UreqForgejoTransport::new(&forgejo.host, token),
     );
     let review = client.review_pull(role, number, event, body)?;
+    let owner_id = branch_owner_id(db, repo_root, &issue_id)?;
+    record_pr_action(
+        repo_root, state_dir, db, &owner_id, role, "review", &forgejo, number,
+    )?;
     println!("Review: {}", review.id);
     println!("State:  {}", review.state);
     println!("Issue:  {issue_id}");
@@ -224,6 +243,41 @@ pub fn persist_forge_pr(
     store.write_issue_atomic(&record)?;
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
+}
+
+fn record_pr_action(
+    repo_root: &Path,
+    state_dir: &Path,
+    db: &Database,
+    issue_id: &str,
+    role: &str,
+    action: &str,
+    forgejo: &ForgejoConfig,
+    number: u64,
+) -> Result<()> {
+    let Some(role) = activity_log::attempt_role_from_cli(role) else {
+        return Ok(());
+    };
+    let owner_id = branch_owner_id(db, repo_root, issue_id)?;
+    let remote_author = forgejo.sudo_user_for_role(role.as_str()).ok();
+    activity_log::record_pr_action_in_state_dir(
+        state_dir,
+        &owner_id,
+        role,
+        action,
+        &forge_pr_identifier(forgejo, number),
+        remote_author,
+    )?;
+    Ok(())
+}
+
+fn branch_owner_id(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    let policy = workflow_policy::load(repo_root)?;
+    Ok(workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?.owner_id)
+}
+
+fn forge_pr_identifier(forgejo: &ForgejoConfig, number: u64) -> String {
+    format!("forgejo/{}/{}#{}", forgejo.owner, forgejo.repo, number)
 }
 
 fn load_forgejo(repo_root: &Path) -> Result<ForgejoConfig> {
@@ -418,6 +472,7 @@ mod tests {
     use atelier_app::forgejo::ForgejoPullRequest;
     use atelier_app::project_config::{ForgejoConfig, ForgejoSudoUsers};
     use atelier_core::Issue;
+    use atelier_records::activity::{list_issue_activities, ActivityAttemptRole};
     use chrono::Utc;
     use std::collections::BTreeMap;
     use tempfile::tempdir;
@@ -706,6 +761,61 @@ target:
         assert_eq!(owner, epic);
         assert_eq!(inherited["number"], 42);
         assert_eq!(inherited["provider"], "forgejo");
+    }
+
+    #[test]
+    fn record_pr_action_writes_owner_activity_with_remote_author_metadata() {
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
+        let db = Database::open(&db_path).unwrap();
+        let epic = db
+            .create_issue_with_type("Epic", None, "medium", "epic")
+            .unwrap();
+        let child = db.create_subissue(&epic, "Child", None, "medium").unwrap();
+        atelier_app::export::run_canonical(&db, &dir.path().join(".atelier"), false).unwrap();
+
+        record_pr_action(
+            dir.path(),
+            &dir.path().join(".atelier"),
+            &db,
+            &child,
+            "reviewer",
+            "review",
+            &forgejo_config(),
+            42,
+        )
+        .unwrap();
+
+        let owner_activities = list_issue_activities(&dir.path().join(".atelier"), &epic).unwrap();
+        let child_activities = list_issue_activities(&dir.path().join(".atelier"), &child).unwrap();
+        assert!(child_activities.is_empty());
+        assert_eq!(owner_activities.len(), 1);
+        let activity = &owner_activities[0];
+        assert_eq!(
+            activity.attempt.as_ref().unwrap().role,
+            ActivityAttemptRole::Reviewer
+        );
+        assert_eq!(activity.pr_attribution.as_ref().unwrap().action, "review");
+        assert_eq!(
+            activity
+                .pr_attribution
+                .as_ref()
+                .unwrap()
+                .forge_pr
+                .as_deref(),
+            Some("forgejo/tools/atelier#42")
+        );
+        assert_eq!(
+            activity
+                .pr_attribution
+                .as_ref()
+                .unwrap()
+                .remote_author
+                .as_deref(),
+            Some("reviewer")
+        );
     }
 
     #[test]
