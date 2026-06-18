@@ -30,7 +30,7 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
-- `atelier pr open/status/show/comments/comment/review`
+- `atelier pr open/link/status/show/merge/comments/comment/review`
 - `atelier session`
 - `atelier session show/list`
 - `atelier history`
@@ -117,7 +117,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `bundle` | Preview and apply one-shot graph bundles from files. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `session` | Inspect derived issue-scoped worker/reviewer/validator attempts. | `show` and `list` name the linked issue or epic, role, state, serial, and bounded recent activity reconstructed from canonical issue events. Session commands do not start, end, or mutate workflow state. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
-| `pr` | Manage Forgejo pull request review artifacts associated with issue or epic work. | `open`, `link`, `status`, `show`, `comments`, `comment`, and `review` name the linked issue or epic, remote PR URL/number, author identity, review state, unresolved inline comment count, and next review command. `link` accepts a PR number or matching Forgejo URL and stores only the normalized `pull_request` number. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR number/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
+| `pr` | Manage Forgejo pull request review artifacts associated with issue or epic work. | `open`, `link`, `status`, `show`, `merge`, `comments`, `comment`, and `review` name the linked issue or epic, remote PR URL/number, author identity, merge state, review state, unresolved inline comment count, and next review command. `link` accepts a PR number or matching Forgejo URL and stores only the normalized `pull_request` number. `merge` merges or confirms the linked Forgejo PR without changing Atelier workflow state. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR number/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
 | `forgejo` | Configure and verify Forgejo integration. | `atelier forgejo roles check` verifies configured role authors, repo write permission, sudo behavior, and collapsed mappings; `atelier forgejo roles provision` creates missing service accounts, grants repo access, and optionally writes `[forgejo.role_authors]`. | Role names, pass/fail tokens, and remediation text only. | `.atelier/config.toml`, `pr`, `issue transition <id> --options`, remote Forgejo admin UI. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
@@ -505,7 +505,8 @@ set, and session output is a projection of worker/reviewer/validator attempts
 derived from issue activity.
 
 PR commands are visible only for review artifacts. They may create, inspect,
-comment on, and review Forgejo pull requests. Forgejo role authorship is
+merge or confirm merge state for, comment on, and review Forgejo pull requests.
+Forgejo role authorship is
 configured through `[forgejo.role_authors]`, and `atelier forgejo roles`
 provisions and verifies the service accounts used for worker, reviewer,
 validator, and manager PR actions. PR commands must not close, start, or
