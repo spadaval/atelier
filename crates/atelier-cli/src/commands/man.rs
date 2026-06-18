@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use crate::commands;
 use atelier_app::command_storage::{command_storage, CommandStorageAccess};
-use atelier_records::RecordStore;
+use atelier_records::activity::{list_derived_issue_attempts, DerivedIssueAttemptState};
 use atelier_sqlite::Database;
 
 const ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
@@ -88,17 +88,16 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         .into_iter()
         .map(|issue| format!("{} - {}", issue.id, issue.title))
         .collect();
-    let active_sessions = RecordStore::new(state_dir)
-        .load_sessions()?
+    let active_sessions = list_derived_issue_attempts(state_dir)?
         .into_iter()
-        .filter(|session| session.header.status == "active")
+        .filter(|session| session.state == DerivedIssueAttemptState::Active)
         .map(|session| {
             format!(
-                "{} {} {} -> {}",
-                session.header.id,
-                session.data.role,
-                session.data.session_kind,
-                commands::session::format_target(session.data.target.as_ref())
+                "{} {} {} -> issue/{}",
+                session.id,
+                session.role,
+                session.state.as_str(),
+                session.issue_id
             )
         })
         .collect();

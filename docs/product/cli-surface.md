@@ -32,7 +32,7 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier evidence record/show/attach/list`
 - `atelier pr open/status/show/comments/comment/review`
 - `atelier session`
-- `atelier session begin/show/list/end`
+- `atelier session show/list`
 - `atelier history`
 - `atelier issue note <id> "..."`
 - `atelier start`
@@ -116,8 +116,8 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `mission` | Create, focus, inspect, close, update, note, and coordinate durable missions. | `show` is the rich mission detail view; `status` is the compact health and next-action view; `list` stays queue-oriented; completion uses `close --reason` after gates pass; other lifecycle edits stay on `update`; note entry appends mission activity without field mutation. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `mission show <id>`, `mission note <id> "..."`, `mission status [<id>]`, `mission audit <id>`, `mission close <id> --reason "..."`, `history --mission <id>`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
-| `session` | Manage durable, optional agent session records for handoff and coordination. | `begin`, `show`, `list`, and `end` name the session, linked issue or mission context, role, state, and bounded recent activity. Sessions never define current work and never replace issue workflow status. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
-| `pr` | Manage Forgejo pull request review artifacts associated with issue work. | `open`, `status`, `show`, `comments`, `comment`, and `review` name the linked issue, remote PR URL/number, author identity, review state, unresolved inline comment count, and next review command. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR ID/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
+| `session` | Inspect derived issue-scoped worker/reviewer/validator attempts. | `show` and `list` name the linked issue or epic, role, state, serial, and bounded recent activity reconstructed from canonical issue events. Session commands do not start, end, or mutate workflow state. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
+| `pr` | Manage Forgejo pull request review artifacts associated with issue or epic work. | `open`, `status`, `show`, `comments`, `comment`, and `review` name the linked issue or epic, remote PR URL/number, author identity, review state, unresolved inline comment count, and next review command. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR ID/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
 
@@ -203,13 +203,18 @@ answer. A consolidation that merely moves ritual into a new umbrella command,
 adds mandatory ceremony to ordinary work, or hides the domain next action behind
 diagnostic jargon fails this check.
 
-Mission lifecycle statuses are `draft`, `ready`, `active`, and `closed`.
+Mission lifecycle statuses are `draft`, `ready`, `active`, `superseded`, and
+`closed`.
 Mission creation defaults to `ready`; `atelier mission start <id>` transitions
 the selected mission to `active` and transitions any previous active mission
 back to `ready` when `--switch` is supplied. Mission commands do not accept
 `open` as a mission-status alias and do not read legacy `data.active` state;
 committed mission records should be migrated directly to the lifecycle status
 they mean.
+Use `superseded` for a mission whose execution has been replaced by another
+mission; it is hidden from default current mission lists like `closed`, but
+remains visible with `atelier mission list --status superseded` or
+`--status all`.
 
 Mission completion uses `atelier mission close <id> --reason "..."`, which runs
 the mission completion gates before it commits the lifecycle change and records
@@ -300,7 +305,7 @@ names the operator-facing blocker class and the next domain command.
 workflow/config validity, `issue transition --options` owns issue-level
 readiness inspection, and `mission status` owns mission completion inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
-`AGENTS.md`, `AGENTFACTORY.md`, product command docs, visible root help, and
+`AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier lint` or an explicitly
 named development-only diagnostic, not a required normal workflow command.
 `atelier evidence record` is the normal evidence-recording surface. It records
@@ -492,10 +497,11 @@ product workflow or root help. Public orientation commands such as
 `atelier status`, `atelier doctor`, `atelier lint`, and record-specific repair
 guidance should absorb routine cache recovery.
 
-Session commands are visible only for durable optional session records. They
-must not reintroduce the removed runtime session/current-work model: current
-work remains the checkout's canonical `in_progress` issue set, and sessions are
-handoff metadata linked to work.
+Session commands are visible only for derived inspection views over canonical
+issue activity. They must not reintroduce the removed runtime session/current
+work model: current work remains the checkout's canonical `in_progress` issue
+set, and session output is a projection of worker/reviewer/validator attempts
+derived from issue activity.
 
 PR commands are visible only for review artifacts. They may create, inspect,
 comment on, and review Forgejo pull requests, including sudo-mode role

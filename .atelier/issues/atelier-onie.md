@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:14:38.802416912+00:00"
+status: "done"
 title: "Implement linked_pr_merged validator"
-updated_at: "2026-06-17T18:00:54.109347237+00:00"
+updated_at: "2026-06-18T01:14:38.802416912+00:00"
 ---
 
 ## Description

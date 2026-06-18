@@ -1070,6 +1070,19 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     );
     assert!(success, "close mission failed: {stderr}");
 
+    let (success, superseded_out, stderr) =
+        run_atelier(dir.path(), &["mission", "create", "Superseded mission"]);
+    assert!(success, "superseded mission create failed: {stderr}");
+    assert!(superseded_out.contains("Mission atelier-"));
+    let superseded_id = record_id_by_title(dir.path(), "missions", "Superseded mission");
+    let superseded_id = superseded_id.as_str();
+    let (success, superseded_update, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", superseded_id, "--status", "superseded"],
+    );
+    assert!(success, "superseded mission update failed: {stderr}");
+    assert!(superseded_update.contains("Status: superseded"));
+
     let (success, epic_out, stderr) = run_atelier(
         dir.path(),
         &["issue", "create", "Mission epic", "--issue-type", "epic"],
@@ -1161,6 +1174,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let active_row = format!("{active_id} [ready] - Active mission");
     let older_row = format!("{older_id} [ready] - Older ready");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
+    let superseded_row = format!("{superseded_id} [superseded] - Superseded mission");
     let active_pos = stdout.find(&active_row).expect("missing active row");
     let older_pos = stdout.find(&older_row).expect("missing older row");
     assert!(
@@ -1168,6 +1182,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         "newer ready mission should sort first:\n{stdout}"
     );
     assert!(!stdout.contains(&closed_row));
+    assert!(!stdout.contains(&superseded_row));
     assert!(
         stdout.contains(&format!(
             "[epic] {epic_id} [ready] medium - Mission epic | ready 1, blocked 1, done 1"
@@ -1192,15 +1207,19 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let (success, all_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "all"]);
     assert!(success, "all mission list failed: {stderr}");
-    assert!(all_out.contains("3 missions | 1 closed, 2 ready | 1 blocked"));
+    assert!(all_out.contains("4 missions | 1 closed, 2 ready, 1 superseded | 1 blocked"));
     assert!(all_out.contains(&active_row));
     assert!(all_out.contains(&older_row));
     assert!(all_out.contains(&closed_row));
+    assert!(all_out.contains(&superseded_row));
     let active_pos = all_out.find(&active_row).expect("missing active row");
+    let superseded_pos = all_out
+        .find(&superseded_row)
+        .expect("missing superseded row");
     let closed_pos = all_out.find(&closed_row).expect("missing closed row");
     assert!(
-        active_pos < closed_pos,
-        "current missions should sort before closed missions:\n{all_out}"
+        active_pos < superseded_pos && superseded_pos < closed_pos,
+        "current missions should sort before superseded and closed missions:\n{all_out}"
     );
 
     let (success, ready_out, stderr) =
@@ -1209,6 +1228,14 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(ready_out.contains(&active_row));
     assert!(ready_out.contains(&older_row));
     assert!(!ready_out.contains(&closed_row));
+    assert!(!ready_out.contains(&superseded_row));
+
+    let (success, superseded_filter_out, stderr) =
+        run_atelier(dir.path(), &["mission", "list", "--status", "superseded"]);
+    assert!(success, "superseded mission list failed: {stderr}");
+    assert!(superseded_filter_out.contains("1 superseded mission | 0 blocked"));
+    assert!(superseded_filter_out.contains(&superseded_row));
+    assert!(!superseded_filter_out.contains(&active_row));
 
     let (success, open_out, stderr) =
         run_atelier(dir.path(), &["mission", "list", "--status", "open"]);

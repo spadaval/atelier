@@ -52,6 +52,8 @@ validators:
     builtin: epic_child_proof_complete
   lint_clear:
     builtin: no_blocking_lints
+  pr_merged:
+    builtin: linked_pr_merged
   closeout_clean:
     builtin: git_worktree_clean
 

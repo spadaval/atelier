@@ -2,9 +2,9 @@
 
 ## Start Here
 
-- Load `AGENTFACTORY.md` before coordinated agent work.
 - Use the `agent-factory` skill for planning, orchestration, implementation,
-  review, validation, documentation, audit, and readiness work.
+  review, validation, documentation, audit, and readiness work. The repository
+  copy lives at `.agents/skills/agent-factory/SKILL.md`.
 - Use Atelier (`atelier`) for durable task tracking. Do not replace it with private
   chat notes or ad hoc TODO files.
 - Orchestrators assign exactly one agent-factory subskill to each subagent.
@@ -28,12 +28,16 @@
 
 ## Repository Shape
 
+- Agent Factory skill source: `.agents/skills/agent-factory/SKILL.md`
 - Product intent: `SPEC.md`
 - Domain language: `CONTEXT.md`
 - Documentation map: `docs/index.md`
 - Product behavior: `docs/product/index.md`
 - Architecture: `docs/architecture/index.md`
 - Quality and validation: `docs/architecture/quality/`
+- ADRs: `docs/adr/`
+- Validation router: `docs/architecture/quality/validation.md`
+- Code standards: `docs/architecture/quality/standards.md`
 
 ## Common Commands
 

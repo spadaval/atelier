@@ -627,7 +627,7 @@ fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec
         None | Some("all") => records,
         Some("current") => records
             .into_iter()
-            .filter(|record| mission_lifecycle_status(record) != "closed")
+            .filter(|record| is_current_mission_status(&mission_lifecycle_status(record)))
             .collect(),
         Some(status) => {
             let status = normalize_mission_status(status)?;
@@ -641,9 +641,9 @@ fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec
 
 fn normalize_mission_status(status: &str) -> Result<&str> {
     match status {
-        "draft" | "ready" | "active" | "closed" => Ok(status),
+        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(status),
         _ => bail!(
-            "Invalid mission status '{}'. Must be one of: draft, ready, active, closed",
+            "Invalid mission status '{}'. Must be one of: draft, ready, active, superseded, closed",
             status
         ),
     }
@@ -651,6 +651,10 @@ fn normalize_mission_status(status: &str) -> Result<&str> {
 
 fn mission_lifecycle_status(record: &RecordSummary) -> String {
     record.status.clone()
+}
+
+fn is_current_mission_status(status: &str) -> bool {
+    !matches!(status, "closed" | "superseded")
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
@@ -1654,12 +1658,18 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
             .filter(|row| mission_lifecycle_status(&row.record) == "draft"),
     );
 
+    print_mission_list_group(
+        "Superseded",
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "superseded"),
+    );
+
     let other_statuses = rows
         .iter()
         .filter(|row| {
             !matches!(
                 mission_lifecycle_status(&row.record).as_str(),
-                "active" | "ready" | "draft" | "closed"
+                "active" | "ready" | "draft" | "superseded" | "closed"
             )
         })
         .map(|row| mission_lifecycle_status(&row.record))
@@ -1680,7 +1690,7 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
 
     let first_actionable = rows
         .iter()
-        .find(|row| mission_lifecycle_status(&row.record) != "closed")
+        .find(|row| is_current_mission_status(&mission_lifecycle_status(&row.record)))
         .or_else(|| rows.first());
     print_mission_list_next_commands(first_actionable);
     Ok(())
@@ -1716,7 +1726,7 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
             mission_lifecycle_status(&row.record),
             row.record.title
         );
-        if mission_lifecycle_status(&row.record) != "closed" {
+        if is_current_mission_status(&mission_lifecycle_status(&row.record)) {
             print_mission_list_open_work(row);
         }
     }
@@ -1753,8 +1763,9 @@ fn mission_status_rank(status: &str) -> u8 {
         "active" => 0,
         "ready" => 1,
         "draft" => 2,
-        "closed" => 4,
-        _ => 3,
+        "superseded" => 3,
+        "closed" => 5,
+        _ => 4,
     }
 }
 

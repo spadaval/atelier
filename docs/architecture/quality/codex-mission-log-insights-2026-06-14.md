@@ -310,7 +310,7 @@ High-value improvement:
 2. Update `docs/product/cli-surface.md`, `docs/architecture/index.md`, and
    `docs/architecture/quality/validation.md` with the command map, source map,
    validation recipes, and proof examples.
-3. Update `AGENTFACTORY.md` and the Agent Factory orchestration guidance with
+3. Update `AGENTS.md` and the Agent Factory orchestration guidance with
    stale-state preflight, safe validation recipes, and checkout ownership in
    handoffs.
 4. Create follow-up tracker work for closeout proof matching and atomic

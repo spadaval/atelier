@@ -36,7 +36,7 @@ Missions and planning:
 
 Records:
   evidence      Capture validation evidence
-  session       Manage durable optional work sessions
+  session       Inspect derived issue attempts
   pr            Manage Forgejo pull request review artifacts
   history       Inspect canonical repo, mission, issue, or epic activity
 
@@ -124,11 +124,11 @@ enum Commands {
     /// Start tracked work on an issue
     Start {
         id: String,
-        /// Do not create or reuse a session for this start
-        #[arg(long)]
+        /// Do not emit legacy session output for this start
+        #[arg(long, hide = true)]
         no_session: bool,
-        /// Reuse an existing active mutating session
-        #[arg(long)]
+        /// Legacy option retained only to reject stale scripts with a direct error
+        #[arg(long, hide = true)]
         reuse_session: Option<String>,
     },
 
@@ -197,7 +197,7 @@ enum Commands {
         action: EvidenceCommands,
     },
 
-    /// Durable optional work sessions
+    /// Inspect derived issue-scoped worker, reviewer, and validator attempts
     Session {
         #[command(subcommand)]
         action: SessionCommands,
@@ -595,41 +595,13 @@ another target.")]
 
 #[derive(Subcommand)]
 enum SessionCommands {
-    /// Begin a durable optional work session
-    Begin {
-        /// Operator role: worker, reviewer, manager, or admin
-        #[arg(long)]
-        role: String,
-        /// Link the session to an issue
-        #[arg(long)]
-        issue: Option<String>,
-        /// Link the session to a mission
-        #[arg(long)]
-        mission: Option<String>,
-        /// Agent-factory subskill or other local role specialization
-        #[arg(long)]
-        subskill: Option<String>,
-        /// Agent identity to record
-        #[arg(long)]
-        agent: Option<String>,
-        /// Session kind
-        #[arg(long, default_value = "mutating")]
-        kind: String,
-    },
-    /// Show a session record
+    /// Show a derived issue attempt
     Show { id: String },
-    /// List session records
+    /// List derived issue attempts
     List {
-        /// Show only active sessions
+        /// Show only active attempts
         #[arg(long)]
         active: bool,
-    },
-    /// End an active session
-    End {
-        id: String,
-        /// Reason recorded in terminal output
-        #[arg(long)]
-        reason: String,
     },
 }
 
@@ -1069,7 +1041,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 // ============================================================================
 
 fn main() -> Result<()> {
+    load_dotenv()?;
     run()
+}
+
+fn load_dotenv() -> Result<()> {
+    match dotenvy::dotenv() {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn run() -> Result<()> {
@@ -1419,27 +1400,6 @@ fn run() -> Result<()> {
         },
 
         Commands::Session { action } => match action {
-            SessionCommands::Begin {
-                role,
-                issue,
-                mission,
-                subskill,
-                agent,
-                kind,
-            } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                commands::session::begin(
-                    storage.db(),
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &role,
-                    issue.as_deref(),
-                    mission.as_deref(),
-                    subskill.as_deref(),
-                    agent.as_deref(),
-                    &kind,
-                )
-            }
             SessionCommands::Show { id } => {
                 let storage = use_cases::mission_query_storage()?;
                 commands::session::show(&storage.state_dir(), &id)
@@ -1447,10 +1407,6 @@ fn run() -> Result<()> {
             SessionCommands::List { active } => {
                 let storage = use_cases::mission_query_storage()?;
                 commands::session::list(&storage.state_dir(), active)
-            }
-            SessionCommands::End { id, reason } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                commands::session::end(&storage.state_dir(), &storage.db_path(), &id, &reason)
             }
         },
 
@@ -1729,10 +1685,8 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::List { .. } => "evidence list",
         },
         Commands::Session { action } => match action {
-            SessionCommands::Begin { .. } => "session begin",
             SessionCommands::Show { .. } => "session show",
             SessionCommands::List { .. } => "session list",
-            SessionCommands::End { .. } => "session end",
         },
         Commands::Pr { action } => match action {
             PrCommands::Open { .. } => "pr open",

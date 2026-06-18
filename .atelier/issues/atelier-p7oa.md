@@ -20,13 +20,15 @@ updated_at: "2026-06-17T18:01:06.283518854+00:00"
 
 ## Description
 
-Run final closeout checks for the mission and capture docs/help parity proof.
+Run final closeout checks for the merged mission and capture docs/help parity
+proof for the session-as-issue-events model.
 
 ## Outcome
 
 - Formatting, focused tests, lint, export check, doctor, and diff checks pass
   or any residual failure is documented as follow-up work.
-- Docs/help output matches the implemented session and PR command surfaces.
+- Docs/help output matches the implemented issue-event session inspection and PR
+  command surfaces.
 - Mission closeout evidence maps every mission validation criterion to child
   issue proof.
 
@@ -36,4 +38,5 @@ Run final closeout checks for the mission and capture docs/help parity proof.
   `atelier lint`, `atelier export --check`, `atelier doctor`, and
   `git diff --check`.
 - Evidence record or review artifact maps docs/help transcript checks to the
-  implemented public interfaces.
+  implemented public interfaces and confirms durable-session workflow commands
+  are no longer taught as the happy path.

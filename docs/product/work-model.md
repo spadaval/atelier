@@ -10,6 +10,9 @@ separate issue hierarchy.
   health, active epics, risks, validation expectations, and evidence. It is also
   the default shared background workspace boundary: one mission normally owns
   one shared worktree or equivalent checkout.
+- Session: a derived issue-scoped worker/reviewer/validator attempt rebuilt
+  from canonical issue activity. Session views are inspection-only and help
+  explain handoff context without replacing issue workflow state.
 - Checkpoint semantics: deferred v1 product language for intermediate target
   states. Checkpoint prose may live in missions, epics, issues, or evidence, but
   there is no active first-class milestone record table.
@@ -29,6 +32,10 @@ separate issue hierarchy.
   accountability. Parent completion is derived from linked implementation,
   review, validation, and completion evidence rather than from direct proof pasted
   onto the parent objective.
+
+Session views remain derived from issue activity; they are not a separate work
+queue, and they do not become the source of truth for current work or
+completion.
 
 ## Evidence Records
 
@@ -89,7 +96,9 @@ mission completion is computed from closed linked work, clear mission blockers,
 configured health gates, and workflow approval on accountable child work;
 mission `Validation` prose guides human completion and validation but is not
 parsed as a coded evidence contract.
-Missions keep the built-in lifecycle `draft`, `ready`, `active`, and `closed`;
+Missions keep the built-in lifecycle `draft`, `ready`, `active`, `superseded`,
+and `closed`; `superseded` means another mission has replaced the execution
+scope and hides from default current mission lists without claiming completion.
 Atelier does not add a configurable mission workflow graph. Issues and epics
 remain the workflow-owned records: they move through normal issue transitions
 until a terminal done-category status is allowed.

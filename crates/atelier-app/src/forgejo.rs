@@ -316,8 +316,10 @@ struct ReviewPayload<'a> {
 #[derive(Debug, Deserialize)]
 struct PullResponse {
     number: u64,
-    #[serde(alias = "html_url")]
-    url: String,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    html_url: Option<String>,
     state: String,
     #[serde(default)]
     merged: bool,
@@ -335,7 +337,7 @@ impl From<PullResponse> for ForgejoPullRequest {
     fn from(value: PullResponse) -> Self {
         Self {
             number: value.number,
-            url: value.url,
+            url: value.html_url.or(value.url).unwrap_or_default(),
             state: value.state,
             merged: value.merged,
             source_branch: value.head.branch,

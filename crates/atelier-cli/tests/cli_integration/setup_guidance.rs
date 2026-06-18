@@ -812,9 +812,10 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
 
 #[test]
 fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
-    let guidance = std::fs::read_to_string(workspace_root().join("AGENTFACTORY.md")).unwrap();
-    assert!(guidance.contains("Hidden workflow diagnostics are not normal"));
-    assert!(guidance.contains("## Validation Routing"));
+    let guidance =
+        std::fs::read_to_string(workspace_root().join(".agents/skills/agent-factory/SKILL.md"))
+            .unwrap();
+    assert!(guidance.contains("Agent Factory assigns subskills"));
     assert!(!guidance.contains("atelier workflow validate issue"));
     assert!(!guidance.contains("atelier workflow validate mission"));
     assert!(!guidance.contains("## Checks"));
@@ -1516,18 +1517,10 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
 
     let (success, active_out, stderr) = run_atelier(dir.path(), &["start", &active_id]);
     assert!(success, "initial start failed: {stderr}");
-    let session_id = active_out
-        .lines()
-        .find_map(|line| line.strip_prefix("Session: "))
-        .map(str::trim)
-        .expect("initial start should create a session")
-        .to_string();
+    assert!(!active_out.contains("Session:"), "{active_out}");
     commit_all(dir.path(), "active item started");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["start", &next_id, "--reuse-session", &session_id],
-    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
     assert!(success, "second current work issue should start: {stderr}");
     assert!(
         stdout.contains(&format!("Started work on {next_id}")),

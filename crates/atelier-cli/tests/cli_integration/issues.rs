@@ -1549,7 +1549,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(show_out.contains("atelier-0002"));
     assert!(show_out.contains("(open blocker)"));
     assert!(show_out.contains("Outcome"));
-    assert!(show_out.contains("AGENTFACTORY.md declares Atelier as the tracker"));
+    assert!(show_out.contains("AGENTS.md declares Atelier as the tracker"));
     assert!(show_out.contains("Evidence"));
     assert!(show_out.contains("atelier import-beads <path>"));
     assert!(!show_out.contains("Acceptance Criteria"));

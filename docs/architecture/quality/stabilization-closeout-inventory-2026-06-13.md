@@ -65,7 +65,7 @@ Observed transcript: `target/debug/atelier evidence --help`.
 Command used:
 
 ```bash
-rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md AGENTFACTORY.md CONTEXT.md SPEC.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
+rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md CONTEXT.md SPEC.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
 ```
 
 Classification:

@@ -154,7 +154,7 @@ categories, not alternate stored tokens.
 | Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose may reference plan/checkpoint Markdown by path, but must not become a shadow graph. |
 
 Mission status is mission-lifecycle state, not issue workflow state. The current
-durable vocabulary is `draft`, `ready`, `active`, and `closed`.
+durable vocabulary is `draft`, `ready`, `active`, `superseded`, and `closed`.
 
 ### Deferred Plan Records
 

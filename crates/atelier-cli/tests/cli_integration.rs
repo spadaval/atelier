@@ -683,11 +683,6 @@ fn write_valid_command_guidance(dir: &Path) {
         "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
     )
     .unwrap();
-    fs::write(
-        dir.join("AGENTFACTORY.md"),
-        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission status <id> --verbose`\n- `atelier issue show <id>`\n",
-    )
-    .unwrap();
 }
 
 fn remove_issue_section(markdown: &str, heading: &str) -> String {

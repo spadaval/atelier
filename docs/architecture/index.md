@@ -49,7 +49,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0003: Evidence Artifact Storage](../adr/0003-evidence-artifact-storage.md)
 - [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
 - [ADR 0009: Virtual Workspace Root And CLI-Owned Binary](../adr/0009-virtual-workspace-root-and-cli-binary.md)
-- [ADR 0010: Session-Aware PR Coordination Boundaries](../adr/0010-session-aware-pr-coordination-boundaries.md)
+- [ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries](../adr/0010-session-aware-pr-coordination-boundaries.md)
 
 ## Target Architecture
 
@@ -74,8 +74,8 @@ Accepted ADRs record cross-cutting product choices:
 - `doctor --fix` repairs ignored local projection/cache state from committed
   Markdown records when it is safe to do so.
 - First-class concepts include missions, issues, evidence, typed links,
-  workflows, workflow validators, and deferred session/run metadata; their
-  user-visible behavior is defined in [Product](../product/index.md).
+  workflows, workflow validators, derived session views, and deferred run
+  metadata; their user-visible behavior is defined in [Product](../product/index.md).
 - Repository-owned issue workflow policy lives at the fixed
   `.atelier/workflow.yaml` path. Loading, schema validation, status categories,
   transition lookup, validator evaluation, guidance rendering, and branch

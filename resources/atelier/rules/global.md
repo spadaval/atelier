@@ -104,7 +104,7 @@ Before using unfamiliar libraries/APIs:
 
 These rules keep work organized and enable context handoff between sessions.
 
-Use the repository's `AGENTS.md` and `AGENTFACTORY.md` guidance for the active
+Use the repository's `AGENTS.md` guidance and tracker help for the active
 tracking workflow.
 
 ---

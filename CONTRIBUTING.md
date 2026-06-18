@@ -6,7 +6,7 @@ or treat GitHub issues as the primary work queue for this repository.
 
 Before changing code or docs:
 
-1. Read [AGENTS.md](AGENTS.md) and [AGENTFACTORY.md](AGENTFACTORY.md).
+1. Read [AGENTS.md](AGENTS.md).
 2. Find or create the relevant Atelier issue.
 3. Start tracked work with the workflow commands allowed by that issue.
 4. Attach evidence that proves the issue outcome before closeout.

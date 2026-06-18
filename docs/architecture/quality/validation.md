@@ -25,6 +25,10 @@ accountable child work plus a validation item that audits the parent outcome.
 Direct evidence on a mission is legacy or migration-only; it is not the normal
 way to satisfy mission proof.
 
+Session `show` and `list` are read-only inspection surfaces over derived issue
+activity. They can support attribution proof, but they do not create, end, or
+mutate workflow state.
+
 ## Validation Placement
 
 Each tracker layer owns a different question. Do not duplicate lower-level
@@ -68,32 +72,29 @@ public behavior, or workflow gate can be reproduced before the fix.
 | Test-first CLI rejection | A failing-before/passing-after test or transcript shows the rejected command and error text, with docs/help parity when public help changes. | Full test suite passes without showing the rejected command path. |
 | Canonical write or projection refresh | Round-trip or rebuild transcript, concurrency or scenario proof, and attached evidence show canonical files remain source of truth. | End-of-mission audit only, with no early proof of the write or refresh path. |
 
-## Agent Factory Boundary
+## Agent Guidance Boundary
 
-`AGENTFACTORY.md` is the repository binding and delegation bridge, not the full
-Atelier command or workflow contract. Per
-[ADR 0006](../../adr/0006-agent-guidance-ownership-boundary.md), when a rule is
-durable product behavior, Atelier must own the operator-facing surface and
-Agent Factory should route to it instead of restating it as private process
-lore.
+Per [ADR 0006](../../adr/0006-agent-guidance-ownership-boundary.md), when a
+rule is durable product behavior, Atelier must own the operator-facing surface
+and Agent Factory should route to it instead of restating it as private process
+lore. `AGENTS.md` is a concise repository entry point and reference map, not the
+full Atelier command or workflow contract.
 
-| AGENTFACTORY topic | Classification | Durable owner or destination | Notes |
+| Topic | Classification | Durable owner or destination | Notes |
 | --- | --- | --- | --- |
-| `Sources`; tracker identity; durable `.atelier/` state; ignored runtime/cache state; preferred binary for ordinary work | Repository binding | `AGENTFACTORY.md`, `docs/index.md`, repository instructions | Keep in the binding so a fresh worker can locate the repository's authoritative docs and tracker shape. |
+| Source locations; tracker identity; durable `.atelier/` state; ignored runtime/cache state | Repository instructions | `AGENTS.md`, `docs/index.md` | Keep concise so a fresh worker can locate authoritative docs and tracker shape. |
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
 | Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
 | Tracker freshness, health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier mission status`, `atelier lint`, `atelier doctor` | Missing proof, blockers, stale state, and health failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, `AGENTFACTORY.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
-For the current binding, this means the retained `Sources` and tracker-shape
-material are repository binding; the retained model-routing, worktree, and
-assignment rules are orchestration-only; and the former command-family cookbook
-(`Mission`, `Work/evidence`, `Issues`, `Sync/state`, `Health`, and mission
-completion detail) should be routed to Atelier-owned help, docs, status, audit,
-lint, doctor, export, and workflow-policy surfaces.
+This means source locations and tracker shape belong in repository instructions
+and docs indexes; model-routing and assignment rules are orchestration-only; and
+command-family cookbooks should be routed to Atelier-owned help, docs, status,
+audit, lint, doctor, export, and workflow-policy surfaces.
 
 ## Stale-State Preflight
 
@@ -219,7 +220,7 @@ than "make mission status faster."
 | Docs-only issue | Documentation diff plus `git diff --check -- '*.md'`; run `atelier lint <id>` or repo-wide `atelier lint` when tracker records changed. | Durable note can be enough for typo-scale docs. First-class evidence is required for process policy or docs that gate later work. | Not required unless the docs define policy, completion, public contracts, docs/help parity, or epic/mission review boundaries. |
 | CLI behavior change | Focused CLI integration test or human transcript for success and rejection paths; update docs/help proof when the surface changes. | First-class evidence attached to the issue. | Required for public command contract changes, docs/help parity, or cross-command workflow behavior. |
 | Persistence migration | Migration diff inspection, round-trip or rebuild proof, deterministic export or projection-freshness diagnostics when relevant, and degraded-state or recovery transcript. | First-class evidence attached to the issue and any affected parent criterion. | Required unless the migration is a throwaway fixture-only spike with no durable state effect. |
-| Agent Factory process change | Diff of `AGENTFACTORY.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
+| Agent Factory process change | Diff of `AGENTS.md`, skill/process docs, or mapped quality docs plus a dogfood transcript showing the guidance is actionable through `atelier` commands. | First-class evidence for policy changes; durable notes only for local wording caveats. | Required when the process change affects validation, completion, mission orchestration, or future worker behavior. |
 | Crate migration root-deletion completion | Crate-migration guard script, `RUSTFLAGS=-Dwarnings cargo check --workspace --all-targets`, `cargo metadata --no-deps --format-version 1`, and residue searches for old root module paths. Before root deletion, run the guard self-test if one exists. | First-class evidence attached to the root-deletion or validation issue. | Required because the claim removes the root package, changes workspace ownership, and gates mission completion. |
 | Epic completion | Validation issue maps each epic Outcome line to child work and evidence, confirms the epic branch/review boundary, uses `atelier issue show <epic-id>`, `atelier issue transition <epic-id> --options`, or the configured terminal check, and records residual risks. | First-class evidence attached to the validation issue; the epic derives completion from that validation plus child evidence. | Always required for broad parent claims, performed by a validation worker that did not implement the bulk of the children. |
 | Mission completion | Mission status synthesizes linked work state, clear blockers, tracker health, configured gates, and explicit validation work when parent-level judgment is required. It does not re-run every child proof or require duplicate direct mission evidence for ordinary proved work. | First-class evidence attaches to the accountable validation issue when one exists. | Required for explicit mission-level validation work, adversarial validation, or cross-cutting mission claims; routine mission shell completion stays a thin synthesis over proved child work and health gates. |
@@ -244,7 +245,7 @@ audit` is completion drill-down: it exists to report mission shell completion an
 any explicit linked validation work that supplies workflow
 approval, and may be folded into a verbose completion mode of mission status.
 Hidden workflow validators are
-advanced diagnostics; use them only when the binding, assignment, or completion
+advanced diagnostics; use them only when the assignment or completion
 contract explicitly requires them, and attach the human-readable result to the
 accountable issue that performed the check.
 
@@ -293,8 +294,8 @@ Install `cargo-nextest` before running the default Rust test command:
 
 ### Validation Command Recipes
 
-These are the repository-owned shell recipes that `AGENTFACTORY.md` should
-route to when a worker needs concrete command forms:
+These are the repository-owned shell recipes to use when a worker needs concrete
+command forms:
 
 | Purpose | Known-good form |
 | --- | --- |

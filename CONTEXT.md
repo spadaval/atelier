@@ -61,9 +61,9 @@
 - Guidance: advisory workflow text rendered near an action, status, or failure
   to explain the next operator move. Guidance informs; validators decide.
 - Mission: a high-level objective that may span multiple epics, issues,
-  evidence records, agents, and deferred session/run metadata. It is also the
-  shared background workspace boundary: one mission normally owns one shared
-  worktree for coordinated agent work.
+  evidence records, agents, derived session views, and deferred run metadata.
+  It is also the shared background workspace boundary: one mission normally
+  owns one shared worktree for coordinated agent work.
 - Epic: the normal branch and review boundary beneath a mission. One epic
   normally owns one reviewable branch or PR-equivalent changeset.
 - Issue: a durable accountability unit and implementation slice. It does not
@@ -78,10 +78,10 @@
 - Mission Control: the target projection or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
-- Session: a durable, optional coordination record for one agent's bounded work
-  interval, role, linked issue or mission context, and handoff activity. A
-  session can explain who did what and when, but it does not define current
-  work and it is not required for every issue.
+- Session: a derived, issue-scoped worker/reviewer/validator attempt rebuilt
+  from canonical issue activity. A session can explain who did what and when,
+  but it does not define current work, it is inspection-only, and it is not a
+  standalone workflow record.
 - Typed field: a workflow-policy-owned issue field with a declared name, type,
   cardinality, validation rules, and projection contract. Typed fields are
   authored as first-class canonical issue data only when the active workflow
@@ -140,26 +140,28 @@
   relationships.
 - Missions, issues, evidence, workflow policy, and activity sidecars are the v1
   first-class durable concepts. Milestone/checkpoint records, first-class plan
-  records, and runs/sessions remain deferred until a later contract reintroduces
-  them directly.
+  records, and runs remain deferred until a later contract reintroduces them
+  directly. Session views are derived from canonical issue activity rather than
+  stored as standalone workflow records.
 - Validators belong to workflow policy. Checkpoint or plan prose may describe
   desired proof, but validators enforce issue transitions.
 - Durable claim/assignment and current work are easy to confuse. Current work
   is derived from canonical `in_progress` issue status in the checkout's
   tracked Markdown records, not from runtime work associations or a parallel
   hidden claim system.
-- Durable sessions and current work are also distinct. A session can be linked
-  to the work an agent is doing, but the source of truth for current work stays
-  the checkout's canonical `in_progress` issue set. Ending a session does not
-  close, block, or abandon an issue; workflow transitions do that.
-- Session records and local command diagnostics serve different purposes.
-  Sessions are bounded, durable coordination records when the operator wants
-  handoff visibility. Local command diagnostics are ignored runtime telemetry
-  for command health and are not exported work records.
+- Derived session views and current work are also distinct. A session view can
+  summarize the work an agent is doing, but the source of truth for current
+  work stays the checkout's canonical `in_progress` issue set. Viewing or
+  ending a session record does not close, block, or abandon an issue; workflow
+  transitions do that.
+- Derived session views and local command diagnostics serve different purposes.
+  Sessions summarize bounded worker, reviewer, and validator attempts from
+  canonical issue activity. Local command diagnostics are ignored runtime
+  telemetry for command health and are not exported work records.
 - Pull request artifacts and validators are distinct. `atelier pr` commands
-  operate on Forgejo review artifacts and record their issue linkage, while
-  workflow validators such as `linked_pr_merged` only read PR state to decide
-  whether an Atelier transition is allowed.
+  operate on Forgejo review artifacts and record their issue or epic linkage,
+  while workflow validators such as `linked_pr_merged` only read PR state to
+  decide whether an Atelier transition is allowed.
 - Typed fields and evidence attachments are distinct. The `forge_pr` typed
   field stores the active PR artifact state for an issue; evidence attachments
   prove claims with command transcripts, reviews, or validation records.

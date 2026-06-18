@@ -29,7 +29,7 @@ The cutover must prove:
   instead of command-result JSON.
 - Missing IDs, invalid dependencies, stale exports, and unhealthy tracker state
   fail with actionable diagnostics.
-- `AGENTFACTORY.md` routes normal repository tracker work through Atelier
+- `AGENTS.md` routes normal repository tracker work through Atelier
   commands. Global Agent Factory procedure updates are tracked separately by
   `atelier-z1p.5`.
 
@@ -203,8 +203,8 @@ These cutover criteria define the repository switch to Atelier:
 | --- | --- | --- |
 | Beads data import from `.beads/issues.manual.jsonl` preserves current records, relationships, statuses, labels, notes, and close metadata or reports precise loss. | `atelier-z1p.2` | Import report, count comparison, round-trip show/list/update/close validation, and fixture-based tests. |
 | Agent Factory command parity covers every required MVP matrix row with focused text behavior. | `atelier-z1p.3` | Focused CLI tests and manual command transcript for ready/show/create/update/close/dependency/lint/doctor/export/rebuild. |
-| Repository dogfood cutover proves Atelier is live for `/root/atelier`. | `atelier-z1p.4` | `AGENTFACTORY.md` uses Atelier commands, a real update and closeout happen through Atelier, normal repository work no longer needs `bd`, and the old archive is purged after validation. |
-| Agent Factory skill docs support tracker bindings instead of hard-coding Beads. | `atelier-z1p.5` | Follow-up outside this repository cutover; skill procedures route through repository-bound tracker commands and include Atelier examples. |
+| Repository dogfood cutover proves Atelier is live for `/root/atelier`. | `atelier-z1p.4` | `AGENTS.md` uses Atelier commands, a real update and closeout happen through Atelier, normal repository work no longer needs `bd`, and the old archive is purged after validation. |
+| Agent Factory skill docs support repository trackers instead of hard-coding Beads. | `atelier-z1p.5` | Follow-up outside this repository cutover; skill procedures route through repository tracker commands and include Atelier examples. |
 
 Already closed prerequisites that remain part of the replacement foundation:
 
@@ -232,7 +232,7 @@ not block the first replacement cutover:
 
 The repository cutover updated:
 
-- `AGENTFACTORY.md`: change tracker binding from Beads to Atelier and replace
+- `AGENTS.md`: change tracker binding from Beads to Atelier and replace
   sync/check/export commands.
 - `AGENTS.md`: replace Beads-specific agent startup instructions with Atelier
   tracker instructions.
