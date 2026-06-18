@@ -1,11 +1,11 @@
 use anyhow::Result;
 use chrono::Utc;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use atelier_records::activity::{
     create_issue_activity_with_metadata, create_mission_activity, derive_issue_attempts,
     list_issue_activities, ActivityAttemptLifecycle, ActivityAttemptMetadata, ActivityAttemptRole,
-    ActivityEventType, DerivedIssueAttemptState,
+    ActivityEventType, ActivityPrAttribution, DerivedIssueAttemptState,
 };
 
 pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
@@ -75,6 +75,61 @@ pub fn record_work_started(
         )?),
         &work_body(branch, worktree_path),
     )
+}
+
+pub fn record_pr_action(
+    issue_id: &str,
+    role: ActivityAttemptRole,
+    action: &str,
+    forge_pr: &str,
+    remote_author: Option<&str>,
+) -> Result<()> {
+    let Some(state_dir) = current_state_dir_for_issue(issue_id) else {
+        return Ok(());
+    };
+    record_pr_action_in_state_dir(&state_dir, issue_id, role, action, forge_pr, remote_author)
+}
+
+pub fn record_pr_action_in_state_dir(
+    state_dir: &Path,
+    issue_id: &str,
+    role: ActivityAttemptRole,
+    action: &str,
+    forge_pr: &str,
+    remote_author: Option<&str>,
+) -> Result<()> {
+    let serial = current_attempt_serial_in_state_dir(state_dir, issue_id, role)?.unwrap_or(1);
+    create_issue_activity_with_metadata(
+        state_dir,
+        issue_id,
+        ActivityEventType::Comment,
+        &current_actor(),
+        Utc::now(),
+        &format!("Recorded PR {action}"),
+        Some(ActivityAttemptMetadata {
+            role,
+            serial,
+            lifecycle: ActivityAttemptLifecycle::Updated,
+            agent: current_agent(),
+            subskill: current_subskill(),
+        }),
+        Some(ActivityPrAttribution {
+            action: action.to_string(),
+            forge_pr: Some(forge_pr.to_string()),
+            remote_author: remote_author.map(str::to_string),
+        }),
+        &pr_action_body(role, action, forge_pr, remote_author),
+    )?;
+    Ok(())
+}
+
+pub fn attempt_role_from_cli(role: &str) -> Option<ActivityAttemptRole> {
+    match role {
+        "worker" => Some(ActivityAttemptRole::Worker),
+        "reviewer" => Some(ActivityAttemptRole::Reviewer),
+        "validator" => Some(ActivityAttemptRole::Validator),
+        _ => None,
+    }
 }
 
 pub fn record_evidence_attached(
@@ -293,6 +348,19 @@ fn next_serial(issue_id: &str, role: ActivityAttemptRole) -> Result<u32> {
     Ok(latest_serial(issue_id, role)?.unwrap_or(0) + 1)
 }
 
+fn current_attempt_serial_in_state_dir(
+    state_dir: &Path,
+    issue_id: &str,
+    role: ActivityAttemptRole,
+) -> Result<Option<u32>> {
+    Ok(list_issue_activities(state_dir, issue_id)?
+        .into_iter()
+        .filter_map(|activity| activity.attempt)
+        .filter(|attempt| attempt.role == role)
+        .map(|attempt| attempt.serial)
+        .max())
+}
+
 fn serials(issue_id: &str, role: ActivityAttemptRole) -> Result<Vec<u32>> {
     Ok(list_issue_activities_for_attempts(issue_id)?
         .into_iter()
@@ -404,6 +472,21 @@ fn transition_body(transition: &str, from: &str, to: Option<&str>, reason: Optio
         scalar(from),
         option_scalar(to),
         option_scalar(reason)
+    )
+}
+
+fn pr_action_body(
+    role: ActivityAttemptRole,
+    action: &str,
+    forge_pr: &str,
+    remote_author: Option<&str>,
+) -> String {
+    format!(
+        "role: {}\naction: {}\nforge_pr: {}\nremote_author: {}",
+        scalar(role.as_str()),
+        scalar(action),
+        scalar(forge_pr),
+        option_scalar(remote_author)
     )
 }
 

@@ -149,6 +149,19 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
             .context("forgejo_api_error: failed to parse pull request response")
     }
 
+    pub fn merge_pull(&self, role: &str, number: u64) -> Result<ForgejoPullRequest> {
+        let payload = serde_json::to_string(&MergePullPayload {
+            merge_method: "merge",
+        })?;
+        self.send(self.write_request(
+            role,
+            "POST",
+            self.repo_path(&format!("pulls/{number}/merge")),
+            payload,
+        )?)?;
+        self.show_pull(number)
+    }
+
     pub fn comment_pull(&self, role: &str, number: u64, body: &str) -> Result<ForgejoComment> {
         let payload = serde_json::to_string(&CommentPayload { body })?;
         let response = self.send(self.write_request(
@@ -300,6 +313,12 @@ struct OpenPullPayload<'a> {
     body: &'a str,
     head: &'a str,
     base: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct MergePullPayload<'a> {
+    #[serde(rename = "Do")]
+    merge_method: &'a str,
 }
 
 #[derive(Debug, Serialize)]
@@ -527,6 +546,38 @@ mod tests {
             ]
         );
         assert_eq!(requests[1].path, "/api/v1/repos/tools/atelier/pulls/7");
+    }
+
+    #[test]
+    fn merges_pull_with_role_sudo_header_and_confirms_state() {
+        let transport = MockTransport::new(vec![
+            ForgejoResponse {
+                status: 200,
+                body: "{}".to_string(),
+            },
+            ForgejoResponse {
+                status: 200,
+                body: pull_response(42, true),
+            },
+        ]);
+        let client = ForgejoClient::new(config(), &transport);
+
+        let pull = client.merge_pull("validator", 42).unwrap();
+
+        assert!(pull.merged);
+        let requests = transport.requests();
+        assert_eq!(requests[0].method, "POST");
+        assert_eq!(
+            requests[0].path,
+            "/api/v1/repos/tools/atelier/pulls/42/merge"
+        );
+        assert_eq!(
+            requests[0].headers.get("Sudo").map(String::as_str),
+            Some("forge-validator")
+        );
+        assert_eq!(requests[0].body.as_deref(), Some(r#"{"Do":"merge"}"#));
+        assert_eq!(requests[1].method, "GET");
+        assert_eq!(requests[1].path, "/api/v1/repos/tools/atelier/pulls/42");
     }
 
     #[test]
