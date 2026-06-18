@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T18:01:55.598661343+00:00"
+status: "done"
 title: "Record PR actions as issue-event attribution"
-updated_at: "2026-06-18T17:55:46.632230222+00:00"
+updated_at: "2026-06-18T18:01:55.598661343+00:00"
 ---
 
 ## Description
