@@ -70,6 +70,17 @@ pub enum ActivityAttemptLifecycle {
     Abandoned,
 }
 
+impl ActivityAttemptLifecycle {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Started => "started",
+            Self::Updated => "updated",
+            Self::Finished => "finished",
+            Self::Abandoned => "abandoned",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActivityPrAttribution {
@@ -94,6 +105,16 @@ pub struct DerivedIssueAttempt {
     pub agent: Option<String>,
     pub subskill: Option<String>,
     pub activity_ids: Vec<String>,
+    pub activities: Vec<DerivedIssueAttemptActivity>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DerivedIssueAttemptActivity {
+    pub id: String,
+    pub event_type: ActivityEventType,
+    pub lifecycle: ActivityAttemptLifecycle,
+    pub created_at: DateTime<Utc>,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -474,6 +495,7 @@ pub fn derive_issue_attempts(
             agent: attempt.agent.clone(),
             subskill: attempt.subskill.clone(),
             activity_ids: Vec::new(),
+            activities: Vec::new(),
         });
         if activity.created_at < entry.started_at {
             entry.started_at = activity.created_at;
@@ -487,7 +509,8 @@ pub fn derive_issue_attempts(
                 entry.subskill = attempt.subskill.clone();
             }
         }
-        match attempt.lifecycle {
+        let lifecycle = attempt.lifecycle;
+        match lifecycle {
             ActivityAttemptLifecycle::Started | ActivityAttemptLifecycle::Updated => {}
             ActivityAttemptLifecycle::Finished => {
                 entry.state = DerivedIssueAttemptState::Finished;
@@ -498,7 +521,14 @@ pub fn derive_issue_attempts(
                 entry.ended_at = Some(activity.created_at);
             }
         }
-        entry.activity_ids.push(activity.id);
+        entry.activity_ids.push(activity.id.clone());
+        entry.activities.push(DerivedIssueAttemptActivity {
+            id: activity.id,
+            event_type: activity.event_type,
+            lifecycle,
+            created_at: activity.created_at,
+            summary: activity.summary,
+        });
     }
     Ok(attempts.into_values().collect())
 }
