@@ -1479,6 +1479,12 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
     }
 
     let field = atelier_app::workflow_policy::effective_forge_pr_field(db, target_id)?;
+    if field.is_none() {
+        return Ok((
+            false,
+            format!("no linked forge_pr field; run `atelier pr open --issue {target_id}`"),
+        ));
+    }
     let repo_root = repo_root()?;
     let config_path = repo_root.join(".atelier/config.toml");
     let forgejo = match ProjectConfig::load(&repo_root)
