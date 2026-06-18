@@ -245,6 +245,7 @@ fn imported_issue(
             .clone()
             .unwrap_or_else(|| "task".to_string()),
         priority: import_priority(record.priority, &record.id, lossy_fields),
+        fields: Default::default(),
         parent_id: None,
         created_at,
         updated_at,

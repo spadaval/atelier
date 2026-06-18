@@ -19,9 +19,10 @@ impl Database {
             );
         }
 
+        let fields_json = serde_json::to_string(&issue.fields)?;
         self.conn.execute(
-            "INSERT INTO issues (id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO issues (id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 issue.id,
                 issue.title,
@@ -29,6 +30,7 @@ impl Database {
                 issue.status,
                 issue.issue_type,
                 issue.priority,
+                fields_json,
                 issue.parent_id,
                 issue.created_at.to_rfc3339(),
                 issue.updated_at.to_rfc3339(),
@@ -102,7 +104,7 @@ impl Database {
             record_id::allocate_issue_id(|candidate| Ok(self.get_issue(candidate)?.is_some()))?;
         let now = Utc::now().to_rfc3339();
         self.conn.execute(
-            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?7)",
+            "INSERT INTO issues (id, title, description, priority, issue_type, parent_id, status, fields_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', '{}', ?7, ?7)",
             params![id, title, description, priority, issue_type, parent_id, now],
         )?;
         Ok(id)
@@ -111,7 +113,7 @@ impl Database {
     pub fn get_subissues(&self, parent_id: impl ToString) -> Result<Vec<Issue>> {
         let parent_id = parent_id.to_string();
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
+            "SELECT id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at FROM issues WHERE parent_id = ?1 ORDER BY id",
         )?;
 
         let issues = stmt
@@ -124,7 +126,7 @@ impl Database {
     pub fn get_issue(&self, id: impl ToString) -> Result<Option<Issue>> {
         let id = id.to_string();
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
+            "SELECT id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at FROM issues WHERE id = ?1",
         )?;
 
         let issue = stmt.query_row([id], issue_from_row).ok();
@@ -180,7 +182,7 @@ impl Database {
         priority_filter: Option<&str>,
     ) -> Result<Vec<Issue>> {
         let mut sql = String::from(
-            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
+            "SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at FROM issues i",
         );
         let mut conditions = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -339,7 +341,7 @@ impl Database {
         let pattern = format!("%{}%", escaped);
         let mut stmt = self.conn.prepare(
             r#"
-            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.parent_id, i.created_at, i.updated_at, i.closed_at
+            SELECT DISTINCT i.id, i.title, i.description, i.status, i.issue_type, i.priority, i.fields_json, i.parent_id, i.created_at, i.updated_at, i.closed_at
             FROM issues i
             WHERE i.title LIKE ?1 ESCAPE '\' COLLATE NOCASE
                OR i.description LIKE ?1 ESCAPE '\' COLLATE NOCASE
@@ -399,12 +401,48 @@ mod tests {
             status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "medium".to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: now,
             updated_at: now,
             closed_at: None,
         })
         .unwrap();
+    }
+
+    #[test]
+    fn issue_fields_round_trip_through_projection_table() {
+        let (db, _dir) = setup_test_db();
+        let now = Utc::now();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            "forge_pr".to_string(),
+            serde_json::json!({
+                "host": "github.com",
+                "number": 42,
+                "owner": "openai",
+                "repo": "atelier"
+            }),
+        );
+
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-flds".to_string(),
+            title: "Fielded issue".to_string(),
+            description: None,
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
+            priority: "medium".to_string(),
+            fields: fields.clone(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+
+        let issue = db.require_issue("atelier-flds").unwrap();
+
+        assert_eq!(issue.fields, fields);
     }
 
     #[test]

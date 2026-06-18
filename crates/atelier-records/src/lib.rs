@@ -225,6 +225,7 @@ impl CanonicalIssueRecord {
             },
             issue_type: self.issue.issue_type,
             priority: self.issue.priority,
+            fields: self.issue.fields,
             closed_at: self.issue.closed_at,
             sections: self.sections,
         })
@@ -871,6 +872,7 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_scalar(&mut output, "id", Some(&record.issue.id))?;
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
+    write_yaml_map_if_not_empty(&mut output, "fields", &record.issue.fields)?;
     write_yaml_scalar(
         &mut output,
         "priority",
@@ -907,6 +909,7 @@ fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueR
             status: issue.header.status.clone(),
             issue_type: issue.issue_type.clone(),
             priority: issue.priority.clone(),
+            fields: issue.fields.clone(),
             parent_id: None,
             created_at: issue.header.created_at,
             updated_at: issue.header.updated_at,
@@ -1022,6 +1025,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
         .with_context(|| format!("Invalid issue_type in {}", display_state_path(relative)))?;
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
+    let fields = optional_object(&front_matter, "fields", relative)?;
     let sections = parse_issue_sections(body, relative)?;
 
     Ok(CanonicalIssueRecord {
@@ -1033,6 +1037,7 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
             issue_type,
             priority: db_priority(&require_scalar(&front_matter, "priority", relative)?)
                 .with_context(|| format!("Invalid priority in {}", display_state_path(relative)))?,
+            fields,
             parent_id: None,
             created_at: require_datetime(&front_matter, "created_at", relative)?,
             updated_at,
@@ -2016,6 +2021,27 @@ fn require_i64(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> 
     })
 }
 
+fn optional_object(
+    values: &BTreeMap<String, Value>,
+    key: &str,
+    relative: &Path,
+) -> Result<BTreeMap<String, Value>> {
+    let Some(value) = values.get(key) else {
+        return Ok(BTreeMap::new());
+    };
+    let Some(object) = value.as_object() else {
+        bail!(
+            "Front matter key '{}' must be a mapping in {}",
+            key,
+            display_state_path(relative)
+        );
+    };
+    Ok(object
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect())
+}
+
 fn require_datetime(
     values: &BTreeMap<String, Value>,
     key: &str,
@@ -2672,6 +2698,28 @@ fn write_yaml_array_if_not_empty(output: &mut String, key: &str, values: &[Strin
     Ok(())
 }
 
+fn write_yaml_map_if_not_empty(
+    output: &mut String,
+    key: &str,
+    values: &BTreeMap<String, Value>,
+) -> Result<()> {
+    if values.is_empty() {
+        return Ok(());
+    }
+    output.push_str(key);
+    output.push_str(":\n");
+    let rendered = serde_yaml::to_string(values)?;
+    for line in rendered.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        output.push_str("  ");
+        output.push_str(line);
+        output.push('\n');
+    }
+    Ok(())
+}
+
 fn write_evidence_target(output: &mut String, target: &EvidenceTarget) -> Result<()> {
     output.push_str("target:\n");
     output.push_str("  kind: ");
@@ -3032,6 +3080,7 @@ mod tests {
                 status: "todo".to_string(),
                 issue_type: "task".to_string(),
                 priority: "high".to_string(),
+                fields: BTreeMap::new(),
                 parent_id: None,
                 created_at: Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap(),
                 updated_at: Utc.with_ymd_and_hms(2026, 6, 10, 13, 0, 0).unwrap(),
@@ -3267,6 +3316,30 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("## Outcome\n\nIssue Markdown round-trips without losing fields."));
         assert!(text.contains("## Evidence\n\n- `cargo test record_store` passes."));
         assert!(!text.contains("closed_at:"));
+    }
+
+    #[test]
+    fn issue_record_round_trips_typed_fields() {
+        let mut record = issue_record("atelier-flds");
+        record.issue.fields.insert(
+            "forge_pr".to_string(),
+            serde_json::json!({
+                "host": "github.com",
+                "number": 42,
+                "owner": "openai",
+                "repo": "atelier",
+                "url": "https://github.com/openai/atelier/pull/42"
+            }),
+        );
+
+        let text = render_issue_record(&record).unwrap();
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-flds")).unwrap();
+
+        assert_eq!(parsed.issue.fields, record.issue.fields);
+        assert_eq!(render_issue_record(&parsed).unwrap(), text);
+        assert!(text.contains("fields:\n"));
+        assert!(text.contains("  forge_pr:\n"));
+        assert!(text.contains("    number: 42\n"));
     }
 
     #[test]

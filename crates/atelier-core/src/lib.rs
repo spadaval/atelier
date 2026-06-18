@@ -4,6 +4,7 @@
 //! dependencies. Concrete domain types move here as the migration advances.
 
 use chrono::{DateTime, Utc};
+use std::collections::BTreeMap;
 use std::fmt;
 
 pub type IssueId = String;
@@ -125,6 +126,8 @@ pub struct Issue {
     pub status: String,
     pub issue_type: String,
     pub priority: String,
+    #[serde(default)]
+    pub fields: BTreeMap<String, serde_json::Value>,
     pub parent_id: Option<IssueId>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -246,6 +249,8 @@ pub struct IssueRecord {
     pub header: RecordHeader,
     pub issue_type: String,
     pub priority: String,
+    #[serde(default)]
+    pub fields: BTreeMap<String, serde_json::Value>,
     pub closed_at: Option<DateTime<Utc>>,
     pub sections: IssueSections,
 }

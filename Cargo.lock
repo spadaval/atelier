@@ -94,6 +94,7 @@ dependencies = [
  "chrono",
  "fs2",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tempfile",
  "tracing",
@@ -130,6 +131,7 @@ version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -171,6 +173,7 @@ dependencies = [
  "atelier-core",
  "chrono",
  "serde",
+ "serde_json",
  "serde_yaml",
 ]
 
