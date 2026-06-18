@@ -134,3 +134,168 @@ fn start_does_not_create_standalone_session_records() {
         "start must not create .atelier/sessions records: {session_files:?}"
     );
 }
+
+#[test]
+fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Attempt metadata epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Attempt metadata epic");
+    commit_all(dir.path(), "attempt metadata item");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["start", &issue_id],
+        &[
+            ("ATELIER_AGENT", "worker-agent"),
+            ("ATELIER_SUBSKILL", "implement"),
+        ],
+    );
+    assert!(success, "start failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_review"],
+        &[
+            ("ATELIER_AGENT", "review-agent"),
+            ("ATELIER_SUBSKILL", "review"),
+        ],
+    );
+    assert!(success, "request_review failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_validation"],
+        &[
+            ("ATELIER_AGENT", "validator-agent"),
+            ("ATELIER_SUBSKILL", "validate"),
+        ],
+    );
+    assert!(success, "request_validation failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier_with_env(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "--kind",
+            "validation",
+            "attempt metadata proof",
+        ],
+        &[
+            ("ATELIER_AGENT", "validator-agent"),
+            ("ATELIER_SUBSKILL", "validate"),
+        ],
+    );
+    assert!(success, "evidence record failed: {stderr}");
+
+    let activity = issue_activity_texts(dir.path(), &issue_id);
+    assert_activity_contains(
+        &activity,
+        "work_started",
+        &[
+            "attempt:\n",
+            "  role: worker",
+            "  serial: 1",
+            "  lifecycle: started",
+            "  agent: worker-agent",
+            "  subskill: implement",
+        ],
+    );
+    assert_activity_contains(
+        &activity,
+        "work_finished",
+        &[
+            "transition: \"request_review\"",
+            "  role: worker",
+            "  serial: 1",
+            "  lifecycle: finished",
+        ],
+    );
+    assert_activity_contains(
+        &activity,
+        "transition_applied",
+        &[
+            "transition: \"request_review\"",
+            "  role: reviewer",
+            "  serial: 1",
+            "  lifecycle: started",
+            "  subskill: review",
+        ],
+    );
+    assert_activity_contains(
+        &activity,
+        "work_finished",
+        &[
+            "transition: \"request_validation\"",
+            "  role: reviewer",
+            "  serial: 1",
+            "  lifecycle: finished",
+        ],
+    );
+    assert_activity_contains(
+        &activity,
+        "transition_applied",
+        &[
+            "transition: \"request_validation\"",
+            "  role: validator",
+            "  serial: 1",
+            "  lifecycle: started",
+            "  subskill: validate",
+        ],
+    );
+    assert_activity_contains(
+        &activity,
+        "evidence_attached",
+        &[
+            "attempt:\n",
+            "  role: validator",
+            "  serial: 1",
+            "  lifecycle: updated",
+        ],
+    );
+
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["session", "list"]);
+    assert!(success, "session list failed: {stderr}");
+    assert!(
+        list_out.contains(&format!("{issue_id}/worker/1")),
+        "{list_out}"
+    );
+    assert!(
+        list_out.contains(&format!("{issue_id}/reviewer/1")),
+        "{list_out}"
+    );
+    assert!(
+        list_out.contains(&format!("{issue_id}/validator/1")),
+        "{list_out}"
+    );
+    assert!(list_out.contains("finished"), "{list_out}");
+    assert!(list_out.contains("active"), "{list_out}");
+
+    assert!(
+        session_record_files(dir.path()).is_empty(),
+        "workflow milestones must not create standalone session records"
+    );
+}
+
+fn session_record_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir.join(".atelier").join("sessions"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().and_then(|extension| extension.to_str()) == Some("md"))
+        .collect()
+}

@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T17:55:14.830658930+00:00"
+status: "done"
 title: "Emit issue-event attempt milestones from workflow commands"
-updated_at: "2026-06-18T16:45:16.595923819+00:00"
+updated_at: "2026-06-18T17:55:14.830658930+00:00"
 ---
 
 ## Description
