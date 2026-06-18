@@ -209,3 +209,63 @@ fn start_rejects_no_session_with_reuse_session() {
         "{stderr}"
     );
 }
+
+#[test]
+fn status_man_and_history_show_session_context() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Visible session item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Visible session item");
+    commit_all(dir.path(), "visible session item");
+
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "start failed: {stderr}");
+    let session_id = session_id_from_start_output(&start_out);
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(
+        status_out.contains("Current work:  1 issue(s)"),
+        "{status_out}"
+    );
+    assert!(status_out.contains("Active sessions: 1"), "{status_out}");
+    assert!(status_out.contains(&session_id), "{status_out}");
+    assert!(
+        status_out.contains(&format!("issue/{issue_id}")),
+        "{status_out}"
+    );
+
+    let (success, man_out, stderr) = run_atelier(dir.path(), &["man", "worker"]);
+    assert!(success, "man worker failed: {stderr}");
+    assert!(man_out.contains("Active sessions: 1"), "{man_out}");
+    assert!(man_out.contains(&session_id), "{man_out}");
+    assert!(
+        man_out.contains("atelier session list --active"),
+        "{man_out}"
+    );
+    assert!(!man_out.contains("atelier session start"), "{man_out}");
+
+    let (success, history_out, stderr) =
+        run_atelier(dir.path(), &["history", "--issue", &issue_id]);
+    assert!(success, "history issue failed: {stderr}");
+    assert!(history_out.contains("session_started"), "{history_out}");
+    assert!(
+        history_out.contains(&format!("session/{session_id}")),
+        "{history_out}"
+    );
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["session", "end", &session_id, "--reason", "done"],
+    );
+    assert!(success, "session end failed: {stderr}");
+
+    let (success, history_out, stderr) =
+        run_atelier(dir.path(), &["history", "--issue", &issue_id]);
+    assert!(success, "history issue after end failed: {stderr}");
+    assert!(history_out.contains("session_ended"), "{history_out}");
+}
