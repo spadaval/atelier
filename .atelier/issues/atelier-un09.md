@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-18T23:49:12.534450550+00:00"
+status: "done"
 title: "Epic: Harden PR artifact workflow seams"
-updated_at: "2026-06-18T23:47:33.574474928+00:00"
+updated_at: "2026-06-18T23:49:12.534450550+00:00"
 ---
 
 ## Description
