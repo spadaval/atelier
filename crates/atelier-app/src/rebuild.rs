@@ -249,6 +249,7 @@ impl<'a> ProjectionLoader<'a> {
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
         let record_links = self.collect_record_links()?;
+        self.validate_issue_fields()?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
 
@@ -385,6 +386,32 @@ impl<'a> ProjectionLoader<'a> {
             )?;
         }
         Ok(record_links)
+    }
+
+    fn validate_issue_fields(&self) -> Result<()> {
+        if self
+            .issues
+            .iter()
+            .all(|issue| issue.issue.fields.is_empty())
+        {
+            return Ok(());
+        }
+        let repo_root = self.state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "Cannot determine repository root for {}",
+                self.state_dir.display()
+            )
+        })?;
+        let policy = crate::workflow_policy::load(repo_root)?;
+        let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+        for issue in &self.issues {
+            crate::workflow_policy::validate_issue_against_policy(
+                &policy,
+                &issue.issue,
+                &policy_path,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -1045,6 +1072,74 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_round_trips_canonical_issue_fields() {
+        let (db, dir) = setup_test_db();
+        let now = chrono::Utc::now();
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "forge_pr".to_string(),
+            serde_json::json!({
+                "host": "github.com",
+                "number": 42,
+                "owner": "openai",
+                "repo": "atelier",
+                "url": "https://github.com/openai/atelier/pull/42"
+            }),
+        );
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-flds".to_string(),
+            title: "Fielded issue".to_string(),
+            description: Some("Field body".to_string()),
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
+            priority: "medium".to_string(),
+            fields: fields.clone(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v2_policy(&state_dir);
+
+        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
+        run(&state_dir, &rebuilt_path).unwrap();
+        let rebuilt = Database::open(&rebuilt_path).unwrap();
+
+        assert_eq!(
+            rebuilt.require_issue("atelier-flds").unwrap().fields,
+            fields
+        );
+        validate_canonical_state(&state_dir).unwrap();
+    }
+
+    #[test]
+    fn rebuild_rejects_issue_fields_that_violate_workflow_schema() {
+        let (db, dir) = setup_test_db();
+        let id = db.create_issue("Invalid field", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v2_policy(&state_dir);
+        let path = state_dir.join(issue_record_path(&id));
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "labels: []\n",
+            "labels: []\nfields:\n  forge_pr:\n    host: \"github.com\"\n",
+        );
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
+
+        assert!(error.to_string().contains("workflow_issue_field_invalid"));
+        assert!(error.to_string().contains("issue "));
+        assert!(error
+            .to_string()
+            .contains("field 'forge_pr' is missing required key 'number'"));
+    }
+
+    #[test]
     fn rebuild_allows_parent_records_after_children() {
         let (db, dir) = setup_test_db();
         let child = db.create_issue("Child", Some("Child body"), "low").unwrap();
@@ -1402,6 +1497,158 @@ mod tests {
             format!(
                 "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Activity\"\n---\n\nBody\n"
             ),
+        )
+        .unwrap();
+    }
+
+    fn write_schema_v2_policy(state_dir: &Path) {
+        fs::write(
+            state_dir.join("workflow.yaml"),
+            r#"schema: atelier.workflow
+schema_version: 2
+
+branch_lifecycle:
+  base_branch: main
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
+
+issue_types:
+  bug: standard_proof
+  epic: standard_review_proof
+  feature: standard_proof
+  spike: lightweight_spike
+  task: standard_proof
+  validation: standard_review_proof
+
+statuses:
+  todo:
+    category: todo
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
+  archived:
+    category: done
+
+fields:
+  forge_pr:
+    type: object
+    required: [host, number, owner, repo, url]
+
+validators:
+  durable_current:
+    builtin: durable_state_current
+  review_ready:
+    builtin: review_complete
+  proof_attached:
+    builtin: evidence_attached
+    params:
+      min_count: 1
+  blockers_clear:
+    builtin: no_open_blockers
+  epic_child_proof:
+    builtin: epic_child_proof_complete
+  lint_clear:
+    builtin: no_blocking_lints
+  closeout_clean:
+    builtin: git_worktree_clean
+
+guidance_templates:
+  close_with_proof:
+    format: markdown
+    template: |
+      Closing {{ issue.id }} requires attached evidence and no open blockers.
+  record_spike_outcome:
+    format: markdown
+    template: |
+      Record a concise close reason that captures what {{ issue.id }} learned
+      and what follow-up work remains.
+
+workflows:
+  standard_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, validation]
+        to: blocked
+      close:
+        from: [in_progress, validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - blockers_clear
+          - lint_clear
+          - durable_current
+        guidance: [close_with_proof]
+
+  standard_review_proof:
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_ready]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - proof_attached
+          - epic_child_proof
+          - blockers_clear
+          - lint_clear
+          - durable_current
+          - closeout_clean
+        guidance: [close_with_proof]
+
+  lightweight_spike:
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      revise:
+        from: [review]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - review_ready
+          - durable_current
+        guidance: [record_spike_outcome]
+"#,
         )
         .unwrap();
     }

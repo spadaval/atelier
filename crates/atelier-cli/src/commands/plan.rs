@@ -338,6 +338,7 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
                 status: status.clone(),
                 issue_type: issue.issue_type.clone(),
                 priority: issue.priority.clone(),
+                fields: Default::default(),
                 parent_id: None,
                 created_at: now,
                 updated_at: now,

@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
+use serde_json::Value as JsonValue;
 use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -1764,7 +1765,118 @@ pub fn validate_issue_against_policy(
         }
         .into());
     }
+    validate_issue_fields_against_policy(policy, issue, policy_path)?;
     Ok(())
+}
+
+fn validate_issue_fields_against_policy(
+    policy: &WorkflowPolicy,
+    issue: &Issue,
+    policy_path: &Path,
+) -> Result<()> {
+    for (field_name, value) in &issue.fields {
+        let Some(definition) = policy.fields.get(field_name) else {
+            return Err(WorkflowPolicyError {
+                code: "workflow_issue_field_unknown",
+                path: policy_path.display().to_string(),
+                message: format!(
+                    "issue {} defines field '{}' but .atelier/workflow.yaml does not define it",
+                    issue.id, field_name
+                ),
+                field: Some(format!("fields.{field_name}")),
+                reference: Some(issue.id.clone()),
+                line: None,
+                column: None,
+            }
+            .into());
+        };
+        validate_issue_field_value(field_name, value, definition, issue, policy_path)?;
+    }
+    Ok(())
+}
+
+fn validate_issue_field_value(
+    field_name: &str,
+    value: &JsonValue,
+    definition: &FieldDefinition,
+    issue: &Issue,
+    policy_path: &Path,
+) -> Result<()> {
+    let valid = match &definition.field_type {
+        FieldType::String => value.is_string(),
+        FieldType::Bool => value.is_boolean(),
+        FieldType::Integer => value.as_i64().is_some() || value.as_u64().is_some(),
+        FieldType::Enum { values } => value
+            .as_str()
+            .is_some_and(|value| values.iter().any(|allowed| allowed == value)),
+        FieldType::Object { required } => {
+            let Some(object) = value.as_object() else {
+                return Err(issue_field_error(
+                    policy_path,
+                    issue,
+                    field_name,
+                    "must be an object",
+                ));
+            };
+            for required_key in required {
+                if !object.contains_key(required_key) {
+                    return Err(issue_field_error(
+                        policy_path,
+                        issue,
+                        field_name,
+                        format!("is missing required key '{required_key}'"),
+                    ));
+                }
+            }
+            true
+        }
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(issue_field_error(
+            policy_path,
+            issue,
+            field_name,
+            format!(
+                "does not match workflow field type {}",
+                field_type_name(&definition.field_type)
+            ),
+        ))
+    }
+}
+
+fn issue_field_error(
+    policy_path: &Path,
+    issue: &Issue,
+    field_name: &str,
+    message: impl Into<String>,
+) -> anyhow::Error {
+    WorkflowPolicyError {
+        code: "workflow_issue_field_invalid",
+        path: policy_path.display().to_string(),
+        message: format!(
+            "issue {} field '{}' {}",
+            issue.id,
+            field_name,
+            message.into()
+        ),
+        field: Some(format!("fields.{field_name}")),
+        reference: Some(issue.id.clone()),
+        line: None,
+        column: None,
+    }
+    .into()
+}
+
+fn field_type_name(field_type: &FieldType) -> &'static str {
+    match field_type {
+        FieldType::String => "string",
+        FieldType::Bool => "bool",
+        FieldType::Integer => "integer",
+        FieldType::Enum { .. } => "enum",
+        FieldType::Object { .. } => "object",
+    }
 }
 
 fn workflow_statuses(workflow: &WorkflowDefinition) -> BTreeSet<String> {
@@ -2275,6 +2387,7 @@ fields:
             status: "todo".to_string(),
             priority: "medium".to_string(),
             issue_type: "task".to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

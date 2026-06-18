@@ -1505,6 +1505,7 @@ pub fn create_lifecycle(
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: now,
             updated_at: now,

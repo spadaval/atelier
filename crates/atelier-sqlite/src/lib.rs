@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use atelier_core::{Issue, IssuePriority, ISSUE_PRIORITY_LABELS};
 use atelier_records as record_store;
 
-const SCHEMA_VERSION: i32 = 20;
+const SCHEMA_VERSION: i32 = 21;
 
 /// Well-known relation types. Unknown types are accepted with a warning;
 /// these are the recognized conventions.
@@ -253,6 +253,7 @@ impl Database {
                 status TEXT NOT NULL DEFAULT 'todo',
                 issue_type TEXT NOT NULL DEFAULT 'task',
                 priority TEXT NOT NULL DEFAULT 'medium',
+                fields_json TEXT NOT NULL DEFAULT '{}',
                 parent_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -312,7 +313,14 @@ impl Database {
         self.drop_local_only_tables(version);
         self.drop_runtime_metadata(version);
         self.rebuild_projection_index_schema(version);
+        self.migrate_issue_fields(version);
         Ok(())
+    }
+
+    fn migrate_issue_fields(&self, version: i32) {
+        if version < 21 {
+            self.migrate("ALTER TABLE issues ADD COLUMN fields_json TEXT NOT NULL DEFAULT '{}'");
+        }
     }
 
     fn migrate_typed_issue_columns(&self, version: i32) -> Result<()> {
@@ -549,6 +557,7 @@ impl Database {
                 status TEXT NOT NULL DEFAULT 'todo',
                 issue_type TEXT NOT NULL DEFAULT 'task',
                 priority TEXT NOT NULL DEFAULT 'medium',
+                fields_json TEXT NOT NULL DEFAULT '{}',
                 parent_id TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -601,7 +610,7 @@ impl Database {
         for (old_id, new_id) in mappings {
             self.conn.execute(
                 "INSERT INTO issues_v15
-                 SELECT ?2, title, description, status, issue_type, priority, NULL, created_at, updated_at, closed_at
+                 SELECT ?2, title, description, status, issue_type, priority, '{}', NULL, created_at, updated_at, closed_at
                  FROM issues WHERE id = ?1",
                 rusqlite::params![old_id, new_id],
             )?;
@@ -716,8 +725,10 @@ pub(crate) fn parse_datetime(s: String) -> DateTime<Utc> {
 }
 
 /// Maps a database row to an Issue struct.
-/// Expects columns in order: id, title, description, status, issue_type, priority, parent_id, created_at, updated_at, closed_at
+/// Expects columns in order: id, title, description, status, issue_type, priority, fields_json, parent_id, created_at, updated_at, closed_at
 pub(crate) fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
+    let fields_json = row.get::<_, String>(6)?;
+    let fields = serde_json::from_str(&fields_json).unwrap_or_default();
     Ok(Issue {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -725,10 +736,11 @@ pub(crate) fn issue_from_row(row: &rusqlite::Row) -> rusqlite::Result<Issue> {
         status: row.get(3)?,
         issue_type: row.get(4)?,
         priority: row.get(5)?,
-        parent_id: row.get(6)?,
-        created_at: parse_datetime(row.get::<_, String>(7)?),
-        updated_at: parse_datetime(row.get::<_, String>(8)?),
-        closed_at: row.get::<_, Option<String>>(9)?.map(parse_datetime),
+        fields,
+        parent_id: row.get(7)?,
+        created_at: parse_datetime(row.get::<_, String>(8)?),
+        updated_at: parse_datetime(row.get::<_, String>(9)?),
+        closed_at: row.get::<_, Option<String>>(10)?.map(parse_datetime),
     })
 }
 
