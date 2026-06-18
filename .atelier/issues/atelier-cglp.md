@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T18:23:42.777013576+00:00"
+status: "done"
 title: "Add focused tests for fields, issue-event attempts, PR integration, and linked_pr_merged"
-updated_at: "2026-06-18T16:49:09.148897844+00:00"
+updated_at: "2026-06-18T18:23:42.777013576+00:00"
 ---
 
 ## Description
