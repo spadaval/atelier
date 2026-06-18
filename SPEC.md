@@ -260,58 +260,61 @@ v1.
 
 ## Workflows
 
-Atelier should support repository-owned configurable issue workflows. Version 1
+Atelier supports repository-owned configurable issue workflows. Schema version 3
 uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
-policy path. The file defines shared statuses with explicit categories, named
-issue workflows, terminal done states, built-in issue-type mappings, transition
-rules, configured built-in validators with params, guidance templates, strict
-configuration errors, and deferred features.
+policy path. The file defines branch policy, shared statuses with explicit
+categories, named issue workflows, workflow-owned issue type applicability,
+terminal done states, transition rules, inline built-in validators with params,
+static transition descriptions, and strict configuration errors.
 
 Example workflow:
 
 ```yaml
-issue_types:
-  bug: standard_review_proof
-  epic: standard_review_proof
-  feature: standard_review_proof
-  spike: lightweight_spike
-  task: standard_proof
-  validation: standard_review_proof
+schema: atelier.workflow
+schema_version: 3
+
+branch_policy:
+  base_branch: master
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
 
 statuses:
-  open:
-    category: todo
-  in_progress:
-    category: active
-  review:
-    category: review
-  validation:
-    category: validation
-  done:
-    category: done
+  todo: { category: todo }
+  in_progress: { category: active }
+  blocked: { category: blocked }
+  review: { category: review }
+  validation: { category: validation }
+  done: { category: done }
+  archived: { category: done }
 
 workflows:
-  standard_proof:
-    initial_status: open
-    done_statuses: [done]
+  standard:
+    applies_to: [bug, feature, task]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open]
+        from: [todo, blocked]
         to: in_progress
       close:
-        from: [in_progress]
+        from: [in_progress, validation]
         to: done
         required_fields: [close_reason]
+        description: "Closing requires attached evidence and no open blockers."
         validators:
-          - proof_attached
-          - durable_current
+          - evidence_attached: { min_count: 1 }
+          - no_open_blockers
+          - durable_state_current
 
-  standard_review_proof:
-    initial_status: open
-    done_statuses: [done]
+  epic_reviewed:
+    applies_to: [epic]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open]
+        from: [todo, blocked]
         to: in_progress
       request_review:
         from: [in_progress]
@@ -324,16 +327,58 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - proof_attached
-          - durable_current
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - linked_pr_merged
+          - durable_state_current
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - durable_state_current
+
+  spike:
+    applies_to: [spike]
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - review_complete
+          - durable_state_current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
 ceremony unless policy says so. The starter contract uses proof-first closure
 for ordinary implementation tasks, keeps review/proof workflows for epics,
-validation and other risk-bearing issue types, and keeps a lighter
-spike workflow that records an inspectable close reason without requiring
-first-class evidence.
+validation and other risk-bearing issue types, and keeps a lighter spike
+workflow that records an inspectable close reason. Every built-in issue type
+must appear exactly once across `workflows.*.applies_to`; missing, duplicate, or
+unknown issue types are config errors.
 
 ## Rules, Lint, And Guidance
 

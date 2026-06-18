@@ -56,7 +56,8 @@ Agent Factory remains the portable orchestration discipline.
 
 5. Role-scoped guidance belongs in Atelier when it helps operators.
    `atelier man <role>` is the repo-owned guide namespace for tactical role
-   guidance. Valid roles are `worker`, `reviewer`, `manager`, and `admin`.
+   guidance. Valid roles are `worker`, `reviewer`, `validator`, `manager`, and
+   `admin`.
    `manager` is the broad CLI role class for work coordination; `orchestrator`
    remains an Agent Factory agent type within that class.
 

@@ -46,7 +46,10 @@
   prove. Broad green test suites and mission summaries can support strong proof,
   but they are weak when they are the only proof for a concrete outcome.
 - Workflow: repository-owned policy that defines issue workflow statuses,
-  transitions, terminal states, validators, and guidance.
+  transitions, terminal states, validators, descriptions, and applicability.
+- Workflow applicability: the issue type coverage owned by each workflow through
+  `workflows.*.applies_to`. Every built-in issue type must be covered exactly
+  once by the committed workflow policy.
 - Workflow status: the canonical issue `status` value defined by workflow
   policy. It is durable repository state, not a derived summary or a local
   runtime marker.
@@ -58,8 +61,9 @@
   status to another after required fields, evidence, and validators succeed.
 - Validator: a machine-readable workflow transition check that controls whether
   a transition can proceed and returns an actionable failure reason.
-- Guidance: advisory workflow text rendered near an action, status, or failure
-  to explain the next operator move. Guidance informs; validators decide.
+- Transition description: static workflow text rendered near an action, status,
+  or failure to explain the next operator move. Descriptions inform;
+  validators decide.
 - Mission: a high-level objective that may span multiple epics, issues,
   evidence records, agents, derived session views, and deferred run metadata.
   It is also the shared background workspace boundary: one mission normally
@@ -82,15 +86,11 @@
   from canonical issue activity. A session can explain who did what and when,
   but it does not define current work, it is inspection-only, and it is not a
   standalone workflow record.
-- Typed field: a workflow-policy-owned issue field with a declared name, type,
-  cardinality, validation rules, and projection contract. Typed fields are
-  authored as first-class canonical issue data only when the active workflow
-  policy defines them; they are not generic attachments or escaped JSON blobs.
-- Pull request artifact: a Forgejo review object linked from issue state,
-  normally through the typed `forge_pr` field. It records remote review state
-  such as URL, number, author, merge state, and unresolved comment status for
-  validators and review commands. It is a review artifact, not an Atelier
-  workflow transition.
+- Pull request artifact: a Forgejo review object linked from issue state through
+  the built-in canonical `pull_request` field. Canonical storage is the
+  normalized PR number; Forgejo host, owner, repo, and branch expectations are
+  derived from project config and workflow branch policy. It is a review
+  artifact, not an Atelier workflow transition.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -162,14 +162,15 @@
   operate on Forgejo review artifacts and record their issue or epic linkage,
   while workflow validators such as `linked_pr_merged` only read PR state to
   decide whether an Atelier transition is allowed.
-- Typed fields and evidence attachments are distinct. The `forge_pr` typed
-  field stores the active PR artifact state for an issue; evidence attachments
-  prove claims with command transcripts, reviews, or validation records.
+- Pull request links and evidence attachments are distinct. The `pull_request`
+  field stores the active PR artifact number for a branch-owning issue or epic;
+  evidence attachments prove claims with command transcripts, reviews, or
+  validation records.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are
   exceptional isolation tools, not the default assignment model.
-- Branch lifecycle is workflow-owned rather than a separate routine setup step.
+- Branch policy is workflow-owned rather than a separate routine setup step.
   `atelier start <id>` prepares the owner branch from the work graph: child
   issues use the nearest parent epic branch, standalone issues use an issue
   branch, and epics use an epic branch. `atelier issue close <id>` commits the

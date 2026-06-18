@@ -88,7 +88,13 @@ mod tests {
 
         let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
         assert!(workflow.contains("schema: atelier.workflow"));
-        assert!(workflow.contains("standard_review_proof"));
+        assert!(workflow.contains("schema_version: 3"));
+        assert!(workflow.contains("branch_policy:"));
+        assert!(workflow.contains("  standard:"));
+        assert!(workflow.contains("  epic_reviewed:"));
+        assert!(workflow.contains("  validation_reviewed:"));
+        assert!(workflow.contains("  spike:"));
+        assert!(workflow.contains("applies_to:"));
     }
 
     #[test]

@@ -21,6 +21,7 @@ Primary question: "Which existing Atelier commands matter for my current role?"
 | `atelier man` | Worker | Discover valid role guides. | Good. |
 | `atelier man worker` | Worker | Implement assigned or ready work. | Good. Requires valid tracker state. |
 | `atelier man reviewer` | Reviewer | Check proof and workflow readiness. | Good. Requires valid tracker state. |
+| `atelier man validator` | Validator | Run explicit validation and record validation proof. | Good. Requires valid tracker state. |
 | `atelier man manager` | Manager/orchestrator | Coordinate missions, planning artifacts, blockers, and work. | Good. Requires valid tracker state. |
 | `atelier man admin` | Admin | Set up, repair, migrate, and maintain Atelier. | Good. Degrades gracefully before init or broken state. |
 

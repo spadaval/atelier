@@ -81,13 +81,20 @@ pub fn record_pr_action(
     issue_id: &str,
     role: ActivityAttemptRole,
     action: &str,
-    forge_pr: &str,
+    pull_request: &str,
     remote_author: Option<&str>,
 ) -> Result<()> {
     let Some(state_dir) = current_state_dir_for_issue(issue_id) else {
         return Ok(());
     };
-    record_pr_action_in_state_dir(&state_dir, issue_id, role, action, forge_pr, remote_author)
+    record_pr_action_in_state_dir(
+        &state_dir,
+        issue_id,
+        role,
+        action,
+        pull_request,
+        remote_author,
+    )
 }
 
 pub fn record_pr_action_in_state_dir(
@@ -95,7 +102,7 @@ pub fn record_pr_action_in_state_dir(
     issue_id: &str,
     role: ActivityAttemptRole,
     action: &str,
-    forge_pr: &str,
+    pull_request: &str,
     remote_author: Option<&str>,
 ) -> Result<()> {
     let serial = current_attempt_serial_in_state_dir(state_dir, issue_id, role)?.unwrap_or(1);
@@ -115,10 +122,10 @@ pub fn record_pr_action_in_state_dir(
         }),
         Some(ActivityPrAttribution {
             action: action.to_string(),
-            forge_pr: Some(forge_pr.to_string()),
+            pull_request: Some(pull_request.to_string()),
             remote_author: remote_author.map(str::to_string),
         }),
-        &pr_action_body(role, action, forge_pr, remote_author),
+        &pr_action_body(role, action, pull_request, remote_author),
     )?;
     Ok(())
 }
@@ -478,14 +485,14 @@ fn transition_body(transition: &str, from: &str, to: Option<&str>, reason: Optio
 fn pr_action_body(
     role: ActivityAttemptRole,
     action: &str,
-    forge_pr: &str,
+    pull_request: &str,
     remote_author: Option<&str>,
 ) -> String {
     format!(
-        "role: {}\naction: {}\nforge_pr: {}\nremote_author: {}",
+        "role: {}\naction: {}\npull_request: {}\nremote_author: {}",
         scalar(role.as_str()),
         scalar(action),
-        scalar(forge_pr),
+        scalar(pull_request),
         option_scalar(remote_author)
     )
 }

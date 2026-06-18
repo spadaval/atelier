@@ -6,6 +6,7 @@ pub mod create;
 pub mod delete;
 pub mod deps;
 pub mod evidence;
+pub mod forgejo;
 pub mod history;
 pub mod import;
 pub mod init;

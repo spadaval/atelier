@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
-use atelier_app::project_config::{ForgejoConfig, ProjectConfig};
+use atelier_app::project_config::ProjectConfig;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::{EvidenceRecord, Issue, Record};
@@ -36,7 +36,7 @@ pub struct IssueTransitionOption {
     pub allowed: bool,
     pub blockers: Vec<String>,
     pub validator_results: Vec<ValidatorResult>,
-    pub guidance: Vec<String>,
+    pub descriptions: Vec<String>,
     pub command: String,
 }
 
@@ -59,9 +59,11 @@ pub fn check(db: &Database) -> Result<()> {
         atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
     );
     println!("Policy:         pass");
-    println!("Issue Types:    {}", report.policy.issue_types.len());
+    println!(
+        "Applicability:  {}",
+        report.policy.workflow_by_issue_type.len()
+    );
     println!("Statuses:       {}", report.policy.statuses.len());
-    println!("Validators:     {}", report.policy.validators.len());
     println!("Workflows:      {}", report.policy.workflows.len());
     println!("Record Health:  pass");
     println!("Issues Checked: {}", report.issue_count);
@@ -107,8 +109,8 @@ pub fn issue_transition_options(
                 .filter(|result| !result.passed)
                 .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
         );
-        let mut guidance = render_transition_guidance(&policy, &issue, name, transition)?;
-        guidance.extend(branch_context_guidance(db, &issue, name, transition)?);
+        let mut descriptions = transition_descriptions(transition);
+        descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -116,7 +118,7 @@ pub fn issue_transition_options(
             allowed: blockers.is_empty(),
             blockers,
             validator_results,
-            guidance,
+            descriptions,
             command: transition_command(&issue.id, name, transition),
         });
     }
@@ -169,7 +171,7 @@ pub(crate) fn known_branch_owner(
 
 pub(crate) fn configured_base_branch() -> Result<String> {
     Ok(atelier_app::workflow_policy::load(&repo_root()?)?
-        .branch_lifecycle
+        .branch_policy
         .base_branch)
 }
 
@@ -443,7 +445,7 @@ fn transition_blockers(
 }
 
 fn report_blocked_transition(
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
@@ -464,7 +466,7 @@ fn report_blocked_transition(
         &transition.to,
         validator_results,
         blockers,
-        &render_transition_guidance(policy, issue, transition_name, transition)?,
+        &transition_descriptions(transition),
         &transition_command(&issue.id, transition_name, transition),
     );
     bail!(
@@ -628,7 +630,7 @@ impl CloseGitIntegration {
         }
         let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id).with_context(|| {
             format!(
-                "Close Git integration could not resolve branch lifecycle for {}. Inspect parent links with `atelier issue show {}`.",
+                "Close Git integration could not resolve branch policy for {}. Inspect parent links with `atelier issue show {}`.",
                 issue.id, issue.id
             )
         })?;
@@ -1076,7 +1078,7 @@ pub fn print_issue_transition_options(
         println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
         print_text_list("Blockers", &option.blockers);
-        print_text_list("Guidance", &option.guidance);
+        print_text_list("Description", &option.descriptions);
     }
 }
 
@@ -1126,7 +1128,7 @@ fn print_transition_attempt(
     destination: &str,
     validator_results: &[ValidatorResult],
     blockers: &[String],
-    guidance: &[String],
+    descriptions: &[String],
     command: &str,
 ) {
     println!("Issue Transition {} - {}", issue.id, issue.title);
@@ -1137,7 +1139,7 @@ fn print_transition_attempt(
     println!("Command:    {}", command);
     print_transition_detail("Validators", validator_results);
     print_text_list("Blockers", blockers);
-    print_text_list("Guidance", guidance);
+    print_text_list("Description", descriptions);
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
@@ -1279,17 +1281,11 @@ fn evaluate_policy_transition(
     target_kind: &str,
     target_id: &str,
     transition: &str,
-    validators: &[String],
+    validators: &[atelier_app::workflow_policy::ValidatorDefinition],
 ) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
     let mut results = Vec::new();
-    for validator_name in validators {
-        let definition = policy.validators.get(validator_name).ok_or_else(|| {
-            anyhow!(
-                "workflow policy references unknown validator '{}'",
-                validator_name
-            )
-        })?;
+    for definition in validators {
         let started = Instant::now();
         let (passed, reason) = evaluate_builtin_with_params(
             db,
@@ -1304,7 +1300,7 @@ fn evaluate_policy_transition(
             target_kind: target_kind.to_string(),
             target_id: target_id.to_string(),
             transition: transition.to_string(),
-            validator: validator_name.clone(),
+            validator: definition.builtin.clone(),
             passed,
             reason,
             elapsed_ms: started.elapsed().as_millis(),
@@ -1313,36 +1309,15 @@ fn evaluate_policy_transition(
     Ok(results)
 }
 
-fn render_transition_guidance(
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    issue: &Issue,
-    transition_name: &str,
+fn transition_descriptions(
     transition: &atelier_app::workflow_policy::TransitionDefinition,
-) -> Result<Vec<String>> {
-    let mut rendered = Vec::new();
-    for guidance_name in &transition.guidance {
-        let template = policy
-            .guidance_templates
-            .get(guidance_name)
-            .ok_or_else(|| {
-                anyhow!(
-                    "workflow policy references undefined guidance template '{}'",
-                    guidance_name
-                )
-            })?;
-        rendered.push(
-            template
-                .template
-                .replace("{{ issue.id }}", &issue.id)
-                .replace("{{ issue.type }}", &issue.issue_type)
-                .replace("{{ transition.name }}", transition_name)
-                .replace("{{ transition.from }}", &issue.status)
-                .replace("{{ transition.to }}", &transition.to)
-                .trim()
-                .to_string(),
-        );
-    }
-    Ok(rendered)
+) -> Vec<String> {
+    transition
+        .description
+        .iter()
+        .map(|description| description.trim().to_string())
+        .filter(|description| !description.is_empty())
+        .collect()
 }
 
 fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
@@ -1478,11 +1453,11 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
         ));
     }
 
-    let field = atelier_app::workflow_policy::effective_forge_pr_field(db, target_id)?;
+    let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
     if field.is_none() {
         return Ok((
             false,
-            format!("no linked forge_pr field; run `atelier pr open --issue {target_id}`"),
+            format!("no linked pull_request field; run `atelier pr open --issue {target_id}`"),
         ));
     }
     let repo_root = repo_root()?;
@@ -1520,58 +1495,40 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    linked_pr_merged_with_client(field, &forgejo, &client, target_id)
+    linked_pr_merged_with_client(db, &repo_root, field, &client, target_id)
 }
 
 fn linked_pr_merged_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
     field: Option<Value>,
-    forgejo: &ForgejoConfig,
     client: &ForgejoClient<T>,
     issue_id: &str,
 ) -> Result<(bool, String)> {
     let Some(field) = field else {
         return Ok((
             false,
-            format!("no linked forge_pr field; run `atelier pr open --issue {issue_id}`"),
+            format!("no linked pull_request field; run `atelier pr open --issue {issue_id}`"),
         ));
     };
-    let provider = forge_pr_string(&field, "provider")?;
-    if provider != "forgejo" {
-        return Ok((
-            false,
-            format!(
-                "linked forge_pr provider is '{}'; expected forgejo; run `atelier pr status --issue {}`",
-                provider, issue_id
-            ),
-        ));
-    }
-    let host = forge_pr_string(&field, "host")?;
-    let owner = forge_pr_string(&field, "owner")?;
-    let repo = forge_pr_string(&field, "repo")?;
-    if host != forgejo.host || owner != forgejo.owner || repo != forgejo.repo {
-        return Ok((
-            false,
-            format!(
-                "linked forge_pr points to {}/{}/{}, but configured Forgejo repo is {}/{}/{}; run `atelier pr status --issue {}`",
-                host, owner, repo, forgejo.host, forgejo.owner, forgejo.repo, issue_id
-            ),
-        ));
-    }
-    let number = field.get("number").and_then(Value::as_u64).ok_or_else(|| {
-        anyhow!("forge_pr_invalid: field forge_pr.number must be a positive integer")
+    let number = field.as_u64().filter(|number| *number > 0).ok_or_else(|| {
+        anyhow!("pull_request_invalid: field pull_request must be a positive integer")
     })?;
-    let expected_source = forge_pr_string(&field, "source_branch")?;
-    let expected_target = forge_pr_string(&field, "target_branch")?;
     let pull = client.show_pull(number)?;
-    if pull.source_branch != expected_source || pull.target_branch != expected_target {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
         return Ok((
             false,
             format!(
-                "linked PR branches are {} -> {}, but forge_pr records {} -> {}; run `atelier pr status --issue {}`",
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier pr status --issue {}`",
                 pull.source_branch,
                 pull.target_branch,
-                expected_source,
-                expected_target,
+                resolution.owner_id,
+                resolution.expected_branch,
+                resolution.base_branch,
                 issue_id
             ),
         ));
@@ -1587,14 +1544,6 @@ fn linked_pr_merged_with_client<T: ForgejoTransport>(
             ),
         ))
     }
-}
-
-fn forge_pr_string<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow!("forge_pr_invalid: field forge_pr.{key} must be a non-empty string"))
 }
 
 fn epic_child_proof_complete(
@@ -2289,8 +2238,11 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
-    use atelier_app::project_config::ForgejoSudoUsers;
+    use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
+    use chrono::Utc;
     use serde_json::json;
+    use std::collections::BTreeMap;
+    use tempfile::{tempdir, TempDir};
 
     struct FakeForgejoTransport {
         state: &'static str,
@@ -2337,27 +2289,59 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            sudo_users: ForgejoSudoUsers {
+            role_authors: ForgejoRoleAuthors {
                 worker: "forge-worker".to_string(),
                 reviewer: "forge-reviewer".to_string(),
                 validator: "forge-validator".to_string(),
                 manager: "forge-manager".to_string(),
-                admin: "forge-admin".to_string(),
             },
         }
     }
 
-    fn forge_pr_field() -> Value {
-        json!({
-            "provider": "forgejo",
-            "host": "https://forge.example.test",
-            "owner": "tools",
-            "repo": "atelier",
-            "number": 42,
-            "url": "https://forge.example.test/tools/atelier/pulls/42",
-            "source_branch": "epic/atelier-hw9t",
-            "target_branch": "master"
+    fn pull_request_field() -> Value {
+        json!(42)
+    }
+
+    fn setup_pr_validator_repo() -> (TempDir, Database) {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/workflow.yaml"),
+            atelier_app::workflow_policy::STARTER_POLICY_YAML
+                .replace("base_branch: main", "base_branch: master"),
+        )
+        .unwrap();
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        let now = Utc::now();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-hw9t".to_string(),
+            title: "Epic".to_string(),
+            description: None,
+            status: "validation".to_string(),
+            issue_type: "epic".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
         })
+        .unwrap();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-val1".to_string(),
+            title: "Validation".to_string(),
+            description: None,
+            status: "validation".to_string(),
+            issue_type: "validation".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+        (dir, db)
     }
 
     #[test]
@@ -2404,11 +2388,13 @@ mod tests {
 
     #[test]
     fn linked_pr_merged_validator_reports_required_states() {
+        let (dir, db) = setup_pr_validator_repo();
         let forgejo = forgejo_config();
         let merged_client = ForgejoClient::new(forgejo.clone(), FakeForgejoTransport::merged());
 
         let (passed, reason) =
-            linked_pr_merged_with_client(None, &forgejo, &merged_client, "atelier-hw9t").unwrap();
+            linked_pr_merged_with_client(&db, dir.path(), None, &merged_client, "atelier-hw9t")
+                .unwrap();
         assert!(!passed);
         assert!(reason.contains("atelier pr open --issue atelier-hw9t"));
 
@@ -2422,8 +2408,9 @@ mod tests {
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(
-            Some(forge_pr_field()),
-            &forgejo,
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
             &open_client,
             "atelier-hw9t",
         )
@@ -2442,8 +2429,9 @@ mod tests {
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(
-            Some(forge_pr_field()),
-            &forgejo,
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
             &closed_client,
             "atelier-hw9t",
         )
@@ -2452,8 +2440,9 @@ mod tests {
         assert!(reason.contains("closed and not merged"));
 
         let (passed, reason) = linked_pr_merged_with_client(
-            Some(forge_pr_field()),
-            &forgejo,
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
             &merged_client,
             "atelier-hw9t",
         )
@@ -2463,22 +2452,46 @@ mod tests {
     }
 
     #[test]
-    fn linked_pr_merged_validator_rejects_repo_and_branch_mismatch() {
-        let forgejo = forgejo_config();
-        let merged_client = ForgejoClient::new(forgejo.clone(), FakeForgejoTransport::merged());
-        let mut wrong_repo = forge_pr_field();
-        wrong_repo["repo"] = json!("other");
+    fn linked_pr_merged_is_configured_only_for_epic_close() {
+        let (dir, db) = setup_pr_validator_repo();
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let epic_workflow = policy.workflow_by_issue_type.get("epic").unwrap();
+        let epic_close = &policy.workflows[epic_workflow].transitions["close"];
+        let linked_pr_validators = epic_close
+            .validators
+            .iter()
+            .filter(|validator| validator.builtin == "linked_pr_merged")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(linked_pr_validators.len(), 1);
 
-        let (passed, reason) = linked_pr_merged_with_client(
-            Some(wrong_repo),
-            &forgejo,
-            &merged_client,
+        let results = evaluate_policy_transition(
+            &db,
+            &policy,
+            "issue",
             "atelier-hw9t",
+            "close",
+            &linked_pr_validators,
         )
         .unwrap();
-        assert!(!passed);
-        assert!(reason.contains("configured Forgejo repo"));
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].passed);
+        assert!(results[0]
+            .reason
+            .contains("atelier pr open --issue atelier-hw9t"));
 
+        let validation_workflow = policy.workflow_by_issue_type.get("validation").unwrap();
+        let validation_close = &policy.workflows[validation_workflow].transitions["close"];
+        assert!(!validation_close
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "linked_pr_merged"));
+    }
+
+    #[test]
+    fn linked_pr_merged_validator_rejects_branch_mismatch() {
+        let (dir, db) = setup_pr_validator_repo();
+        let forgejo = forgejo_config();
         let wrong_branch_client = ForgejoClient::new(
             forgejo.clone(),
             FakeForgejoTransport {
@@ -2489,8 +2502,9 @@ mod tests {
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(
-            Some(forge_pr_field()),
-            &forgejo,
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
             &wrong_branch_client,
             "atelier-hw9t",
         )

@@ -358,7 +358,7 @@ fn print_mission_branch_lifecycle(
     summary: &MissionListSummary,
     active_work: &[Issue],
 ) -> Result<()> {
-    print_mission_heading("Branch Lifecycle");
+    print_mission_heading("Branch Policy");
     let current_branch = crate::commands::workflow::current_git_branch()?;
     println!(
         "Current branch: {}",

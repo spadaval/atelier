@@ -68,8 +68,8 @@ and boundary decisions.
 The command surface should stay product-oriented rather than role-prefixed.
 `issue create` and `issue transition` belong together because they both mutate
 or inspect issue workflow state. Role-specific guidance belongs in a guide
-layer: `atelier man worker`, `atelier man reviewer`, `atelier man manager`, and
-`atelier man admin`.
+layer: `atelier man worker`, `atelier man reviewer`, `atelier man validator`,
+`atelier man manager`, and `atelier man admin`.
 
 The main product risk is not that all roles share commands. The risk is that
 general help presents too many commands without answering which role should care.

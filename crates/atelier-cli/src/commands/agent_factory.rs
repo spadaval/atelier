@@ -561,7 +561,7 @@ fn render_issue_evidence_status(
 }
 
 fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<()> {
-    println!("\nBranch Lifecycle");
+    println!("\nBranch Policy");
     println!("----------------");
     match crate::commands::workflow::branch_lifecycle_context(db, canonical_id) {
         Ok(context) => {

@@ -15,7 +15,7 @@ pub use atelier_workflow::{
 
 pub use atelier_workflow::STARTER_POLICY_YAML;
 
-pub const FORGE_PR_FIELD: &str = "forge_pr";
+pub const PULL_REQUEST_FIELD: &str = "pull_request";
 
 #[derive(Debug, Clone)]
 pub struct WorkflowCheckReport {
@@ -58,22 +58,22 @@ pub fn resolve_branch_lifecycle(
         owner_issue_type: owner.issue_type,
         owner_kind,
         expected_branch,
-        base_branch: policy.branch_lifecycle.base_branch.clone(),
-        merge_strategy: policy.branch_lifecycle.merge_strategy,
+        base_branch: policy.branch_policy.base_branch.clone(),
+        merge_strategy: policy.branch_policy.merge_strategy,
         merge_owned,
         nested_under_epic,
     })
 }
 
-pub fn effective_forge_pr_field(db: &Database, issue_id: &str) -> Result<Option<Value>> {
+pub fn effective_pull_request_field(db: &Database, issue_id: &str) -> Result<Option<Value>> {
     let issue = db.require_issue(issue_id)?;
-    if issue.parent_id.is_some() && issue.fields.contains_key(FORGE_PR_FIELD) {
+    if issue.parent_id.is_some() && issue.fields.contains_key(PULL_REQUEST_FIELD) {
         return Err(anyhow!(
-            "workflow_issue_field_invalid: issue {} defines forge_pr directly, but child issues inherit forge_pr from the nearest parent epic; move the field to the owning epic or remove it from the child",
+            "workflow_issue_field_invalid: issue {} defines pull_request directly, but child issues inherit pull_request from the nearest parent epic; move the field to the owning epic or remove it from the child",
             issue.id
         ));
     }
-    if let Some(value) = issue.fields.get(FORGE_PR_FIELD) {
+    if let Some(value) = issue.fields.get(PULL_REQUEST_FIELD) {
         return Ok(Some(value.clone()));
     }
 
@@ -82,19 +82,19 @@ pub fn effective_forge_pr_field(db: &Database, issue_id: &str) -> Result<Option<
     while let Some(current_id) = parent_id {
         if !seen.insert(current_id.clone()) {
             return Err(anyhow!(
-                "workflow_forge_pr_invalid_graph: issue {} has a cyclic parent graph while resolving forge_pr",
+                "workflow_pull_request_invalid_graph: issue {} has a cyclic parent graph while resolving pull_request",
                 issue.id
             ));
         }
         let parent = db.get_issue(&current_id)?.ok_or_else(|| {
             anyhow!(
-                "workflow_forge_pr_invalid_graph: issue {} references missing parent issue {}",
+                "workflow_pull_request_invalid_graph: issue {} references missing parent issue {}",
                 issue.id,
                 current_id
             )
         })?;
         if parent.issue_type == "epic" {
-            return Ok(parent.fields.get(FORGE_PR_FIELD).cloned());
+            return Ok(parent.fields.get(PULL_REQUEST_FIELD).cloned());
         }
         parent_id = parent.parent_id;
     }
@@ -107,13 +107,13 @@ fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
     while let Some(current_id) = parent_id {
         if !seen.insert(current_id.clone()) {
             return Err(anyhow!(
-                "workflow_branch_lifecycle_invalid_graph: issue {} has a cyclic parent graph while resolving branch owner",
+                "workflow_branch_policy_invalid_graph: issue {} has a cyclic parent graph while resolving branch owner",
                 issue.id
             ));
         }
         let parent = db.get_issue(&current_id)?.ok_or_else(|| {
             anyhow!(
-                "workflow_branch_lifecycle_invalid_graph: issue {} references missing parent issue {}",
+                "workflow_branch_policy_invalid_graph: issue {} references missing parent issue {}",
                 issue.id,
                 current_id
             )
@@ -124,7 +124,7 @@ fn nearest_parent_epic(db: &Database, issue: &Issue) -> Result<Issue> {
         parent_id = parent.parent_id;
     }
     Err(anyhow!(
-        "workflow_branch_lifecycle_invalid_graph: issue {} is nested but has no parent epic branch owner",
+        "workflow_branch_policy_invalid_graph: issue {} is nested but has no parent epic branch owner",
         issue.id
     ))
 }
@@ -167,29 +167,17 @@ mod tests {
         .unwrap();
     }
 
-    fn forge_pr_field() -> BTreeMap<String, Value> {
+    fn pull_request_field() -> BTreeMap<String, Value> {
         let mut fields = BTreeMap::new();
-        fields.insert(
-            FORGE_PR_FIELD.to_string(),
-            serde_json::json!({
-                "provider": "forgejo",
-                "host": "forge.example.test",
-                "owner": "tools",
-                "repo": "atelier",
-                "number": 42,
-                "url": "https://forge.example.test/tools/atelier/pulls/42",
-                "source_branch": "codex/atelier-fpr1",
-                "target_branch": "master"
-            }),
-        );
+        fields.insert(PULL_REQUEST_FIELD.to_string(), serde_json::json!(42));
         fields
     }
 
     #[test]
-    fn effective_forge_pr_field_inherits_from_nearest_parent_epic() {
+    fn effective_pull_request_field_inherits_from_nearest_parent_epic() {
         let (db, _dir) = setup_test_db();
-        let parent_fields = forge_pr_field();
-        let expected = parent_fields.get(FORGE_PR_FIELD).unwrap().clone();
+        let parent_fields = pull_request_field();
+        let expected = parent_fields.get(PULL_REQUEST_FIELD).unwrap().clone();
         insert_issue(&db, "atelier-epic", "epic", None, parent_fields);
         insert_issue(
             &db,
@@ -199,28 +187,28 @@ mod tests {
             BTreeMap::new(),
         );
 
-        let inherited = effective_forge_pr_field(&db, "atelier-child").unwrap();
+        let inherited = effective_pull_request_field(&db, "atelier-child").unwrap();
 
         assert_eq!(inherited, Some(expected));
     }
 
     #[test]
-    fn effective_forge_pr_field_rejects_child_duplicate() {
+    fn effective_pull_request_field_rejects_child_duplicate() {
         let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-epic", "epic", None, forge_pr_field());
+        insert_issue(&db, "atelier-epic", "epic", None, pull_request_field());
         insert_issue(
             &db,
             "atelier-child",
             "task",
             Some("atelier-epic"),
-            forge_pr_field(),
+            pull_request_field(),
         );
 
-        let error = effective_forge_pr_field(&db, "atelier-child")
+        let error = effective_pull_request_field(&db, "atelier-child")
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("workflow_issue_field_invalid"));
-        assert!(error.contains("child issues inherit forge_pr"));
+        assert!(error.contains("child issues inherit pull_request"));
     }
 }

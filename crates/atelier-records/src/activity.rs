@@ -86,7 +86,7 @@ impl ActivityAttemptLifecycle {
 pub struct ActivityPrAttribution {
     pub action: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub forge_pr: Option<String>,
+    pub pull_request: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_author: Option<String>,
 }
@@ -908,7 +908,7 @@ mod tests {
         });
         activity.pr_attribution = Some(ActivityPrAttribution {
             action: "comment".to_string(),
-            forge_pr: Some("forgejo/example#42".to_string()),
+            pull_request: Some("forgejo/example#42".to_string()),
             remote_author: Some("reviewer-user".to_string()),
         });
 

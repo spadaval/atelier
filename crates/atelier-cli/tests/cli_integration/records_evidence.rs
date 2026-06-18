@@ -2143,11 +2143,17 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
 
     let policy_path = dir.path().join(".atelier").join("workflow.yaml");
     let policy = std::fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("schema_version: 3"));
+    assert!(policy.contains("branch_policy:"));
     assert!(policy.contains("  todo:\n    category: todo"));
     assert!(policy.contains("  archived:\n    category: done"));
     assert!(policy.contains("    initial_status: todo"));
     assert!(policy.contains("    done_statuses: [done, archived]"));
-    assert!(policy.contains("  lightweight_spike:"));
+    assert!(policy.contains("  standard:"));
+    assert!(policy.contains("  epic_reviewed:"));
+    assert!(policy.contains("  validation_reviewed:"));
+    assert!(policy.contains("  spike:"));
+    assert!(policy.contains("applies_to:"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
     assert!(!success, "workflow init should be removed");

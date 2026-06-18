@@ -8,7 +8,7 @@ use crate::storage_layout::StorageLayout;
 
 const PROJECT_CONFIG_SCHEMA: &str = "atelier.project_config";
 const PROJECT_CONFIG_SCHEMA_VERSION: i64 = 1;
-pub const FORGEJO_ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
+pub const FORGEJO_ROLES: &[&str] = &["worker", "reviewer", "validator", "manager"];
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectConfig {
@@ -32,16 +32,15 @@ pub struct ForgejoConfig {
     pub owner: String,
     pub repo: String,
     pub admin_token_env: String,
-    pub sudo_users: ForgejoSudoUsers,
+    pub role_authors: ForgejoRoleAuthors,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ForgejoSudoUsers {
+pub struct ForgejoRoleAuthors {
     pub worker: String,
     pub reviewer: String,
     pub validator: String,
     pub manager: String,
-    pub admin: String,
 }
 
 impl ProjectConfig {
@@ -52,7 +51,7 @@ impl ProjectConfig {
     pub fn require_forgejo(&self, config_path: &Path) -> Result<&ForgejoConfig> {
         self.forgejo.as_ref().ok_or_else(|| {
             anyhow!(
-                "forgejo_config_missing: {} is missing [forgejo]; configure host, owner, repo, admin_token_env, and [forgejo.sudo_users] role mappings before running `atelier pr` or PR validators",
+                "forgejo_config_missing: {} is missing [forgejo]; configure host, owner, repo, admin_token_env, and [forgejo.role_authors] role mappings before running `atelier pr` or PR validators",
                 config_path.display()
             )
         })
@@ -60,13 +59,12 @@ impl ProjectConfig {
 }
 
 impl ForgejoConfig {
-    pub fn sudo_user_for_role(&self, role: &str) -> Result<&str> {
+    pub fn role_author_for_role(&self, role: &str) -> Result<&str> {
         match role {
-            "worker" => Ok(&self.sudo_users.worker),
-            "reviewer" => Ok(&self.sudo_users.reviewer),
-            "validator" => Ok(&self.sudo_users.validator),
-            "manager" => Ok(&self.sudo_users.manager),
-            "admin" => Ok(&self.sudo_users.admin),
+            "worker" => Ok(&self.role_authors.worker),
+            "reviewer" => Ok(&self.role_authors.reviewer),
+            "validator" => Ok(&self.role_authors.validator),
+            "manager" => Ok(&self.role_authors.manager),
             other => Err(anyhow!(
                 "forgejo_config_invalid_role: unsupported Atelier role '{}'; expected {}",
                 other,
@@ -105,17 +103,16 @@ struct RawForgejoConfig {
     owner: Option<String>,
     repo: Option<String>,
     admin_token_env: Option<String>,
-    sudo_users: Option<RawForgejoSudoUsers>,
+    role_authors: Option<RawForgejoRoleAuthors>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawForgejoSudoUsers {
+struct RawForgejoRoleAuthors {
     worker: Option<String>,
     reviewer: Option<String>,
     validator: Option<String>,
     manager: Option<String>,
-    admin: Option<String>,
 }
 
 pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
@@ -126,28 +123,39 @@ pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
     parse_project_config(&text, &config_path)
 }
 
-fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
-    let raw = toml::from_str::<RawProjectConfig>(text).map_err(|error| {
+pub fn load_forgejo_with_default_role_authors(
+    repo_root: &Path,
+    role_authors: ForgejoRoleAuthors,
+) -> Result<ForgejoConfig> {
+    let layout = StorageLayout::new(repo_root);
+    let config_path = layout.config_path();
+    let text = fs::read_to_string(&config_path)
+        .with_context(|| format!("failed to read {}", config_path.display()))?;
+    let raw = parse_raw_project_config(&text, &config_path)?;
+    validate_schema_fields(&raw, &config_path)?;
+    require_non_empty(&raw.project_slug, &config_path, "project_slug")?;
+    let raw_forgejo = raw.forgejo.ok_or_else(|| {
         anyhow!(
-            "project_config_parse_error: {}: {}",
-            config_path.display(),
-            error
+            "forgejo_config_missing: {} is missing [forgejo]; configure host, owner, repo, and admin_token_env before provisioning Forgejo role authors",
+            config_path.display()
         )
     })?;
-    if raw.schema != PROJECT_CONFIG_SCHEMA {
-        return Err(anyhow!(
-            "project_config_schema_unsupported: {} schema must be '{}'",
-            config_path.display(),
-            PROJECT_CONFIG_SCHEMA
-        ));
-    }
-    if raw.schema_version != PROJECT_CONFIG_SCHEMA_VERSION {
-        return Err(anyhow!(
-            "project_config_schema_unsupported: {} schema_version must be {}",
-            config_path.display(),
-            PROJECT_CONFIG_SCHEMA_VERSION
-        ));
-    }
+    Ok(ForgejoConfig {
+        host: require_owned_option(raw_forgejo.host, &config_path, "forgejo.host")?,
+        owner: require_owned_option(raw_forgejo.owner, &config_path, "forgejo.owner")?,
+        repo: require_owned_option(raw_forgejo.repo, &config_path, "forgejo.repo")?,
+        admin_token_env: require_env_var_name(
+            raw_forgejo.admin_token_env,
+            &config_path,
+            "forgejo.admin_token_env",
+        )?,
+        role_authors,
+    })
+}
+
+fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
+    let raw = parse_raw_project_config(text, config_path)?;
+    validate_schema_fields(&raw, config_path)?;
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;
     let paths = ProjectPaths {
         state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
@@ -171,10 +179,38 @@ fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig>
     })
 }
 
-fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<ForgejoConfig> {
-    let sudo_users = raw.sudo_users.ok_or_else(|| {
+fn parse_raw_project_config(text: &str, config_path: &Path) -> Result<RawProjectConfig> {
+    toml::from_str::<RawProjectConfig>(text).map_err(|error| {
         anyhow!(
-            "forgejo_config_invalid: {} [forgejo.sudo_users] is required; map {} to Forgejo sudo users",
+            "project_config_parse_error: {}: {}",
+            config_path.display(),
+            error
+        )
+    })
+}
+
+fn validate_schema_fields(raw: &RawProjectConfig, config_path: &Path) -> Result<()> {
+    if raw.schema != PROJECT_CONFIG_SCHEMA {
+        return Err(anyhow!(
+            "project_config_schema_unsupported: {} schema must be '{}'",
+            config_path.display(),
+            PROJECT_CONFIG_SCHEMA
+        ));
+    }
+    if raw.schema_version != PROJECT_CONFIG_SCHEMA_VERSION {
+        return Err(anyhow!(
+            "project_config_schema_unsupported: {} schema_version must be {}",
+            config_path.display(),
+            PROJECT_CONFIG_SCHEMA_VERSION
+        ));
+    }
+    Ok(())
+}
+
+fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<ForgejoConfig> {
+    let role_authors = raw.role_authors.ok_or_else(|| {
+        anyhow!(
+            "forgejo_config_invalid: {} [forgejo.role_authors] is required; map {} to Forgejo role author users",
             config_path.display(),
             FORGEJO_ROLES.join(", ")
         )
@@ -188,28 +224,27 @@ fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<For
             config_path,
             "forgejo.admin_token_env",
         )?,
-        sudo_users: ForgejoSudoUsers {
+        role_authors: ForgejoRoleAuthors {
             worker: require_owned_option(
-                sudo_users.worker,
+                role_authors.worker,
                 config_path,
-                "forgejo.sudo_users.worker",
+                "forgejo.role_authors.worker",
             )?,
             reviewer: require_owned_option(
-                sudo_users.reviewer,
+                role_authors.reviewer,
                 config_path,
-                "forgejo.sudo_users.reviewer",
+                "forgejo.role_authors.reviewer",
             )?,
             validator: require_owned_option(
-                sudo_users.validator,
+                role_authors.validator,
                 config_path,
-                "forgejo.sudo_users.validator",
+                "forgejo.role_authors.validator",
             )?,
             manager: require_owned_option(
-                sudo_users.manager,
+                role_authors.manager,
                 config_path,
-                "forgejo.sudo_users.manager",
+                "forgejo.role_authors.manager",
             )?,
-            admin: require_owned_option(sudo_users.admin, config_path, "forgejo.sudo_users.admin")?,
         },
     };
     Ok(config)
@@ -285,17 +320,16 @@ owner = "tools"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
-[forgejo.sudo_users]
+[forgejo.role_authors]
 worker = "atelier-worker"
 reviewer = "atelier-reviewer"
 validator = "atelier-validator"
 manager = "atelier-manager"
-admin = "atelier-admin"
 "#
     }
 
     #[test]
-    fn parses_valid_forgejo_config_and_sudo_mapping() {
+    fn parses_valid_forgejo_config_and_role_authors() {
         let config = parse_project_config(valid_config(), &path()).unwrap();
         let forgejo = config.require_forgejo(&path()).unwrap();
 
@@ -304,13 +338,14 @@ admin = "atelier-admin"
         assert_eq!(forgejo.repo, "atelier");
         assert_eq!(forgejo.admin_token_env, "FORGEJO_ADMIN_TOKEN");
         assert_eq!(
-            forgejo.sudo_user_for_role("worker").unwrap(),
+            forgejo.role_author_for_role("worker").unwrap(),
             "atelier-worker"
         );
         assert_eq!(
-            forgejo.sudo_user_for_role("validator").unwrap(),
+            forgejo.role_author_for_role("validator").unwrap(),
             "atelier-validator"
         );
+        assert!(forgejo.role_author_for_role("admin").is_err());
     }
 
     #[test]
@@ -342,7 +377,15 @@ cache_dir = ".atelier/cache"
         let error = parse_project_config(&missing_role, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("forgejo.sudo_users.validator"));
+        assert!(error.contains("forgejo.role_authors.validator"));
+
+        let old_sudo_users = valid_config()
+            .replace("[forgejo.role_authors]", "[forgejo.sudo_users]")
+            + "admin = \"atelier-admin\"\n";
+        let error = parse_project_config(&old_sudo_users, &path())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unknown field `sudo_users`"));
 
         let bad_token = valid_config().replace(
             "admin_token_env = \"FORGEJO_ADMIN_TOKEN\"",

@@ -175,6 +175,19 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
             .context("forgejo_api_error: failed to parse pull request comment response")
     }
 
+    pub fn pull_comments(&self, number: u64) -> Result<Vec<ForgejoComment>> {
+        let response = self.send(ForgejoRequest {
+            method: "GET",
+            path: self.repo_path(&format!("issues/{number}/comments")),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: None,
+        })?;
+        serde_json::from_str::<Vec<CommentResponse>>(&response.body)
+            .map(|comments| comments.into_iter().map(Into::into).collect())
+            .context("forgejo_api_error: failed to parse pull request comments response")
+    }
+
     pub fn review_pull(
         &self,
         role: &str,
@@ -210,6 +223,123 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
             .context("forgejo_api_error: failed to parse pull request review comments response")
     }
 
+    pub fn user_exists(&self, username: &str) -> Result<bool> {
+        let response = self.transport.send(ForgejoRequest {
+            method: "GET",
+            path: format!("/api/v1/users/{}", percent_encode(username)),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: None,
+        })?;
+        match response.status {
+            200..=299 => Ok(true),
+            404 => Ok(false),
+            status => Err(anyhow!(
+                "forgejo_api_error: GET /api/v1/users/{} failed with status {}: {}",
+                username,
+                status,
+                response.body
+            )),
+        }
+    }
+
+    pub fn create_user(
+        &self,
+        username: &str,
+        email: &str,
+        full_name: &str,
+        password: &str,
+    ) -> Result<()> {
+        let payload = serde_json::to_string(&CreateUserPayload {
+            username,
+            email,
+            full_name,
+            password,
+            must_change_password: false,
+            restricted: true,
+            send_notify: false,
+        })?;
+        self.send(ForgejoRequest {
+            method: "POST",
+            path: "/api/v1/admin/users".to_string(),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: Some(payload),
+        })?;
+        Ok(())
+    }
+
+    pub fn add_collaborator(&self, username: &str, permission: &str) -> Result<()> {
+        let payload = serde_json::to_string(&AddCollaboratorPayload { permission })?;
+        self.send(ForgejoRequest {
+            method: "PUT",
+            path: self.repo_path(&format!("collaborators/{}", percent_encode(username))),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: Some(payload),
+        })?;
+        Ok(())
+    }
+
+    pub fn collaborator_permission(&self, username: &str) -> Result<Option<String>> {
+        let path = self.repo_path(&format!(
+            "collaborators/{}/permission",
+            percent_encode(username)
+        ));
+        let response = self.transport.send(ForgejoRequest {
+            method: "GET",
+            path: path.clone(),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: None,
+        })?;
+        match response.status {
+            200..=299 => {
+                let parsed = serde_json::from_str::<CollaboratorPermissionResponse>(&response.body)
+                    .context(
+                        "forgejo_api_error: failed to parse collaborator permission response",
+                    )?;
+                Ok(Some(parsed.permission))
+            }
+            404 => Ok(None),
+            status => Err(anyhow!(
+                "forgejo_api_error: GET {} failed with status {}: {}",
+                path,
+                status,
+                response.body
+            )),
+        }
+    }
+
+    pub fn verify_sudo_user(&self, username: &str) -> Result<bool> {
+        let mut headers = BTreeMap::new();
+        headers.insert("Sudo".to_string(), username.to_string());
+        let response = self.transport.send(ForgejoRequest {
+            method: "GET",
+            path: "/api/v1/user".to_string(),
+            query: Vec::new(),
+            headers,
+            body: None,
+        })?;
+        match response.status {
+            200..=299 => {
+                let parsed = serde_json::from_str::<serde_json::Value>(&response.body)
+                    .context("forgejo_api_error: failed to parse sudo user response")?;
+                let login = parsed
+                    .get("login")
+                    .or_else(|| parsed.get("username"))
+                    .and_then(|value| value.as_str());
+                Ok(login == Some(username))
+            }
+            403 | 404 => Ok(false),
+            status => Err(anyhow!(
+                "forgejo_api_error: GET /api/v1/user with Sudo failed with status {}: {}",
+                status,
+                response.body
+            )),
+        }
+    }
+
     fn send(&self, request: ForgejoRequest) -> Result<ForgejoResponse> {
         let method = request.method;
         let path = request.path.clone();
@@ -237,7 +367,7 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
         let mut headers = BTreeMap::new();
         headers.insert(
             "Sudo".to_string(),
-            self.config.sudo_user_for_role(role)?.to_string(),
+            self.config.role_author_for_role(role)?.to_string(),
         );
         Ok(ForgejoRequest {
             method,
@@ -256,6 +386,27 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
             suffix
         )
     }
+}
+
+#[derive(Debug, Serialize)]
+struct CreateUserPayload<'a> {
+    username: &'a str,
+    email: &'a str,
+    full_name: &'a str,
+    password: &'a str,
+    must_change_password: bool,
+    restricted: bool,
+    send_notify: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct AddCollaboratorPayload<'a> {
+    permission: &'a str,
+}
+
+#[derive(Debug, Deserialize)]
+struct CollaboratorPermissionResponse {
+    permission: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -434,7 +585,7 @@ fn percent_encode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project_config::{ForgejoConfig, ForgejoSudoUsers};
+    use crate::project_config::{ForgejoConfig, ForgejoRoleAuthors};
     use std::cell::RefCell;
 
     #[derive(Debug)]
@@ -472,12 +623,11 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            sudo_users: ForgejoSudoUsers {
+            role_authors: ForgejoRoleAuthors {
                 worker: "forge-worker".to_string(),
                 reviewer: "forge-reviewer".to_string(),
                 validator: "forge-validator".to_string(),
                 manager: "forge-manager".to_string(),
-                admin: "forge-admin".to_string(),
             },
         }
     }
@@ -619,6 +769,96 @@ mod tests {
             Some("forge-validator")
         );
         assert!(requests[1].body.as_deref().unwrap().contains("APPROVE"));
+    }
+
+    #[test]
+    fn lists_top_level_pull_comments() {
+        let transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: r#"[{"id":11,"body":"Looks good"}]"#.to_string(),
+        }]);
+        let client = ForgejoClient::new(config(), &transport);
+
+        let comments = client.pull_comments(42).unwrap();
+
+        assert_eq!(comments[0].id, 11);
+        assert_eq!(comments[0].body, "Looks good");
+        let requests = transport.requests();
+        assert_eq!(requests[0].method, "GET");
+        assert_eq!(
+            requests[0].path,
+            "/api/v1/repos/tools/atelier/issues/42/comments"
+        );
+    }
+
+    #[test]
+    fn provisions_role_users_and_repository_permissions() {
+        let transport = MockTransport::new(vec![
+            ForgejoResponse {
+                status: 404,
+                body: "missing".to_string(),
+            },
+            ForgejoResponse {
+                status: 201,
+                body: r#"{"login":"atelier-worker"}"#.to_string(),
+            },
+            ForgejoResponse {
+                status: 204,
+                body: String::new(),
+            },
+            ForgejoResponse {
+                status: 200,
+                body: r#"{"permission":"write"}"#.to_string(),
+            },
+            ForgejoResponse {
+                status: 200,
+                body: r#"{"login":"atelier-worker"}"#.to_string(),
+            },
+        ]);
+        let client = ForgejoClient::new(config(), &transport);
+
+        assert!(!client.user_exists("atelier-worker").unwrap());
+        client
+            .create_user(
+                "atelier-worker",
+                "atelier-worker@localhost.invalid",
+                "Atelier Worker",
+                "secret",
+            )
+            .unwrap();
+        client.add_collaborator("atelier-worker", "write").unwrap();
+        assert_eq!(
+            client
+                .collaborator_permission("atelier-worker")
+                .unwrap()
+                .as_deref(),
+            Some("write")
+        );
+        assert!(client.verify_sudo_user("atelier-worker").unwrap());
+
+        let requests = transport.requests();
+        assert_eq!(requests[0].method, "GET");
+        assert_eq!(requests[0].path, "/api/v1/users/atelier-worker");
+        assert_eq!(requests[1].method, "POST");
+        assert_eq!(requests[1].path, "/api/v1/admin/users");
+        let body = requests[1].body.as_deref().unwrap();
+        assert!(body.contains("\"username\":\"atelier-worker\""));
+        assert!(body.contains("\"email\":\"atelier-worker@localhost.invalid\""));
+        assert!(body.contains("\"restricted\":true"));
+        assert!(body.contains("\"send_notify\":false"));
+        assert_eq!(requests[2].method, "PUT");
+        assert_eq!(
+            requests[2].path,
+            "/api/v1/repos/tools/atelier/collaborators/atelier-worker"
+        );
+        assert_eq!(
+            requests[2].body.as_deref(),
+            Some(r#"{"permission":"write"}"#)
+        );
+        assert_eq!(
+            requests[4].headers.get("Sudo").map(String::as_str),
+            Some("atelier-worker")
+        );
     }
 
     #[test]

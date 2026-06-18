@@ -398,10 +398,10 @@ impl<'a> ProjectionLoader<'a> {
                 if issue
                     .issue
                     .fields
-                    .contains_key(crate::workflow_policy::FORGE_PR_FIELD)
+                    .contains_key(crate::workflow_policy::PULL_REQUEST_FIELD)
                 {
                     bail!(
-                        "workflow_issue_field_invalid: issue {} defines forge_pr directly, but child issues inherit forge_pr from parent issue {}; move forge_pr to the owning epic or remove it from the child",
+                        "workflow_issue_field_invalid: issue {} defines pull_request directly, but child issues inherit pull_request from parent issue {}; move pull_request to the owning epic or remove it from the child",
                         issue.issue.id,
                         parent_id
                     );
@@ -1095,19 +1095,7 @@ mod tests {
         let (db, dir) = setup_test_db();
         let now = chrono::Utc::now();
         let mut fields = BTreeMap::new();
-        fields.insert(
-            "forge_pr".to_string(),
-            serde_json::json!({
-                "provider": "forgejo",
-                "host": "github.com",
-                "number": 42,
-                "owner": "openai",
-                "repo": "atelier",
-                "url": "https://github.com/openai/atelier/pull/42",
-                "source_branch": "codex/atelier-flds",
-                "target_branch": "master"
-            }),
-        );
+        fields.insert("pull_request".to_string(), serde_json::json!(42));
         db.insert_issue_rebuild(&Issue {
             id: "atelier-flds".to_string(),
             title: "Fielded issue".to_string(),
@@ -1125,7 +1113,7 @@ mod tests {
 
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v2_policy(&state_dir);
+        write_schema_v3_policy(&state_dir);
 
         let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
         run(&state_dir, &rebuilt_path).unwrap();
@@ -1144,11 +1132,11 @@ mod tests {
         let id = db.create_issue("Invalid field", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v2_policy(&state_dir);
+        write_schema_v3_policy(&state_dir);
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
             "labels: []\n",
-            "labels: []\nfields:\n  forge_pr:\n    provider: \"forgejo\"\n    host: \"github.com\"\n    owner: \"openai\"\n    repo: \"atelier\"\n    url: \"https://github.com/openai/atelier/pull/42\"\n    source_branch: \"codex/atelier-flds\"\n    target_branch: \"master\"\n",
+            "labels: []\npull_request: \"not-a-number\"\n",
         );
         fs::write(path, text).unwrap();
 
@@ -1158,11 +1146,11 @@ mod tests {
         assert!(error.to_string().contains("issue "));
         assert!(error
             .to_string()
-            .contains("field 'forge_pr' is missing required key 'number'"));
+            .contains("must be a positive integer PR number"));
     }
 
     #[test]
-    fn rebuild_rejects_child_local_forge_pr_field() {
+    fn rebuild_rejects_child_local_pull_request_field() {
         let (db, dir) = setup_test_db();
         let parent = db
             .create_issue_with_type("Parent", None, "medium", "epic")
@@ -1172,18 +1160,19 @@ mod tests {
             .unwrap();
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
-        write_schema_v2_policy(&state_dir);
+        write_schema_v3_policy(&state_dir);
         let path = state_dir.join(issue_record_path(&child));
-        let text = fs::read_to_string(&path).unwrap().replace(
-            "labels: []\n",
-            "labels: []\nfields:\n  forge_pr:\n    provider: \"forgejo\"\n    host: \"github.com\"\n    owner: \"openai\"\n    repo: \"atelier\"\n    number: 42\n    url: \"https://github.com/openai/atelier/pull/42\"\n    source_branch: \"codex/atelier-flds\"\n    target_branch: \"master\"\n",
-        );
+        let text = fs::read_to_string(&path)
+            .unwrap()
+            .replace("labels: []\n", "labels: []\npull_request: 42\n");
         fs::write(path, text).unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
 
         assert!(error.to_string().contains("workflow_issue_field_invalid"));
-        assert!(error.to_string().contains("child issues inherit forge_pr"));
+        assert!(error
+            .to_string()
+            .contains("child issues inherit pull_request"));
     }
 
     #[test]
@@ -1548,26 +1537,18 @@ mod tests {
         .unwrap();
     }
 
-    fn write_schema_v2_policy(state_dir: &Path) {
+    fn write_schema_v3_policy(state_dir: &Path) {
         fs::write(
             state_dir.join("workflow.yaml"),
             r#"schema: atelier.workflow
-schema_version: 2
+schema_version: 3
 
-branch_lifecycle:
+branch_policy:
   base_branch: main
   merge_strategy: squash
   branch_templates:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
-
-issue_types:
-  bug: standard_proof
-  epic: standard_review_proof
-  feature: standard_proof
-  spike: lightweight_spike
-  task: standard_proof
-  validation: standard_review_proof
 
 statuses:
   todo:
@@ -1585,42 +1566,9 @@ statuses:
   archived:
     category: done
 
-fields:
-  forge_pr:
-    type: object
-    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
-
-validators:
-  durable_current:
-    builtin: durable_state_current
-  review_ready:
-    builtin: review_complete
-  proof_attached:
-    builtin: evidence_attached
-    params:
-      min_count: 1
-  blockers_clear:
-    builtin: no_open_blockers
-  epic_child_proof:
-    builtin: epic_child_proof_complete
-  lint_clear:
-    builtin: no_blocking_lints
-  closeout_clean:
-    builtin: git_worktree_clean
-
-guidance_templates:
-  close_with_proof:
-    format: markdown
-    template: |
-      Closing {{ issue.id }} requires attached evidence and no open blockers.
-  record_spike_outcome:
-    format: markdown
-    template: |
-      Record a concise close reason that captures what {{ issue.id }} learned
-      and what follow-up work remains.
-
 workflows:
-  standard_proof:
+  standard:
+    applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -1634,14 +1582,15 @@ workflows:
         from: [in_progress, validation]
         to: done
         required_fields: [close_reason]
+        description: "Closing requires attached evidence and no open blockers."
         validators:
-          - proof_attached
-          - blockers_clear
-          - lint_clear
-          - durable_current
-        guidance: [close_with_proof]
+          - evidence_attached: { min_count: 1 }
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
 
-  standard_review_proof:
+  epic_reviewed:
+    applies_to: [epic]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -1657,21 +1606,54 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_ready]
+        validators: [review_complete]
       close:
         from: [validation]
         to: done
         required_fields: [close_reason]
+        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
         validators:
-          - proof_attached
-          - epic_child_proof
-          - blockers_clear
-          - lint_clear
-          - durable_current
-          - closeout_clean
-        guidance: [close_with_proof]
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - linked_pr_merged
+          - durable_state_current
+          - git_worktree_clean
 
-  lightweight_spike:
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_complete]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
+          - git_worktree_clean
+
+  spike:
+    applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
     transitions:
@@ -1691,10 +1673,10 @@ workflows:
         from: [review]
         to: done
         required_fields: [close_reason]
+        description: "Record a concise close reason that captures what changed."
         validators:
-          - review_ready
-          - durable_current
-        guidance: [record_spike_outcome]
+          - review_complete
+          - durable_state_current
 "#,
         )
         .unwrap();

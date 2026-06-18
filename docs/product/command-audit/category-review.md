@@ -20,7 +20,7 @@ Audited low-level surfaces:
 | `diagnostics slow` | Hide/admin-frame | Keep as local-only telemetry. It must not become workflow state or a normal automation contract. | No new issue. |
 | `import-beads` | Hide/migration-only | Keep as explicit predecessor import escape hatch. Normal setup uses `init`, with `init --import-beads` only for intentional migration. | No new issue. |
 | `maintenance delete` | Keep visible admin | Keep under `maintenance` as explicit destructive record surgery with force/confirmation framing. Never list as routine next action. | No new issue. |
-| `branch` | Keep visible advanced recovery | Keep for orchestrator recovery of epic owner branches. Routine branch setup and merge stay owned by `start` and close lifecycle integration. | Cross-reference: branch lifecycle epic `atelier-5sjm`. |
+| `branch` | Keep visible advanced recovery | Keep for orchestrator recovery of epic owner branches. Routine branch setup and merge stay owned by `start` and close branch-policy integration. | Cross-reference: branch policy epic `atelier-5sjm`. |
 | `worktree` | Keep visible advanced work management | Keep as real workspace management. `worktree for-mission` is the default manager/orchestrator setup path; issue worktrees are exceptional isolation; `worktree repair` is admin recovery. | No new issue. |
 
 Boundary decisions:
