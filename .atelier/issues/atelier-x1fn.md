@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T00:43:59.302068274+00:00"
+status: "done"
 title: "Define forge_pr typed field for one active Forgejo PR"
-updated_at: "2026-06-17T18:00:03.988050823+00:00"
+updated_at: "2026-06-18T00:43:59.302068274+00:00"
 ---
 
 ## Description

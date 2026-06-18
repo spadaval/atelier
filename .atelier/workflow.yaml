@@ -1,5 +1,5 @@
 schema: atelier.workflow
-schema_version: 1
+schema_version: 2
 
 branch_lifecycle:
   base_branch: master
@@ -31,6 +31,11 @@ statuses:
     category: done
   archived:
     category: done
+
+fields:
+  forge_pr:
+    type: object
+    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
 
 validators:
   durable_current:
