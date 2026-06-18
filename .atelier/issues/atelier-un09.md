@@ -6,6 +6,7 @@ labels:
 - "architecture"
 - "pr"
 - "workflow"
+pull_request: 2
 priority: "P1"
 relationships:
   blocks: []
