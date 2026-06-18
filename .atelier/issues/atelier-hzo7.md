@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T17:48:30.774979372+00:00"
+status: "done"
 title: "Add issue-event attempt attribution model"
-updated_at: "2026-06-18T17:39:56.211247697+00:00"
+updated_at: "2026-06-18T17:48:30.774979372+00:00"
 ---
 
 ## Description
