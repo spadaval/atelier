@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T00:26:08.288772270+00:00"
+status: "done"
 title: "Support workflow schema version 2 typed field definitions"
-updated_at: "2026-06-18T00:22:15.763793272+00:00"
+updated_at: "2026-06-18T00:26:08.288772270+00:00"
 ---
 
 ## Description
