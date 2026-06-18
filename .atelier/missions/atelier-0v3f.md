@@ -49,9 +49,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Close architecture audit gaps and readiness graph"
-updated_at: "2026-06-18T16:44:20.749787388+00:00"
+updated_at: "2026-06-18T18:27:02.103854960+00:00"
 ---
 
 ## Intent
@@ -77,3 +77,7 @@ Make the code, architecture docs, tracker claims, and operator health surfaces a
 - `atelier-ngb2` proof shows the corrective session-as-issue-events model replaces durable-session workflow assumptions before final readiness validation closes.
 - Final evidence includes cargo fmt -- --check, focused nextest suites, atelier lint, atelier export --check, atelier doctor, and git diff --check.
 - A status transcript either passes or documents the branch-lifecycle graph failure as an intentional stale-data condition with follow-up ownership.
+
+## Terminal Notes
+
+- Close reason: Completed mission: all linked work is done, validations are recorded, terminal checks pass, and final lint/doctor/export/diff health is clean.
