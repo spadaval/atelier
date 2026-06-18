@@ -52,6 +52,12 @@ workflow transition is currently allowed. In the starter policy, this is an
 epic close gate only; validation issues and ordinary implementation issues close
 from attached proof and local workflow checks.
 
+PR validators check the local workflow facts Atelier depends on: the normalized
+PR number, configured Forgejo remote, expected source and target branches,
+merged state, and review-complete state when the workflow names that validator.
+They do not duplicate Forgejo branch-protection, required-approval, merge
+strategy, or merge-authorization policy.
+
 Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or
 mission, completion synthesizes child work, blockers, proof, review, and

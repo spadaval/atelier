@@ -9,8 +9,8 @@ Primary question: "Which existing Atelier commands matter for my current role?"
 - Name: Correct. `man` is a guide layer, not a new command namespace.
 - Documentation: Should be visible in root help and product docs as the
   role-specific replacement for the removed `prime` signpost.
-- Design: Correct if valid roles are exact: `worker`, `reviewer`, `manager`,
-  and `admin`. Do not add `orchestrator` or `validator` aliases.
+- Design: Correct if valid roles are exact: `worker`, `reviewer`, `validator`,
+  `manager`, and `admin`. Do not add `orchestrator` aliases.
 - Output hierarchy: Role title, current state, ranked relevant commands, normal
   loop, then commands not usually for the role.
 

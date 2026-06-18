@@ -152,4 +152,5 @@ and hidden/admin `rebuild`.
 
 `atelier man` is the role-guide command. It is visible in root help, uses static
 Rust-rendered text plus a brief live state snapshot, and replaces the removed
-prime command. It accepts only `worker`, `reviewer`, `manager`, and `admin`.
+prime command. It accepts only `worker`, `reviewer`, `validator`, `manager`, and
+`admin`.

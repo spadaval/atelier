@@ -59,6 +59,12 @@ commands transition issues as a side effect.
    Validators such as `linked_pr_merged` inspect the active `pull_request` link
    and remote Forgejo state, then report pass/fail guidance. They do not mutate
    Forgejo, write PR comments, merge PRs, or change Atelier issue status.
+   Their local authority is limited to facts Atelier needs for workflow
+   readiness: linked PR number, configured remote identity, expected branch
+   match, merged state, review-complete state when configured, and unresolved
+   review-comment counts for guidance. Forgejo remains the policy authority for
+   branch protection, required approvals, allowed merge methods, and merge
+   authorization.
 
 ## Alternatives Considered
 
@@ -102,6 +108,9 @@ absent.
 - `linked_pr_merged` and related validators should produce actionable failure
   guidance naming the PR state to fix and the command surface that can inspect
   it.
+- Adding local enforcement of Forgejo approval or branch-protection policy is a
+  separate product/architecture decision, not an implied extension of
+  `linked_pr_merged`, `review_complete`, or `atelier pr merge`.
 - Evidence records remain the proof mechanism for validation transcripts,
   review summaries, and residual risk; they do not become the mutable PR state
   store.
