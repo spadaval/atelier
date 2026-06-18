@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:17:53.353373937+00:00"
+status: "done"
 title: "Render actionable PR validator failure guidance"
-updated_at: "2026-06-17T18:00:58.979537811+00:00"
+updated_at: "2026-06-18T01:17:53.353373937+00:00"
 ---
 
 ## Description

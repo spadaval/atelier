@@ -28,9 +28,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "validation"
 title: "Epic: Gate workflow with linked merged PR"
-updated_at: "2026-06-18T01:10:48.693612215+00:00"
+updated_at: "2026-06-18T01:17:08.179196067+00:00"
 ---
 
 ## Description
