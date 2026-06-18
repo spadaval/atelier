@@ -8,9 +8,11 @@ use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
-use atelier_core::{Issue, SessionRecord};
-use atelier_records::activity::list_all_issue_activities;
-use atelier_records::RecordStore;
+use atelier_core::Issue;
+use atelier_records::activity::{
+    list_all_issue_activities, list_derived_issue_attempts, DerivedIssueAttempt,
+    DerivedIssueAttemptState,
+};
 use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -96,11 +98,11 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("Active sessions: {}", active_sessions.len());
         for session in &active_sessions {
             println!(
-                "  {} {} {} -> {}",
-                session.header.id,
-                session.data.role,
-                session.data.session_kind,
-                commands::session::format_target(session.data.target.as_ref())
+                "  {} {} {} -> issue/{}",
+                session.id,
+                session.role,
+                session.state.as_str(),
+                session.issue_id
             );
         }
     }
@@ -307,13 +309,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     Ok(())
 }
 
-fn active_session_records(state_dir: &Path) -> Result<Vec<SessionRecord>> {
-    let mut sessions = RecordStore::new(state_dir)
-        .load_sessions()?
+fn active_session_records(state_dir: &Path) -> Result<Vec<DerivedIssueAttempt>> {
+    let mut sessions = list_derived_issue_attempts(state_dir)?
         .into_iter()
-        .filter(|session| session.header.status == "active")
+        .filter(|session| session.state == DerivedIssueAttemptState::Active)
         .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| left.header.id.cmp(&right.header.id));
+    sessions.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(sessions)
 }
 

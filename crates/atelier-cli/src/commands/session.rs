@@ -1,5 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_core::{Record, SessionRecord, SessionTarget};
+use atelier_records::activity::{
+    list_derived_issue_attempts, DerivedIssueAttempt, DerivedIssueAttemptState,
+};
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -39,17 +42,15 @@ pub fn begin(
 }
 
 pub fn show(state_dir: &Path, id: &str) -> Result<()> {
-    let record = load_session(state_dir, id)?;
-    print_record(&record);
+    let attempt = load_derived_attempt(state_dir, id)?;
+    print_attempt(&attempt);
     Ok(())
 }
 
 pub fn list(state_dir: &Path, active: bool) -> Result<()> {
-    let store = RecordStore::new(state_dir);
-    let records = store
-        .load_sessions()?
+    let records = list_derived_issue_attempts(state_dir)?
         .into_iter()
-        .filter(|record| !active || record.header.status == "active")
+        .filter(|attempt| !active || attempt.state == DerivedIssueAttemptState::Active)
         .collect::<Vec<_>>();
     println!("Sessions");
     println!("--------");
@@ -58,14 +59,13 @@ pub fn list(state_dir: &Path, active: bool) -> Result<()> {
         return Ok(());
     }
     for record in records {
-        let target = format_target(record.data.target.as_ref());
         println!(
-            "  {:<14} {:<8} {:<9} {:<10} {}",
-            record.header.id,
-            record.header.status,
-            record.data.role,
-            record.data.session_kind,
-            target
+            "  {:<32} {:<9} {:<9} serial={} issue/{}",
+            record.id,
+            record.state.as_str(),
+            record.role,
+            record.serial,
+            record.issue_id
         );
     }
     Ok(())
@@ -95,6 +95,13 @@ fn load_session(state_dir: &Path, id: &str) -> Result<SessionRecord> {
         Record::Session(record) => Ok(record),
         other => bail!("Expected session record {id}, found {}", other.kind()),
     }
+}
+
+fn load_derived_attempt(state_dir: &Path, id: &str) -> Result<DerivedIssueAttempt> {
+    list_derived_issue_attempts(state_dir)?
+        .into_iter()
+        .find(|attempt| attempt.id == id)
+        .ok_or_else(|| anyhow::anyhow!("Session {id} was not found in issue activity"))
 }
 
 fn session_target(
@@ -162,6 +169,40 @@ fn print_record(record: &SessionRecord) {
             .map(|ended| ended.to_rfc3339())
             .unwrap_or_else(|| "(active)".to_string())
     );
+}
+
+fn print_attempt(attempt: &DerivedIssueAttempt) {
+    println!(
+        "{} [session] {} - {} attempt {} for issue {}",
+        attempt.id,
+        attempt.state.as_str(),
+        attempt.role,
+        attempt.serial,
+        attempt.issue_id
+    );
+    println!("Issue:       {}", attempt.issue_id);
+    println!("Role:        {}", attempt.role);
+    println!("Serial:      {}", attempt.serial);
+    println!("State:       {}", attempt.state.as_str());
+    println!("Actor:       {}", attempt.actor);
+    println!(
+        "Agent:       {}",
+        attempt.agent.as_deref().unwrap_or("(none)")
+    );
+    println!(
+        "Subskill:    {}",
+        attempt.subskill.as_deref().unwrap_or("(none)")
+    );
+    println!("Started:     {}", attempt.started_at.to_rfc3339());
+    println!("Updated:     {}", attempt.updated_at.to_rfc3339());
+    println!(
+        "Ended:       {}",
+        attempt
+            .ended_at
+            .map(|ended| ended.to_rfc3339())
+            .unwrap_or_else(|| "(active)".to_string())
+    );
+    println!("Activity:    {}", attempt.activity_ids.join(", "));
 }
 
 pub fn format_target(target: Option<&SessionTarget>) -> String {
