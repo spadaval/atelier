@@ -1832,6 +1832,9 @@ fn validate_issue_field_value(
         }
     };
     if valid {
+        if field_name == "forge_pr" {
+            validate_forge_pr_field(value, issue, policy_path)?;
+        }
         Ok(())
     } else {
         Err(issue_field_error(
@@ -1844,6 +1847,112 @@ fn validate_issue_field_value(
             ),
         ))
     }
+}
+
+fn validate_forge_pr_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    let provider = require_forge_pr_string(object, "provider", issue, policy_path)?;
+    if provider != "forgejo" {
+        return Err(issue_field_key_error(
+            policy_path,
+            issue,
+            "provider",
+            "must be 'forgejo'",
+        ));
+    }
+    let host = require_forge_pr_string(object, "host", issue, policy_path)?;
+    require_forge_pr_string(object, "owner", issue, policy_path)?;
+    require_forge_pr_string(object, "repo", issue, policy_path)?;
+    let number = require_forge_pr_number(object, issue, policy_path)?;
+    let url = require_forge_pr_string(object, "url", issue, policy_path)?;
+    if !url.contains(host) {
+        return Err(issue_field_key_error(
+            policy_path,
+            issue,
+            "url",
+            "must contain the forge_pr host",
+        ));
+    }
+    if !url.contains(&number.to_string()) {
+        return Err(issue_field_key_error(
+            policy_path,
+            issue,
+            "url",
+            "must contain the forge_pr number",
+        ));
+    }
+    require_forge_pr_string(object, "source_branch", issue, policy_path)?;
+    require_forge_pr_string(object, "target_branch", issue, policy_path)?;
+    Ok(())
+}
+
+fn require_forge_pr_string<'a>(
+    object: &'a serde_json::Map<String, JsonValue>,
+    key: &str,
+    issue: &Issue,
+    policy_path: &Path,
+) -> Result<&'a str> {
+    let Some(value) = object.get(key).and_then(JsonValue::as_str) else {
+        return Err(issue_field_key_error(
+            policy_path,
+            issue,
+            key,
+            "must be a string",
+        ));
+    };
+    if value.trim().is_empty() {
+        return Err(issue_field_key_error(
+            policy_path,
+            issue,
+            key,
+            "must not be empty",
+        ));
+    }
+    Ok(value)
+}
+
+fn require_forge_pr_number(
+    object: &serde_json::Map<String, JsonValue>,
+    issue: &Issue,
+    policy_path: &Path,
+) -> Result<u64> {
+    let number = object
+        .get("number")
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_i64().and_then(|n| n.try_into().ok()))
+        })
+        .filter(|number| *number > 0)
+        .ok_or_else(|| {
+            issue_field_key_error(policy_path, issue, "number", "must be a positive integer")
+        })?;
+    Ok(number)
+}
+
+fn issue_field_key_error(
+    policy_path: &Path,
+    issue: &Issue,
+    key: &str,
+    message: impl Into<String>,
+) -> anyhow::Error {
+    WorkflowPolicyError {
+        code: "workflow_issue_field_invalid",
+        path: policy_path.display().to_string(),
+        message: format!(
+            "issue {} field 'forge_pr.{}' {}",
+            issue.id,
+            key,
+            message.into()
+        ),
+        field: Some(format!("fields.forge_pr.{key}")),
+        reference: Some(issue.id.clone()),
+        line: None,
+        column: None,
+    }
+    .into()
 }
 
 fn issue_field_error(
@@ -2196,6 +2305,33 @@ mod tests {
         )
     }
 
+    fn forge_pr_policy() -> WorkflowPolicy {
+        let text = valid_policy().replacen("schema_version: 1", "schema_version: 2", 1)
+            + r#"
+fields:
+  forge_pr:
+    type: object
+    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
+"#;
+        parse_policy_text(&text, WORKFLOW_POLICY_PATH).unwrap()
+    }
+
+    fn issue_with_fields(fields: std::collections::BTreeMap<String, JsonValue>) -> Issue {
+        Issue {
+            id: "atelier-fpr1".to_string(),
+            title: "Forge PR".to_string(),
+            description: None,
+            status: "todo".to_string(),
+            priority: "medium".to_string(),
+            issue_type: "task".to_string(),
+            fields,
+            parent_id: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            closed_at: None,
+        }
+    }
+
     #[test]
     fn parses_valid_policy() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
@@ -2292,6 +2428,56 @@ fields:
                 ],
             })
         );
+    }
+
+    #[test]
+    fn validates_forge_pr_field_shape() {
+        let policy = forge_pr_policy();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            "forge_pr".to_string(),
+            serde_json::json!({
+                "provider": "forgejo",
+                "host": "forge.example.test",
+                "owner": "tools",
+                "repo": "atelier",
+                "number": 42,
+                "url": "https://forge.example.test/tools/atelier/pulls/42",
+                "source_branch": "codex/atelier-fpr1",
+                "target_branch": "master"
+            }),
+        );
+        let issue = issue_with_fields(fields);
+
+        validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
+    }
+
+    #[test]
+    fn rejects_mismatched_forge_pr_field_shape() {
+        let policy = forge_pr_policy();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert(
+            "forge_pr".to_string(),
+            serde_json::json!({
+                "provider": "github",
+                "host": "forge.example.test",
+                "owner": "tools",
+                "repo": "atelier",
+                "number": 42,
+                "url": "https://forge.example.test/tools/atelier/pulls/42",
+                "source_branch": "codex/atelier-fpr1",
+                "target_branch": "master"
+            }),
+        );
+        let issue = issue_with_fields(fields);
+
+        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_issue_field_invalid"));
+        assert!(error.contains("fields.forge_pr.provider"));
+        assert!(error.contains("must be 'forgejo'"));
     }
 
     #[test]

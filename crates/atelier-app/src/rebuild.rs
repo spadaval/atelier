@@ -249,7 +249,7 @@ impl<'a> ProjectionLoader<'a> {
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
         let record_links = self.collect_record_links()?;
-        self.validate_issue_fields()?;
+        self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
 
@@ -388,7 +388,26 @@ impl<'a> ProjectionLoader<'a> {
         Ok(record_links)
     }
 
-    fn validate_issue_fields(&self) -> Result<()> {
+    fn validate_issue_fields(&self, child_edges: &[(String, String)]) -> Result<()> {
+        let parent_by_child = child_edges
+            .iter()
+            .map(|(child_id, parent_id)| (child_id.as_str(), parent_id.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        for issue in &self.issues {
+            if let Some(parent_id) = parent_by_child.get(issue.issue.id.as_str()) {
+                if issue
+                    .issue
+                    .fields
+                    .contains_key(crate::workflow_policy::FORGE_PR_FIELD)
+                {
+                    bail!(
+                        "workflow_issue_field_invalid: issue {} defines forge_pr directly, but child issues inherit forge_pr from parent issue {}; move forge_pr to the owning epic or remove it from the child",
+                        issue.issue.id,
+                        parent_id
+                    );
+                }
+            }
+        }
         if self
             .issues
             .iter()
@@ -1079,11 +1098,14 @@ mod tests {
         fields.insert(
             "forge_pr".to_string(),
             serde_json::json!({
+                "provider": "forgejo",
                 "host": "github.com",
                 "number": 42,
                 "owner": "openai",
                 "repo": "atelier",
-                "url": "https://github.com/openai/atelier/pull/42"
+                "url": "https://github.com/openai/atelier/pull/42",
+                "source_branch": "codex/atelier-flds",
+                "target_branch": "master"
             }),
         );
         db.insert_issue_rebuild(&Issue {
@@ -1126,7 +1148,7 @@ mod tests {
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
             "labels: []\n",
-            "labels: []\nfields:\n  forge_pr:\n    host: \"github.com\"\n",
+            "labels: []\nfields:\n  forge_pr:\n    provider: \"forgejo\"\n    host: \"github.com\"\n    owner: \"openai\"\n    repo: \"atelier\"\n    url: \"https://github.com/openai/atelier/pull/42\"\n    source_branch: \"codex/atelier-flds\"\n    target_branch: \"master\"\n",
         );
         fs::write(path, text).unwrap();
 
@@ -1137,6 +1159,31 @@ mod tests {
         assert!(error
             .to_string()
             .contains("field 'forge_pr' is missing required key 'number'"));
+    }
+
+    #[test]
+    fn rebuild_rejects_child_local_forge_pr_field() {
+        let (db, dir) = setup_test_db();
+        let parent = db
+            .create_issue_with_type("Parent", None, "medium", "epic")
+            .unwrap();
+        let child = db
+            .create_subissue(&parent, "Child", None, "medium")
+            .unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v2_policy(&state_dir);
+        let path = state_dir.join(issue_record_path(&child));
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "labels: []\n",
+            "labels: []\nfields:\n  forge_pr:\n    provider: \"forgejo\"\n    host: \"github.com\"\n    owner: \"openai\"\n    repo: \"atelier\"\n    number: 42\n    url: \"https://github.com/openai/atelier/pull/42\"\n    source_branch: \"codex/atelier-flds\"\n    target_branch: \"master\"\n",
+        );
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
+
+        assert!(error.to_string().contains("workflow_issue_field_invalid"));
+        assert!(error.to_string().contains("child issues inherit forge_pr"));
     }
 
     #[test]
@@ -1541,7 +1588,7 @@ statuses:
 fields:
   forge_pr:
     type: object
-    required: [host, number, owner, repo, url]
+    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
 
 validators:
   durable_current:
