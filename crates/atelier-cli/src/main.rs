@@ -36,6 +36,7 @@ Missions and planning:
 
 Records:
   evidence      Capture validation evidence
+  session       Manage durable optional work sessions
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
@@ -65,6 +66,7 @@ Common commands:
   atelier mission show <id>
   atelier mission status
   atelier mission close <id> --reason \"...\"
+  atelier session list --active
   atelier history --mission <id>
   atelier history --issue <id>
   atelier start <issue-id>
@@ -184,6 +186,12 @@ enum Commands {
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
+    },
+
+    /// Durable optional work sessions
+    Session {
+        #[command(subcommand)]
+        action: SessionCommands,
     },
 
     /// Inspect canonical repo, mission, issue, or epic activity
@@ -567,6 +575,46 @@ another target.")]
     List {
         #[arg(long)]
         status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SessionCommands {
+    /// Begin a durable optional work session
+    Begin {
+        /// Operator role: worker, reviewer, manager, or admin
+        #[arg(long)]
+        role: String,
+        /// Link the session to an issue
+        #[arg(long)]
+        issue: Option<String>,
+        /// Link the session to a mission
+        #[arg(long)]
+        mission: Option<String>,
+        /// Agent-factory subskill or other local role specialization
+        #[arg(long)]
+        subskill: Option<String>,
+        /// Agent identity to record
+        #[arg(long)]
+        agent: Option<String>,
+        /// Session kind
+        #[arg(long, default_value = "mutating")]
+        kind: String,
+    },
+    /// Show a session record
+    Show { id: String },
+    /// List session records
+    List {
+        /// Show only active sessions
+        #[arg(long)]
+        active: bool,
+    },
+    /// End an active session
+    End {
+        id: String,
+        /// Reason recorded in terminal output
+        #[arg(long)]
+        reason: String,
     },
 }
 
@@ -1288,6 +1336,41 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Session { action } => match action {
+            SessionCommands::Begin {
+                role,
+                issue,
+                mission,
+                subskill,
+                agent,
+                kind,
+            } => {
+                let storage = use_cases::mission_mutation_storage()?;
+                commands::session::begin(
+                    storage.db(),
+                    &storage.state_dir(),
+                    &role,
+                    issue.as_deref(),
+                    mission.as_deref(),
+                    subskill.as_deref(),
+                    agent.as_deref(),
+                    &kind,
+                )
+            }
+            SessionCommands::Show { id } => {
+                let storage = use_cases::mission_query_storage()?;
+                commands::session::show(&storage.state_dir(), &id)
+            }
+            SessionCommands::List { active } => {
+                let storage = use_cases::mission_query_storage()?;
+                commands::session::list(&storage.state_dir(), active)
+            }
+            SessionCommands::End { id, reason } => {
+                let storage = use_cases::mission_mutation_storage()?;
+                commands::session::end(&storage.state_dir(), &id, &reason)
+            }
+        },
+
         Commands::History {
             mission,
             issue,
@@ -1495,6 +1578,12 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
+        },
+        Commands::Session { action } => match action {
+            SessionCommands::Begin { .. } => "session begin",
+            SessionCommands::Show { .. } => "session show",
+            SessionCommands::List { .. } => "session list",
+            SessionCommands::End { .. } => "session end",
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
