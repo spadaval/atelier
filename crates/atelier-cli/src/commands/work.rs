@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use atelier_core::Issue;
+use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 
 const MISSION_WORKTREE_OWNER_FILE: &str = "mission-worktree-owner";
@@ -28,6 +29,7 @@ fn print_started_work(
     db: &Database,
     id: &str,
     resolution: &atelier_app::workflow_policy::BranchLifecycleResolution,
+    session_id: Option<&str>,
 ) -> Result<()> {
     let issue = db.require_issue(id)?;
     let branch = current_branch().ok();
@@ -45,6 +47,9 @@ fn print_started_work(
     if let Some(branch) = branch {
         println!("Branch: {branch}");
     }
+    if let Some(session_id) = session_id {
+        println!("Session: {session_id}");
+    }
     println!("Worktree: {path}");
     println!();
     println!("Next Commands");
@@ -58,16 +63,93 @@ fn print_started_work(
     Ok(())
 }
 
-pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()> {
+#[derive(Clone, Copy)]
+pub struct StartSessionOptions<'a> {
+    pub no_session: bool,
+    pub reuse_session: Option<&'a str>,
+}
+
+pub fn start_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<()> {
     let db = Database::open(db_path)?;
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
+    validate_start_session_options(state_dir, id, session)?;
     let resolution = prepare_start_branch(&db, id)?;
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
     drop(db);
 
+    let session_id = start_session_after_transition(state_dir, db_path, id, session)?;
     let db = Database::open(db_path)?;
-    print_started_work(&db, id, &resolution)
+    print_started_work(&db, id, &resolution, session_id.as_deref())
+}
+
+fn validate_start_session_options(
+    state_dir: &Path,
+    id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<()> {
+    if session.no_session && session.reuse_session.is_some() {
+        bail!("Use either --no-session or --reuse-session, not both");
+    }
+    if session.no_session {
+        return Ok(());
+    }
+    let active = active_mutating_sessions(state_dir)?;
+    if let Some(reuse_id) = session.reuse_session {
+        if active.iter().any(|record| record.header.id == reuse_id) {
+            return Ok(());
+        }
+        bail!("Session {reuse_id} is not an active mutating session");
+    }
+    if let Some(existing) = active.first() {
+        bail!(
+            "Active mutating session {} already exists. Use `atelier start {id} --reuse-session {}` to reuse it or `atelier start {id} --no-session` to suppress session creation.",
+            existing.header.id,
+            existing.header.id
+        );
+    }
+    Ok(())
+}
+
+fn start_session_after_transition(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<Option<String>> {
+    if session.no_session {
+        return Ok(None);
+    }
+    if let Some(reuse_id) = session.reuse_session {
+        return Ok(Some(reuse_id.to_string()));
+    }
+    let store = RecordStore::new(state_dir);
+    let record = store.create_session(
+        &format!("worker session for issue {id}"),
+        "worker",
+        None,
+        None,
+        Some(atelier_core::SessionTarget {
+            kind: "issue".to_string(),
+            id: id.to_string(),
+        }),
+        "mutating",
+    )?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
+    Ok(Some(record.header.id))
+}
+
+fn active_mutating_sessions(state_dir: &Path) -> Result<Vec<atelier_core::SessionRecord>> {
+    Ok(RecordStore::new(state_dir)
+        .load_sessions()?
+        .into_iter()
+        .filter(|record| record.header.status == "active" && record.data.session_kind == "mutating")
+        .collect())
 }
 
 fn prepare_start_branch(

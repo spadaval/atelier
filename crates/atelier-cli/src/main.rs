@@ -121,7 +121,15 @@ enum Commands {
     Status,
 
     /// Start tracked work on an issue
-    Start { id: String },
+    Start {
+        id: String,
+        /// Do not create or reuse a session for this start
+        #[arg(long)]
+        no_session: bool,
+        /// Reuse an existing active mutating session
+        #[arg(long)]
+        reuse_session: Option<String>,
+    },
 
     /// Issue lifecycle commands (create, show, list, close, ...)
     Issue {
@@ -1026,11 +1034,23 @@ fn run() -> Result<()> {
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
-        Commands::Start { id } => {
+        Commands::Start {
+            id,
+            no_session,
+            reuse_session,
+        } => {
             let db = projection_query_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            commands::work::start_lifecycle(&state_dir, &db_path, &id)
+            commands::work::start_lifecycle(
+                &state_dir,
+                &db_path,
+                &id,
+                commands::work::StartSessionOptions {
+                    no_session,
+                    reuse_session: reuse_session.as_deref(),
+                },
+            )
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -1349,6 +1369,7 @@ fn run() -> Result<()> {
                 commands::session::begin(
                     storage.db(),
                     &storage.state_dir(),
+                    &storage.db_path(),
                     &role,
                     issue.as_deref(),
                     mission.as_deref(),
@@ -1367,7 +1388,7 @@ fn run() -> Result<()> {
             }
             SessionCommands::End { id, reason } => {
                 let storage = use_cases::mission_mutation_storage()?;
-                commands::session::end(&storage.state_dir(), &id, &reason)
+                commands::session::end(&storage.state_dir(), &storage.db_path(), &id, &reason)
             }
         },
 

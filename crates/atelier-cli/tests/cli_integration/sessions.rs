@@ -1,5 +1,14 @@
 use super::*;
 
+fn session_id_from_start_output(stdout: &str) -> String {
+    stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("Session: "))
+        .map(str::trim)
+        .map(str::to_string)
+        .expect("start output should include a session id")
+}
+
 #[test]
 fn session_begin_show_list_and_end_round_trip() {
     let dir = tempdir().unwrap();
@@ -61,4 +70,142 @@ fn session_begin_rejects_invalid_role() {
     assert!(!success);
     assert!(stderr.contains("Invalid session role"));
     assert!(stderr.contains("worker, reviewer, manager, admin"));
+}
+
+#[test]
+fn start_auto_creates_active_mutating_session() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Session start item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Session start item");
+    commit_all(dir.path(), "start item");
+
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "start failed: {stderr}");
+    let session_id = session_id_from_start_output(&start_out);
+
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["session", "list", "--active"]);
+    assert!(success, "session list failed: {stderr}");
+    assert!(list_out.contains(&session_id), "{list_out}");
+    assert!(list_out.contains("worker"), "{list_out}");
+    assert!(list_out.contains("mutating"), "{list_out}");
+    assert!(
+        list_out.contains(&format!("issue/{issue_id}")),
+        "{list_out}"
+    );
+}
+
+#[test]
+fn start_no_session_suppresses_session_creation() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "No session item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "No session item");
+    commit_all(dir.path(), "no session item");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["start", &issue_id, "--no-session"]);
+    assert!(success, "start --no-session failed: {stderr}");
+    assert!(!start_out.contains("Session:"), "{start_out}");
+
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["session", "list", "--active"]);
+    assert!(success, "session list failed: {stderr}");
+    assert!(list_out.contains("(none)"), "{list_out}");
+}
+
+#[test]
+fn start_requires_explicit_reuse_for_active_mutating_session() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Session epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic issue create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Session epic");
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "First session item",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "first issue create failed: {stderr}");
+    let first_id = issue_id_by_title(dir.path(), "First session item");
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Second session item",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "second issue create failed: {stderr}");
+    let second_id = issue_id_by_title(dir.path(), "Second session item");
+    commit_all(dir.path(), "session reuse items");
+
+    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    assert!(success, "first start failed: {stderr}");
+    let session_id = session_id_from_start_output(&start_out);
+    commit_all(dir.path(), "first session started");
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["start", &second_id]);
+    assert!(!success, "second start should require explicit reuse");
+    assert!(stderr.contains("Active mutating session"), "{stderr}");
+    assert!(stderr.contains("--reuse-session"), "{stderr}");
+    assert!(stderr.contains("--no-session"), "{stderr}");
+
+    let (success, reuse_out, stderr) = run_atelier(
+        dir.path(),
+        &["start", &second_id, "--reuse-session", &session_id],
+    );
+    assert!(success, "reuse start failed: {stderr}");
+    assert!(
+        reuse_out.contains(&format!("Session: {session_id}")),
+        "{reuse_out}"
+    );
+}
+
+#[test]
+fn start_rejects_no_session_with_reuse_session() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Flag conflict item"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Flag conflict item");
+    commit_all(dir.path(), "flag conflict item");
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "start",
+            &issue_id,
+            "--no-session",
+            "--reuse-session",
+            "atelier-missing",
+        ],
+    );
+    assert!(!success, "conflicting flags should fail");
+    assert!(
+        stderr.contains("Use either --no-session or --reuse-session"),
+        "{stderr}"
+    );
 }

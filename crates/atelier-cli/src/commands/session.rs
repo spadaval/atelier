@@ -10,6 +10,7 @@ const VALID_ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
 pub fn begin(
     db: &Database,
     state_dir: &Path,
+    db_path: &Path,
     role: &str,
     issue: Option<&str>,
     mission: Option<&str>,
@@ -32,6 +33,7 @@ pub fn begin(
         target,
         kind,
     )?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     print_record(&record);
     Ok(())
 }
@@ -69,7 +71,7 @@ pub fn list(state_dir: &Path, active: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn end(state_dir: &Path, id: &str, reason: &str) -> Result<()> {
+pub fn end(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result<()> {
     if reason.trim().is_empty() {
         bail!("session end requires --reason \"...\"");
     }
@@ -83,6 +85,7 @@ pub fn end(state_dir: &Path, id: &str, reason: &str) -> Result<()> {
     record.header.updated_at = now;
     record.data.ended_at = Some(now);
     store.write_record_atomic(&Record::Session(record.clone()))?;
+    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     println!("Ended session {} - {}", record.header.id, reason.trim());
     Ok(())
 }

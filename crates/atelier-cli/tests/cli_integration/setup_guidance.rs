@@ -1492,19 +1492,41 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     init_git_repo(dir.path());
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Active item"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Shared epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic issue create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Shared epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Active item", "--parent", &epic_id],
+    );
     assert!(success, "active issue create failed: {stderr}");
     let active_id = issue_id_by_title(dir.path(), "Active item");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Next item"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Next item", "--parent", &epic_id],
+    );
     assert!(success, "next issue create failed: {stderr}");
     let next_id = issue_id_by_title(dir.path(), "Next item");
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "two startable items");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    let (success, active_out, stderr) = run_atelier(dir.path(), &["start", &active_id]);
     assert!(success, "initial start failed: {stderr}");
+    let session_id = active_out
+        .lines()
+        .find_map(|line| line.strip_prefix("Session: "))
+        .map(str::trim)
+        .expect("initial start should create a session")
+        .to_string();
+    commit_all(dir.path(), "active item started");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["start", &next_id, "--reuse-session", &session_id],
+    );
     assert!(success, "second current work issue should start: {stderr}");
     assert!(
         stdout.contains(&format!("Started work on {next_id}")),

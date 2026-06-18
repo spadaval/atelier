@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Integrate start with session auto-creation, no-session, and explicit reuse"
-updated_at: "2026-06-17T18:00:18.307217828+00:00"
+updated_at: "2026-06-18T00:02:10.185276509+00:00"
 ---
 
 ## Description
