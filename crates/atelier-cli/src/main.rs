@@ -37,6 +37,7 @@ Missions and planning:
 Records:
   evidence      Capture validation evidence
   session       Manage durable optional work sessions
+  pr            Manage Forgejo pull request review artifacts
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
@@ -200,6 +201,12 @@ enum Commands {
     Session {
         #[command(subcommand)]
         action: SessionCommands,
+    },
+
+    /// Forgejo pull request review artifacts
+    Pr {
+        #[command(subcommand)]
+        action: PrCommands,
     },
 
     /// Inspect canonical repo, mission, issue, or epic activity
@@ -623,6 +630,61 @@ enum SessionCommands {
         /// Reason recorded in terminal output
         #[arg(long)]
         reason: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PrCommands {
+    /// Open or confirm the active Forgejo pull request for an issue owner
+    Open {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, default_value = "")]
+        body: String,
+        #[arg(long)]
+        source_branch: String,
+        #[arg(long, default_value = "master")]
+        target_branch: String,
+    },
+    /// Show concise linked PR status
+    Status {
+        #[arg(long)]
+        issue: Option<String>,
+    },
+    /// Show linked PR details
+    Show {
+        #[arg(long)]
+        issue: Option<String>,
+    },
+    /// List live PR review comments
+    Comments {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        unresolved: bool,
+    },
+    /// Add a Forgejo PR comment
+    Comment {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        body: String,
+    },
+    /// Submit a Forgejo PR review
+    Review {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        event: String,
+        #[arg(long, default_value = "")]
+        body: String,
     },
 }
 
@@ -1392,6 +1454,72 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Pr { action } => {
+            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            match action {
+                PrCommands::Open {
+                    issue,
+                    role,
+                    title,
+                    body,
+                    source_branch,
+                    target_branch,
+                } => commands::pr::open(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    &title,
+                    &body,
+                    &source_branch,
+                    &target_branch,
+                ),
+                PrCommands::Status { issue } => commands::pr::status(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                ),
+                PrCommands::Show { issue } => commands::pr::show(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                ),
+                PrCommands::Comments { issue, unresolved } => commands::pr::comments(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                    unresolved,
+                ),
+                PrCommands::Comment { issue, role, body } => commands::pr::comment(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                    &role,
+                    &body,
+                ),
+                PrCommands::Review {
+                    issue,
+                    role,
+                    event,
+                    body,
+                } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                    &role,
+                    &event,
+                    &body,
+                ),
+            }
+        }
+
         Commands::History {
             mission,
             issue,
@@ -1605,6 +1733,14 @@ fn command_identity(command: &Commands) -> &'static str {
             SessionCommands::Show { .. } => "session show",
             SessionCommands::List { .. } => "session list",
             SessionCommands::End { .. } => "session end",
+        },
+        Commands::Pr { action } => match action {
+            PrCommands::Open { .. } => "pr open",
+            PrCommands::Status { .. } => "pr status",
+            PrCommands::Show { .. } => "pr show",
+            PrCommands::Comments { .. } => "pr comments",
+            PrCommands::Comment { .. } => "pr comment",
+            PrCommands::Review { .. } => "pr review",
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {

@@ -656,6 +656,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
+- `atelier pr open/status/show/comments/comment/review`
 - `atelier session`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`

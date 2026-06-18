@@ -17,6 +17,22 @@ state_root = ".atelier"
 runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
+
+# Forgejo PR integration is optional until `atelier pr` commands or PR
+# validators need it. Uncomment and fill these values in tracked project config.
+#
+# [forgejo]
+# host = "forge.example.test"
+# owner = "workspace"
+# repo = "atelier"
+# admin_token_env = "FORGEJO_ADMIN_TOKEN"
+#
+# [forgejo.sudo_users]
+# worker = "atelier-worker"
+# reviewer = "atelier-reviewer"
+# validator = "atelier-validator"
+# manager = "atelier-manager"
+# admin = "atelier-admin"
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[

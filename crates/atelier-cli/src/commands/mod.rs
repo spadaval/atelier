@@ -15,6 +15,7 @@ pub mod man;
 pub mod mission;
 pub mod next;
 pub mod plan;
+pub mod pr;
 pub mod relate;
 pub mod session;
 pub mod status;

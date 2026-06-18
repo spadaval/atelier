@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:00:58.310277720+00:00"
+status: "done"
 title: "Add pr open, status, show, comments, comment, and review commands"
-updated_at: "2026-06-17T18:00:38.748336356+00:00"
+updated_at: "2026-06-18T01:00:58.310277720+00:00"
 ---
 
 ## Description

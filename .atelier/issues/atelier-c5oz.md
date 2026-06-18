@@ -40,9 +40,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:10:18.500645141+00:00"
+status: "done"
 title: "Epic: Add Forgejo PR integration"
-updated_at: "2026-06-17T18:00:43.375763309+00:00"
+updated_at: "2026-06-18T01:10:18.500645141+00:00"
 ---
 
 ## Description

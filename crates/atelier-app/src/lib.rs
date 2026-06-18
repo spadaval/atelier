@@ -5,9 +5,11 @@
 
 pub mod command_storage;
 pub mod export;
+pub mod forgejo;
 pub mod health;
 pub mod init;
 pub mod lint;
+pub mod project_config;
 pub mod projection;
 pub mod rebuild;
 pub mod storage_layout;
