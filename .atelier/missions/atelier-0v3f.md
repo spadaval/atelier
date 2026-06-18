@@ -42,24 +42,28 @@ relationships:
     id: "atelier-mwup"
     type: "advances"
   - kind: "issue"
+    id: "atelier-ngb2"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-tovs"
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
 status: "ready"
 title: "Close architecture audit gaps and readiness graph"
-updated_at: "2026-06-17T21:36:35.087153495+00:00"
+updated_at: "2026-06-18T16:44:20.749787388+00:00"
 ---
 
 ## Intent
 
-Make the code, architecture docs, tracker claims, and operator health surfaces agree after the app/CLI split, RecordStore extraction, canonical record normalization, session/PR field work, and readiness validation.
+Make the code, architecture docs, tracker claims, and operator health surfaces agree after the app/CLI split, RecordStore extraction, canonical record normalization, session/PR field work, corrective session-as-issue-events work, and readiness validation.
 
 ## Constraints
 
 - Reuse the existing open graph instead of creating parallel duplicate epics.
 - Do not reopen closed epics; create follow-up work where live code contradicts closed claims.
 - Contract/artifact decisions must land before dependent implementation starts.
+- The session-as-issue-events model wins over durable optional sessions: worker/reviewer/validator attempts are derived from canonical issue activity, and session commands are inspection-only rather than workflow drivers.
 - The current atelier status branch-lifecycle failure is mission-blocking until fixed or explicitly documented as expected stale data.
 
 ## Risks
@@ -70,5 +74,6 @@ Make the code, architecture docs, tracker claims, and operator health surfaces a
 ## Validation
 
 - Mission status maps all linked epics and child issues to proof.
+- `atelier-ngb2` proof shows the corrective session-as-issue-events model replaces durable-session workflow assumptions before final readiness validation closes.
 - Final evidence includes cargo fmt -- --check, focused nextest suites, atelier lint, atelier export --check, atelier doctor, and git diff --check.
 - A status transcript either passes or documents the branch-lifecycle graph failure as an intentional stale-data condition with follow-up ownership.

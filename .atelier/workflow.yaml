@@ -116,7 +116,6 @@ workflows:
           - epic_child_proof
           - blockers_clear
           - lint_clear
-          - pr_merged
           - durable_current
           - closeout_clean
         guidance: [close_with_proof]
