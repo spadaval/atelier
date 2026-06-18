@@ -9,9 +9,9 @@ Search command:
 
 ```bash
 rg -n 'export --check|atelier export|export/rebuild|lint/export|export check' \
-  AGENTFACTORY.md docs/architecture/quality/validation.md \
+  AGENTS.md docs/architecture/quality/validation.md \
   docs/product/command-audit docs/product/validation.md \
-  /root/.agents/skills/agent-factory
+  .agents/skills/agent-factory
 ```
 
 ## Allowed References
@@ -21,8 +21,8 @@ rg -n 'export --check|atelier export|export/rebuild|lint/export|export check' \
 | `docs/product/command-audit/export.md` | Migration/debug | The file audits the export command itself and states that normal operators use `lint` and `doctor`. |
 | `docs/product/command-audit/category-review.md` | Migration/debug | The category table explicitly keeps export/rebuild outside normal workflow and classifies `export --check` as hidden/advanced. |
 | `docs/architecture/quality/validation.md` deterministic export/projection diagnostic row | Storage-rendering-specific | The validation router names `export --check` only for storage-rendering, migration, or debug claims. |
-| `/root/.agents/skills/agent-factory/procedures/install.md` storage-rendering diagnostics list | Migration/debug | Install guidance keeps export commands out of normal tracker and health commands. |
-| `/root/.agents/skills/agent-factory/standards/tracker.md` mission closeout caveat | Storage-rendering-specific | The tracker standard says to use `export --check` only when the mission changes deterministic export, projection freshness, or migration/debug surfaces. |
+| `.agents/skills/agent-factory/procedures/install.md` storage-rendering diagnostics list | Migration/debug | Install guidance keeps export commands out of normal tracker and health commands. |
+| `.agents/skills/agent-factory/standards/tracker.md` mission closeout caveat | Storage-rendering-specific | The tracker standard says to use `export --check` only when the mission changes deterministic export, projection freshness, or migration/debug surfaces. |
 
 ## Historical Or Deferred References
 

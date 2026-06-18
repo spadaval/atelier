@@ -6,7 +6,6 @@ use std::process::Command;
 
 const GUIDANCE_FILES: &[&str] = &[
     "AGENTS.md",
-    "AGENTFACTORY.md",
     "docs/product/cli-surface.md",
     "docs/product/work-model.md",
     "docs/architecture/quality/validation.md",

@@ -812,9 +812,10 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
 
 #[test]
 fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
-    let guidance = std::fs::read_to_string(workspace_root().join("AGENTFACTORY.md")).unwrap();
-    assert!(guidance.contains("Hidden workflow diagnostics are not normal"));
-    assert!(guidance.contains("## Validation Routing"));
+    let guidance =
+        std::fs::read_to_string(workspace_root().join(".agents/skills/agent-factory/SKILL.md"))
+            .unwrap();
+    assert!(guidance.contains("Agent Factory assigns subskills"));
     assert!(!guidance.contains("atelier workflow validate issue"));
     assert!(!guidance.contains("atelier workflow validate mission"));
     assert!(!guidance.contains("## Checks"));
