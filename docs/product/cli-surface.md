@@ -30,6 +30,7 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
+- `atelier pr open/status/show/comments/comment/review`
 - `atelier session`
 - `atelier session begin/show/list/end`
 - `atelier history`
@@ -48,7 +49,7 @@ may be cited as ordinary workflow proof.
 
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
-| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary health. They may appear in root help, role guides, issue next actions, mission status, and Agent Factory workflow guidance. | `status`, `start`, `issue show`, `issue transition --options`, `issue close`, `mission status`, `evidence record`, `lint`, `doctor`, `worktree for-mission` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
+| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary health. They may appear in root help, role guides, issue next actions, mission status, and Agent Factory workflow guidance. | `status`, `start`, `issue show`, `issue transition --options`, `issue close`, `mission status`, `evidence record`, `pr`, `lint`, `doctor`, `worktree for-mission` | `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
 | Admin maintenance | Visible but specialized commands for setup, explicit repair, destructive record surgery, or manual owner-branch/worktree recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor --fix`, `maintenance delete ... --force`, `branch status`, `branch merge`, `worktree repair` | `issue close`, `mission status`, hidden `workflow check`, hidden `diagnostics slow` |
 | Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `mission status`, `issue transition --options` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
