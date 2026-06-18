@@ -30,6 +30,8 @@ the normal repo-owned operational path that Agent Factory should reference:
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
+- `atelier session`
+- `atelier session begin/show/list/end`
 - `atelier history`
 - `atelier issue note <id> "..."`
 - `atelier start`

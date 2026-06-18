@@ -2936,7 +2936,8 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
     let standalone_id = issue_id_by_title(dir.path(), "Standalone work");
     commit_all(dir.path(), "initial tracker state");
 
-    let (success, child_out, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+    let (success, child_out, stderr) =
+        run_atelier(dir.path(), &["start", &child_id, "--no-session"]);
     assert!(success, "child start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(child_out.contains(&format!("Started work on {child_id} Child work")));
@@ -2956,7 +2957,8 @@ fn test_start_prepares_child_standalone_and_epic_owner_branches_before_transitio
         .status()
         .unwrap();
     assert!(status.success(), "switch back to main failed");
-    let (success, standalone_out, stderr) = run_atelier(dir.path(), &["start", &standalone_id]);
+    let (success, standalone_out, stderr) =
+        run_atelier(dir.path(), &["start", &standalone_id, "--no-session"]);
     assert!(success, "standalone start failed: {stderr}");
     assert_eq!(
         git_current_branch(dir.path()),
@@ -3094,7 +3096,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         assert!(!options_out.contains("branch for-epic"), "{options_out}");
     }
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id, "--no-session"]);
     assert!(success, "child start failed: {stderr}");
     let (success, epic_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "epic branch status failed: {stderr}");
@@ -3119,7 +3121,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         .status()
         .unwrap();
     assert!(status.success(), "switch to main failed");
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &standalone_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &standalone_id, "--no-session"]);
     assert!(success, "standalone start failed: {stderr}");
     let (success, issue_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "issue branch status failed: {stderr}");
@@ -3304,7 +3306,7 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
     commit_all(dir.path(), "initial tracker state");
     let main_before = git_rev_parse(dir.path(), "main");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &child_id, "--no-session"]);
     assert!(success, "child start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     ensure_all_issue_completion_sections(dir.path());
@@ -3412,7 +3414,7 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
     );
     assert!(success, "child close failed: {stderr}");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id, "--no-session"]);
     assert!(success, "epic start failed: {stderr}");
     move_issue_to_validation(dir.path(), &epic_id);
     ensure_all_issue_completion_sections(dir.path());

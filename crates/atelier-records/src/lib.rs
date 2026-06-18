@@ -3210,6 +3210,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
                 ("issue", "atelier.issue", 1, Some("issues")),
                 ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
+                ("session", "atelier.session", 1, Some("sessions")),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
@@ -3225,7 +3226,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["mission", "evidence"]);
+        assert_eq!(generic_contracts, vec!["mission", "evidence", "session"]);
     }
 
     #[test]

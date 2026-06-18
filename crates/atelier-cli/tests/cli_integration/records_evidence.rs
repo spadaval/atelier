@@ -2261,7 +2261,7 @@ fn test_workflow_check_rejects_stale_agent_guidance_commands() {
     write_valid_command_guidance(dir.path());
     fs::write(
         dir.path().join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier session start`\n",
+        "# Agent Instructions\n\n- `atelier timer start`\n",
     )
     .unwrap();
 
@@ -2273,7 +2273,7 @@ fn test_workflow_check_rejects_stale_agent_guidance_commands() {
     );
     assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
     assert!(stdout.contains("AGENTS.md"), "{stdout}");
-    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(stdout.contains("atelier timer"), "{stdout}");
     assert!(
         stderr.contains("workflow_command_surface_drift"),
         "{stderr}"
@@ -2378,7 +2378,7 @@ fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
     write_valid_command_guidance(dir.path());
 
     let surface = format!(
-        "{}\n## Core\n\n- `atelier session start`\n",
+        "{}\n## Core\n\n- `atelier timer start`\n",
         valid_command_surface_doc()
     );
     write_command_surface_doc(dir.path(), &surface);
@@ -2390,7 +2390,7 @@ fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
         "workflow check should reject removed command as normal guidance"
     );
     assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(stdout.contains("atelier timer"), "{stdout}");
     assert!(
         stderr.contains("workflow_command_surface_drift"),
         "{stderr}"

@@ -666,6 +666,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier mission list",
         "atelier mission show <id>",
+        "atelier session list --active",
         "atelier history --mission <id>",
         "atelier history --issue <id>",
         "atelier start <issue-id>",
@@ -693,7 +694,6 @@ fn test_top_level_help_only_shows_core_commands() {
         "repair",
         "timer",
         "milestone",
-        "session",
         "daemon",
         "cpitd",
         "usage",
@@ -921,7 +921,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
-    assert!(!stdout.contains("session"));
+    assert!(stdout.contains("Active sessions: none"));
+    assert!(!stdout.contains("session start"));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
     assert!(success, "quiet status failed: {stderr}");
@@ -1560,9 +1561,10 @@ fn test_root_start_same_issue_reports_already_started_work() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "restartable item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id, "--no-session"]);
     assert!(success, "first start failed: {stderr}");
-    let (success, restart_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, restart_out, stderr) =
+        run_atelier(dir.path(), &["start", &issue_id, "--no-session"]);
     assert!(!success, "second start should be guarded:\n{restart_out}");
     assert!(
         stderr.contains("Transition 'start' is not available from status 'in_progress'"),
@@ -1585,7 +1587,7 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "switchable items");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id, "--no-session"]);
     assert!(success, "first start failed: {stderr}");
     let (success, abandon_out, stderr) =
         run_atelier(dir.path(), &["abandon", &first_id, "--reason", "switching"]);
@@ -1595,7 +1597,8 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
         "{stderr}"
     );
 
-    let (success, second_out, stderr) = run_atelier(dir.path(), &["start", &second_id]);
+    let (success, second_out, stderr) =
+        run_atelier(dir.path(), &["start", &second_id, "--no-session"]);
     assert!(success, "second start should not require abandon: {stderr}");
     assert!(
         second_out.contains(&format!("Started work on {second_id}")),
@@ -1993,7 +1996,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     assert!(issue_out.contains("Created issue atelier-"));
     let archive_id = issue_id_by_title(dir.path(), "Explicit archive workflow item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &archive_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &archive_id, "--no-session"]);
     assert!(success, "archive start failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
