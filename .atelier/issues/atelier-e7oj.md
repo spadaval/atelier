@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T00:51:57.660441332+00:00"
+status: "done"
 title: "Add Forgejo config and role sudo-user mapping"
-updated_at: "2026-06-17T18:00:33.745331853+00:00"
+updated_at: "2026-06-18T00:51:57.660441332+00:00"
 ---
 
 ## Description
