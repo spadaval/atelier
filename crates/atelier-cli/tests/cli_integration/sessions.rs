@@ -7,6 +7,7 @@ fn write_attempt_activity(
     role: &str,
     serial: u32,
     lifecycle: &str,
+    summary: &str,
 ) {
     let activity_dir = dir
         .join(".atelier")
@@ -26,7 +27,7 @@ fn write_attempt_activity(
                 "event_type: \"work_started\"\n",
                 "actor: \"codex\"\n",
                 "created_at: \"2026-06-18T17:00:00.000000Z\"\n",
-                "summary: \"Attempt event\"\n",
+                "summary: \"{summary}\"\n",
                 "attempt:\n",
                 "  role: {role}\n",
                 "  serial: {serial}\n",
@@ -40,7 +41,8 @@ fn write_attempt_activity(
             issue_id = issue_id,
             role = role,
             serial = serial,
-            lifecycle = lifecycle
+            lifecycle = lifecycle,
+            summary = summary
         ),
     )
     .unwrap();
@@ -62,8 +64,19 @@ fn session_list_and_show_are_derived_from_issue_activity() {
         "worker",
         1,
         "started",
+        "Worker attempt started",
+    );
+    write_attempt_activity(
+        dir.path(),
+        &issue_id,
+        "20260618T170001000000Z",
+        "worker",
+        1,
+        "updated",
+        "Worker attempt progressed",
     );
 
+    let activity_before = issue_activity_texts(dir.path(), &issue_id);
     let (success, list_out, stderr) = run_atelier(dir.path(), &["session", "list", "--active"]);
     assert!(success, "session list failed: {stderr}");
     let attempt_id = format!("{issue_id}/worker/1");
@@ -72,6 +85,15 @@ fn session_list_and_show_are_derived_from_issue_activity() {
     assert!(
         list_out.contains(&format!("issue/{issue_id}")),
         "{list_out}"
+    );
+    assert!(
+        list_out.contains("recent=\"work_started updated - Worker attempt progressed\""),
+        "{list_out}"
+    );
+    assert_eq!(
+        activity_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "session list must not mutate issue activity"
     );
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["session", "show", &attempt_id]);
@@ -83,6 +105,20 @@ fn session_list_and_show_are_derived_from_issue_activity() {
     assert!(show_out.contains("Role:        worker"), "{show_out}");
     assert!(show_out.contains("Serial:      1"), "{show_out}");
     assert!(show_out.contains("Subskill:    implement"), "{show_out}");
+    assert!(show_out.contains("Activity:"), "{show_out}");
+    assert!(
+        show_out.contains("work_started started - Worker attempt started"),
+        "{show_out}"
+    );
+    assert!(
+        show_out.contains("work_started updated - Worker attempt progressed"),
+        "{show_out}"
+    );
+    assert_eq!(
+        activity_before,
+        issue_activity_texts(dir.path(), &issue_id),
+        "session show must not mutate issue activity"
+    );
 }
 
 #[test]

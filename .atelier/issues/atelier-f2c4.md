@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Render session inspection from issue-event attempts"
-updated_at: "2026-06-18T16:45:24.861474469+00:00"
+updated_at: "2026-06-18T17:57:04.378634056+00:00"
 ---
 
 ## Description

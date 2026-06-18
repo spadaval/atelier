@@ -1,7 +1,8 @@
 use anyhow::{bail, Result};
 use atelier_core::{Record, SessionRecord, SessionTarget};
 use atelier_records::activity::{
-    list_derived_issue_attempts, DerivedIssueAttempt, DerivedIssueAttemptState,
+    list_derived_issue_attempts, DerivedIssueAttempt, DerivedIssueAttemptActivity,
+    DerivedIssueAttemptState,
 };
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
@@ -48,10 +49,16 @@ pub fn show(state_dir: &Path, id: &str) -> Result<()> {
 }
 
 pub fn list(state_dir: &Path, active: bool) -> Result<()> {
-    let records = list_derived_issue_attempts(state_dir)?
+    let mut records = list_derived_issue_attempts(state_dir)?
         .into_iter()
         .filter(|attempt| !active || attempt.state == DerivedIssueAttemptState::Active)
         .collect::<Vec<_>>();
+    records.sort_by(|left, right| {
+        left.issue_id
+            .cmp(&right.issue_id)
+            .then(left.role.cmp(&right.role))
+            .then(left.serial.cmp(&right.serial))
+    });
     println!("Sessions");
     println!("--------");
     if records.is_empty() {
@@ -60,12 +67,13 @@ pub fn list(state_dir: &Path, active: bool) -> Result<()> {
     }
     for record in records {
         println!(
-            "  {:<32} {:<9} {:<9} serial={} issue/{}",
+            "  {:<32} {:<9} {:<9} serial={} issue/{} recent=\"{}\"",
             record.id,
             record.state.as_str(),
             record.role,
             record.serial,
-            record.issue_id
+            record.issue_id,
+            recent_activity_summary(&record)
         );
     }
     Ok(())
@@ -202,7 +210,39 @@ fn print_attempt(attempt: &DerivedIssueAttempt) {
             .map(|ended| ended.to_rfc3339())
             .unwrap_or_else(|| "(active)".to_string())
     );
-    println!("Activity:    {}", attempt.activity_ids.join(", "));
+    println!("Activity:");
+    if attempt.activities.is_empty() {
+        println!("  (none)");
+    } else {
+        for activity in &attempt.activities {
+            print_activity(activity);
+        }
+    }
+}
+
+fn recent_activity_summary(attempt: &DerivedIssueAttempt) -> String {
+    attempt
+        .activities
+        .last()
+        .map(|activity| {
+            format!(
+                "{} {} - {}",
+                activity.event_type,
+                activity.lifecycle.as_str(),
+                activity.summary
+            )
+        })
+        .unwrap_or_else(|| "(none)".to_string())
+}
+
+fn print_activity(activity: &DerivedIssueAttemptActivity) {
+    println!(
+        "  {} {} {} - {}",
+        activity.created_at.to_rfc3339(),
+        activity.event_type,
+        activity.lifecycle.as_str(),
+        activity.summary
+    );
 }
 
 pub fn format_target(target: Option<&SessionTarget>) -> String {
