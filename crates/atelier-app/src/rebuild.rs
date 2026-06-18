@@ -1589,8 +1589,8 @@ workflows:
           - no_blocking_lints
           - durable_state_current
 
-  reviewed:
-    applies_to: [epic, validation]
+  epic_reviewed:
+    applies_to: [epic]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -1611,7 +1611,39 @@ workflows:
         from: [validation]
         to: done
         required_fields: [close_reason]
-        description: "Closing requires attached evidence and no open blockers."
+        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - linked_pr_merged
+          - durable_state_current
+          - git_worktree_clean
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_complete]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete

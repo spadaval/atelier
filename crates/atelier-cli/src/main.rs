@@ -38,6 +38,7 @@ Records:
   evidence      Capture validation evidence
   session       Inspect derived issue attempts
   pr            Manage Forgejo pull request review artifacts
+  forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
@@ -53,6 +54,7 @@ Common commands:
   atelier man
   atelier man worker
   atelier man reviewer
+  atelier man validator
   atelier man manager
   atelier man admin
   atelier status
@@ -68,6 +70,7 @@ Common commands:
   atelier mission status
   atelier mission close <id> --reason \"...\"
   atelier session list --active
+  atelier forgejo roles check
   atelier history --mission <id>
   atelier history --issue <id>
   atelier start <issue-id>
@@ -114,7 +117,7 @@ enum Commands {
 
     /// Show role-specific operating guidance
     Man {
-        /// Role guide to print: worker, reviewer, manager, or admin
+        /// Role guide to print: worker, reviewer, validator, manager, or admin
         role: Option<String>,
     },
 
@@ -207,6 +210,12 @@ enum Commands {
     Pr {
         #[command(subcommand)]
         action: PrCommands,
+    },
+
+    /// Configure and verify Forgejo integration
+    Forgejo {
+        #[command(subcommand)]
+        action: ForgejoCommands,
     },
 
     /// Inspect canonical repo, mission, issue, or epic activity
@@ -645,7 +654,7 @@ enum PrCommands {
         #[arg(long)]
         role: String,
     },
-    /// List live PR review comments
+    /// List live PR comments and review comments
     Comments {
         #[arg(long)]
         issue: Option<String>,
@@ -670,6 +679,27 @@ enum PrCommands {
         event: String,
         #[arg(long, default_value = "")]
         body: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForgejoCommands {
+    /// Provision and verify Forgejo role author accounts
+    Roles {
+        #[command(subcommand)]
+        action: ForgejoRolesCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForgejoRolesCommands {
+    /// Verify configured role author users, repo permissions, and sudo access
+    Check,
+    /// Create missing role author users and grant repository access
+    Provision {
+        /// Persist the role author mapping in .atelier/config.toml
+        #[arg(long)]
+        write_config: bool,
     },
 }
 
@@ -1508,6 +1538,18 @@ fn run() -> Result<()> {
             }
         }
 
+        Commands::Forgejo { action } => {
+            let repo_root = atelier_app::storage_layout::find_repo_root()?;
+            match action {
+                ForgejoCommands::Roles { action } => match action {
+                    ForgejoRolesCommands::Check => commands::forgejo::roles_check(&repo_root),
+                    ForgejoRolesCommands::Provision { write_config } => {
+                        commands::forgejo::roles_provision(&repo_root, write_config)
+                    }
+                },
+            }
+        }
+
         Commands::History {
             mission,
             issue,
@@ -1729,6 +1771,12 @@ fn command_identity(command: &Commands) -> &'static str {
             PrCommands::Comments { .. } => "pr comments",
             PrCommands::Comment { .. } => "pr comment",
             PrCommands::Review { .. } => "pr review",
+        },
+        Commands::Forgejo { action } => match action {
+            ForgejoCommands::Roles { action } => match action {
+                ForgejoRolesCommands::Check => "forgejo roles check",
+                ForgejoRolesCommands::Provision { .. } => "forgejo roles provision",
+            },
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {

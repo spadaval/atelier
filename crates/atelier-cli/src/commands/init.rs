@@ -91,7 +91,8 @@ mod tests {
         assert!(workflow.contains("schema_version: 3"));
         assert!(workflow.contains("branch_policy:"));
         assert!(workflow.contains("  standard:"));
-        assert!(workflow.contains("  reviewed:"));
+        assert!(workflow.contains("  epic_reviewed:"));
+        assert!(workflow.contains("  validation_reviewed:"));
         assert!(workflow.contains("  spike:"));
         assert!(workflow.contains("applies_to:"));
     }

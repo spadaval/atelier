@@ -42,11 +42,11 @@ commands transition issues as a side effect.
    Forgejo pull requests for linked issues. They do not start, close, block, or
    otherwise transition Atelier workflow.
 
-4. Forgejo sudo identity is command authorship, not Atelier authorship.
-   Repository config may map Atelier roles to Forgejo users for sudo-mode PR
-   operations. That mapping controls remote PR authorship and review identity;
-   it does not replace Atelier evidence producers, activity actors, or session
-   attempts.
+4. Forgejo role authorship is command authorship, not Atelier authorship.
+   Repository config maps Atelier PR roles to Forgejo service users for remote
+   PR operations. That mapping controls remote PR authorship and review
+   identity; it does not replace Atelier evidence producers, activity actors,
+   or session attempts.
 
 5. `pull_request` is a built-in issue artifact link.
    The active PR link belongs in the canonical `pull_request` field on the

@@ -2238,7 +2238,7 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
-    use atelier_app::project_config::{ForgejoConfig, ForgejoSudoUsers};
+    use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
     use chrono::Utc;
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -2289,12 +2289,11 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            sudo_users: ForgejoSudoUsers {
+            role_authors: ForgejoRoleAuthors {
                 worker: "forge-worker".to_string(),
                 reviewer: "forge-reviewer".to_string(),
                 validator: "forge-validator".to_string(),
                 manager: "forge-manager".to_string(),
-                admin: "forge-admin".to_string(),
             },
         }
     }
@@ -2320,6 +2319,20 @@ mod tests {
             description: None,
             status: "validation".to_string(),
             issue_type: "epic".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-val1".to_string(),
+            title: "Validation".to_string(),
+            description: None,
+            status: "validation".to_string(),
+            issue_type: "validation".to_string(),
             priority: "medium".to_string(),
             fields: BTreeMap::new(),
             parent_id: None,
@@ -2436,6 +2449,43 @@ mod tests {
         .unwrap();
         assert!(passed);
         assert_eq!(reason, "linked PR 42 is merged");
+    }
+
+    #[test]
+    fn linked_pr_merged_is_configured_only_for_epic_close() {
+        let (dir, db) = setup_pr_validator_repo();
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let epic_workflow = policy.workflow_by_issue_type.get("epic").unwrap();
+        let epic_close = &policy.workflows[epic_workflow].transitions["close"];
+        let linked_pr_validators = epic_close
+            .validators
+            .iter()
+            .filter(|validator| validator.builtin == "linked_pr_merged")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(linked_pr_validators.len(), 1);
+
+        let results = evaluate_policy_transition(
+            &db,
+            &policy,
+            "issue",
+            "atelier-hw9t",
+            "close",
+            &linked_pr_validators,
+        )
+        .unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(!results[0].passed);
+        assert!(results[0]
+            .reason
+            .contains("atelier pr open --issue atelier-hw9t"));
+
+        let validation_workflow = policy.workflow_by_issue_type.get("validation").unwrap();
+        let validation_close = &policy.workflows[validation_workflow].transitions["close"];
+        assert!(!validation_close
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "linked_pr_merged"));
     }
 
     #[test]

@@ -27,12 +27,11 @@ cache_dir = ".atelier/cache"
 # repo = "atelier"
 # admin_token_env = "FORGEJO_ADMIN_TOKEN"
 #
-# [forgejo.sudo_users]
+# [forgejo.role_authors]
 # worker = "atelier-worker"
 # reviewer = "atelier-reviewer"
 # validator = "atelier-validator"
 # manager = "atelier-manager"
-# admin = "atelier-admin"
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[

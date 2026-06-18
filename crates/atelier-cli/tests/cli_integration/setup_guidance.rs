@@ -659,6 +659,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier man",
         "atelier man worker",
         "atelier man reviewer",
+        "atelier man validator",
         "atelier man manager",
         "atelier man admin",
         "atelier issue list",
@@ -1263,7 +1264,7 @@ fn test_man_rejects_unknown_roles_and_admin_degrades_before_init() {
     assert!(!success, "unknown role should fail");
     assert!(stdout.is_empty());
     assert!(stderr.contains("unknown man role 'bogus'"));
-    assert!(stderr.contains("Valid roles: worker, reviewer, manager, admin"));
+    assert!(stderr.contains("Valid roles: worker, reviewer, validator, manager, admin"));
 
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["man", "worker"]);
     assert!(!success, "worker guide should require tracker state");

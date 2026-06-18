@@ -2150,7 +2150,8 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     assert!(policy.contains("    initial_status: todo"));
     assert!(policy.contains("    done_statuses: [done, archived]"));
     assert!(policy.contains("  standard:"));
-    assert!(policy.contains("  reviewed:"));
+    assert!(policy.contains("  epic_reviewed:"));
+    assert!(policy.contains("  validation_reviewed:"));
     assert!(policy.contains("  spike:"));
     assert!(policy.contains("applies_to:"));
 

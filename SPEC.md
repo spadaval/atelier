@@ -308,8 +308,8 @@ workflows:
           - no_open_blockers
           - durable_state_current
 
-  reviewed:
-    applies_to: [epic, validation]
+  epic_reviewed:
+    applies_to: [epic]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -330,6 +330,29 @@ workflows:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
           - linked_pr_merged
+          - durable_state_current
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
           - durable_state_current
 
   spike:

@@ -5,8 +5,8 @@ use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
 use atelier_app::forgejo::{
-    ForgejoClient, ForgejoPullRequest, ForgejoReviewComment, ForgejoTransport, ReviewEvent,
-    UreqForgejoTransport,
+    ForgejoClient, ForgejoComment, ForgejoPullRequest, ForgejoReviewComment, ForgejoTransport,
+    ReviewEvent, UreqForgejoTransport,
 };
 use atelier_app::project_config::{ForgejoConfig, ProjectConfig};
 use atelier_app::workflow_policy::{self, PULL_REQUEST_FIELD};
@@ -44,8 +44,50 @@ pub fn open(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
+    let (owner_id, pull) = open_with_client(
+        db,
+        repo_root,
+        state_dir,
+        db_path,
+        &issue_id,
+        role,
+        title,
+        body,
+        source_branch,
+        target_branch,
+        &forgejo,
+        &client,
+    )?;
+    println!("PR:      {}", pull.url);
+    println!("Issue:   {issue_id}");
+    println!("Owner:   {owner_id}");
+    println!("State:   {}", pull.state);
+    Ok(())
+}
+
+fn open_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_id: &str,
+    role: &str,
+    title: &str,
+    body: &str,
+    source_branch: &str,
+    target_branch: &str,
+    forgejo: &ForgejoConfig,
+    client: &ForgejoClient<T>,
+) -> Result<(String, ForgejoPullRequest)> {
+    validate_requested_pull_request_matches_policy(
+        db,
+        repo_root,
+        issue_id,
+        source_branch,
+        target_branch,
+    )?;
     let pull = client.open_pull(role, title, body, source_branch, target_branch)?;
-    let owner_id = persist_pull_request(db, state_dir, db_path, &issue_id, &pull)?;
+    let owner_id = persist_pull_request(db, state_dir, db_path, issue_id, &pull)?;
     record_pr_action(
         repo_root,
         state_dir,
@@ -53,14 +95,10 @@ pub fn open(
         &owner_id,
         role,
         "open",
-        &forgejo,
+        forgejo,
         pull.number,
     )?;
-    println!("PR:      {}", pull.url);
-    println!("Issue:   {issue_id}");
-    println!("Owner:   {owner_id}");
-    println!("State:   {}", pull.state);
-    Ok(())
+    Ok((owner_id, pull))
 }
 
 pub fn link(
@@ -227,7 +265,11 @@ pub fn comments(
     );
     println!("PR Comments");
     println!("===========");
-    let lines = render_comment_lines(client.review_comments(number)?, unresolved);
+    let mut lines = render_pull_comment_lines(client.pull_comments(number)?);
+    lines.extend(render_review_comment_lines(
+        client.review_comments(number)?,
+        unresolved,
+    ));
     if lines.is_empty() {
         println!("(none)");
         return Ok(());
@@ -262,6 +304,7 @@ pub fn comment(
     )?;
     println!("Comment: {}", comment.id);
     println!("Issue:   {issue_id}");
+    println!("Next:    atelier pr comments --issue {issue_id}");
     Ok(())
 }
 
@@ -401,7 +444,7 @@ fn record_pr_action(
         return Ok(());
     };
     let owner_id = branch_owner_id(db, repo_root, issue_id)?;
-    let remote_author = forgejo.sudo_user_for_role(role.as_str()).ok();
+    let remote_author = forgejo.role_author_for_role(role.as_str()).ok();
     activity_log::record_pr_action_in_state_dir(
         state_dir,
         &owner_id,
@@ -533,6 +576,31 @@ fn validate_remote_pull_matches_policy(
     Ok(())
 }
 
+fn validate_requested_pull_request_matches_policy(
+    db: &Database,
+    repo_root: &Path,
+    issue_id: &str,
+    source_branch: &str,
+    target_branch: &str,
+) -> Result<()> {
+    let policy = workflow_policy::load(repo_root)?;
+    let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if source_branch != resolution.expected_branch || target_branch != resolution.base_branch {
+        bail!(
+            "pull_request_mismatch: requested PR branches are {} -> {}, but issue {} expects {} -> {}; rerun `atelier pr open --issue {} --source-branch {} --target-branch {}`",
+            source_branch,
+            target_branch,
+            resolution.owner_id,
+            resolution.expected_branch,
+            resolution.base_branch,
+            resolution.owner_id,
+            resolution.expected_branch,
+            resolution.base_branch
+        );
+    }
+    Ok(())
+}
+
 fn print_pull_request_summary(
     issue_id: &str,
     value: &Value,
@@ -650,7 +718,23 @@ fn parse_review_event(value: &str) -> Result<ReviewEvent> {
     }
 }
 
-fn render_comment_lines(comments: Vec<ForgejoReviewComment>, unresolved: bool) -> Vec<String> {
+fn render_pull_comment_lines(comments: Vec<ForgejoComment>) -> Vec<String> {
+    comments
+        .into_iter()
+        .map(|comment| {
+            format!(
+                "comment {} - {}",
+                comment.id,
+                single_line_body(&comment.body)
+            )
+        })
+        .collect()
+}
+
+fn render_review_comment_lines(
+    comments: Vec<ForgejoReviewComment>,
+    unresolved: bool,
+) -> Vec<String> {
     comments
         .into_iter()
         .filter(|comment| !unresolved || !comment.resolved)
@@ -660,7 +744,7 @@ fn render_comment_lines(comments: Vec<ForgejoReviewComment>, unresolved: bool) -
                 .map(|line| line.to_string())
                 .unwrap_or_else(|| "-".to_string());
             format!(
-                "{} {}:{} {}",
+                "review-comment {} {}:{} {}",
                 comment.id,
                 comment.path,
                 line,
@@ -674,11 +758,23 @@ fn render_comment_lines(comments: Vec<ForgejoReviewComment>, unresolved: bool) -
         .collect()
 }
 
+fn single_line_body(body: &str) -> String {
+    let normalized = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    const LIMIT: usize = 80;
+    if normalized.chars().count() <= LIMIT {
+        normalized
+    } else {
+        let mut truncated = normalized.chars().take(LIMIT - 3).collect::<String>();
+        truncated.push_str("...");
+        truncated
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use atelier_app::forgejo::{ForgejoPullRequest, ForgejoRequest, ForgejoResponse};
-    use atelier_app::project_config::{ForgejoConfig, ForgejoSudoUsers};
+    use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
     use atelier_core::Issue;
     use atelier_records::activity::{list_issue_activities, ActivityAttemptRole};
     use chrono::Utc;
@@ -721,12 +817,11 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            sudo_users: ForgejoSudoUsers {
+            role_authors: ForgejoRoleAuthors {
                 worker: "worker".to_string(),
                 reviewer: "reviewer".to_string(),
                 validator: "validator".to_string(),
                 manager: "manager".to_string(),
-                admin: "admin".to_string(),
             },
         }
     }
@@ -974,6 +1069,120 @@ target:
 
         assert_eq!(owner, epic);
         assert_eq!(inherited, json!(42));
+    }
+
+    #[test]
+    fn pr_open_rejects_branch_mismatch_before_remote_create() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
+        let db = Database::open(&db_path).unwrap();
+        insert_issue(
+            &db,
+            "atelier-issue",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+        atelier_app::export::run_canonical(&db, &state_dir, false).unwrap();
+        let transport = MockTransport::new(Vec::new());
+        let client = ForgejoClient::new(forgejo_config(), &transport);
+
+        let error = open_with_client(
+            &db,
+            dir.path(),
+            &state_dir,
+            &db_path,
+            "atelier-issue",
+            "worker",
+            "Title",
+            "Body",
+            "codex/wrong",
+            "master",
+            &forgejo_config(),
+            &client,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("pull_request_mismatch"));
+        assert!(error.contains("codex/wrong -> master"));
+        assert!(error.contains("atelier-issue expects codex/atelier-issue -> master"));
+        assert!(error.contains(
+            "atelier pr open --issue atelier-issue --source-branch codex/atelier-issue --target-branch master"
+        ));
+        assert!(transport.requests().is_empty());
+        let refreshed = Database::open(&db_path).unwrap();
+        assert!(
+            workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn pr_open_persists_link_and_records_action_after_preflight() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
+        let db = Database::open(&db_path).unwrap();
+        insert_issue(
+            &db,
+            "atelier-issue",
+            "feature",
+            "in_progress",
+            None,
+            BTreeMap::new(),
+        );
+        atelier_app::export::run_canonical(&db, &state_dir, false).unwrap();
+        let transport = MockTransport::new(vec![ForgejoResponse {
+            status: 201,
+            body: pull_response(42, "open", false, "codex/atelier-issue"),
+        }]);
+        let client = ForgejoClient::new(forgejo_config(), &transport);
+
+        let (owner_id, pull) = open_with_client(
+            &db,
+            dir.path(),
+            &state_dir,
+            &db_path,
+            "atelier-issue",
+            "worker",
+            "Title",
+            "Body",
+            "codex/atelier-issue",
+            "master",
+            &forgejo_config(),
+            &client,
+        )
+        .unwrap();
+
+        assert_eq!(owner_id, "atelier-issue");
+        assert_eq!(pull.number, 42);
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].method, "POST");
+        assert_eq!(requests[0].path, "/api/v1/repos/tools/atelier/pulls");
+        let refreshed = Database::open(&db_path).unwrap();
+        let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
+            .unwrap()
+            .unwrap();
+        assert_eq!(field, json!(42));
+        let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
+        assert_eq!(activities.len(), 1);
+        assert_eq!(
+            activities[0].attempt.as_ref().unwrap().role,
+            ActivityAttemptRole::Worker
+        );
+        assert_eq!(
+            activities[0].pr_attribution.as_ref().unwrap().action,
+            "open"
+        );
     }
 
     #[test]
@@ -1297,7 +1506,7 @@ target:
 
     #[test]
     fn render_comment_lines_filters_resolved_comments() {
-        let lines = render_comment_lines(
+        let lines = render_review_comment_lines(
             vec![
                 ForgejoReviewComment {
                     id: 1,
@@ -1317,6 +1526,19 @@ target:
             true,
         );
 
-        assert_eq!(lines, vec!["1 src/lib.rs:10 unresolved"]);
+        assert_eq!(lines, vec!["review-comment 1 src/lib.rs:10 unresolved"]);
+    }
+
+    #[test]
+    fn render_pull_comment_lines_include_body_summary() {
+        let lines = render_pull_comment_lines(vec![ForgejoComment {
+            id: 11,
+            body: "Looks\n\n good from the top-level PR discussion".to_string(),
+        }]);
+
+        assert_eq!(
+            lines,
+            vec!["comment 11 - Looks good from the top-level PR discussion"]
+        );
     }
 }

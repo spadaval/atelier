@@ -93,8 +93,8 @@ workflows:
           - no_blocking_lints
           - durable_state_current
 
-  reviewed:
-    applies_to: [epic, validation]
+  epic_reviewed:
+    applies_to: [epic]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -115,7 +115,39 @@ workflows:
         from: [validation]
         to: done
         required_fields: [close_reason]
-        description: "Closing requires attached evidence and merged review state."
+        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - linked_pr_merged
+          - durable_state_current
+          - git_worktree_clean
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_complete]
+      close:
+        from: [validation]
+        to: done
+        required_fields: [close_reason]
+        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -123,7 +155,6 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
-          - linked_pr_merged
 
   spike:
     applies_to: [spike]
@@ -214,7 +245,8 @@ Starter workflow names are:
 | Workflow | Applies to |
 | --- | --- |
 | `standard` | `bug`, `feature`, `task` |
-| `reviewed` | `epic`, `validation` |
+| `epic_reviewed` | `epic` |
+| `validation_reviewed` | `validation` |
 | `spike` | `spike` |
 
 ## Transitions
@@ -281,9 +313,12 @@ Forgejo host, owner, and repository before they normalize to a number.
 
 The active PR link belongs to the branch-owning issue or epic. Child issues
 inherit the nearest parent epic's `pull_request`; defining `pull_request`
-directly on a child issue is invalid. `linked_pr_merged` derives Forgejo
-host/owner/repo from `.atelier/config.toml` and derives expected source/target
-branches from `branch_policy`.
+directly on a child issue is invalid. The starter policy attaches
+`linked_pr_merged` only to epic close, so validation issues and ordinary child
+issues can close on their own proof while the epic remains the merged-PR
+boundary. `linked_pr_merged` derives Forgejo host/owner/repo from
+`.atelier/config.toml` and derives expected source/target branches from
+`branch_policy`.
 
 ## Errors
 

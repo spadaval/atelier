@@ -48,7 +48,9 @@ remote Forgejo PR against configured repo and branch policy, then reports
 whether the required PR is merged. It must not create, comment on, review,
 merge, or close the PR, and it must not transition Atelier workflow. PR commands
 perform review-artifact actions; validators only decide whether the configured
-workflow transition is currently allowed.
+workflow transition is currently allowed. In the starter policy, this is an
+epic close gate only; validation issues and ordinary implementation issues close
+from attached proof and local workflow checks.
 
 Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or
@@ -110,7 +112,8 @@ Missions and epics coordinate work; they are not proof dumping grounds.
 
 An epic completion should answer whether the reviewable branch is coherent, child
 work is closed, child proof exists, and any explicit review or validation work
-has approved the branch.
+has approved the branch. The configured epic close transition also requires the
+linked Forgejo PR to be merged.
 
 A mission completion should answer whether linked work is closed, blockers are
 clear, configured health gates pass, and any explicit mission-level validation

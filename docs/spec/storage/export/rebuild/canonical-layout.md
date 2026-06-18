@@ -55,7 +55,7 @@ where they live, not their contents. The current tracked config also carries
 repair and migration flows still exist.
 
 Forgejo PR integration is optional tracked project configuration. Repositories
-that use `atelier pr` or PR validators configure the remote and sudo authorship
+that use `atelier pr` or PR validators configure the remote and role author
 mapping in `.atelier/config.toml`:
 
 ```toml
@@ -65,17 +65,17 @@ owner = "workspace"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
-[forgejo.sudo_users]
+[forgejo.role_authors]
 worker = "atelier-worker"
 reviewer = "atelier-reviewer"
 validator = "atelier-validator"
 manager = "atelier-manager"
-admin = "atelier-admin"
 ```
 
 The admin token value stays in the named environment variable. The config parser
-rejects missing Forgejo remote fields, missing role mappings, empty values, and
-invalid token environment variable names with errors that name the required key.
+rejects missing Forgejo remote fields, missing role author mappings, empty
+values, obsolete sudo-user mappings, and invalid token environment variable
+names with errors that name the required key.
 
 ## Schema Identity
 

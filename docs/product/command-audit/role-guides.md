@@ -10,6 +10,7 @@ Add a guide command such as:
 ```text
 atelier man worker
 atelier man reviewer
+atelier man validator
 atelier man manager
 atelier man admin
 ```
@@ -43,6 +44,7 @@ atelier status
 atelier issue list --ready
 atelier issue show <id>
 atelier start <id>
+atelier pr comment --issue <id> --role worker --body "..."
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
 atelier issue transition <id> --options
@@ -63,6 +65,9 @@ Core loop:
 ```text
 atelier issue show <id>
 atelier issue transition <id> --options
+atelier pr comments --issue <id>
+atelier pr comment --issue <id> --role reviewer --body "..."
+atelier pr review --issue <id> --role reviewer --event request-changes --body "..."
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
@@ -73,6 +78,27 @@ atelier mission status <id> --verbose
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
 normal readiness inspection uses `issue transition --options`, `lint`, and
 `mission status`.
+
+## Validator Guide
+
+Primary job: run explicit validation work and record validation proof.
+
+Default first command: `atelier issue show <id>`.
+
+Core loop:
+
+```text
+atelier issue show <id>
+atelier issue transition <id> --options
+atelier evidence show <evidence-id>
+atelier evidence record --target issue/<id> --kind validation -- <command>
+atelier pr comments --issue <id>
+atelier pr review --issue <id> --role validator --event approve --body "..."
+```
+
+Validator guide should make PR validation visible as process guidance. It
+should not imply that validation issues require a merged PR; the starter
+workflow reserves the `linked_pr_merged` close gate for epics.
 
 ## Manager Guide
 

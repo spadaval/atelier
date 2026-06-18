@@ -17,9 +17,8 @@ owner = "supadava"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
-[forgejo.sudo_users]
-worker = "supadava"
-reviewer = "supadava"
-validator = "supadava"
-manager = "supadava"
-admin = "supadava"
+[forgejo.role_authors]
+worker = "atelier-worker"
+reviewer = "atelier-reviewer"
+validator = "atelier-validator"
+manager = "atelier-manager"

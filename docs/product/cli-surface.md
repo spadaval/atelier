@@ -75,11 +75,11 @@ lint` confirms the committed tracker and workflow configuration are valid.
 `atelier man [<role>]` is the role-specific guide surface. It filters the
 existing product command surface for the operator's job without creating
 role-prefixed command namespaces. Valid roles are `worker`, `reviewer`,
-`manager`, and `admin`. `manager` is the broad CLI role class for work
+`validator`, `manager`, and `admin`. `manager` is the broad CLI role class for work
 coordination; Agent Factory may still use `orchestrator` for a specific agent
 type inside that class, but `orchestrator` is not a `man` role alias. With no
-role, `atelier man` lists the valid roles. Worker, reviewer, and manager guides
-require valid tracker/runtime state and fail fast with recovery guidance when
+role, `atelier man` lists the valid roles. Worker, reviewer, validator, and
+manager guides require valid tracker/runtime state and fail fast with recovery guidance when
 state is unavailable. The admin guide degrades gracefully before initialization
 or when local state is broken.
 
@@ -107,7 +107,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
-| `man` | Show role-specific operating guidance for worker, reviewer, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, `doctor`, role-specific commands. |
+| `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, `doctor`, role-specific commands. |
 | `status` | Root orientation for the current checkout. | Current-work set, active mission, ready count, tracker freshness, and the next work/mission/health commands. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, `doctor`. |
 | `start` | Prepare the work graph's owner branch and move one issue into the checkout's current-work set by transitioning it to `in_progress` in canonical Markdown. | Confirmation, resulting workflow status, owner branch, base branch when relevant, checkout context, and the next work commands. | Issue ID and success token. | `issue show <id>`, `worktree status`, `status`. |
 | `issue` | Create, list, show, update, transition, close, note, and manage issue-owned blockers. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, and canonical paths. | `issue show <id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
@@ -118,6 +118,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `session` | Inspect derived issue-scoped worker/reviewer/validator attempts. | `show` and `list` name the linked issue or epic, role, state, serial, and bounded recent activity reconstructed from canonical issue events. Session commands do not start, end, or mutate workflow state. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
 | `pr` | Manage Forgejo pull request review artifacts associated with issue or epic work. | `open`, `link`, `status`, `show`, `comments`, `comment`, and `review` name the linked issue or epic, remote PR URL/number, author identity, review state, unresolved inline comment count, and next review command. `link` accepts a PR number or matching Forgejo URL and stores only the normalized `pull_request` number. PR commands do not transition Atelier workflow; workflow gates read PR state separately. | Issue ID, PR number/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
+| `forgejo` | Configure and verify Forgejo integration. | `atelier forgejo roles check` verifies configured role authors, repo write permission, sudo behavior, and collapsed mappings; `atelier forgejo roles provision` creates missing service accounts, grants repo access, and optionally writes `[forgejo.role_authors]`. | Role names, pass/fail tokens, and remediation text only. | `.atelier/config.toml`, `pr`, `issue transition <id> --options`, remote Forgejo admin UI. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
 
@@ -504,11 +505,16 @@ set, and session output is a projection of worker/reviewer/validator attempts
 derived from issue activity.
 
 PR commands are visible only for review artifacts. They may create, inspect,
-comment on, and review Forgejo pull requests, including sudo-mode role
-authorship when repository configuration maps an Atelier role to a Forgejo
-user. They must not close, start, or otherwise transition Atelier issues.
+comment on, and review Forgejo pull requests. Forgejo role authorship is
+configured through `[forgejo.role_authors]`, and `atelier forgejo roles`
+provisions and verifies the service accounts used for worker, reviewer,
+validator, and manager PR actions. PR commands must not close, start, or
+otherwise transition Atelier issues.
 Workflow validators such as `linked_pr_merged` read external PR state and
-return actionable pass/fail guidance through transition/status surfaces.
+return actionable pass/fail guidance through transition/status surfaces. The
+starter workflow uses `linked_pr_merged` only on epic close; validation issues
+and ordinary implementation issues rely on their own proof and local workflow
+checks.
 
 ## Integration Or Experimental
 
