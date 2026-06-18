@@ -52,7 +52,7 @@ workflow semantics. It owns:
 - built-in validator definitions, validator parameter parsing, and
   machine-readable validator results;
 - transition guidance template evaluation; and
-- branch lifecycle policy derived from workflow configuration and the work
+- branch policy derived from workflow configuration and the work
   graph.
 
 `atelier-workflow` must not own terminal output, command parsing, Git command
@@ -95,7 +95,7 @@ and tests show that:
 - CLI integration tests remain only for command shape, rendered transcript, and
   exit behavior; and
 - lower-crate unit tests cover parsing, status categories, transition
-  selection, validator results, guidance rendering, and branch lifecycle policy.
+  selection, validator results, guidance rendering, and branch policy.
 
 ## Temporary Adapter Policy
 

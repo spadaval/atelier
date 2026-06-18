@@ -622,6 +622,12 @@ enum PrCommands {
         #[arg(long, default_value = "master")]
         target_branch: String,
     },
+    /// Link an existing Forgejo PR by number or URL
+    Link {
+        #[arg(long)]
+        issue: Option<String>,
+        pull_request: String,
+    },
     /// Show concise linked PR status
     Status {
         #[arg(long)]
@@ -1439,6 +1445,17 @@ fn run() -> Result<()> {
                     &source_branch,
                     &target_branch,
                 ),
+                PrCommands::Link {
+                    issue,
+                    pull_request,
+                } => commands::pr::link(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &pull_request,
+                ),
                 PrCommands::Status { issue } => commands::pr::status(
                     storage.db(),
                     storage.repo_root(),
@@ -1705,6 +1722,7 @@ fn command_identity(command: &Commands) -> &'static str {
         },
         Commands::Pr { action } => match action {
             PrCommands::Open { .. } => "pr open",
+            PrCommands::Link { .. } => "pr link",
             PrCommands::Status { .. } => "pr status",
             PrCommands::Show { .. } => "pr show",
             PrCommands::Merge { .. } => "pr merge",

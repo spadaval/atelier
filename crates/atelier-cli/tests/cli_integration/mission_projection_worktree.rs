@@ -3057,7 +3057,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
 
     let (success, base_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "base status failed: {stderr}");
-    assert!(base_status.contains("Branch Lifecycle"), "{base_status}");
+    assert!(base_status.contains("Branch Policy"), "{base_status}");
     assert!(
         base_status.contains("Current branch: main"),
         "{base_status}"
@@ -3094,7 +3094,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     ] {
         let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", id]);
         assert!(success, "issue show failed for {id}: {stderr}");
-        assert!(show_out.contains("Branch Lifecycle"), "{show_out}");
+        assert!(show_out.contains("Branch Policy"), "{show_out}");
         assert!(show_out.contains(&owner), "{show_out}");
         assert!(show_out.contains(&expected), "{show_out}");
         assert!(show_out.contains(scope), "{show_out}");
@@ -3196,10 +3196,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     let (success, mission_status, stderr) =
         run_atelier(dir.path(), &["mission", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
-    assert!(
-        mission_status.contains("Branch Lifecycle"),
-        "{mission_status}"
-    );
+    assert!(mission_status.contains("Branch Policy"), "{mission_status}");
     assert!(
         mission_status.contains(&format!("epic {epic_id} (epic) -> epic/{epic_id}")),
         "{mission_status}"

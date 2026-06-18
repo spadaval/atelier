@@ -415,15 +415,7 @@ mod tests {
         let (db, _dir) = setup_test_db();
         let now = Utc::now();
         let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
-            "forge_pr".to_string(),
-            serde_json::json!({
-                "host": "github.com",
-                "number": 42,
-                "owner": "openai",
-                "repo": "atelier"
-            }),
-        );
+        fields.insert("pull_request".to_string(), serde_json::json!(42));
 
         db.insert_issue_rebuild(&Issue {
             id: "atelier-flds".to_string(),

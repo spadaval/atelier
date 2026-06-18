@@ -9,7 +9,7 @@ use atelier_app::forgejo::{
     UreqForgejoTransport,
 };
 use atelier_app::project_config::{ForgejoConfig, ProjectConfig};
-use atelier_app::workflow_policy::{self, FORGE_PR_FIELD};
+use atelier_app::workflow_policy::{self, PULL_REQUEST_FIELD};
 use atelier_records::{issue_record_path, RecordStore};
 use atelier_sqlite::Database;
 use serde_json::{json, Value};
@@ -30,7 +30,7 @@ pub fn open(
     target_branch: &str,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    ensure_no_linked_forge_pr(db, repo_root, &issue_id)?;
+    ensure_no_linked_pull_request(db, repo_root, &issue_id)?;
     let config_path = repo_root.join(".atelier/config.toml");
     let config = ProjectConfig::load(repo_root)?;
     let forgejo = config.require_forgejo(&config_path)?.clone();
@@ -45,7 +45,7 @@ pub fn open(
         UreqForgejoTransport::new(&forgejo.host, token),
     );
     let pull = client.open_pull(role, title, body, source_branch, target_branch)?;
-    let owner_id = persist_forge_pr(db, state_dir, db_path, &issue_id, &forgejo, &pull)?;
+    let owner_id = persist_pull_request(db, state_dir, db_path, &issue_id, &pull)?;
     record_pr_action(
         repo_root,
         state_dir,
@@ -63,6 +63,37 @@ pub fn open(
     Ok(())
 }
 
+pub fn link(
+    db: &Database,
+    repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: Option<&str>,
+    pull_request: &str,
+) -> Result<()> {
+    let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
+    ensure_no_linked_pull_request(db, repo_root, &issue_id)?;
+    let forgejo = load_forgejo(repo_root)?;
+    let number = parse_pull_request_reference(pull_request, &forgejo)?;
+    let token = env::var(&forgejo.admin_token_env).with_context(|| {
+        format!(
+            "forgejo_config_missing_token: environment variable {} is required for `atelier pr link`",
+            forgejo.admin_token_env
+        )
+    })?;
+    let client = ForgejoClient::new(
+        forgejo.clone(),
+        UreqForgejoTransport::new(&forgejo.host, token),
+    );
+    let pull = client.show_pull(number)?;
+    let owner_id = persist_pull_request(db, state_dir, db_path, &issue_id, &pull)?;
+    println!("PR:      {}", pull.url);
+    println!("Number:  {}", pull.number);
+    println!("Issue:   {issue_id}");
+    println!("Owner:   {owner_id}");
+    Ok(())
+}
+
 pub fn status(
     db: &Database,
     repo_root: &Path,
@@ -70,10 +101,11 @@ pub fn status(
     issue_ref: Option<&str>,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
+    let forgejo = load_forgejo(repo_root)?;
     println!("PR Status");
     println!("=========");
-    print_forge_pr_summary(&issue_id, &field);
+    print_pull_request_summary(&issue_id, &field, &forgejo)?;
     Ok(())
 }
 
@@ -84,7 +116,7 @@ pub fn show(
     issue_ref: Option<&str>,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
     let forgejo = load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
@@ -92,7 +124,7 @@ pub fn show(
             forgejo.admin_token_env
         )
     })?;
-    let number = forge_pr_number(&field)?;
+    let number = pull_request_number(&field)?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -115,23 +147,21 @@ pub fn merge(
     role: &str,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
     let forgejo = load_forgejo(repo_root)?;
-    validate_linked_forge_pr(&field, &forgejo, &issue_id)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
             "forgejo_config_missing_token: environment variable {} is required for `atelier pr merge`",
             forgejo.admin_token_env
         )
     })?;
-    let number = forge_pr_number(&field)?;
+    let number = pull_request_number(&field)?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    let (owner_id, pull) = merge_with_client(
-        db, repo_root, state_dir, db_path, &issue_id, role, &forgejo, &client,
-    )?;
+    let (owner_id, pull) =
+        merge_with_client(db, repo_root, state_dir, db_path, &issue_id, role, &client)?;
     let action = "merge";
     record_pr_action(
         repo_root, state_dir, db, &owner_id, role, action, &forgejo, number,
@@ -152,14 +182,12 @@ fn merge_with_client<T: ForgejoTransport>(
     db_path: &Path,
     issue_id: &str,
     role: &str,
-    forgejo: &ForgejoConfig,
     client: &ForgejoClient<T>,
 ) -> Result<(String, ForgejoPullRequest)> {
-    let field = linked_forge_pr(db, issue_id)?;
-    validate_linked_forge_pr(&field, forgejo, issue_id)?;
-    let number = forge_pr_number(&field)?;
+    let field = linked_pull_request(db, issue_id)?;
+    let number = pull_request_number(&field)?;
     let current = client.show_pull(number)?;
-    validate_remote_pull_matches_linked_field(&current, &field, issue_id)?;
+    validate_remote_pull_matches_policy(db, _repo_root, &current, issue_id)?;
     let pull = if current.merged {
         current
     } else {
@@ -167,12 +195,12 @@ fn merge_with_client<T: ForgejoTransport>(
     };
     if !pull.merged {
         bail!(
-            "forge_pr_unmerged: Forgejo PR {} did not report merged after merge; inspect `atelier pr show --issue {}`",
+            "pull_request_unmerged: Forgejo PR {} did not report merged after merge; inspect `atelier pr show --issue {}`",
             number,
             issue_id
         );
     }
-    let owner_id = confirm_forge_pr_merged(db, state_dir, db_path, issue_id, &pull)?;
+    let owner_id = confirm_pull_request_merged(db, state_dir, db_path, issue_id, &pull)?;
     Ok((owner_id, pull))
 }
 
@@ -184,7 +212,7 @@ pub fn comments(
     unresolved: bool,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
     let forgejo = load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
@@ -192,7 +220,7 @@ pub fn comments(
             forgejo.admin_token_env
         )
     })?;
-    let number = forge_pr_number(&field)?;
+    let number = pull_request_number(&field)?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -219,10 +247,10 @@ pub fn comment(
     body: &str,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
     let forgejo = load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env)?;
-    let number = forge_pr_number(&field)?;
+    let number = pull_request_number(&field)?;
     let client = ForgejoClient::new(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
@@ -247,10 +275,10 @@ pub fn review(
     body: &str,
 ) -> Result<()> {
     let issue_id = infer_issue_id(db, state_dir, repo_root, issue_ref)?;
-    let field = linked_forge_pr(db, &issue_id)?;
+    let field = linked_pull_request(db, &issue_id)?;
     let forgejo = load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env)?;
-    let number = forge_pr_number(&field)?;
+    let number = pull_request_number(&field)?;
     let event = parse_review_event(event)?;
     let client = ForgejoClient::new(
         forgejo.clone(),
@@ -267,12 +295,11 @@ pub fn review(
     Ok(())
 }
 
-pub fn persist_forge_pr(
+pub fn persist_pull_request(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     issue_id: &str,
-    forgejo: &ForgejoConfig,
     pull: &ForgejoPullRequest,
 ) -> Result<String> {
     let repo_root = state_dir.parent().ok_or_else(|| {
@@ -284,25 +311,28 @@ pub fn persist_forge_pr(
     let policy = workflow_policy::load(repo_root)?;
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
     let owner_id = resolution.owner_id;
-    let value = json!({
-        "provider": "forgejo",
-        "host": forgejo.host,
-        "owner": forgejo.owner,
-        "repo": forgejo.repo,
-        "number": pull.number,
-        "url": pull.url,
-        "source_branch": pull.source_branch,
-        "target_branch": pull.target_branch,
-    });
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
+        bail!(
+            "pull_request_mismatch: Forgejo PR branches are {} -> {}, but issue {} expects {} -> {}",
+            pull.source_branch,
+            pull.target_branch,
+            owner_id,
+            resolution.expected_branch,
+            resolution.base_branch
+        );
+    }
+    let value = json!(pull.number);
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
     let mut record = store.load_issue(&path)?;
-    if let Some(existing) = record.issue.fields.get(FORGE_PR_FIELD) {
+    if let Some(existing) = record.issue.fields.get(PULL_REQUEST_FIELD) {
         if existing == &value {
             return Ok(owner_id);
         }
         bail!(
-            "forge_pr_mismatch: issue {} already has a different forge_pr field; inspect `atelier pr status --issue {}` before replacing it",
+            "pull_request_mismatch: issue {} already has a different pull_request field; inspect `atelier pr status --issue {}` before replacing it",
             owner_id,
             owner_id
         );
@@ -310,13 +340,13 @@ pub fn persist_forge_pr(
     record
         .issue
         .fields
-        .insert(FORGE_PR_FIELD.to_string(), value);
+        .insert(PULL_REQUEST_FIELD.to_string(), value);
     store.write_issue_atomic(&record)?;
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
 }
 
-pub fn confirm_forge_pr_merged(
+pub fn confirm_pull_request_merged(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
@@ -334,19 +364,24 @@ pub fn confirm_forge_pr_merged(
     let owner_id = resolution.owner_id;
     let store = RecordStore::new(state_dir);
     let path = issue_record_path(&owner_id);
-    let mut record = store.load_issue(&path)?;
-    let field = record.issue.fields.get_mut(FORGE_PR_FIELD).ok_or_else(|| {
+    let record = store.load_issue(&path)?;
+    let field = record.issue.fields.get(PULL_REQUEST_FIELD).ok_or_else(|| {
         anyhow!(
-            "forge_pr_missing: issue {} has no linked forge_pr field; run `atelier pr open --issue {}` first",
+            "pull_request_missing: issue {} has no linked pull_request field; run `atelier pr open --issue {}` first",
             owner_id,
             owner_id
         )
     })?;
-    validate_remote_pull_matches_linked_field(pull, field, &owner_id)?;
-    if let Some(object) = field.as_object_mut() {
-        object.insert("state".to_string(), json!(pull.state));
-        object.insert("merged".to_string(), json!(true));
+    let number = pull_request_number(field)?;
+    if pull.number != number {
+        bail!(
+            "pull_request_mismatch: linked pull_request number is {}, but Forgejo returned {}; run `atelier pr status --issue {}`",
+            number,
+            pull.number,
+            owner_id
+        );
     }
+    validate_remote_pull_matches_policy(db, repo_root, pull, &owner_id)?;
     store.write_issue_atomic(&record)?;
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
     Ok(owner_id)
@@ -372,7 +407,7 @@ fn record_pr_action(
         &owner_id,
         role,
         action,
-        &forge_pr_identifier(forgejo, number),
+        &pull_request_identifier(forgejo, number),
         remote_author,
     )?;
     Ok(())
@@ -383,7 +418,7 @@ fn branch_owner_id(db: &Database, repo_root: &Path, issue_id: &str) -> Result<St
     Ok(workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?.owner_id)
 }
 
-fn forge_pr_identifier(forgejo: &ForgejoConfig, number: u64) -> String {
+fn pull_request_identifier(forgejo: &ForgejoConfig, number: u64) -> String {
     format!("forgejo/{}/{}#{}", forgejo.owner, forgejo.repo, number)
 }
 
@@ -394,104 +429,124 @@ fn load_forgejo(repo_root: &Path) -> Result<ForgejoConfig> {
         .cloned()
 }
 
-fn linked_forge_pr(db: &Database, issue_id: &str) -> Result<Value> {
-    workflow_policy::effective_forge_pr_field(db, issue_id)?.ok_or_else(|| {
+fn linked_pull_request(db: &Database, issue_id: &str) -> Result<Value> {
+    workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
         anyhow!(
-            "forge_pr_missing: issue {} has no linked forge_pr field; run `atelier pr open --issue {}` first",
+            "pull_request_missing: issue {} has no linked pull_request field; run `atelier pr open --issue {}` first",
             issue_id,
             issue_id
         )
     })
 }
 
-fn forge_pr_number(value: &Value) -> Result<u64> {
-    value.get("number").and_then(Value::as_u64).ok_or_else(|| {
-        anyhow!("forge_pr_invalid: field forge_pr.number must be a positive integer")
+fn pull_request_number(value: &Value) -> Result<u64> {
+    value.as_u64().filter(|number| *number > 0).ok_or_else(|| {
+        anyhow!("pull_request_invalid: field pull_request must be a positive integer")
     })
 }
 
-fn forge_pr_string<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| anyhow!("forge_pr_invalid: field forge_pr.{key} must be a non-empty string"))
-}
-
-fn validate_linked_forge_pr(value: &Value, forgejo: &ForgejoConfig, issue_id: &str) -> Result<()> {
-    let provider = forge_pr_string(value, "provider")?;
-    if provider != "forgejo" {
-        bail!(
-            "forge_pr_mismatch: linked forge_pr provider is '{}'; expected forgejo; run `atelier pr status --issue {}`",
-            provider,
-            issue_id
-        );
+fn parse_pull_request_reference(input: &str, forgejo: &ForgejoConfig) -> Result<u64> {
+    let input = input.trim();
+    if input.is_empty() {
+        bail!("pull_request_invalid: PR reference must be a positive number or Forgejo PR URL");
     }
-    let host = forge_pr_string(value, "host")?;
-    let owner = forge_pr_string(value, "owner")?;
-    let repo = forge_pr_string(value, "repo")?;
-    if host != forgejo.host || owner != forgejo.owner || repo != forgejo.repo {
-        bail!(
-            "forge_pr_mismatch: linked forge_pr points to {}/{}/{}, but configured Forgejo repo is {}/{}/{}; run `atelier pr status --issue {}`",
-            host,
-            owner,
-            repo,
-            forgejo.host,
+    if input.chars().all(|char| char.is_ascii_digit()) {
+        return input
+            .parse::<u64>()
+            .ok()
+            .filter(|number| *number > 0)
+            .ok_or_else(|| anyhow!("pull_request_invalid: PR number must be positive"));
+    }
+
+    let path = pull_request_url_path(input, forgejo)?;
+    let segments = path
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    match segments.as_slice() {
+        [owner, repo, kind, number] if *owner == forgejo.owner && *repo == forgejo.repo => {
+            if *kind != "pulls" && *kind != "pull" {
+                bail!(
+                    "pull_request_invalid: Forgejo PR URL must use /{}/{}/pulls/<number>",
+                    forgejo.owner,
+                    forgejo.repo
+                );
+            }
+            number
+                .parse::<u64>()
+                .ok()
+                .filter(|value| *value > 0)
+                .ok_or_else(|| anyhow!("pull_request_invalid: PR URL number must be positive"))
+        }
+        _ => bail!(
+            "pull_request_mismatch: PR URL must match configured Forgejo repo {}/{} at {}",
             forgejo.owner,
             forgejo.repo,
-            issue_id
-        );
+            forgejo.host.trim_end_matches('/')
+        ),
     }
-    Ok(())
 }
 
-fn validate_remote_pull_matches_linked_field(
+fn pull_request_url_path<'a>(input: &'a str, forgejo: &ForgejoConfig) -> Result<&'a str> {
+    let input = input.trim_end_matches('/');
+    let host = forgejo.host.trim_end_matches('/');
+    if let Some(path) = input.strip_prefix(&format!("{host}/")) {
+        return Ok(path);
+    }
+    let host_without_scheme = host
+        .strip_prefix("https://")
+        .or_else(|| host.strip_prefix("http://"))
+        .unwrap_or(host);
+    for scheme in ["https://", "http://"] {
+        if let Some(path) = input.strip_prefix(&format!("{scheme}{host_without_scheme}/")) {
+            return Ok(path);
+        }
+    }
+    bail!(
+        "pull_request_mismatch: PR URL host must match configured Forgejo host {}",
+        forgejo.host.trim_end_matches('/')
+    )
+}
+
+fn validate_remote_pull_matches_policy(
+    db: &Database,
+    repo_root: &Path,
     pull: &ForgejoPullRequest,
-    value: &Value,
     issue_id: &str,
 ) -> Result<()> {
-    let number = forge_pr_number(value)?;
-    if pull.number != number {
+    let policy = workflow_policy::load(repo_root)?;
+    let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
         bail!(
-            "forge_pr_mismatch: linked forge_pr number is {}, but Forgejo returned {}; run `atelier pr status --issue {}`",
-            number,
-            pull.number,
-            issue_id
-        );
-    }
-    let source_branch = forge_pr_string(value, "source_branch")?;
-    let target_branch = forge_pr_string(value, "target_branch")?;
-    if pull.source_branch != source_branch || pull.target_branch != target_branch {
-        bail!(
-            "forge_pr_mismatch: linked PR branches are {} -> {}, but forge_pr records {} -> {}; run `atelier pr status --issue {}`",
+            "pull_request_mismatch: linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier pr status --issue {}`",
             pull.source_branch,
             pull.target_branch,
-            source_branch,
-            target_branch,
+            resolution.owner_id,
+            resolution.expected_branch,
+            resolution.base_branch,
             issue_id
         );
     }
     Ok(())
 }
 
-fn print_forge_pr_summary(issue_id: &str, value: &Value) {
+fn print_pull_request_summary(
+    issue_id: &str,
+    value: &Value,
+    forgejo: &ForgejoConfig,
+) -> Result<()> {
+    let number = pull_request_number(value)?;
     println!("Issue:  {issue_id}");
     println!(
-        "URL:    {}",
-        value.get("url").and_then(Value::as_str).unwrap_or("")
+        "URL:    {}/{}/{}/pulls/{}",
+        forgejo.host, forgejo.owner, forgejo.repo, number
     );
-    println!(
-        "Number: {}",
-        value.get("number").and_then(Value::as_u64).unwrap_or(0)
-    );
-    println!(
-        "Repo:   {}/{}",
-        value.get("owner").and_then(Value::as_str).unwrap_or(""),
-        value.get("repo").and_then(Value::as_str).unwrap_or("")
-    );
-    if let Some(merged) = value.get("merged").and_then(Value::as_bool) {
-        println!("Merged: {merged}");
-    }
+    println!("Number: {number}");
+    println!("Repo:   {}/{}", forgejo.owner, forgejo.repo);
+    Ok(())
 }
 
 fn infer_issue_id(
@@ -502,9 +557,6 @@ fn infer_issue_id(
 ) -> Result<String> {
     if let Some(issue_ref) = issue_ref {
         return resolve_id(db, issue_ref);
-    }
-    if let Some(issue_id) = issue_from_current_linked_pr_branch(db, repo_root)? {
-        return Ok(issue_id);
     }
     if let Some(issue_id) = issue_from_current_owner_branch(db, repo_root)? {
         return Ok(issue_id);
@@ -521,9 +573,7 @@ fn infer_issue_id(
         .collect::<Vec<_>>();
     match active.as_slice() {
         [one] => Ok(one.clone()),
-        [] => bail!(
-            "pr_target_missing: pass --issue <id>, run from a linked PR source branch, or run from an owner branch"
-        ),
+        [] => bail!("pr_target_missing: pass --issue <id> or run from an owner branch"),
         _ => bail!(
             "pr_target_ambiguous: multiple active issues found ({}); pass --issue <id>",
             active.join(", ")
@@ -531,33 +581,17 @@ fn infer_issue_id(
     }
 }
 
-fn ensure_no_linked_forge_pr(db: &Database, repo_root: &Path, issue_id: &str) -> Result<()> {
+fn ensure_no_linked_pull_request(db: &Database, repo_root: &Path, issue_id: &str) -> Result<()> {
     let policy = workflow_policy::load(repo_root)?;
     let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
-    if workflow_policy::effective_forge_pr_field(db, issue_id)?.is_some() {
+    if workflow_policy::effective_pull_request_field(db, issue_id)?.is_some() {
         bail!(
-            "forge_pr_active: issue {} already has a linked forge_pr; inspect `atelier pr status --issue {}` before opening another PR",
+            "pull_request_active: issue {} already has a linked pull_request; inspect `atelier pr status --issue {}` before opening another PR",
             resolution.owner_id,
             resolution.owner_id
         );
     }
     Ok(())
-}
-
-fn issue_from_current_linked_pr_branch(db: &Database, repo_root: &Path) -> Result<Option<String>> {
-    let branch = current_branch(repo_root)?;
-    let policy = workflow_policy::load(repo_root)?;
-    let mut owners = BTreeSet::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let Some(field) = workflow_policy::effective_forge_pr_field(db, &issue.id)? else {
-            continue;
-        };
-        if field.get("source_branch").and_then(Value::as_str) == Some(branch.as_str()) {
-            let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-            owners.insert(resolution.owner_id);
-        }
-    }
-    resolve_single_branch_target("linked PR source branch", &branch, owners)
 }
 
 fn issue_from_current_owner_branch(db: &Database, repo_root: &Path) -> Result<Option<String>> {
@@ -699,14 +733,7 @@ mod tests {
 
     fn write_workflow(repo_root: &Path) {
         let workflow = atelier_app::workflow_policy::STARTER_POLICY_YAML
-            .replace("schema_version: 1", "schema_version: 2")
-            .replace("base_branch: main", "base_branch: master")
-            + r#"
-fields:
-  forge_pr:
-    type: object
-    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
-"#;
+            .replace("base_branch: main", "base_branch: master");
         std::fs::create_dir_all(repo_root.join(".atelier")).unwrap();
         std::fs::write(repo_root.join(".atelier/workflow.yaml"), workflow).unwrap();
     }
@@ -756,21 +783,9 @@ fields:
         .unwrap();
     }
 
-    fn forge_pr_fields(source_branch: &str, number: u64) -> BTreeMap<String, Value> {
+    fn pull_request_fields(number: u64) -> BTreeMap<String, Value> {
         let mut fields = BTreeMap::new();
-        fields.insert(
-            FORGE_PR_FIELD.to_string(),
-            json!({
-                "provider": "forgejo",
-                "host": "forge.example.test",
-                "owner": "tools",
-                "repo": "atelier",
-                "number": number,
-                "url": format!("https://forge.example.test/tools/atelier/pulls/{number}"),
-                "source_branch": source_branch,
-                "target_branch": "master",
-            }),
-        );
+        fields.insert(PULL_REQUEST_FIELD.to_string(), json!(number));
         fields
     }
 
@@ -800,32 +815,6 @@ target:
             ),
         )
         .unwrap();
-    }
-
-    #[test]
-    fn infer_issue_id_prefers_linked_pr_source_branch_over_active_work() {
-        let dir = setup_repo_on_branch("codex/linked-pr");
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-        insert_issue(
-            &db,
-            "atelier-epic",
-            "epic",
-            "todo",
-            None,
-            forge_pr_fields("codex/linked-pr", 42),
-        );
-        insert_issue(
-            &db,
-            "atelier-active",
-            "feature",
-            "in_progress",
-            None,
-            BTreeMap::new(),
-        );
-
-        let issue_id = infer_issue_id(&db, &dir.path().join(".atelier"), dir.path(), None).unwrap();
-
-        assert_eq!(issue_id, "atelier-epic");
     }
 
     #[test]
@@ -926,7 +915,7 @@ target:
     }
 
     #[test]
-    fn ensure_no_linked_forge_pr_enforces_one_active_pr_per_owner() {
+    fn ensure_no_linked_pull_request_enforces_one_active_pr_per_owner() {
         let dir = setup_repo_on_branch("master");
         let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
         insert_issue(
@@ -935,7 +924,7 @@ target:
             "epic",
             "todo",
             None,
-            forge_pr_fields("codex/linked-pr", 42),
+            pull_request_fields(42),
         );
         insert_issue(
             &db,
@@ -946,16 +935,16 @@ target:
             BTreeMap::new(),
         );
 
-        let error = ensure_no_linked_forge_pr(&db, dir.path(), "atelier-child")
+        let error = ensure_no_linked_pull_request(&db, dir.path(), "atelier-child")
             .unwrap_err()
             .to_string();
 
-        assert!(error.contains("forge_pr_active"));
+        assert!(error.contains("pull_request_active"));
         assert!(error.contains("atelier-epic"));
     }
 
     #[test]
-    fn persist_forge_pr_writes_owner_epic_field_and_child_inherits() {
+    fn persist_pull_request_writes_owner_epic_field_and_child_inherits() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join(".atelier/runtime/state.db");
         std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
@@ -971,31 +960,24 @@ target:
             url: "https://forge.example.test/tools/atelier/pulls/42".to_string(),
             state: "open".to_string(),
             merged: false,
-            source_branch: "codex/work".to_string(),
+            source_branch: format!("epic/{epic}"),
             target_branch: "master".to_string(),
         };
 
-        let owner = persist_forge_pr(
-            &db,
-            &dir.path().join(".atelier"),
-            &db_path,
-            &child,
-            &forgejo_config(),
-            &pull,
-        )
-        .unwrap();
+        let owner =
+            persist_pull_request(&db, &dir.path().join(".atelier"), &db_path, &child, &pull)
+                .unwrap();
         let refreshed = Database::open(&db_path).unwrap();
-        let inherited = workflow_policy::effective_forge_pr_field(&refreshed, &child)
+        let inherited = workflow_policy::effective_pull_request_field(&refreshed, &child)
             .unwrap()
             .unwrap();
 
         assert_eq!(owner, epic);
-        assert_eq!(inherited["number"], 42);
-        assert_eq!(inherited["provider"], "forgejo");
+        assert_eq!(inherited, json!(42));
     }
 
     #[test]
-    fn pr_merge_merges_updates_forge_pr_records_attribution_and_preserves_status() {
+    fn pr_merge_confirms_pull_request_attribution_and_preserves_status() {
         let dir = tempdir().unwrap();
         let state_dir = dir.path().join(".atelier");
         let db_path = state_dir.join("runtime/state.db");
@@ -1024,24 +1006,16 @@ target:
             url: "https://forge.example.test/tools/atelier/pulls/42".to_string(),
             state: "open".to_string(),
             merged: false,
-            source_branch: "codex/work".to_string(),
+            source_branch: "epic/atelier-epic".to_string(),
             target_branch: "master".to_string(),
         };
-        persist_forge_pr(
-            &db,
-            &state_dir,
-            &db_path,
-            "atelier-child",
-            &forgejo_config(),
-            &pull,
-        )
-        .unwrap();
+        persist_pull_request(&db, &state_dir, &db_path, "atelier-child", &pull).unwrap();
         let merge_db = Database::open(&db_path).unwrap();
         let before_status = merge_db.get_issue("atelier-epic").unwrap().unwrap().status;
         let transport = MockTransport::new(vec![
             ForgejoResponse {
                 status: 200,
-                body: pull_response(42, "open", false, "codex/work"),
+                body: pull_response(42, "open", false, "epic/atelier-epic"),
             },
             ForgejoResponse {
                 status: 200,
@@ -1049,7 +1023,7 @@ target:
             },
             ForgejoResponse {
                 status: 200,
-                body: pull_response(42, "closed", true, "codex/work"),
+                body: pull_response(42, "closed", true, "epic/atelier-epic"),
             },
         ]);
         let client = ForgejoClient::new(forgejo_config(), &transport);
@@ -1061,7 +1035,6 @@ target:
             &db_path,
             "atelier-child",
             "validator",
-            &forgejo_config(),
             &client,
         )
         .unwrap();
@@ -1083,11 +1056,10 @@ target:
         let after = refreshed.get_issue("atelier-epic").unwrap().unwrap();
         assert_eq!(after.status, before_status);
         assert!(after.closed_at.is_none());
-        let field = workflow_policy::effective_forge_pr_field(&refreshed, "atelier-child")
+        let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-child")
             .unwrap()
             .unwrap();
-        assert_eq!(field["state"], "closed");
-        assert_eq!(field["merged"], true);
+        assert_eq!(field, json!(42));
         let activities = list_issue_activities(&state_dir, "atelier-epic").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
@@ -1103,7 +1075,7 @@ target:
                 .pr_attribution
                 .as_ref()
                 .unwrap()
-                .forge_pr
+                .pull_request
                 .as_deref(),
             Some("forgejo/tools/atelier#42")
         );
@@ -1131,12 +1103,12 @@ target:
             "feature",
             "validation",
             None,
-            forge_pr_fields("codex/work", 42),
+            pull_request_fields(42),
         );
         atelier_app::export::run_canonical(&db, &state_dir, false).unwrap();
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
-            body: pull_response(42, "closed", true, "codex/work"),
+            body: pull_response(42, "closed", true, "codex/atelier-issue"),
         }]);
         let client = ForgejoClient::new(forgejo_config(), &transport);
 
@@ -1147,7 +1119,6 @@ target:
             &db_path,
             "atelier-issue",
             "validator",
-            &forgejo_config(),
             &client,
         )
         .unwrap();
@@ -1158,11 +1129,10 @@ target:
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].method, "GET");
         let refreshed = Database::open(&db_path).unwrap();
-        let field = workflow_policy::effective_forge_pr_field(&refreshed, "atelier-issue")
+        let field = workflow_policy::effective_pull_request_field(&refreshed, "atelier-issue")
             .unwrap()
             .unwrap();
-        assert_eq!(field["state"], "closed");
-        assert_eq!(field["merged"], true);
+        assert_eq!(field, json!(42));
     }
 
     #[test]
@@ -1187,7 +1157,7 @@ target:
             "feature",
             "validation",
             None,
-            forge_pr_fields("codex/work", 42),
+            pull_request_fields(42),
         );
         atelier_app::export::run_canonical(&db, &state_dir, false).unwrap();
         let empty_transport = MockTransport::new(Vec::new());
@@ -1200,12 +1170,11 @@ target:
             &db_path,
             "atelier-missing",
             "validator",
-            &forgejo_config(),
             &client,
         )
         .unwrap_err()
         .to_string();
-        assert!(missing.contains("forge_pr_missing"));
+        assert!(missing.contains("pull_request_missing"));
 
         let transport = MockTransport::new(vec![ForgejoResponse {
             status: 200,
@@ -1219,12 +1188,11 @@ target:
             &db_path,
             "atelier-linked",
             "validator",
-            &forgejo_config(),
             &client,
         )
         .unwrap_err()
         .to_string();
-        assert!(mismatch.contains("forge_pr_mismatch"));
+        assert!(mismatch.contains("pull_request_mismatch"));
         assert!(mismatch.contains("codex/other -> master"));
         assert_eq!(transport.requests().len(), 1);
     }
@@ -1269,7 +1237,7 @@ target:
                 .pr_attribution
                 .as_ref()
                 .unwrap()
-                .forge_pr
+                .pull_request
                 .as_deref(),
             Some("forgejo/tools/atelier#42")
         );
@@ -1289,6 +1257,42 @@ target:
         assert_eq!(parse_review_event("approve").unwrap(), ReviewEvent::Approve);
         let error = parse_review_event("merge").unwrap_err().to_string();
         assert!(error.contains("expected approve"));
+    }
+
+    #[test]
+    fn parse_pull_request_reference_accepts_number_and_matching_url() {
+        let config = forgejo_config();
+
+        assert_eq!(parse_pull_request_reference("42", &config).unwrap(), 42);
+        assert_eq!(
+            parse_pull_request_reference(
+                "https://forge.example.test/tools/atelier/pulls/42",
+                &config,
+            )
+            .unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn parse_pull_request_reference_rejects_mismatched_url_context() {
+        let config = forgejo_config();
+
+        let host = parse_pull_request_reference(
+            "https://other.example.test/tools/atelier/pulls/42",
+            &config,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(host.contains("configured Forgejo host"));
+
+        let repo = parse_pull_request_reference(
+            "https://forge.example.test/tools/other/pulls/42",
+            &config,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(repo.contains("configured Forgejo repo tools/atelier"));
     }
 
     #[test]

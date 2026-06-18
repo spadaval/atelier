@@ -118,7 +118,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("Tracker:  {tracker_state}");
 
     println!();
-    println!("Branch Lifecycle");
+    println!("Branch Policy");
     println!("----------------");
     print_branch_lifecycle_state(db, &active_issues)?;
 

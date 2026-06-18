@@ -7,7 +7,7 @@ Accepted.
 ## Context
 
 Atelier is using derived session views, Forgejo pull request integration,
-typed issue fields, and PR-backed workflow gates. These concepts can easily
+built-in pull request links, and PR-backed workflow gates. These concepts can easily
 collapse into older runtime session/current-work behavior or into a PR-driven
 workflow where remote review actions move Atelier issues directly.
 
@@ -48,16 +48,17 @@ commands transition issues as a side effect.
    it does not replace Atelier evidence producers, activity actors, or session
    attempts.
 
-5. `forge_pr` is a typed issue field.
-   The active PR link belongs in workflow-policy-owned typed issue fields on
-   the owning issue or epic, not in generic attachments or evidence payloads.
-   Evidence remains the durable proof envelope for transcripts and validation
-   results.
+5. `pull_request` is a built-in issue artifact link.
+   The active PR link belongs in the canonical `pull_request` field on the
+   branch-owning issue or epic, not in generic attachments, evidence payloads,
+   or a workflow-defined typed-field registry. Canonical storage is the
+   normalized PR number. Forgejo host, owner, repo, and branch expectations are
+   derived from project config and workflow branch policy.
 
 6. PR validators are read-only workflow gates.
-   Validators such as `linked_pr_merged` inspect the configured `forge_pr`
-   field and remote Forgejo state, then report pass/fail guidance. They do not
-   mutate Forgejo, write PR comments, merge PRs, or change Atelier issue status.
+   Validators such as `linked_pr_merged` inspect the active `pull_request` link
+   and remote Forgejo state, then report pass/fail guidance. They do not mutate
+   Forgejo, write PR comments, merge PRs, or change Atelier issue status.
 
 ## Alternatives Considered
 
@@ -94,9 +95,10 @@ absent.
   transitions.
 - Product docs and help must teach `pr` as a review-artifact surface whose
   next steps point back to issue or epic transition readiness.
-- Workflow schema version 2 can define typed fields such as `forge_pr`; strict
-  validation must reject unknown typed fields rather than accepting arbitrary
-  JSON payloads.
+- Workflow schema version 3 does not define a top-level typed-field registry.
+  Strict validation accepts the built-in `pull_request` field as a positive PR
+  number and rejects unknown issue fields rather than accepting arbitrary JSON
+  payloads.
 - `linked_pr_merged` and related validators should produce actionable failure
   guidance naming the PR state to fix and the command surface that can inspect
   it.

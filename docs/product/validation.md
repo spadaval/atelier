@@ -43,11 +43,12 @@ language for normal operators.
 
 External-state validator is a workflow validator that reads a system outside
 Atelier without mutating it. `linked_pr_merged` is the product model for Forgejo
-PR gates: it reads the issue's active `forge_pr` typed field and Forgejo review
-state, then reports whether the required PR is merged. It must not create,
-comment on, review, merge, or close the PR, and it must not transition Atelier
-workflow. PR commands perform review-artifact actions; validators only decide
-whether the configured workflow transition is currently allowed.
+PR gates: it reads the issue's active `pull_request` artifact link, verifies the
+remote Forgejo PR against configured repo and branch policy, then reports
+whether the required PR is merged. It must not create, comment on, review,
+merge, or close the PR, and it must not transition Atelier workflow. PR commands
+perform review-artifact actions; validators only decide whether the configured
+workflow transition is currently allowed.
 
 Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or

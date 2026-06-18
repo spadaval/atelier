@@ -12,22 +12,14 @@ use atelier_core::Issue;
 pub use atelier_core::RecordId;
 
 pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
-schema_version: 1
+schema_version: 3
 
-branch_lifecycle:
+branch_policy:
   base_branch: main
   merge_strategy: squash
   branch_templates:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
-
-issue_types:
-  bug: standard_proof
-  epic: standard_review_proof
-  feature: standard_proof
-  spike: lightweight_spike
-  task: standard_proof
-  validation: standard_review_proof
 
 statuses:
   todo:
@@ -45,37 +37,9 @@ statuses:
   archived:
     category: done
 
-validators:
-  durable_current:
-    builtin: durable_state_current
-  review_ready:
-    builtin: review_complete
-  proof_attached:
-    builtin: evidence_attached
-    params:
-      min_count: 1
-  blockers_clear:
-    builtin: no_open_blockers
-  epic_child_proof:
-    builtin: epic_child_proof_complete
-  lint_clear:
-    builtin: no_blocking_lints
-  closeout_clean:
-    builtin: git_worktree_clean
-
-guidance_templates:
-  close_with_proof:
-    format: markdown
-    template: |
-      Closing {{ issue.id }} requires attached evidence and no open blockers.
-  record_spike_outcome:
-    format: markdown
-    template: |
-      Record a concise close reason that captures what {{ issue.id }} learned
-      and what follow-up work remains.
-
 workflows:
-  standard_proof:
+  standard:
+    applies_to: [bug, feature, task]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -89,14 +53,15 @@ workflows:
         from: [in_progress, validation]
         to: done
         required_fields: [close_reason]
+        description: "Closing requires attached evidence and no open blockers."
         validators:
-          - proof_attached
-          - blockers_clear
-          - lint_clear
-          - durable_current
-        guidance: [close_with_proof]
+          - evidence_attached: { min_count: 1 }
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
 
-  standard_review_proof:
+  reviewed:
+    applies_to: [epic, validation]
     initial_status: todo
     done_statuses: [done, archived]
     transitions:
@@ -112,21 +77,23 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_ready]
+        validators:
+          - review_complete
       close:
         from: [validation]
         to: done
         required_fields: [close_reason]
+        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
-          - proof_attached
-          - epic_child_proof
-          - blockers_clear
-          - lint_clear
-          - durable_current
-          - closeout_clean
-        guidance: [close_with_proof]
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
+          - git_worktree_clean
 
-  lightweight_spike:
+  spike:
+    applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
     transitions:
@@ -146,16 +113,15 @@ workflows:
         from: [review]
         to: done
         required_fields: [close_reason]
+        description: "Record the spike outcome before closing."
         validators:
-          - review_ready
-          - durable_current
-        guidance: [record_spike_outcome]
+          - review_complete
+          - durable_state_current
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
-const WORKFLOW_SCHEMA_VERSION: i64 = 1;
-const WORKFLOW_SCHEMA_VERSION_V2: i64 = 2;
+const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "review", "validation", "done"];
 const BUILTIN_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 const BUILTIN_VALIDATORS: &[&str] = &[
@@ -182,32 +148,18 @@ const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
 const TOP_LEVEL_FIELDS: &[&str] = &[
     "schema",
     "schema_version",
-    "branch_lifecycle",
-    "issue_types",
+    "branch_policy",
     "statuses",
-    "fields",
-    "validators",
-    "guidance_templates",
     "workflows",
-];
-const ALLOWED_TEMPLATE_VARIABLES: &[&str] = &[
-    "issue.id",
-    "issue.type",
-    "transition.name",
-    "transition.from",
-    "transition.to",
 ];
 const ALLOWED_BRANCH_TEMPLATE_VARIABLES: &[&str] = &["issue.id", "issue.type"];
 
 #[derive(Debug, Clone)]
 pub struct WorkflowPolicy {
     pub schema_version: i64,
-    pub branch_lifecycle: BranchLifecycleConfig,
-    pub issue_types: BTreeMap<String, String>,
+    pub branch_policy: BranchLifecycleConfig,
+    pub workflow_by_issue_type: BTreeMap<String, String>,
     pub statuses: BTreeMap<String, StatusDefinition>,
-    pub fields: BTreeMap<String, FieldDefinition>,
-    pub validators: BTreeMap<String, ValidatorDefinition>,
-    pub guidance_templates: BTreeMap<String, GuidanceTemplate>,
     pub workflows: BTreeMap<String, WorkflowDefinition>,
 }
 
@@ -319,6 +271,7 @@ pub struct GuidanceTemplate {
 
 #[derive(Debug, Clone)]
 pub struct WorkflowDefinition {
+    pub applies_to: Vec<String>,
     pub initial_status: String,
     pub done_statuses: Vec<String>,
     pub transitions: BTreeMap<String, TransitionDefinition>,
@@ -329,13 +282,13 @@ pub struct TransitionDefinition {
     pub from: Vec<String>,
     pub to: String,
     pub required_fields: Vec<String>,
-    pub validators: Vec<String>,
-    pub guidance: Vec<String>,
+    pub description: Option<String>,
+    pub validators: Vec<ValidatorDefinition>,
 }
 
 impl WorkflowPolicy {
     pub fn workflow_name_for_issue_type(&self, issue_type: &str) -> Result<&str> {
-        self.issue_types
+        self.workflow_by_issue_type
             .get(issue_type)
             .map(String::as_str)
             .ok_or_else(|| {
@@ -411,8 +364,8 @@ impl WorkflowPolicy {
         owner_kind: &BranchOwnerKind,
     ) -> Result<String> {
         let template = match owner_kind {
-            BranchOwnerKind::Epic => &self.branch_lifecycle.branch_templates.epic,
-            BranchOwnerKind::StandaloneIssue => &self.branch_lifecycle.branch_templates.issue,
+            BranchOwnerKind::Epic => &self.branch_policy.branch_templates.epic,
+            BranchOwnerKind::StandaloneIssue => &self.branch_policy.branch_templates.issue,
         };
         render_branch_template(template, owner)
     }
@@ -459,33 +412,8 @@ struct StatusDefinitionRaw {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct FieldDefinitionRaw {
-    #[serde(rename = "type")]
-    field_type: String,
-    #[serde(default)]
-    values: Vec<String>,
-    #[serde(default)]
-    required: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ValidatorDefinitionRaw {
-    builtin: String,
-    #[serde(default)]
-    params: Option<Value>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct GuidanceTemplateRaw {
-    format: String,
-    template: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct WorkflowDefinitionRaw {
+    applies_to: Vec<String>,
     initial_status: String,
     done_statuses: Vec<String>,
     transitions: Mapping,
@@ -499,9 +427,9 @@ struct TransitionDefinitionRaw {
     #[serde(default)]
     required_fields: Vec<String>,
     #[serde(default)]
-    validators: Vec<String>,
+    description: Option<String>,
     #[serde(default)]
-    guidance: Vec<String>,
+    validators: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -575,16 +503,6 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
     let schema_version = validate_schema(root, display_path)?;
     check_top_level_fields(root, display_path, schema_version)?;
 
-    let issue_types = parse_issue_types(
-        require_mapping(
-            root,
-            display_path,
-            "issue_types",
-            "workflow_config_invalid_issue_type_mapping",
-            "issue_types must be a mapping of built-in issue types to workflow names",
-        )?,
-        display_path,
-    )?;
     let statuses = parse_statuses(
         require_mapping(
             root,
@@ -595,42 +513,7 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
         )?,
         display_path,
     )?;
-    let fields = if let Some(value) = root.get("fields") {
-        parse_fields(
-            value.as_mapping().ok_or_else(|| {
-                policy_error_with_field(
-                    "workflow_config_invalid_field",
-                    display_path,
-                    "fields",
-                    "fields must be a mapping of field names to field definitions",
-                )
-            })?,
-            display_path,
-        )?
-    } else {
-        BTreeMap::new()
-    };
-    let validators = parse_validators(
-        require_mapping(
-            root,
-            display_path,
-            "validators",
-            "workflow_config_invalid_validator",
-            "validators must be a mapping of validator names to validator definitions",
-        )?,
-        display_path,
-    )?;
-    let guidance_templates = parse_guidance_templates(
-        require_mapping(
-            root,
-            display_path,
-            "guidance_templates",
-            "workflow_config_invalid_guidance_template",
-            "guidance_templates must be a mapping of guidance names to template definitions",
-        )?,
-        display_path,
-    )?;
-    let branch_lifecycle = parse_branch_lifecycle(root.get("branch_lifecycle"), display_path)?;
+    let branch_policy = parse_branch_policy(root.get("branch_policy"), display_path)?;
     let workflows = parse_workflows(
         require_mapping(
             root,
@@ -641,46 +524,46 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
         )?,
         display_path,
     )?;
+    let workflow_by_issue_type = issue_type_mappings_from_workflows(&workflows, display_path)?;
 
     let policy = WorkflowPolicy {
         schema_version,
-        branch_lifecycle,
-        issue_types,
+        branch_policy,
+        workflow_by_issue_type,
         statuses,
-        fields,
-        validators,
-        guidance_templates,
         workflows,
     };
     validate_policy(&policy, display_path)?;
     Ok(policy)
 }
 
-fn parse_branch_lifecycle(
-    value: Option<&Value>,
-    display_path: &str,
-) -> Result<BranchLifecycleConfig> {
+fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<BranchLifecycleConfig> {
     let Some(value) = value else {
-        return Ok(BranchLifecycleConfig::default());
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_branch_policy",
+            display_path,
+            "branch_policy",
+            "branch_policy is required in workflow schema_version 3",
+        ));
     };
     let raw = deserialize_entry::<BranchLifecycleRaw>(
         value,
         display_path,
-        "branch_lifecycle",
-        "workflow_config_invalid_branch_lifecycle",
+        "branch_policy",
+        "workflow_config_invalid_branch_policy",
     )?;
     let Some(base_branch) = raw.base_branch else {
         return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_lifecycle",
+            "workflow_config_invalid_branch_policy",
             display_path,
-            "branch_lifecycle.base_branch",
-            "branch_lifecycle.base_branch is required when branch_lifecycle is configured",
+            "branch_policy.base_branch",
+            "branch_policy.base_branch is required",
         ));
     };
     validate_branch_value(
         &base_branch,
         display_path,
-        "branch_lifecycle.base_branch",
+        "branch_policy.base_branch",
         "base branch",
     )?;
     let merge_strategy = parse_merge_strategy(raw.merge_strategy.as_deref(), display_path)?;
@@ -698,9 +581,9 @@ fn parse_merge_strategy(value: Option<&str>, display_path: &str) -> Result<Merge
         "merge_commit" => Ok(MergeStrategy::MergeCommit),
         "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
         other => Err(policy_error_with_field(
-            "workflow_config_invalid_branch_lifecycle",
+            "workflow_config_invalid_branch_policy",
             display_path,
-            "branch_lifecycle.merge_strategy",
+            "branch_policy.merge_strategy",
             format!(
                 "unsupported merge strategy '{}'; expected squash, merge_commit, or fast_forward_only",
                 other
@@ -725,12 +608,12 @@ fn parse_branch_templates(
     validate_branch_template(
         &templates.epic,
         display_path,
-        "branch_lifecycle.branch_templates.epic",
+        "branch_policy.branch_templates.epic",
     )?;
     validate_branch_template(
         &templates.issue,
         display_path,
-        "branch_lifecycle.branch_templates.issue",
+        "branch_policy.branch_templates.issue",
     )?;
     Ok(templates)
 }
@@ -754,7 +637,7 @@ fn parse_yaml(text: &str, display_path: &str) -> Result<Value> {
     })
 }
 
-fn check_top_level_fields(root: &Mapping, display_path: &str, schema_version: i64) -> Result<()> {
+fn check_top_level_fields(root: &Mapping, display_path: &str, _schema_version: i64) -> Result<()> {
     for key in root.keys() {
         let Some(key) = key.as_str() else {
             return Err(policy_error(
@@ -780,14 +663,6 @@ fn check_top_level_fields(root: &Mapping, display_path: &str, schema_version: i6
                 display_path,
                 key,
                 format!("unknown top-level workflow field '{}'", key),
-            ));
-        }
-        if key == "fields" && schema_version < WORKFLOW_SCHEMA_VERSION_V2 {
-            return Err(policy_error_with_field(
-                "workflow_config_schema_unsupported",
-                display_path,
-                key,
-                "top-level field 'fields' requires workflow schema_version 2",
             ));
         }
     }
@@ -844,68 +719,67 @@ fn validate_schema(root: &Mapping, display_path: &str) -> Result<i64> {
         ));
     };
     if schema_version != WORKFLOW_SCHEMA_VERSION {
-        if schema_version == WORKFLOW_SCHEMA_VERSION_V2 {
-            return Ok(schema_version);
-        }
         return Err(policy_error_with_field(
             "workflow_config_schema_unsupported",
             display_path,
             "schema_version",
             format!(
-                "unsupported workflow schema_version {}; expected {} or {}",
-                schema_version, WORKFLOW_SCHEMA_VERSION, WORKFLOW_SCHEMA_VERSION_V2
+                "unsupported workflow schema_version {}; expected {}",
+                schema_version, WORKFLOW_SCHEMA_VERSION
             ),
         ));
     }
     Ok(schema_version)
 }
 
-fn parse_issue_types(mapping: &Mapping, display_path: &str) -> Result<BTreeMap<String, String>> {
-    let mut parsed = BTreeMap::new();
-    for (key, value) in mapping {
-        let Some(issue_type) = key.as_str() else {
-            return Err(policy_error(
-                "workflow_config_invalid_issue_type_mapping",
-                display_path,
-                "issue_types keys must be strings",
-            ));
-        };
-        if !BUILTIN_ISSUE_TYPES.contains(&issue_type) {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_issue_type_mapping",
-                display_path,
-                format!("issue_types.{}", issue_type),
-                format!(
-                    "unsupported built-in issue type '{}'; expected {}",
-                    issue_type,
-                    BUILTIN_ISSUE_TYPES.join(", ")
-                ),
-            ));
+fn issue_type_mappings_from_workflows(
+    workflows: &BTreeMap<String, WorkflowDefinition>,
+    display_path: &str,
+) -> Result<BTreeMap<String, String>> {
+    let mut mappings = BTreeMap::new();
+    for (workflow_name, workflow) in workflows {
+        for issue_type in &workflow.applies_to {
+            if !BUILTIN_ISSUE_TYPES.contains(&issue_type.as_str()) {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_issue_type_mapping",
+                    display_path,
+                    format!("workflows.{}.applies_to", workflow_name),
+                    format!(
+                        "unsupported built-in issue type '{}'; expected {}",
+                        issue_type,
+                        BUILTIN_ISSUE_TYPES.join(", ")
+                    ),
+                ));
+            }
+            if let Some(existing_workflow) =
+                mappings.insert(issue_type.clone(), workflow_name.clone())
+            {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_issue_type_mapping",
+                    display_path,
+                    format!("workflows.{}.applies_to", workflow_name),
+                    format!(
+                        "issue type '{}' is assigned to both workflow '{}' and workflow '{}'",
+                        issue_type, existing_workflow, workflow_name
+                    ),
+                ));
+            }
         }
-        let Some(workflow_name) = value.as_str() else {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_issue_type_mapping",
-                display_path,
-                format!("issue_types.{}", issue_type),
-                "issue type mappings must point to a workflow name string",
-            ));
-        };
-        parsed.insert(issue_type.to_string(), workflow_name.to_string());
     }
     for issue_type in BUILTIN_ISSUE_TYPES {
-        if !parsed.contains_key(*issue_type) {
+        if !mappings.contains_key(*issue_type) {
             return Err(policy_error_with_field(
                 "workflow_config_invalid_issue_type_mapping",
                 display_path,
-                format!("issue_types.{}", issue_type),
+                "workflows.*.applies_to",
                 format!(
-                    "missing workflow mapping for built-in issue type '{}'",
+                    "missing workflow applies_to entry for built-in issue type '{}'",
                     issue_type
                 ),
             ));
         }
     }
-    Ok(parsed)
+    Ok(mappings)
 }
 
 fn parse_statuses(
@@ -962,213 +836,6 @@ fn parse_statuses(
         );
     }
     Ok(statuses)
-}
-
-fn parse_fields(
-    mapping: &Mapping,
-    display_path: &str,
-) -> Result<BTreeMap<String, FieldDefinition>> {
-    let mut fields = BTreeMap::new();
-    for (key, value) in mapping {
-        let Some(name) = key.as_str() else {
-            return Err(policy_error(
-                "workflow_config_invalid_field",
-                display_path,
-                "fields keys must be strings",
-            ));
-        };
-        ensure_identifier(
-            name,
-            display_path,
-            &format!("fields.{}", name),
-            "workflow_config_invalid_field",
-            "field names",
-        )?;
-        let raw = deserialize_entry::<FieldDefinitionRaw>(
-            value,
-            display_path,
-            &format!("fields.{}", name),
-            "workflow_config_invalid_field",
-        )?;
-        fields.insert(
-            name.to_string(),
-            parse_field_definition(name, raw, display_path)?,
-        );
-    }
-    Ok(fields)
-}
-
-fn parse_field_definition(
-    field_name: &str,
-    raw: FieldDefinitionRaw,
-    display_path: &str,
-) -> Result<FieldDefinition> {
-    let field = format!("fields.{}", field_name);
-    let field_type = match raw.field_type.as_str() {
-        "string" => {
-            reject_field_values(field_name, &raw, display_path)?;
-            FieldType::String
-        }
-        "bool" => {
-            reject_field_values(field_name, &raw, display_path)?;
-            FieldType::Bool
-        }
-        "integer" => {
-            reject_field_values(field_name, &raw, display_path)?;
-            FieldType::Integer
-        }
-        "enum" => {
-            if raw.required.is_empty() {
-                validate_string_list(&raw.values, display_path, &format!("{field}.values"))?;
-                if raw.values.is_empty() {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_field",
-                        display_path,
-                        format!("{field}.values"),
-                        "enum fields require at least one value",
-                    ));
-                }
-                FieldType::Enum { values: raw.values }
-            } else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_field",
-                    display_path,
-                    format!("{field}.required"),
-                    "enum fields do not accept required keys",
-                ));
-            }
-        }
-        "object" => {
-            if !raw.values.is_empty() {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_field",
-                    display_path,
-                    format!("{field}.values"),
-                    "object fields do not accept enum values",
-                ));
-            }
-            validate_string_list(&raw.required, display_path, &format!("{field}.required"))?;
-            if raw.required.is_empty() {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_field",
-                    display_path,
-                    format!("{field}.required"),
-                    "object fields require at least one required key",
-                ));
-            }
-            FieldType::Object {
-                required: raw.required,
-            }
-        }
-        other => {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_field",
-                display_path,
-                format!("{field}.type"),
-                format!(
-                    "unsupported field type '{}'; expected string, bool, integer, enum, or object",
-                    other
-                ),
-            ));
-        }
-    };
-    Ok(FieldDefinition { field_type })
-}
-
-fn reject_field_values(
-    field_name: &str,
-    raw: &FieldDefinitionRaw,
-    display_path: &str,
-) -> Result<()> {
-    if !raw.values.is_empty() {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_field",
-            display_path,
-            format!("fields.{}.values", field_name),
-            format!("{} fields do not accept enum values", raw.field_type),
-        ));
-    }
-    if !raw.required.is_empty() {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_field",
-            display_path,
-            format!("fields.{}.required", field_name),
-            format!("{} fields do not accept required keys", raw.field_type),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_string_list(values: &[String], display_path: &str, field: &str) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for value in values {
-        ensure_identifier(
-            value,
-            display_path,
-            field,
-            "workflow_config_invalid_field",
-            "field values",
-        )?;
-        if !seen.insert(value.as_str()) {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_field",
-                display_path,
-                field,
-                format!("duplicate field value '{}'", value),
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn parse_validators(
-    mapping: &Mapping,
-    display_path: &str,
-) -> Result<BTreeMap<String, ValidatorDefinition>> {
-    let mut validators = BTreeMap::new();
-    for (key, value) in mapping {
-        let Some(name) = key.as_str() else {
-            return Err(policy_error(
-                "workflow_config_invalid_validator",
-                display_path,
-                "validators keys must be strings",
-            ));
-        };
-        ensure_identifier(
-            name,
-            display_path,
-            &format!("validators.{}", name),
-            "workflow_config_invalid_validator",
-            "validator names",
-        )?;
-        let raw = deserialize_entry::<ValidatorDefinitionRaw>(
-            value,
-            display_path,
-            &format!("validators.{}", name),
-            "workflow_config_invalid_validator",
-        )?;
-        if !BUILTIN_VALIDATORS.contains(&raw.builtin.as_str()) {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_validator",
-                display_path,
-                format!("validators.{}.builtin", name),
-                format!(
-                    "unsupported built-in validator '{}'; expected {}",
-                    raw.builtin,
-                    BUILTIN_VALIDATORS.join(", ")
-                ),
-            ));
-        }
-        let params = parse_validator_params(name, &raw.builtin, raw.params, display_path)?;
-        validators.insert(
-            name.to_string(),
-            ValidatorDefinition {
-                builtin: raw.builtin,
-                params,
-            },
-        );
-    }
-    Ok(validators)
 }
 
 fn parse_validator_params(
@@ -1266,54 +933,6 @@ fn parse_validator_params(
     }
 }
 
-fn parse_guidance_templates(
-    mapping: &Mapping,
-    display_path: &str,
-) -> Result<BTreeMap<String, GuidanceTemplate>> {
-    let mut templates = BTreeMap::new();
-    for (key, value) in mapping {
-        let Some(name) = key.as_str() else {
-            return Err(policy_error(
-                "workflow_config_invalid_guidance_template",
-                display_path,
-                "guidance_templates keys must be strings",
-            ));
-        };
-        ensure_identifier(
-            name,
-            display_path,
-            &format!("guidance_templates.{}", name),
-            "workflow_config_invalid_guidance_template",
-            "guidance template names",
-        )?;
-        let raw = deserialize_entry::<GuidanceTemplateRaw>(
-            value,
-            display_path,
-            &format!("guidance_templates.{}", name),
-            "workflow_config_invalid_guidance_template",
-        )?;
-        if raw.format != "markdown" {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_guidance_template",
-                display_path,
-                format!("guidance_templates.{}.format", name),
-                format!(
-                    "unsupported guidance template format '{}'; expected markdown",
-                    raw.format
-                ),
-            ));
-        }
-        validate_template_syntax(display_path, name, &raw.template)?;
-        templates.insert(
-            name.to_string(),
-            GuidanceTemplate {
-                template: raw.template,
-            },
-        );
-    }
-    Ok(templates)
-}
-
 fn parse_workflows(
     mapping: &Mapping,
     display_path: &str,
@@ -1366,6 +985,7 @@ fn parse_workflow_definition(
     let transitions = parse_transitions(workflow_name, &raw.transitions, display_path)?;
 
     Ok(WorkflowDefinition {
+        applies_to: raw.applies_to,
         initial_status: raw.initial_status,
         done_statuses: raw.done_statuses,
         transitions,
@@ -1377,6 +997,14 @@ fn validate_workflow_shape(
     raw: &WorkflowDefinitionRaw,
     display_path: &str,
 ) -> Result<()> {
+    if raw.applies_to.is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_issue_type_mapping",
+            display_path,
+            format!("workflows.{}.applies_to", workflow_name),
+            "workflow applies_to must contain at least one built-in issue type",
+        ));
+    }
     if raw.done_statuses.is_empty() {
         return Err(policy_error_with_field(
             "workflow_config_invalid_workflow",
@@ -1449,14 +1077,119 @@ fn parse_transition_definition(
         &raw.required_fields,
         display_path,
     )?;
+    let validators = parse_transition_validators(
+        workflow_name,
+        transition_name,
+        &raw.validators,
+        display_path,
+    )?;
 
     Ok(TransitionDefinition {
         from,
         to: raw.to,
         required_fields: raw.required_fields,
-        validators: raw.validators,
-        guidance: raw.guidance,
+        description: raw.description,
+        validators,
     })
+}
+
+fn parse_transition_validators(
+    workflow_name: &str,
+    transition_name: &str,
+    values: &[Value],
+    display_path: &str,
+) -> Result<Vec<ValidatorDefinition>> {
+    let mut validators = Vec::new();
+    for value in values {
+        match value {
+            Value::String(name) => {
+                validate_builtin_validator_name(
+                    workflow_name,
+                    transition_name,
+                    name,
+                    display_path,
+                )?;
+                validators.push(ValidatorDefinition {
+                    builtin: name.clone(),
+                    params: None,
+                });
+            }
+            Value::Mapping(mapping) if mapping.len() == 1 => {
+                let (key, params) = mapping.iter().next().expect("mapping has one entry");
+                let Some(name) = key.as_str() else {
+                    return Err(policy_error_with_field(
+                        "workflow_config_invalid_validator",
+                        display_path,
+                        format!(
+                            "workflows.{}.transitions.{}.validators",
+                            workflow_name, transition_name
+                        ),
+                        "validator map keys must be strings",
+                    ));
+                };
+                validate_builtin_validator_name(
+                    workflow_name,
+                    transition_name,
+                    name,
+                    display_path,
+                )?;
+                let params =
+                    parse_validator_params(name, name, Some(params.clone()), display_path)?;
+                validators.push(ValidatorDefinition {
+                    builtin: name.to_string(),
+                    params,
+                });
+            }
+            Value::Mapping(_) => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_validator",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.validators",
+                        workflow_name, transition_name
+                    ),
+                    "validator maps must contain exactly one built-in validator name",
+                ));
+            }
+            _ => {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_validator",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.validators",
+                        workflow_name, transition_name
+                    ),
+                    "validators must be built-in validator strings or single-key validator maps",
+                ));
+            }
+        }
+    }
+    Ok(validators)
+}
+
+fn validate_builtin_validator_name(
+    workflow_name: &str,
+    transition_name: &str,
+    name: &str,
+    display_path: &str,
+) -> Result<()> {
+    if BUILTIN_VALIDATORS.contains(&name) {
+        Ok(())
+    } else {
+        Err(policy_error_with_field(
+            "workflow_config_invalid_validator",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.validators",
+                workflow_name, transition_name
+            ),
+            format!(
+                "unsupported built-in validator '{}'; expected {}",
+                name,
+                BUILTIN_VALIDATORS.join(", ")
+            ),
+        ))
+    }
 }
 
 fn parse_transition_from(
@@ -1507,26 +1240,7 @@ fn validate_required_fields(
 }
 
 fn validate_policy(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
-    validate_issue_type_mappings(policy, display_path)?;
     validate_workflows(policy, display_path)?;
-    Ok(())
-}
-
-fn validate_issue_type_mappings(policy: &WorkflowPolicy, display_path: &str) -> Result<()> {
-    for (issue_type, workflow_name) in &policy.issue_types {
-        if !policy.workflows.contains_key(workflow_name) {
-            return Err(policy_error_with_reference(
-                "workflow_config_invalid_issue_type_mapping",
-                display_path,
-                format!("issue_types.{}", issue_type),
-                workflow_name,
-                format!(
-                    "issue type '{}' points to undefined workflow '{}'",
-                    issue_type, workflow_name
-                ),
-            ));
-        }
-    }
     Ok(())
 }
 
@@ -1616,13 +1330,6 @@ fn validate_workflow_transitions(
             transition,
             display_path,
         )?;
-        validate_transition_references(
-            policy,
-            workflow_name,
-            transition_name,
-            transition,
-            display_path,
-        )?;
     }
     Ok(())
 }
@@ -1672,71 +1379,30 @@ fn validate_transition_statuses(
     Ok(())
 }
 
-fn validate_transition_references(
-    policy: &WorkflowPolicy,
-    workflow_name: &str,
-    transition_name: &str,
-    transition: &TransitionDefinition,
-    display_path: &str,
-) -> Result<()> {
-    for validator_name in &transition.validators {
-        if !policy.validators.contains_key(validator_name) {
-            return Err(policy_error_with_reference(
-                "workflow_config_unknown_reference",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.validators",
-                    workflow_name, transition_name
-                ),
-                validator_name,
-                format!(
-                    "transition '{}' in workflow '{}' references undefined validator '{}'",
-                    transition_name, workflow_name, validator_name
-                ),
-            ));
-        }
-    }
-    for guidance_name in &transition.guidance {
-        if !policy.guidance_templates.contains_key(guidance_name) {
-            return Err(policy_error_with_reference(
-                "workflow_config_unknown_reference",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.guidance",
-                    workflow_name, transition_name
-                ),
-                guidance_name,
-                format!(
-                    "transition '{}' in workflow '{}' references undefined guidance template '{}'",
-                    transition_name, workflow_name, guidance_name
-                ),
-            ));
-        }
-    }
-    Ok(())
-}
-
 pub fn validate_issue_against_policy(
     policy: &WorkflowPolicy,
     issue: &Issue,
     policy_path: &Path,
 ) -> Result<()> {
-    let workflow_name = policy.issue_types.get(&issue.issue_type).ok_or_else(|| {
-        policy_error_with_field(
-            "workflow_config_invalid_issue_type_mapping",
-            WORKFLOW_POLICY_PATH,
-            format!("issue_types.{}", issue.issue_type),
-            format!(
-                "missing workflow mapping for issue type '{}' required by issue {}",
-                issue.issue_type, issue.id
-            ),
-        )
-    })?;
+    let workflow_name = policy
+        .workflow_by_issue_type
+        .get(&issue.issue_type)
+        .ok_or_else(|| {
+            policy_error_with_field(
+                "workflow_config_invalid_issue_type_mapping",
+                WORKFLOW_POLICY_PATH,
+                format!("workflows.*.applies_to.{}", issue.issue_type),
+                format!(
+                    "missing workflow mapping for issue type '{}' required by issue {}",
+                    issue.issue_type, issue.id
+                ),
+            )
+        })?;
     let workflow = policy.workflows.get(workflow_name).ok_or_else(|| {
         policy_error_with_reference(
             "workflow_config_invalid_issue_type_mapping",
             WORKFLOW_POLICY_PATH,
-            format!("issue_types.{}", issue.issue_type),
+            format!("workflows.*.applies_to.{}", issue.issue_type),
             workflow_name,
             format!(
                 "issue type '{}' points to undefined workflow '{}' required by issue {}",
@@ -1771,221 +1437,54 @@ pub fn validate_issue_against_policy(
 }
 
 fn validate_issue_fields_against_policy(
-    policy: &WorkflowPolicy,
+    _policy: &WorkflowPolicy,
     issue: &Issue,
     policy_path: &Path,
 ) -> Result<()> {
     for (field_name, value) in &issue.fields {
-        let Some(definition) = policy.fields.get(field_name) else {
+        if field_name == "pull_request" {
+            validate_pull_request_field(value, issue, policy_path)?;
+        } else {
             return Err(WorkflowPolicyError {
                 code: "workflow_issue_field_unknown",
                 path: policy_path.display().to_string(),
                 message: format!(
-                    "issue {} defines field '{}' but .atelier/workflow.yaml does not define it",
+                    "issue {} defines field '{}' but schema_version 3 only supports built-in field 'pull_request'",
                     issue.id, field_name
                 ),
-                field: Some(format!("fields.{field_name}")),
+                field: Some(field_name.to_string()),
                 reference: Some(issue.id.clone()),
                 line: None,
                 column: None,
             }
             .into());
-        };
-        validate_issue_field_value(field_name, value, definition, issue, policy_path)?;
+        }
     }
     Ok(())
 }
 
-fn validate_issue_field_value(
-    field_name: &str,
-    value: &JsonValue,
-    definition: &FieldDefinition,
-    issue: &Issue,
-    policy_path: &Path,
-) -> Result<()> {
-    let valid = match &definition.field_type {
-        FieldType::String => value.is_string(),
-        FieldType::Bool => value.is_boolean(),
-        FieldType::Integer => value.as_i64().is_some() || value.as_u64().is_some(),
-        FieldType::Enum { values } => value
-            .as_str()
-            .is_some_and(|value| values.iter().any(|allowed| allowed == value)),
-        FieldType::Object { required } => {
-            let Some(object) = value.as_object() else {
-                return Err(issue_field_error(
-                    policy_path,
-                    issue,
-                    field_name,
-                    "must be an object",
-                ));
-            };
-            for required_key in required {
-                if !object.contains_key(required_key) {
-                    return Err(issue_field_error(
-                        policy_path,
-                        issue,
-                        field_name,
-                        format!("is missing required key '{required_key}'"),
-                    ));
-                }
-            }
-            true
-        }
-    };
+fn validate_pull_request_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
+    let valid = value
+        .as_u64()
+        .filter(|number| *number > 0)
+        .or_else(|| value.as_i64().and_then(|number| u64::try_from(number).ok()))
+        .is_some_and(|number| number > 0);
     if valid {
-        if field_name == "forge_pr" {
-            validate_forge_pr_field(value, issue, policy_path)?;
-        }
         Ok(())
     } else {
-        Err(issue_field_error(
-            policy_path,
-            issue,
-            field_name,
-            format!(
-                "does not match workflow field type {}",
-                field_type_name(&definition.field_type)
+        Err(WorkflowPolicyError {
+            code: "workflow_issue_field_invalid",
+            path: policy_path.display().to_string(),
+            message: format!(
+                "issue {} field 'pull_request' must be a positive integer PR number",
+                issue.id
             ),
-        ))
-    }
-}
-
-fn validate_forge_pr_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
-    let Some(object) = value.as_object() else {
-        return Ok(());
-    };
-    let provider = require_forge_pr_string(object, "provider", issue, policy_path)?;
-    if provider != "forgejo" {
-        return Err(issue_field_key_error(
-            policy_path,
-            issue,
-            "provider",
-            "must be 'forgejo'",
-        ));
-    }
-    let host = require_forge_pr_string(object, "host", issue, policy_path)?;
-    require_forge_pr_string(object, "owner", issue, policy_path)?;
-    require_forge_pr_string(object, "repo", issue, policy_path)?;
-    let number = require_forge_pr_number(object, issue, policy_path)?;
-    let url = require_forge_pr_string(object, "url", issue, policy_path)?;
-    if !url.contains(host) {
-        return Err(issue_field_key_error(
-            policy_path,
-            issue,
-            "url",
-            "must contain the forge_pr host",
-        ));
-    }
-    if !url.contains(&number.to_string()) {
-        return Err(issue_field_key_error(
-            policy_path,
-            issue,
-            "url",
-            "must contain the forge_pr number",
-        ));
-    }
-    require_forge_pr_string(object, "source_branch", issue, policy_path)?;
-    require_forge_pr_string(object, "target_branch", issue, policy_path)?;
-    Ok(())
-}
-
-fn require_forge_pr_string<'a>(
-    object: &'a serde_json::Map<String, JsonValue>,
-    key: &str,
-    issue: &Issue,
-    policy_path: &Path,
-) -> Result<&'a str> {
-    let Some(value) = object.get(key).and_then(JsonValue::as_str) else {
-        return Err(issue_field_key_error(
-            policy_path,
-            issue,
-            key,
-            "must be a string",
-        ));
-    };
-    if value.trim().is_empty() {
-        return Err(issue_field_key_error(
-            policy_path,
-            issue,
-            key,
-            "must not be empty",
-        ));
-    }
-    Ok(value)
-}
-
-fn require_forge_pr_number(
-    object: &serde_json::Map<String, JsonValue>,
-    issue: &Issue,
-    policy_path: &Path,
-) -> Result<u64> {
-    let number = object
-        .get("number")
-        .and_then(|value| {
-            value
-                .as_u64()
-                .or_else(|| value.as_i64().and_then(|n| n.try_into().ok()))
-        })
-        .filter(|number| *number > 0)
-        .ok_or_else(|| {
-            issue_field_key_error(policy_path, issue, "number", "must be a positive integer")
-        })?;
-    Ok(number)
-}
-
-fn issue_field_key_error(
-    policy_path: &Path,
-    issue: &Issue,
-    key: &str,
-    message: impl Into<String>,
-) -> anyhow::Error {
-    WorkflowPolicyError {
-        code: "workflow_issue_field_invalid",
-        path: policy_path.display().to_string(),
-        message: format!(
-            "issue {} field 'forge_pr.{}' {}",
-            issue.id,
-            key,
-            message.into()
-        ),
-        field: Some(format!("fields.forge_pr.{key}")),
-        reference: Some(issue.id.clone()),
-        line: None,
-        column: None,
-    }
-    .into()
-}
-
-fn issue_field_error(
-    policy_path: &Path,
-    issue: &Issue,
-    field_name: &str,
-    message: impl Into<String>,
-) -> anyhow::Error {
-    WorkflowPolicyError {
-        code: "workflow_issue_field_invalid",
-        path: policy_path.display().to_string(),
-        message: format!(
-            "issue {} field '{}' {}",
-            issue.id,
-            field_name,
-            message.into()
-        ),
-        field: Some(format!("fields.{field_name}")),
-        reference: Some(issue.id.clone()),
-        line: None,
-        column: None,
-    }
-    .into()
-}
-
-fn field_type_name(field_type: &FieldType) -> &'static str {
-    match field_type {
-        FieldType::String => "string",
-        FieldType::Bool => "bool",
-        FieldType::Integer => "integer",
-        FieldType::Enum { .. } => "enum",
-        FieldType::Object { .. } => "object",
+            field: Some("pull_request".to_string()),
+            reference: Some(issue.id.clone()),
+            line: None,
+            column: None,
+        }
+        .into())
     }
 }
 
@@ -2039,48 +1538,10 @@ where
     })
 }
 
-fn validate_template_syntax(display_path: &str, name: &str, template: &str) -> Result<()> {
-    let mut rest = template;
-    while let Some(start) = rest.find("{{") {
-        rest = &rest[start + 2..];
-        let Some(end) = rest.find("}}") else {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_guidance_template",
-                display_path,
-                format!("guidance_templates.{}.template", name),
-                "template contains '{{' without a matching '}}'",
-            ));
-        };
-        let variable = rest[..end].trim();
-        if !ALLOWED_TEMPLATE_VARIABLES.contains(&variable) {
-            return Err(policy_error_with_field(
-                "workflow_config_invalid_guidance_template",
-                display_path,
-                format!("guidance_templates.{}.template", name),
-                format!(
-                    "unsupported template variable '{}'; expected {}",
-                    variable,
-                    ALLOWED_TEMPLATE_VARIABLES.join(", ")
-                ),
-            ));
-        }
-        rest = &rest[end + 2..];
-    }
-    if rest.contains("}}") {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_guidance_template",
-            display_path,
-            format!("guidance_templates.{}.template", name),
-            "template contains '}}' without a matching '{{'",
-        ));
-    }
-    Ok(())
-}
-
 fn validate_branch_template(template: &str, display_path: &str, field: &str) -> Result<()> {
     if template.trim().is_empty() {
         return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_lifecycle",
+            "workflow_config_invalid_branch_policy",
             display_path,
             field,
             "branch template must not be empty",
@@ -2091,7 +1552,7 @@ fn validate_branch_template(template: &str, display_path: &str, field: &str) -> 
         rest = &rest[start + 2..];
         let Some(end) = rest.find("}}") else {
             return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_lifecycle",
+                "workflow_config_invalid_branch_policy",
                 display_path,
                 field,
                 "branch template contains '{{' without a matching '}}'",
@@ -2100,7 +1561,7 @@ fn validate_branch_template(template: &str, display_path: &str, field: &str) -> 
         let variable = rest[..end].trim();
         if !ALLOWED_BRANCH_TEMPLATE_VARIABLES.contains(&variable) {
             return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_lifecycle",
+                "workflow_config_invalid_branch_policy",
                 display_path,
                 field,
                 format!(
@@ -2114,7 +1575,7 @@ fn validate_branch_template(template: &str, display_path: &str, field: &str) -> 
     }
     if rest.contains("}}") {
         return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_lifecycle",
+            "workflow_config_invalid_branch_policy",
             display_path,
             field,
             "branch template contains '}}' without a matching '{{'",
@@ -2134,7 +1595,7 @@ fn validate_branch_value(value: &str, display_path: &str, field: &str, kind: &st
         || value.contains('\\')
     {
         return Err(policy_error_with_field(
-            "workflow_config_invalid_branch_lifecycle",
+            "workflow_config_invalid_branch_policy",
             display_path,
             field,
             format!("{} is not a valid branch policy value: '{}'", kind, value),
@@ -2148,7 +1609,7 @@ fn render_branch_template(template: &str, issue: &Issue) -> Result<String> {
     validate_branch_value(
         &branch,
         WORKFLOW_POLICY_PATH,
-        "branch_lifecycle.branch_templates",
+        "branch_policy.branch_templates",
         "rendered branch name",
     )?;
     Ok(branch)
@@ -2162,9 +1623,9 @@ fn render_branch_template_with(template: &str, issue_id: &str, issue_type: &str)
         rest = &rest[start + 2..];
         let Some(end) = rest.find("}}") else {
             return Err(policy_error_with_field(
-                "workflow_config_invalid_branch_lifecycle",
+                "workflow_config_invalid_branch_policy",
                 WORKFLOW_POLICY_PATH,
-                "branch_lifecycle.branch_templates",
+                "branch_policy.branch_templates",
                 "branch template contains '{{' without a matching '}}'",
             ));
         };
@@ -2173,9 +1634,9 @@ fn render_branch_template_with(template: &str, issue_id: &str, issue_type: &str)
             "issue.type" => rendered.push_str(issue_type),
             variable => {
                 return Err(policy_error_with_field(
-                    "workflow_config_invalid_branch_lifecycle",
+                    "workflow_config_invalid_branch_policy",
                     WORKFLOW_POLICY_PATH,
-                    "branch_lifecycle.branch_templates",
+                    "branch_policy.branch_templates",
                     format!(
                         "unsupported branch template variable '{}'; expected {}",
                         variable,
@@ -2295,32 +1756,21 @@ mod tests {
         STARTER_POLICY_YAML
     }
 
-    fn default_branch_lifecycle() -> &'static str {
-        "branch_lifecycle:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n"
+    fn default_branch_policy() -> &'static str {
+        "branch_policy:\n  base_branch: main\n  merge_strategy: squash\n  branch_templates:\n    epic: epic/{{ issue.id }}\n    issue: codex/{{ issue.id }}\n"
     }
 
     fn configured_policy() -> String {
         valid_policy().replace(
-            default_branch_lifecycle(),
-            "branch_lifecycle:\n  base_branch: trunk\n  merge_strategy: fast_forward_only\n  branch_templates:\n    epic: review/{{ issue.id }}\n    issue: work/{{ issue.type }}/{{ issue.id }}\n",
+            default_branch_policy(),
+            "branch_policy:\n  base_branch: trunk\n  merge_strategy: fast_forward_only\n  branch_templates:\n    epic: review/{{ issue.id }}\n    issue: work/{{ issue.type }}/{{ issue.id }}\n",
         )
-    }
-
-    fn forge_pr_policy() -> WorkflowPolicy {
-        let text = valid_policy().replacen("schema_version: 1", "schema_version: 2", 1)
-            + r#"
-fields:
-  forge_pr:
-    type: object
-    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
-"#;
-        parse_policy_text(&text, WORKFLOW_POLICY_PATH).unwrap()
     }
 
     fn issue_with_fields(fields: std::collections::BTreeMap<String, JsonValue>) -> Issue {
         Issue {
-            id: "atelier-fpr1".to_string(),
-            title: "Forge PR".to_string(),
+            id: "atelier-pr01".to_string(),
+            title: "Pull request".to_string(),
             description: None,
             status: "todo".to_string(),
             priority: "medium".to_string(),
@@ -2336,14 +1786,20 @@ fields:
     #[test]
     fn parses_valid_policy() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        assert_eq!(policy.schema_version, 1);
+        assert_eq!(policy.schema_version, 3);
         assert_eq!(
-            policy.issue_types.get("task").map(String::as_str),
-            Some("standard_proof")
+            policy
+                .workflow_by_issue_type
+                .get("task")
+                .map(String::as_str),
+            Some("standard")
         );
         assert_eq!(
-            policy.issue_types.get("epic").map(String::as_str),
-            Some("standard_review_proof")
+            policy
+                .workflow_by_issue_type
+                .get("epic")
+                .map(String::as_str),
+            Some("reviewed")
         );
         assert_eq!(
             policy
@@ -2352,123 +1808,35 @@ fields:
                 .map(|status| status.category.as_str()),
             Some("done")
         );
+        let close = &policy.workflows["standard"].transitions["close"];
         assert_eq!(
-            policy
-                .validators
-                .get("proof_attached")
-                .and_then(|validator| validator.params.as_ref()),
+            close.validators[0].params.as_ref(),
             Some(&ValidatorParams::EvidenceAttached {
                 min_count: 1,
                 kind: None,
             })
         );
-        assert_eq!(
-            policy.branch_lifecycle.merge_strategy,
-            MergeStrategy::Squash
-        );
-        assert_eq!(policy.branch_lifecycle.base_branch, "main");
+        assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
+        assert_eq!(policy.branch_policy.base_branch, "main");
     }
 
     #[test]
-    fn parses_schema_version_2_field_definitions() {
-        let text = valid_policy().replacen("schema_version: 1", "schema_version: 2", 1)
-            + r#"
-fields:
-  release_note:
-    type: string
-  approved:
-    type: bool
-  retry_count:
-    type: integer
-  pr_state:
-    type: enum
-    values: [open, merged]
-  forge_pr:
-    type: object
-    required: [provider, host, owner, repo, number, url, source_branch, target_branch]
-"#;
-        let policy = parse_policy_text(&text, WORKFLOW_POLICY_PATH).unwrap();
-
-        assert_eq!(policy.schema_version, 2);
-        assert_eq!(
-            policy
-                .fields
-                .get("release_note")
-                .map(|field| &field.field_type),
-            Some(&FieldType::String)
-        );
-        assert_eq!(
-            policy.fields.get("approved").map(|field| &field.field_type),
-            Some(&FieldType::Bool)
-        );
-        assert_eq!(
-            policy
-                .fields
-                .get("retry_count")
-                .map(|field| &field.field_type),
-            Some(&FieldType::Integer)
-        );
-        assert_eq!(
-            policy.fields.get("pr_state").map(|field| &field.field_type),
-            Some(&FieldType::Enum {
-                values: vec!["open".to_string(), "merged".to_string()],
-            })
-        );
-        assert_eq!(
-            policy.fields.get("forge_pr").map(|field| &field.field_type),
-            Some(&FieldType::Object {
-                required: vec![
-                    "provider".to_string(),
-                    "host".to_string(),
-                    "owner".to_string(),
-                    "repo".to_string(),
-                    "number".to_string(),
-                    "url".to_string(),
-                    "source_branch".to_string(),
-                    "target_branch".to_string(),
-                ],
-            })
-        );
-    }
-
-    #[test]
-    fn validates_forge_pr_field_shape() {
-        let policy = forge_pr_policy();
+    fn validates_pull_request_field_shape() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
-        fields.insert(
-            "forge_pr".to_string(),
-            serde_json::json!({
-                "provider": "forgejo",
-                "host": "forge.example.test",
-                "owner": "tools",
-                "repo": "atelier",
-                "number": 42,
-                "url": "https://forge.example.test/tools/atelier/pulls/42",
-                "source_branch": "codex/atelier-fpr1",
-                "target_branch": "master"
-            }),
-        );
+        fields.insert("pull_request".to_string(), serde_json::json!(42));
         let issue = issue_with_fields(fields);
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
     }
 
     #[test]
-    fn rejects_mismatched_forge_pr_field_shape() {
-        let policy = forge_pr_policy();
+    fn rejects_mismatched_pull_request_field_shape() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
         fields.insert(
-            "forge_pr".to_string(),
-            serde_json::json!({
-                "provider": "github",
-                "host": "forge.example.test",
-                "owner": "tools",
-                "repo": "atelier",
-                "number": 42,
-                "url": "https://forge.example.test/tools/atelier/pulls/42",
-                "source_branch": "codex/atelier-fpr1",
-                "target_branch": "master"
-            }),
+            "pull_request".to_string(),
+            serde_json::json!("https://example.test/pulls/42"),
         );
         let issue = issue_with_fields(fields);
 
@@ -2477,91 +1845,61 @@ fields:
             .to_string();
 
         assert!(error.contains("workflow_issue_field_invalid"));
-        assert!(error.contains("fields.forge_pr.provider"));
-        assert!(error.contains("must be 'forgejo'"));
+        assert!(error.contains("pull_request"));
+        assert!(error.contains("positive integer"));
     }
 
     #[test]
-    fn rejects_fields_in_schema_version_1_policy() {
-        let text = format!(
-            "{}\nfields:\n  forge_pr:\n    type: object\n    required: [provider]\n",
-            valid_policy()
-        );
+    fn rejects_removed_top_level_fields() {
+        let text = format!("{}\nissue_types: {{}}\n", valid_policy());
         let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
 
-        assert!(error.contains("workflow_config_schema_unsupported"));
-        assert!(error.contains("fields"));
-        assert!(error.contains("schema_version 2"));
+        assert!(error.contains("workflow_config_unknown_field"));
+        assert!(error.contains("issue_types"));
     }
 
     #[test]
-    fn rejects_invalid_schema_version_2_field_definition() {
-        let text = valid_policy().replacen("schema_version: 1", "schema_version: 2", 1)
-            + "\nfields:\n  forge-pr:\n    type: object\n    required: []\n";
-        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_invalid_field"));
-        assert!(error.contains("fields.forge-pr"));
-
-        let text = valid_policy().replacen("schema_version: 1", "schema_version: 2", 1)
-            + "\nfields:\n  forge_pr:\n    type: object\n    required: []\n";
-        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
-            .unwrap_err()
-            .to_string();
-
-        assert!(error.contains("workflow_config_invalid_field"));
-        assert!(error.contains("object fields require at least one required key"));
-    }
-
-    #[test]
-    fn parses_configured_branch_lifecycle_policy() {
+    fn parses_configured_branch_policy() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
-        assert_eq!(policy.branch_lifecycle.base_branch, "trunk");
+        assert_eq!(policy.branch_policy.base_branch, "trunk");
         assert_eq!(
-            policy.branch_lifecycle.merge_strategy,
+            policy.branch_policy.merge_strategy,
             MergeStrategy::FastForwardOnly
         );
         assert_eq!(
-            policy.branch_lifecycle.branch_templates.epic,
+            policy.branch_policy.branch_templates.epic,
             "review/{{ issue.id }}"
         );
         assert_eq!(
-            policy.branch_lifecycle.branch_templates.issue,
+            policy.branch_policy.branch_templates.issue,
             "work/{{ issue.type }}/{{ issue.id }}"
         );
     }
 
     #[test]
-    fn rejects_configured_branch_lifecycle_without_base_branch() {
+    fn rejects_configured_branch_policy_without_base_branch() {
         let text = valid_policy().replace(
-            default_branch_lifecycle(),
-            "branch_lifecycle:\n  merge_strategy: squash\n",
+            default_branch_policy(),
+            "branch_policy:\n  merge_strategy: squash\n",
         );
         let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_branch_lifecycle"));
-        assert!(error.contains("branch_lifecycle.base_branch"));
+        assert!(error.contains("workflow_config_invalid_branch_policy"));
+        assert!(error.contains("branch_policy.base_branch"));
     }
 
     #[test]
-    fn missing_branch_lifecycle_config_uses_default_policy() {
-        let text = valid_policy().replace(default_branch_lifecycle(), "");
-        let policy = parse_policy_text(&text, WORKFLOW_POLICY_PATH).unwrap();
+    fn missing_branch_policy_is_rejected() {
+        let text = valid_policy().replace(default_branch_policy(), "");
+        let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
 
-        assert_eq!(policy.branch_lifecycle.base_branch, "main");
-        assert_eq!(
-            policy.branch_lifecycle.merge_strategy,
-            MergeStrategy::Squash
-        );
-        assert_eq!(
-            policy.branch_lifecycle.branch_templates.issue,
-            "codex/{{ issue.id }}"
-        );
+        assert!(error.contains("workflow_config_invalid_branch_policy"));
+        assert!(error.contains("branch_policy is required"));
     }
 
     #[test]
@@ -2613,24 +1951,24 @@ fields:
     }
 
     #[test]
-    fn rejects_unknown_validator_reference() {
+    fn rejects_unknown_inline_validator() {
         let error = parse_policy_text(
             &valid_policy().replace(
-                "          - proof_attached\n",
+                "          - no_open_blockers\n",
                 "          - missing_validator\n",
             ),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
         .to_string();
-        assert!(error.contains("workflow_config_unknown_reference"));
+        assert!(error.contains("workflow_config_invalid_validator"));
         assert!(error.contains("missing_validator"));
     }
 
     #[test]
-    fn rejects_missing_issue_type_mapping() {
+    fn rejects_missing_issue_type_coverage() {
         let error = parse_policy_text(
-            &valid_policy().replace("  spike: lightweight_spike\n", ""),
+            &valid_policy().replace("    applies_to: [spike]\n", "    applies_to: []\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2652,14 +1990,17 @@ fields:
     }
 
     #[test]
-    fn rejects_unknown_template_variable() {
+    fn rejects_duplicate_issue_type_coverage() {
         let error = parse_policy_text(
-            &valid_policy().replace("{{ issue.id }}", "{{ issue.title }}"),
+            &valid_policy().replace(
+                "    applies_to: [spike]\n",
+                "    applies_to: [spike, task]\n",
+            ),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
         .to_string();
-        assert!(error.contains("workflow_config_invalid_guidance_template"));
-        assert!(error.contains("issue.title"));
+        assert!(error.contains("workflow_config_invalid_issue_type_mapping"));
+        assert!(error.contains("task"));
     }
 }

@@ -6,16 +6,7 @@ labels:
 - "pr"
 - "validator"
 - "workflow"
-fields:
-  forge_pr:
-    host: http://iiot-grand-central.cisco.com:3000
-    number: 1
-    owner: supadava
-    provider: forgejo
-    repo: atelier
-    source_branch: epic/atelier-hw9t
-    target_branch: master
-    url: http://iiot-grand-central.cisco.com:3000/supadava/atelier/pulls/1
+pull_request: 1
 priority: "P1"
 relationships:
   blocks:
