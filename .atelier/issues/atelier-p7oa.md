@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T18:25:55.864802662+00:00"
+status: "done"
 title: "Run mission closeout checks and docs-help parity validation"
-updated_at: "2026-06-18T18:24:47.985493508+00:00"
+updated_at: "2026-06-18T18:25:55.864802662+00:00"
 ---
 
 ## Description
