@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove durable-session workflow commands and guidance"
-updated_at: "2026-06-18T16:45:30.861580764+00:00"
+updated_at: "2026-06-18T18:00:59.596743624+00:00"
 ---
 
 ## Description

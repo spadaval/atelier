@@ -1517,18 +1517,10 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
 
     let (success, active_out, stderr) = run_atelier(dir.path(), &["start", &active_id]);
     assert!(success, "initial start failed: {stderr}");
-    let session_id = active_out
-        .lines()
-        .find_map(|line| line.strip_prefix("Session: "))
-        .map(str::trim)
-        .expect("initial start should create a session")
-        .to_string();
+    assert!(!active_out.contains("Session:"), "{active_out}");
     commit_all(dir.path(), "active item started");
 
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["start", &next_id, "--reuse-session", &session_id],
-    );
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
     assert!(success, "second current work issue should start: {stderr}");
     assert!(
         stdout.contains(&format!("Started work on {next_id}")),

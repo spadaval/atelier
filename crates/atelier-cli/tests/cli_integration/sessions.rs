@@ -122,6 +122,37 @@ fn session_list_and_show_are_derived_from_issue_activity() {
 }
 
 #[test]
+fn session_help_exposes_only_inspection_commands() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, help_out, stderr) = run_atelier(dir.path(), &["session", "--help"]);
+    assert!(success, "session help failed: {stderr}");
+    assert!(help_out.contains("show"), "{help_out}");
+    assert!(help_out.contains("list"), "{help_out}");
+    assert!(!help_out.contains("begin"), "{help_out}");
+    assert!(!help_out.contains("end"), "{help_out}");
+    assert!(!help_out.contains("mutating"), "{help_out}");
+    assert!(!help_out.contains("admin"), "{help_out}");
+    assert!(!help_out.contains("coordination"), "{help_out}");
+}
+
+#[test]
+fn session_begin_and_end_are_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    for command in ["begin", "end"] {
+        let (success, stdout, stderr) = run_atelier(dir.path(), &["session", command]);
+        assert!(!success, "session {command} should be rejected:\n{stdout}");
+        assert!(
+            stderr.contains(&format!("unrecognized subcommand '{command}'")),
+            "{stderr}"
+        );
+    }
+}
+
+#[test]
 fn session_projection_ignores_standalone_session_files() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

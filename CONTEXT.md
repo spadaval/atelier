@@ -154,10 +154,10 @@
   work stays the checkout's canonical `in_progress` issue set. Viewing or
   ending a session record does not close, block, or abandon an issue; workflow
   transitions do that.
-- Session records and local command diagnostics serve different purposes.
-  Sessions are bounded, durable coordination records when the operator wants
-  handoff visibility. Local command diagnostics are ignored runtime telemetry
-  for command health and are not exported work records.
+- Derived session views and local command diagnostics serve different purposes.
+  Sessions summarize bounded worker, reviewer, and validator attempts from
+  canonical issue activity. Local command diagnostics are ignored runtime
+  telemetry for command health and are not exported work records.
 - Pull request artifacts and validators are distinct. `atelier pr` commands
   operate on Forgejo review artifacts and record their issue or epic linkage,
   while workflow validators such as `linked_pr_merged` only read PR state to
