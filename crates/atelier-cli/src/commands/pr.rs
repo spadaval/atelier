@@ -4,7 +4,9 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
-use atelier_app::forgejo::{ForgejoClient, ForgejoPullRequest, ReviewEvent, UreqForgejoTransport};
+use atelier_app::forgejo::{
+    ForgejoClient, ForgejoPullRequest, ForgejoReviewComment, ReviewEvent, UreqForgejoTransport,
+};
 use atelier_app::project_config::{ForgejoConfig, ProjectConfig};
 use atelier_app::workflow_policy::{self, FORGE_PR_FIELD};
 use atelier_records::{issue_record_path, RecordStore};
@@ -112,33 +114,15 @@ pub fn comments(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    let comments = client.review_comments(number)?;
-    let comments = comments
-        .into_iter()
-        .filter(|comment| !unresolved || !comment.resolved)
-        .collect::<Vec<_>>();
     println!("PR Comments");
     println!("===========");
-    if comments.is_empty() {
+    let lines = render_comment_lines(client.review_comments(number)?, unresolved);
+    if lines.is_empty() {
         println!("(none)");
         return Ok(());
     }
-    for comment in comments {
-        let line = comment
-            .line
-            .map(|line| line.to_string())
-            .unwrap_or_else(|| "-".to_string());
-        println!(
-            "{} {}:{} {}",
-            comment.id,
-            comment.path,
-            line,
-            if comment.resolved {
-                "resolved"
-            } else {
-                "unresolved"
-            }
-        );
+    for line in lines {
+        println!("{line}");
     }
     Ok(())
 }
@@ -373,6 +357,30 @@ fn parse_review_event(value: &str) -> Result<ReviewEvent> {
     }
 }
 
+fn render_comment_lines(comments: Vec<ForgejoReviewComment>, unresolved: bool) -> Vec<String> {
+    comments
+        .into_iter()
+        .filter(|comment| !unresolved || !comment.resolved)
+        .map(|comment| {
+            let line = comment
+                .line
+                .map(|line| line.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            format!(
+                "{} {}:{} {}",
+                comment.id,
+                comment.path,
+                line,
+                if comment.resolved {
+                    "resolved"
+                } else {
+                    "unresolved"
+                }
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,5 +458,30 @@ fields:
         assert_eq!(parse_review_event("approve").unwrap(), ReviewEvent::Approve);
         let error = parse_review_event("merge").unwrap_err().to_string();
         assert!(error.contains("expected approve"));
+    }
+
+    #[test]
+    fn render_comment_lines_filters_resolved_comments() {
+        let lines = render_comment_lines(
+            vec![
+                ForgejoReviewComment {
+                    id: 1,
+                    path: "src/lib.rs".to_string(),
+                    line: Some(10),
+                    body: "fix".to_string(),
+                    resolved: false,
+                },
+                ForgejoReviewComment {
+                    id: 2,
+                    path: "src/lib.rs".to_string(),
+                    line: Some(12),
+                    body: "done".to_string(),
+                    resolved: true,
+                },
+            ],
+            true,
+        );
+
+        assert_eq!(lines, vec!["1 src/lib.rs:10 unresolved"]);
     }
 }
