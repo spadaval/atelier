@@ -7,6 +7,16 @@ labels:
 - "validator"
 - "workflow"
 priority: "P1"
+fields:
+  forge_pr:
+    provider: "forgejo"
+    host: "http://iiot-grand-central.cisco.com:3000"
+    owner: "supadava"
+    repo: "atelier"
+    number: 1
+    url: "http://iiot-grand-central.cisco.com:3000/supadava/atelier/pulls/1"
+    source_branch: "epic/atelier-hw9t"
+    target_branch: "master"
 relationships:
   blocks:
   - kind: "issue"
