@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T01:01:40.505948257+00:00"
+status: "done"
 title: "Persist active PR metadata in the owning issue forge_pr field"
-updated_at: "2026-06-17T18:00:40.993898812+00:00"
+updated_at: "2026-06-18T01:01:40.505948257+00:00"
 ---
 
 ## Description
