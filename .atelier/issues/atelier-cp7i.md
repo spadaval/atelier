@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T23:34:45.910516766+00:00"
+status: "done"
 title: "Clean PR workflow guidance drift"
-updated_at: "2026-06-18T23:31:39.370584419+00:00"
+updated_at: "2026-06-18T23:34:45.910516766+00:00"
 ---
 
 ## Description
