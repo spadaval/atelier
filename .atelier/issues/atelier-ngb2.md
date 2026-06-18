@@ -31,9 +31,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Simplify session and PR attribution model"
-updated_at: "2026-06-18T16:33:54.466232491+00:00"
+updated_at: "2026-06-18T18:20:46.213194618+00:00"
 ---
 
 ## Description
