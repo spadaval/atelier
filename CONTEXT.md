@@ -151,8 +151,8 @@
   hidden claim system.
 - Derived session views and current work are also distinct. A session view can
   summarize the work an agent is doing, but the source of truth for current
-  work stays the checkout's canonical `in_progress` issue set. Viewing or
-  ending a session record does not close, block, or abandon an issue; workflow
+  work stays the checkout's canonical `in_progress` issue set. Inspecting a
+  derived session view does not close, block, or abandon an issue; workflow
   transitions do that.
 - Derived session views and local command diagnostics serve different purposes.
   Sessions summarize bounded worker, reviewer, and validator attempts from

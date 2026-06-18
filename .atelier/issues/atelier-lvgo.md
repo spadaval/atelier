@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate session/PR attribution overhaul"
-updated_at: "2026-06-18T16:33:54.421425630+00:00"
+updated_at: "2026-06-18T18:16:46.669254097+00:00"
 ---
 
 ## Description
