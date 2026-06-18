@@ -1,4 +1,4 @@
-# ADR 0010: Session-Aware PR Coordination Boundaries
+# ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries
 
 ## Status
 
@@ -6,16 +6,17 @@ Accepted.
 
 ## Context
 
-Atelier is adding durable session records, Forgejo pull request integration,
+Atelier is using derived session views, Forgejo pull request integration,
 typed issue fields, and PR-backed workflow gates. These concepts can easily
 collapse into older runtime session/current-work behavior or into a PR-driven
 workflow where remote review actions move Atelier issues directly.
 
 The product contract needs four boundaries to stay clear before implementation:
 
-- sessions explain bounded work and handoff context;
+- sessions are derived issue-scoped worker/reviewer/validator attempts from
+  canonical issue activity and explain bounded work and handoff context;
 - current work remains issue workflow state in the checkout;
-- pull requests are review artifacts linked to issues; and
+- pull requests are review artifacts linked to issues or epics; and
 - workflow validators read PR state without performing PR actions.
 
 Without a durable decision, implementation could recreate hidden active
@@ -24,16 +25,17 @@ commands transition issues as a side effect.
 
 ## Decision
 
-1. Sessions are durable, optional coordination records.
-   A session records role, linked work context, lifecycle, and bounded activity
-   for handoff. It does not define current work, and routine issue execution
-   does not require a session.
+1. Sessions are derived issue activity views.
+   A session view carries role, linked issue or epic context, lifecycle,
+   serial, and bounded activity reconstructed from canonical issue events. It
+   does not define current work, and routine issue execution does not require a
+   session view to be created or mutated.
 
 2. Current work remains workflow-derived.
    The current-work set is still the set of canonical issue records in the
    checkout whose workflow status is `in_progress`, interpreted with branch and
-   mission context. Ending, deleting, or abandoning a session must not close,
-   block, or unassign an issue.
+   mission context. Viewing or ending a session must not close, block, or
+   unassign an issue.
 
 3. Forgejo PRs are review artifacts.
    `atelier pr` commands may open, inspect, comment on, review, and summarize
@@ -44,12 +46,13 @@ commands transition issues as a side effect.
    Repository config may map Atelier roles to Forgejo users for sudo-mode PR
    operations. That mapping controls remote PR authorship and review identity;
    it does not replace Atelier evidence producers, activity actors, or session
-   participants.
+   attempts.
 
 5. `forge_pr` is a typed issue field.
-   The active PR link belongs in workflow-policy-owned typed issue fields, not
-   in generic attachments or evidence payloads. Evidence remains the durable
-   proof envelope for transcripts and validation results.
+   The active PR link belongs in workflow-policy-owned typed issue fields on
+   the owning issue or epic, not in generic attachments or evidence payloads.
+   Evidence remains the durable proof envelope for transcripts and validation
+   results.
 
 6. PR validators are read-only workflow gates.
    Validators such as `linked_pr_merged` inspect the configured `forge_pr`
@@ -62,7 +65,7 @@ commands transition issues as a side effect.
 
 This would make a session feel like a claim or active pointer. It was rejected
 because current work is already recoverable from committed issue workflow state,
-while sessions are optional coordination metadata.
+while sessions are derived issue-event views rather than workflow drivers.
 
 ### Store PR Links As Evidence Attachments
 
@@ -81,14 +84,16 @@ still runs the Atelier transition.
 
 This would couple remote authorship to whoever owns a local session. It was
 rejected because role-to-user sudo mapping is repository configuration for
-Forgejo operations, while sessions are handoff records and may be absent.
+Forgejo operations, while sessions are derived inspection views and may be
+absent.
 
 ## Consequences
 
-- Product docs and help must teach `session` as optional durable handoff
-  metadata, not a replacement for `status`, `start`, or issue transitions.
+- Product docs and help must teach `session` as a derived inspection surface
+  over issue activity, not a replacement for `status`, `start`, or issue
+  transitions.
 - Product docs and help must teach `pr` as a review-artifact surface whose
-  next steps point back to issue transition readiness.
+  next steps point back to issue or epic transition readiness.
 - Workflow schema version 2 can define typed fields such as `forge_pr`; strict
   validation must reject unknown typed fields rather than accepting arbitrary
   JSON payloads.

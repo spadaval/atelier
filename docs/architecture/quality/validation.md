@@ -25,6 +25,10 @@ accountable child work plus a validation item that audits the parent outcome.
 Direct evidence on a mission is legacy or migration-only; it is not the normal
 way to satisfy mission proof.
 
+Session `show` and `list` are read-only inspection surfaces over derived issue
+activity. They can support attribution proof, but they do not create, end, or
+mutate workflow state.
+
 ## Validation Placement
 
 Each tracker layer owns a different question. Do not duplicate lower-level

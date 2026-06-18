@@ -23,9 +23,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Document session-as-issue-events attribution model"
-updated_at: "2026-06-18T16:49:25.845977046+00:00"
+updated_at: "2026-06-18T17:33:34.773454207+00:00"
 ---
 
 ## Description
