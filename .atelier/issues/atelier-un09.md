@@ -6,6 +6,7 @@ labels:
 - "architecture"
 - "pr"
 - "workflow"
+pull_request: 2
 priority: "P1"
 relationships:
   blocks: []
@@ -24,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T23:49:12.534450550+00:00"
+status: "done"
 title: "Epic: Harden PR artifact workflow seams"
-updated_at: "2026-06-18T22:42:55.142286766+00:00"
+updated_at: "2026-06-18T23:49:12.534450550+00:00"
 ---
 
 ## Description

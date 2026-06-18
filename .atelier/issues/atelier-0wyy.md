@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T23:42:58.167412451+00:00"
+status: "done"
 title: "Move PR artifact orchestration behind app use-case boundary"
-updated_at: "2026-06-18T22:42:47.662168928+00:00"
+updated_at: "2026-06-18T23:42:58.167412451+00:00"
 ---
 
 ## Description

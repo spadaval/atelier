@@ -291,12 +291,12 @@ Supported built-ins include:
 | `durable_state_current` | Canonical state and local projection are current enough for the transition. |
 | `issue_sections_parseable` | Issue Markdown sections can be parsed. |
 | `evidence_attached` | Required evidence is attached; supports `min_count`. |
-| `review_complete` | Required review state is complete. |
+| `review_complete` | Required review artifact state is complete enough for the configured transition; Forgejo remains the authority for approval rules and branch protection. |
 | `epic_child_proof_complete` | Epic child work is closed with validating proof. |
 | `no_open_blockers` | Target has no open blockers. |
 | `no_blocking_lints` | Blocking lint checks pass. |
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
-| `linked_pr_merged` | The linked Forgejo PR is merged and matches configured branch policy. |
+| `linked_pr_merged` | The linked Forgejo PR number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 
 ## Pull Request Link
 
@@ -319,6 +319,14 @@ issues can close on their own proof while the epic remains the merged-PR
 boundary. `linked_pr_merged` derives Forgejo host/owner/repo from
 `.atelier/config.toml` and derives expected source/target branches from
 `branch_policy`.
+
+`linked_pr_merged` is deliberately a fact check, not a second Forgejo policy
+engine. Atelier validates the PR link, remote identity, branch match, and
+merged state because those facts decide whether the local workflow gate is
+satisfied. Forgejo owns branch protection, required approvals, allowed merge
+strategies, and final merge authorization. If a repository needs Atelier to
+enforce additional PR policy locally, that is a new product decision rather
+than an extension of the starter workflow.
 
 ## Errors
 

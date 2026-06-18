@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T23:43:42.670083504+00:00"
+status: "done"
 title: "Preflight PR branch policy before remote creation"
-updated_at: "2026-06-18T22:42:06.610418670+00:00"
+updated_at: "2026-06-18T23:43:42.670083504+00:00"
 ---
 
 ## Description

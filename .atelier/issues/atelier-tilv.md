@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-18T23:43:48.896963537+00:00"
+status: "done"
 title: "Align PR comment and review discussion surfaces"
-updated_at: "2026-06-18T22:42:06.615655083+00:00"
+updated_at: "2026-06-18T23:43:48.896963537+00:00"
 ---
 
 ## Description
