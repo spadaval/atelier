@@ -39,9 +39,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-18T00:47:03.129411089+00:00"
+status: "done"
 title: "Epic: Add typed issue fields"
-updated_at: "2026-06-18T00:22:02.835450449+00:00"
+updated_at: "2026-06-18T00:47:03.129411089+00:00"
 ---
 
 ## Description
