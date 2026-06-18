@@ -6,17 +6,17 @@ labels:
 - "pr"
 - "validator"
 - "workflow"
-priority: "P1"
 fields:
   forge_pr:
-    provider: "forgejo"
-    host: "http://iiot-grand-central.cisco.com:3000"
-    owner: "supadava"
-    repo: "atelier"
+    host: http://iiot-grand-central.cisco.com:3000
     number: 1
-    url: "http://iiot-grand-central.cisco.com:3000/supadava/atelier/pulls/1"
-    source_branch: "epic/atelier-hw9t"
-    target_branch: "master"
+    owner: supadava
+    provider: forgejo
+    repo: atelier
+    source_branch: epic/atelier-hw9t
+    target_branch: master
+    url: http://iiot-grand-central.cisco.com:3000/supadava/atelier/pulls/1
+priority: "P1"
 relationships:
   blocks:
   - kind: "issue"
@@ -38,9 +38,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-18T18:22:33.359751482+00:00"
+status: "done"
 title: "Epic: Gate workflow with linked merged PR"
-updated_at: "2026-06-18T01:17:08.179196067+00:00"
+updated_at: "2026-06-18T18:22:33.359751482+00:00"
 ---
 
 ## Description
