@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Record scenario evidence for issue-event attempts, sudo PR authorship, and merged PR gating"
-updated_at: "2026-06-18T16:49:17.642125611+00:00"
+updated_at: "2026-06-18T18:23:53.511636531+00:00"
 ---
 
 ## Description
