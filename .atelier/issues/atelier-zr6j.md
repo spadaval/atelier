@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "schema"
 - "workflow"
+review:
+  kind: pull_request
+  number: 3
+  provider: forgejo
 priority: "P2"
 relationships:
   blocks:
@@ -23,9 +27,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Workflow schema and transition planner"
-updated_at: "2026-06-19T21:21:20.735519596+00:00"
+updated_at: "2026-06-19T21:22:17.594263565+00:00"
 ---
 
 ## Description
