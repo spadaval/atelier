@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Add review backend health checks to doctor"
-updated_at: "2026-06-19T04:11:45.381915555+00:00"
+updated_at: "2026-06-19T04:58:39.112906924+00:00"
 ---
 
 ## Description
