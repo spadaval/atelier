@@ -57,10 +57,10 @@
   into stable operator-facing buckets such as ready, active, blocked, done, or
   archived. Categories help commands summarize work but do not replace workflow
   status in durable state or transition checks.
-- Transition: a named workflow action that moves a record from one workflow
+- Transition: a named workflow rule that moves a record from one workflow
   status to another after required fields, evidence, and validators succeed.
-- Transition effect: configured work run by an explicit issue transition after
-  required fields and validators succeed. Effects may write canonical tracker
+- Transition action: configured work run by an explicit issue transition after
+  required fields and validators succeed. Actions may write canonical tracker
   records, local branch commits, review artifact links, or provider requests,
   but they are scoped to the transition that declares them and are not hidden
   automation hooks.
@@ -69,11 +69,11 @@
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
-- Transition effect: configured work run by an explicit issue transition after
-  required fields and validators pass. Effects are part of the transition's
+- Transition action: configured work run by an explicit issue transition after
+  required fields and validators pass. Actions are part of the transition's
   success boundary; they do not run as background hooks and do not let review
   commands transition issue workflow.
-- Review artifact effect: the v1 transition effect that opens or links the
+- Review artifact action: the v1 transition action that opens or links the
   configured review artifact for the branch-owning issue or epic and writes the
   canonical `review` field. It follows the active review mode and must not
   merge, approve, comment on, or close review or issue workflow by itself.
@@ -197,8 +197,8 @@
   operate on native rooms or provider-backed review artifacts and record their
   issue or epic linkage, while workflow validators such as `linked_pr_merged`
   only read review state to decide whether an Atelier transition is allowed.
-- Review artifact effects and review commands are distinct. A workflow
-  transition may declare an effect that opens or links the branch owner's review
+- Review artifact actions and review commands are distinct. A workflow
+  transition may declare an action that opens or links the branch owner's review
   artifact after validators pass, but approval, comments, request-changes,
   finding resolution, merge, and workflow status changes remain owned by
   explicit review and issue commands.

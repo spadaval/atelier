@@ -13,6 +13,27 @@ state or execute issue transitions load and validate this file directly. If the
 file is missing, obsolete, or invalid, the command fails with a workflow config
 error.
 
+## Ownership Boundary
+
+Atelier has three separate configuration surfaces. A setting belongs to exactly
+one surface unless a later ADR explicitly changes that ownership.
+
+| Surface | Owns | Must not own |
+| --- | --- | --- |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, ignored runtime/cache paths, active review mode, provider backend identity, provider remote coordinates, role-author mapping, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, provider secret values, local runtime contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, and ordered transition actions. | Provider host/owner/repo/token settings, role-author mapping, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
+| Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
+
+The boundary is intentionally split for review integration. `.atelier/config.toml`
+selects the review backend, such as `review.mode = "provider"` with
+`review.provider = "forgejo"`, and records the provider identity needed to
+normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
+transition opens or links the branch owner's review artifact through explicit
+actions such as `review_artifact_open` or `review_artifact_link`. Provider
+approval rules, branch protection, and merge authorization remain with the
+provider or native room implementation; workflow validators only read enough
+review state to decide whether an Atelier transition may proceed.
+
 ## Operator Surface
 
 Issue workflow execution is explicit:
@@ -25,10 +46,10 @@ atelier issue transition <id> --options
 `atelier issue transition <id> --options` renders transitions available from
 the issue's current status. Each option reports whether the transition is
 currently allowed, configured read-only validator results, configured
-transition effects, static transition descriptions, branch context, and the
+transition actions, static transition descriptions, branch context, and the
 next command to run. A blocked attempt records a `transition_blocked` issue
-activity entry without running effects. A successful attempt runs declared
-effects in order, records a `transition_applied` activity entry, and updates
+activity entry without running actions. A successful attempt runs declared
+actions in order, records a `transition_applied` activity entry, and updates
 the canonical issue `status`.
 
 ## Scope
@@ -42,7 +63,7 @@ Workflow policy applies to issues. The contract defines:
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
 - inline read-only built-in validators and validator params;
-- inline built-in transition effects;
+- inline built-in transition actions;
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
@@ -109,7 +130,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -142,7 +163,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -189,7 +210,8 @@ workflows:
 Required top-level fields are `schema`, `schema_version`, `branch_policy`,
 `statuses`, and `workflows`. Unknown top-level fields are hard errors.
 Obsolete top-level fields such as `issue_types`, `branch_lifecycle`,
-`validators`, `guidance_templates`, and `fields` are rejected.
+`validators`, `guidance_templates`, and `fields` are rejected. Obsolete
+transition fields such as `effects` are rejected for the target contract.
 
 ## Branch Policy
 
@@ -200,10 +222,10 @@ tracker graph rather than duplicated in command handlers:
 - child issues under an epic use the nearest parent epic as branch owner;
 - standalone issues own their issue branch;
 - epics own their epic branch;
-- child issue completion effects commit tracker state on the epic branch and do
+- child issue completion actions commit tracker state on the epic branch and do
   not merge to base; and
-- standalone issue and epic completion effects integrate their owner branch to
-  base when the workflow declares that effect.
+- standalone issue and epic completion actions integrate their owner branch to
+  base when the workflow declares that action.
 
 | Field | Rule |
 | --- | --- |
@@ -263,40 +285,44 @@ Each workflow defines named transitions:
 | `to` | Required destination status. It must exist. |
 | `required_fields` | Optional list of required command inputs. Currently `close_reason` is supported. |
 | `validators` | Optional list of inline read-only built-in validators. |
-| `effects` | Optional ordered list of inline built-in transition effects. |
+| `actions` | Optional ordered list of inline built-in transition actions. |
 | `description` | Optional static text rendered near transition options and blocked transition output. |
 
 `description` is static text. There is no template registry and no template
 variable expansion.
 
-## Transition Effects
+## Transition Actions
 
-Transition effects are configured work run by explicit issue transitions after
+Transition actions are configured work run by explicit issue transitions after
 required fields and validators pass. They are declared on a transition, planned
 in declaration order, and rendered separately from validators so operators can
 see what readiness checked and what the command intends to mutate.
 
-Built-in effects are:
+Built-in actions are:
 
-| Effect | Purpose |
+| Action | Purpose |
 | --- | --- |
-| `issue_status_write` | Write the canonical issue status and transition activity entry. This is the default status effect for successful issue transitions. |
-| `owner_branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
-| `owner_branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
+| `branch_prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
+| `branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
+| `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
 | `review_artifact_open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
 | `review_artifact_link` | Normalize an existing configured provider review artifact and write the canonical `review` link. |
 
-Review artifact effects use the configured review mode from `.atelier/config.toml`.
+The workflow engine intrinsically writes the canonical issue status and
+transition activity entry for a successful transition. That status write is not
+a configurable action.
+
+Review artifact actions use the configured review mode from `.atelier/config.toml`.
 In room mode they create or reuse a native review room. In provider mode they
 create, fetch, or link the configured provider artifact. They do not approve,
 comment, request changes, resolve findings, merge review artifacts, close
 issues, add `pr` aliases, or replace explicit `atelier issue transition`.
 
-Failure behavior is part of the effect contract:
+Failure behavior is part of the action contract:
 
-- Preflight failures stop before effects mutate state. This includes invalid
+- Preflight failures stop before actions mutate state. This includes invalid
   source status, missing required fields, failed validators, invalid review mode,
-  and invalid effect configuration.
+  and invalid action configuration.
 - Local write failures name the failed Markdown, activity, branch, commit, or
   integration step and leave recovery commands that can inspect the preserved
   state.
@@ -305,7 +331,7 @@ Failure behavior is part of the effect contract:
 - Idempotent retry must tolerate an already-created review artifact,
   already-written review link, already-applied activity entry, or already-made
   owner-branch commit.
-- Recovery text must name the failed effect, what state was preserved, and next
+- Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
   --options`, `atelier review status --issue <id>`, or `atelier lint <id>`.
 
@@ -331,7 +357,7 @@ params are hard config errors.
 Validators must be read-only. They may inspect canonical records, projection
 freshness, worktree state, evidence, blockers, and review artifacts, but they
 must not write records, create commits, change branches, open reviews, or merge
-anything. Mutating behavior belongs in transition effects.
+anything. Mutating behavior belongs in transition actions.
 
 Supported built-ins include:
 
@@ -347,9 +373,9 @@ Supported built-ins include:
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
 | `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 
-Effects are not validators. They may mutate Git state, canonical review
+Actions are not validators. They may mutate Git state, canonical review
 records, provider review artifacts, and committed tracker state. Unknown
-effects or effect params unsupported by the built-in effect
+actions or action params unsupported by the built-in action
 are hard config errors.
 
 ## Review Field
@@ -458,4 +484,6 @@ diagnostic families include:
 | `workflow_config_invalid_status` | Status name, category, transition source, or terminal status is invalid. |
 | `workflow_config_unknown_validator` | Transition references an unsupported validator. |
 | `workflow_config_invalid_validator` | Validator params are malformed. |
+| `workflow_config_unknown_action` | Transition references an unsupported action. |
+| `workflow_config_invalid_action` | Action params are malformed or unsupported for that built-in action. |
 | `workflow_issue_field_invalid` | Canonical issue fields violate built-in workflow field rules. |
