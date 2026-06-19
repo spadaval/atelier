@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-19T21:23:05.175997882+00:00"
+status: "done"
 title: "Epic: Workflow schema and transition planner"
-updated_at: "2026-06-19T21:22:40.040206930+00:00"
+updated_at: "2026-06-19T21:23:05.175997882+00:00"
 ---
 
 ## Description
