@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:58:14.284686840+00:00"
+status: "done"
 title: "Epic: Implement native review room backend"
-updated_at: "2026-06-19T03:58:46.845763074+00:00"
+updated_at: "2026-06-19T04:58:14.284686840+00:00"
 ---
 
 ## Description

@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:57:25.727360134+00:00"
+status: "done"
 title: "Implement room open status show and timeline comments"
-updated_at: "2026-06-19T03:58:41.591352441+00:00"
+updated_at: "2026-06-19T04:57:25.727360134+00:00"
 ---
 
 ## Description

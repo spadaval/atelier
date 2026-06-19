@@ -667,6 +667,12 @@ enum ReviewCommands {
         issue: Option<String>,
         #[arg(long)]
         role: String,
+        /// Record this room comment as a finding instead of a plain timeline comment
+        #[arg(long)]
+        finding: bool,
+        /// Finding severity for native room mode
+        #[arg(long, default_value = "blocking")]
+        severity: String,
         body: String,
     },
     /// Approve a review artifact
@@ -1526,18 +1532,28 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     unresolved,
                 ),
-                ReviewCommands::Comment { issue, role, body } => commands::pr::comment(
+                ReviewCommands::Comment {
+                    issue,
+                    role,
+                    finding,
+                    severity,
+                    body,
+                } => commands::pr::comment(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
+                    &storage.db_path(),
                     issue.as_deref(),
                     &role,
                     &body,
+                    finding,
+                    finding.then_some(severity.as_str()),
                 ),
                 ReviewCommands::Approve { issue, role, body } => commands::pr::review(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
+                    &storage.db_path(),
                     issue.as_deref(),
                     &role,
                     "approve",
@@ -1547,14 +1563,20 @@ fn run() -> Result<()> {
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
+                    &storage.db_path(),
                     issue.as_deref(),
                     &role,
                     "request-changes",
                     &body,
                 ),
-                ReviewCommands::Resolve { .. } => {
-                    bail!("review_mode_invalid: resolve is only available for native review rooms")
-                }
+                ReviewCommands::Resolve { issue, finding } => commands::pr::resolve(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &finding,
+                ),
             }
         }
 

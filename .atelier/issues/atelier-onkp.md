@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:57:47.420371174+00:00"
+status: "done"
 title: "Implement review merge authority for room mode"
-updated_at: "2026-06-19T03:58:46.844876242+00:00"
+updated_at: "2026-06-19T04:57:47.420371174+00:00"
 ---
 
 ## Description
