@@ -23,9 +23,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T23:40:34.268903290+00:00"
+status: "done"
 title: "Define config and workflow policy ownership boundary"
-updated_at: "2026-06-19T22:54:23.405637605+00:00"
+updated_at: "2026-06-19T23:40:34.268903290+00:00"
 ---
 
 ## Description
