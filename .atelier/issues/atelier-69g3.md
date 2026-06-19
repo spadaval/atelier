@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:46:49.733969352+00:00"
+status: "done"
 title: "Rename pr command dispatch and help to review"
-updated_at: "2026-06-19T03:58:49.566638519+00:00"
+updated_at: "2026-06-19T04:46:49.733969352+00:00"
 ---
 
 ## Description
