@@ -312,14 +312,13 @@ fn epic_branch_name(epic: &Issue) -> Result<String> {
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let issue = db.require_issue(id)?;
     print_active_mission_context(db, id)?;
-    ensure_issue_active_for_worktree(db, id)?;
     let root = repo_root()?;
     let branch = issue_branch_name(&root, &issue)?;
     let worktree_path = path
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".atelier-worktrees").join(id));
-    let worktree_path_string = worktree_path.to_string_lossy().to_string();
-    if !worktree_path.exists() {
+    let created_worktree = !worktree_path.exists();
+    if created_worktree {
         let output = Command::new("git")
             .current_dir(&root)
             .args(["worktree", "add", "-B", &branch])
@@ -340,7 +339,6 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let layout = atelier_app::storage_layout::StorageLayout::new(&worktree_path);
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
-        activate_worktree_issue(&worktree_path, id)?;
         std::fs::create_dir_all(layout.target_runtime_dir())
             .context("worktree setup failed while creating runtime directory")?;
         let exe = env::current_exe().context("failed to locate current atelier executable")?;
@@ -350,69 +348,32 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
             .status()
             .context("worktree setup failed while rebuilding runtime projection")?;
         if !status.success() {
+            if created_worktree {
+                let _ = Command::new("git")
+                    .current_dir(&root)
+                    .args(["worktree", "remove", "--force"])
+                    .arg(&worktree_path)
+                    .status();
+            }
             bail!("worktree setup failed while rebuilding runtime projection");
         }
     } else {
+        if created_worktree {
+            let _ = Command::new("git")
+                .current_dir(&root)
+                .args(["worktree", "remove", "--force"])
+                .arg(&worktree_path)
+                .status();
+        }
         bail!(
             "worktree setup failed because {} does not contain .atelier",
             worktree_path.display()
         );
     }
     validate_worktree_projection(&layout, id)?;
-    crate::commands::activity_log::record_work_started(
-        id,
-        Some(&branch),
-        Some(&worktree_path_string),
-    )?;
     let _ = issue;
     println!("{}", worktree_path.display());
     Ok(())
-}
-
-fn activate_worktree_issue(worktree_path: &Path, id: &str) -> Result<()> {
-    let exe = env::current_exe().context("failed to locate current atelier executable")?;
-    let output = Command::new(exe)
-        .current_dir(worktree_path)
-        .args(["issue", "transition", id, "start"])
-        .output()
-        .context("worktree setup failed while activating issue in worktree")?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("Unknown transition 'start'")
-        || stderr.contains("available from 'in_progress'")
-    {
-        return Ok(());
-    }
-    bail!(
-        "worktree setup failed while activating issue in worktree: {}",
-        stderr.trim()
-    );
-}
-
-fn ensure_issue_active_for_worktree(db: &Database, id: &str) -> Result<()> {
-    let issue = db.require_issue(id)?;
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    if crate::commands::issue_workflow::issue_status_category(
-        workflow_policy.as_ref(),
-        &issue.status,
-    )
-    .as_deref()
-        == Some("active")
-    {
-        return Ok(());
-    }
-    let root = repo_root()?;
-    let layout = atelier_app::storage_layout::StorageLayout::new(&root);
-    crate::commands::workflow::transition_issue(
-        db,
-        &layout.canonical_dir(),
-        &layout.runtime_db_path(),
-        id,
-        "start",
-        None,
-    )
 }
 
 pub fn worktree_for_mission(db: &Database, mission_id: &str, path: Option<&str>) -> Result<()> {

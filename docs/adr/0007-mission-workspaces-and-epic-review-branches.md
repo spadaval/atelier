@@ -41,19 +41,22 @@ Atelier uses this hierarchy as the target operating model:
    local proof named by their `Evidence` section. They do not require an
    independent review by default.
 
-4. Branch lifecycle is owned by start and close commands.
-   Routine workers use `atelier start <id>` to prepare the correct owner
-   branch. The owner branch is the nearest parent epic branch for child issues,
-   an issue branch for standalone issues, and an epic branch for epics.
-   `atelier issue close <id>` commits the close-state tracker change on that
-   owner branch. Child issue close stops at the epic branch; standalone issue
-   and epic close merge their owner branch to the configured base branch.
+4. Branch lifecycle is owned by workflow transition effects.
+   Routine workers use `atelier issue transition <id> <transition>` for normal
+   issue lifecycle movement. The owner branch is the nearest parent epic branch
+   for child issues, an issue branch for standalone issues, and an epic branch
+   for epics. Workflow-declared `effects.before` prepare owner branches when a
+   transition needs setup; workflow-declared `effects.after` commit tracker
+   state, open or update review artifacts, and integrate owner branches when a
+   transition needs those mutations. Child issue completion stops at the epic
+   branch; standalone issue and epic completion may merge their owner branch to
+   the configured base branch when policy declares integration.
 
 5. Squash merge is the default integration strategy.
    Repositories may configure merge commit or fast-forward-only alternatives,
    base branch selection, and branch naming templates. Close must be
    failure-atomic: a failed tracker commit, merge, or required push must not
-   leave the item closed in the integration branch.
+   leave the item advanced in the integration branch.
 
 6. Per-issue worktrees and per-issue branches are exceptional isolation.
    Use them only when the assignment or risk justifies containment: dirty
@@ -101,8 +104,8 @@ where work should happen and where proof should be reviewed.
   must stop teaching per-issue worktrees as the normal mutating-subagent
   default.
 - Product docs, command help, and Agent Factory bindings must teach
-  lifecycle-owned branch preparation through `atelier start <id>` rather than
-  routine pre-work calls to explicit branch helpers.
+  lifecycle-owned branch preparation through `atelier issue transition` effects
+  rather than routine pre-work calls to explicit branch helpers.
 - Workflow policy should allow ordinary implementation issues to close with
   local proof and move review gates to epics, validation issues, closeout
   issues, or explicitly risk-escalated issue types.

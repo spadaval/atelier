@@ -252,7 +252,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
-                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
+                    "  Start selectable active-mission work ({} selectable issue(s)): atelier issue transition {} start",
                     snapshot.selectable_issues.len(),
                     issue.id
                 );
@@ -295,7 +295,9 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
             ready.len()
         );
-        println!("  Start selected work (ready work exists): atelier start <issue-id>");
+        println!(
+            "  Start selected work (ready work exists): atelier issue transition <issue-id> start"
+        );
     }
     if !export_stale.is_empty() {
         println!(
@@ -743,7 +745,10 @@ fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Resul
                 {
                     "ok".to_string()
                 } else {
-                    format!("mismatch; run `atelier start {}`", issue.id)
+                    format!(
+                        "mismatch; run `atelier issue transition {} start`",
+                        issue.id
+                    )
                 };
                 println!(
                     "  {} - owner {} {} ({}) | expected {} | {state}",

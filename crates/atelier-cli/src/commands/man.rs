@@ -219,7 +219,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier start <id> - Move the issue into the current-work set.");
+                println!("  3. atelier issue transition <id> start - Move the issue into the current-work set.");
             }
         }
         Role::Reviewer => {
@@ -266,10 +266,10 @@ fn print_normal_loop(role: Role) {
             println!("  atelier session list --active");
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
-            println!("  atelier start <id>");
+            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue transition <id> start");
             println!("  atelier review comment --issue <id> --role worker --body \"...\"");
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
-            println!("  atelier issue close <id> --reason \"...\"");
         }
         Role::Reviewer => {
             println!("  atelier mission status");

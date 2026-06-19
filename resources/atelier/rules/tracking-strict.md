@@ -55,16 +55,16 @@ atelier issue create "Add login endpoint with JWT tokens" --parent 1
 atelier issue create "Add session middleware for protected routes" --parent 1
 
 # Mark what you're working on
-atelier start 1
+atelier issue transition 1 start
 
 # Add context as you discover things
 atelier issue note 1 "Found existing auth helper in utils/auth.ts"
 
 # Close when done — auto-updates CHANGELOG.md
-atelier issue close 1 --reason "completed"
+atelier issue transition 1 close
 
 # Skip changelog for internal/refactor work
-atelier issue close 1 --reason "completed"
+atelier issue transition 1 close
 
 # Quiet mode for scripting
 atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
@@ -106,7 +106,7 @@ atelier issue create "Add webhook delivery dashboard endpoint" --parent 1
 Sessions are auto-started by the SessionStart hook. **You MUST end sessions properly.**
 
 ```bash
-atelier start <id>          # Mark current focus — ALWAYS
+atelier issue transition <id> start          # Mark current focus — ALWAYS
 atelier issue note <id> "handoff: ..." --kind handoff  # REQUIRED before stopping — ALWAYS
 ```
 

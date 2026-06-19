@@ -46,19 +46,27 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, validation]
         to: blocked
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
           - no_open_blockers
           - no_blocking_lints
           - durable_state_current
+        effects:
+          after:
+            - tracker.commit
+            - branch.merge
 
   epic_reviewed:
     applies_to: [epic]
@@ -68,22 +76,34 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       request_validation:
         from: [in_progress, review]
         to: validation
         validators:
           - review_complete
+        effects:
+          after:
+            - tracker.commit
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -91,6 +111,12 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 
   validation_reviewed:
     applies_to: [validation]
@@ -100,21 +126,33 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       request_validation:
         from: [in_progress, review]
         to: validation
         validators:
           - review_complete
+        effects:
+          after:
+            - tracker.commit
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -123,6 +161,12 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 
   spike:
     applies_to: [spike]
@@ -132,23 +176,38 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       revise:
         from: [review]
         to: in_progress
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record the spike outcome before closing."
+        description: "Closing requires a complete review."
         validators:
           - review_complete
           - durable_state_current
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -167,7 +226,14 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "no_blocking_lints",
     "git_worktree_clean",
 ];
-const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
+const BUILTIN_EFFECTS: &[&str] = &[
+    "branch.prepare",
+    "review.open",
+    "review.merge",
+    "tracker.commit",
+    "branch.merge",
+];
+const ALLOWED_REQUIRED_FIELDS: &[&str] = &[];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
     "hooks",
     "triggers",
@@ -288,6 +354,17 @@ pub struct ValidatorDefinition {
     pub params: Option<ValidatorParams>,
 }
 
+#[derive(Debug, Clone)]
+pub struct EffectDefinition {
+    pub builtin: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TransitionEffects {
+    pub before: Vec<EffectDefinition>,
+    pub after: Vec<EffectDefinition>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidatorParams {
     EvidenceAttached {
@@ -316,6 +393,7 @@ pub struct TransitionDefinition {
     pub required_fields: Vec<String>,
     pub description: Option<String>,
     pub validators: Vec<ValidatorDefinition>,
+    pub effects: TransitionEffects,
 }
 
 impl WorkflowPolicy {
@@ -462,6 +540,17 @@ struct TransitionDefinitionRaw {
     description: Option<String>,
     #[serde(default)]
     validators: Vec<Value>,
+    #[serde(default)]
+    effects: Option<TransitionEffectsRaw>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct TransitionEffectsRaw {
+    #[serde(default)]
+    before: Vec<Value>,
+    #[serde(default)]
+    after: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1115,6 +1204,8 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
+    let effects =
+        parse_transition_effects(workflow_name, transition_name, raw.effects, display_path)?;
 
     Ok(TransitionDefinition {
         from,
@@ -1122,7 +1213,86 @@ fn parse_transition_definition(
         required_fields: raw.required_fields,
         description: raw.description,
         validators,
+        effects,
     })
+}
+
+fn parse_transition_effects(
+    workflow_name: &str,
+    transition_name: &str,
+    raw: Option<TransitionEffectsRaw>,
+    display_path: &str,
+) -> Result<TransitionEffects> {
+    let Some(raw) = raw else {
+        return Ok(TransitionEffects::default());
+    };
+    Ok(TransitionEffects {
+        before: parse_effect_phase(
+            workflow_name,
+            transition_name,
+            "before",
+            &raw.before,
+            display_path,
+        )?,
+        after: parse_effect_phase(
+            workflow_name,
+            transition_name,
+            "after",
+            &raw.after,
+            display_path,
+        )?,
+    })
+}
+
+fn parse_effect_phase(
+    workflow_name: &str,
+    transition_name: &str,
+    phase: &str,
+    raw: &[Value],
+    display_path: &str,
+) -> Result<Vec<EffectDefinition>> {
+    let mut effects = Vec::new();
+    for value in raw {
+        let name = value.as_str().ok_or_else(|| {
+            policy_error(
+                "workflow_config_invalid_effect",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.effects.{} must contain built-in effect strings",
+                    workflow_name, transition_name, phase
+                ),
+            )
+        })?;
+        validate_builtin_effect_name(workflow_name, transition_name, phase, name, display_path)?;
+        effects.push(EffectDefinition {
+            builtin: name.to_string(),
+        });
+    }
+    Ok(effects)
+}
+
+fn validate_builtin_effect_name(
+    workflow_name: &str,
+    transition_name: &str,
+    phase: &str,
+    effect_name: &str,
+    display_path: &str,
+) -> Result<()> {
+    if BUILTIN_EFFECTS.contains(&effect_name) {
+        return Ok(());
+    }
+    Err(policy_error(
+        "workflow_config_invalid_effect",
+        display_path,
+        format!(
+            "workflows.{}.transitions.{}.effects.{} has unsupported built-in effect '{}'; expected {}",
+            workflow_name,
+            transition_name,
+            phase,
+            effect_name,
+            BUILTIN_EFFECTS.join(", ")
+        ),
+    ))
 }
 
 fn parse_transition_validators(
@@ -1899,6 +2069,7 @@ mod tests {
             Some("done")
         );
         let close = &policy.workflows["standard"].transitions["close"];
+        assert!(close.required_fields.is_empty());
         assert_eq!(
             close.validators[0].params.as_ref(),
             Some(&ValidatorParams::EvidenceAttached {
@@ -1906,8 +2077,59 @@ mod tests {
                 kind: None,
             })
         );
+        assert_eq!(
+            effect_names(
+                &policy.workflows["standard"].transitions["start"]
+                    .effects
+                    .before
+            ),
+            vec!["branch.prepare"]
+        );
+        assert_eq!(
+            effect_names(
+                &policy.workflows["standard"].transitions["start"]
+                    .effects
+                    .after
+            ),
+            vec!["tracker.commit"]
+        );
+        assert_eq!(
+            effect_names(&close.effects.after),
+            vec!["tracker.commit", "branch.merge"]
+        );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
+    }
+
+    fn effect_names(effects: &[EffectDefinition]) -> Vec<&str> {
+        effects
+            .iter()
+            .map(|effect| effect.builtin.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn rejects_unknown_transition_effect() {
+        let policy =
+            valid_policy().replace("            - branch.prepare", "            - nope.run");
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("nope.run"));
+    }
+
+    #[test]
+    fn rejects_legacy_close_reason_required_field() {
+        let policy = valid_policy().replace(
+            "        description: \"Closing requires attached evidence and no open blockers.\"",
+            "        required_fields: [close_reason]\n        description: \"Closing requires attached evidence and no open blockers.\"",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_transition"));
+        assert!(error.contains("close_reason"));
     }
 
     #[test]

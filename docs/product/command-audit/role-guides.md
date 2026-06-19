@@ -43,12 +43,12 @@ atelier man worker
 atelier status
 atelier issue list --ready
 atelier issue show <id>
-atelier start <id>
+atelier issue transition <id> start
 atelier review comment --issue <id> --role worker --body "..."
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
 atelier issue transition <id> --options
-atelier issue close <id> --reason "..."
+atelier issue transition <id> close
 ```
 
 Worker guide should hide or de-emphasize setup, maintenance, raw diagnostics,
@@ -130,7 +130,7 @@ mission with many epics, issues, blockers, mission links, or evidence links.
 Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
 branch commands belong in advanced repair and diagnostic guidance; normal branch
-preparation belongs to `atelier start <id>`.
+preparation belongs to workflow transition effects.
 
 ## Admin Guide
 

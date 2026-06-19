@@ -646,7 +646,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier init`
 - `atelier man`
 - `atelier status`
-- `atelier start`
+- `atelier issue transition`
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
@@ -863,12 +863,25 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
             run_atelier(dir, &["issue", "transition", &issue_id, transition]);
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
+            if transition == "request_review" {
+                let (approved, _, approve_stderr) = run_atelier(
+                    dir,
+                    &[
+                        "review", "approve", "--issue", &issue_id, "--role", "reviewer", "--body",
+                        "approved",
+                    ],
+                );
+                assert!(
+                    approved,
+                    "review approve failed for {issue_id}: {approve_stderr}"
+                );
+            }
         }
     }
     issue_id
 }
 
-fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
+fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, _reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     move_issue_to_validation(dir, &issue_id);
     ensure_all_issue_completion_sections(dir);
@@ -876,11 +889,8 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));
     }
-    let mut args = vec!["issue", "close", issue_ref_value];
-    args.push("--reason");
-    args.push(reason.unwrap_or("done"));
-    let (success, _, stderr) = run_atelier(dir, &args);
-    assert!(success, "issue close failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir, &["issue", "transition", &issue_id, "close"]);
+    assert!(success, "issue transition close failed: {stderr}");
     issue_id
 }
 

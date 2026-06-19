@@ -19,8 +19,8 @@ the issue is done?"
 - Output hierarchy: If kept temporarily, the output should say it is legacy and
   point operators back to `status`, `issue transition`, and `worktree status`.
 
-## Role Use
+## Retired Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| `atelier abandon [issue-id] --reason "..."` | Worker | Legacy cleanup for hidden active-pointer state. | Remove or replace. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| removed `atelier abandon [issue-id] --reason "..."` | Worker | Legacy cleanup for hidden active-pointer state; stop work without completion. | Replacement path for current-work state. | Add `issue note` if context matters, inspect `issue transition --options`, or leave no durable change if no workflow state changed. | Remove or keep rejected; do not restore hidden active-pointer cleanup. |

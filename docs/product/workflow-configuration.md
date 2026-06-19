@@ -24,10 +24,13 @@ atelier issue transition <id> --options
 
 `atelier issue transition <id> --options` renders transitions available from
 the issue's current status. Each option reports whether the transition is
-currently allowed, configured validator results, static transition descriptions,
-branch context, and the next command to run. A blocked attempt records a
-`transition_blocked` issue activity entry. A successful attempt records a
-`transition_applied` activity entry and updates the canonical issue `status`.
+currently allowed, configured read-only validator results, static transition
+descriptions, declared before/after effects, branch context, and the next
+command to run. A blocked attempt records a
+`transition_blocked` issue activity entry without running effects. A successful
+attempt evaluates validators, runs declared `effects.before`, records a
+`transition_applied` activity entry, updates the canonical issue `status`, and
+runs declared `effects.after`.
 
 ## Scope
 
@@ -39,7 +42,8 @@ Workflow policy applies to issues. The contract defines:
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
-- inline built-in validators and validator params;
+- inline read-only built-in validators and validator params;
+- mandatory mutating `effects.before` and `effects.after` actions;
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
@@ -79,19 +83,22 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       block:
         from: [todo, in_progress, validation]
         to: blocked
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
           - no_open_blockers
           - no_blocking_lints
           - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 
   epic_reviewed:
     applies_to: [epic]
@@ -101,12 +108,16 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          after: [open_review_artifact]
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -114,7 +125,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -124,6 +134,8 @@ workflows:
           - linked_pr_merged
           - durable_state_current
           - git_worktree_clean
+        effects:
+          after: [commit_tracker_state, integrate_owner_branch]
 
   validation_reviewed:
     applies_to: [validation]
@@ -133,6 +145,8 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -146,7 +160,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -155,6 +168,8 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
+        effects:
+          after: [commit_tracker_state]
 
   spike:
     applies_to: [spike]
@@ -164,6 +179,8 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -176,11 +193,12 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record a concise close reason that captures the spike outcome."
+        description: "Closing requires complete review and current durable state."
         validators:
           - review_complete
           - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 ```
 
 Required top-level fields are `schema`, `schema_version`, `branch_policy`,
@@ -197,9 +215,10 @@ tracker graph rather than duplicated in command handlers:
 - child issues under an epic use the nearest parent epic as branch owner;
 - standalone issues own their issue branch;
 - epics own their epic branch;
-- child issue close commits tracker state on the epic branch and does not merge
-  to base; and
-- standalone issue and epic close integrate their owner branch to base.
+- child issue completion effects commit tracker state on the epic branch and do
+  not merge to base; and
+- standalone issue and epic completion effects integrate their owner branch to
+  base when the workflow declares that effect.
 
 | Field | Rule |
 | --- | --- |
@@ -257,8 +276,8 @@ Each workflow defines named transitions:
 | --- | --- |
 | `from` | Required non-empty list of source statuses. Each status must exist and must not be terminal for the workflow. |
 | `to` | Required destination status. It must exist. |
-| `required_fields` | Optional list of required command inputs. Currently `close_reason` is supported. |
-| `validators` | Optional list of inline built-in validators. |
+| `validators` | Optional list of inline read-only built-in validators. |
+| `effects` | Optional object with `before` and/or `after` lists of mandatory mutating built-in effects. |
 | `description` | Optional static text rendered near transition options and blocked transition output. |
 
 `description` is static text. There is no template registry and no template
@@ -283,6 +302,10 @@ validators:
 
 There is no top-level validator alias registry. Unknown validators and invalid
 params are hard config errors.
+Validators must be read-only. They may inspect canonical records, projection
+freshness, worktree state, evidence, blockers, and review artifacts, but they
+must not write records, create commits, change branches, open reviews, or merge
+anything. Mutating behavior belongs in transition effects.
 
 Supported built-ins include:
 
@@ -297,6 +320,40 @@ Supported built-ins include:
 | `no_blocking_lints` | Blocking lint checks pass. |
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
 | `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
+
+## Effects
+
+Transition effects declare mandatory mutating behavior around a successful
+transition:
+
+```yaml
+effects:
+  before:
+    - prepare_owner_branch
+  after:
+    - commit_tracker_state
+    - integrate_owner_branch
+```
+
+`effects.before` runs after validators pass and before the canonical status
+update when the transition requires preparatory mutation. `effects.after` runs
+after the status update is ready to commit. If a required effect fails, the
+command must report the failed effect and leave durable workflow state on a
+retryable repair path rather than claiming the transition completed.
+
+Supported starter effects include:
+
+| Effect | Phase | Purpose |
+| --- | --- | --- |
+| `prepare_owner_branch` | `before` | Create or check out the workflow-derived owner branch for the issue or epic. |
+| `open_review_artifact` | `after` | Create the configured review artifact when the workflow enters review. |
+| `commit_tracker_state` | `after` | Commit the canonical tracker-state mutation on the owner branch. |
+| `integrate_owner_branch` | `after` | Merge or otherwise integrate the owner branch to the configured base branch using branch policy. |
+
+Effects are not validators. They may mutate Git state, canonical review
+records, provider review artifacts, and committed tracker state. Unknown
+effects, invalid phases, or effect params unsupported by the built-in effect
+are hard config errors.
 
 ## Review Field
 

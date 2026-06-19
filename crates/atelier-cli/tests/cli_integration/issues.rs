@@ -1046,7 +1046,7 @@ fn test_issue_search_reads_payloads_from_record_store_and_activity() {
 }
 
 #[test]
-fn test_show_closed_issue_includes_close_reason() {
+fn test_show_closed_issue_omits_legacy_close_reason() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1058,8 +1058,8 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains("Closed issue"));
     assert!(stdout.contains("Closed:"));
-    assert!(stdout.contains("Close Reason"));
-    assert!(stdout.contains("Done enough"));
+    assert!(!stdout.contains("Close Reason"), "{stdout}");
+    assert!(!stdout.contains("Done enough"), "{stdout}");
 }
 
 #[test]
@@ -1735,11 +1735,9 @@ fn test_issue_mutations_create_activity_sidecars() {
 
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Close reason body"],
-    );
-    assert!(success, "issue close reason failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    assert!(success, "issue transition close failed: {stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(&activities, "comment", &["Plain comment body"]);
@@ -1771,7 +1769,13 @@ fn test_issue_mutations_create_activity_sidecars() {
         "transition_applied",
         &["transition: \"close\"", "to: \"done\""],
     );
-    assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
+    assert!(
+        activities
+            .iter()
+            .all(|activity| !activity.contains("event_type: \"close_reason\"")),
+        "issue transition close should not record a legacy close_reason activity:\n{}",
+        activities.join("\n--- activity ---\n")
+    );
 }
 
 #[test]
@@ -1804,10 +1808,8 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     assert!(success, "issue note failed: {stderr}");
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Canonical close"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(success, "close failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
@@ -1817,8 +1819,8 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Canonical handoff"));
-    assert!(stdout.contains("Close Reason"));
-    assert!(stdout.contains("Canonical close"));
+    assert!(!stdout.contains("Close Reason"), "{stdout}");
+    assert!(!stdout.contains("Canonical close"), "{stdout}");
 }
 
 #[test]
@@ -2114,7 +2116,8 @@ fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active
     run_atelier(dir.path(), &["issue", "create", "Active item"]);
     let active_id = issue_ref(dir.path(), 4);
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &active_id, "start"]);
     assert!(success, "start active issue failed: {stderr}");
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);

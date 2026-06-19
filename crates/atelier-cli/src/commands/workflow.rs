@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -10,8 +11,10 @@ use std::time::Instant;
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
 use atelier_app::project_config::ProjectConfig;
+use atelier_app::project_config::ReviewConfig;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
+use atelier_app::{pr as app_pr, review_room};
 use atelier_core::{EvidenceRecord, Issue, Record};
 use atelier_records::{CanonicalIssueRecord, IssueSections};
 use atelier_sqlite::Database;
@@ -36,8 +39,25 @@ pub struct IssueTransitionOption {
     pub allowed: bool,
     pub blockers: Vec<String>,
     pub validator_results: Vec<ValidatorResult>,
+    pub before_effects: Vec<String>,
+    pub after_effects: Vec<String>,
     pub descriptions: Vec<String>,
     pub command: String,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TransitionExecutionOptions<'a> {
+    pub dry_run: bool,
+    pub skip_effects: bool,
+    pub reason: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+struct EffectResult {
+    phase: &'static str,
+    effect: String,
+    status: String,
+    detail: String,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +138,8 @@ pub fn issue_transition_options(
             allowed: blockers.is_empty(),
             blockers,
             validator_results,
+            before_effects: effect_names(&transition.effects.before),
+            after_effects: effect_names(&transition.effects.after),
             descriptions,
             command: transition_command(&issue.id, name, transition),
         });
@@ -209,11 +231,11 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             "current branch matches expected branch".to_string()
         }
         Some(current) => format!(
-            "mismatch - current branch {current}; run `atelier start {}` before continuing work",
+            "mismatch - current branch {current}; run `atelier issue transition {} start` before continuing work",
             context.resolution.issue_id
         ),
         None => format!(
-            "detached or unknown - run `atelier start {}` before continuing work",
+            "detached or unknown - run `atelier issue transition {} start` before continuing work",
             context.resolution.issue_id
         ),
     }
@@ -245,7 +267,7 @@ fn branch_context_blockers(
     if is_start {
         if !context.dirty_entries.is_empty() {
             blockers.push(format!(
-                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier start {}`",
+                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier issue transition {} start`",
                 issue.id
             ));
         }
@@ -254,15 +276,15 @@ fn branch_context_blockers(
             && !context.base_branch_exists
         {
             blockers.push(format!(
-                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier start {}`",
+                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} start`",
                 context.resolution.base_branch, issue.id
             ));
         }
     }
     if is_close && context.resolution.merge_owned && !context.base_branch_exists {
         blockers.push(format!(
-            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue close {} --reason \"...\"`",
-            context.resolution.base_branch, issue.id
+            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} {}`",
+            context.resolution.base_branch, issue.id, transition_name
         ));
     }
     Ok(blockers)
@@ -297,14 +319,14 @@ fn branch_context_guidance(
     guidance.push(branch_lifecycle_state_line(&context));
     if is_start {
         guidance.push(format!(
-            "Corrective lifecycle command: atelier start {}",
+            "Corrective lifecycle command: atelier issue transition {} start",
             issue.id
         ));
     }
     if is_close {
         guidance.push(format!(
-            "Close lifecycle command: atelier issue close {} --reason \"...\"",
-            issue.id
+            "Terminal lifecycle command: atelier issue transition {} {}",
+            issue.id, transition_name
         ));
     }
     Ok(guidance)
@@ -318,6 +340,25 @@ pub fn transition_issue(
     transition_name: &str,
     close_reason: Option<&str>,
 ) -> Result<()> {
+    let _ = close_reason;
+    transition_issue_with_options(
+        db,
+        state_dir,
+        db_path,
+        issue_ref,
+        transition_name,
+        TransitionExecutionOptions::default(),
+    )
+}
+
+pub fn transition_issue_with_options(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    transition_name: &str,
+    options: TransitionExecutionOptions<'_>,
+) -> Result<()> {
     let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -327,14 +368,8 @@ pub fn transition_issue(
     ensure_transition_available(&before, transition_name, transition)?;
 
     let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
-    let (blockers, validator_results) = transition_blockers(
-        db,
-        &policy,
-        &record,
-        transition_name,
-        transition,
-        close_reason,
-    )?;
+    let (blockers, validator_results) =
+        transition_blockers(db, &policy, &record, transition_name, transition, None)?;
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -346,15 +381,64 @@ pub fn transition_issue(
         )?;
     }
 
-    apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
+    if options.skip_effects && options.reason.is_none_or(|reason| reason.trim().is_empty()) {
+        bail!("--skip-effects requires --reason \"...\" so the repair bypass is auditable");
+    }
+
+    if options.dry_run {
+        print_transition_preview(&before, transition_name, transition, &validator_results);
+        return Ok(());
+    }
+
+    let mut effect_results = Vec::new();
+    if options.skip_effects {
+        let reason = options.reason.unwrap_or_default();
+        crate::commands::activity_log::record_note(
+            &before.id,
+            &format!(
+                "Skipped configured transition effects for `{}`.\n\nreason: {}",
+                transition_name, reason
+            ),
+        )?;
+        effect_results.extend(skipped_effect_results("before", &transition.effects.before));
+    } else {
+        effect_results.extend(run_effects(
+            db,
+            state_dir,
+            db_path,
+            &repo_root,
+            &before,
+            transition_name,
+            &transition.effects.before,
+            "before",
+        )?);
+    }
+
+    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    apply_transition_record(&policy, state_dir, &mut record, transition)?;
     record_applied_transition(&before, transition_name, transition)?;
 
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
+    if options.skip_effects {
+        effect_results.extend(skipped_effect_results("after", &transition.effects.after));
+    } else {
+        effect_results.extend(run_effects(
+            &refreshed,
+            state_dir,
+            db_path,
+            &repo_root,
+            &issue,
+            transition_name,
+            &transition.effects.after,
+            "after",
+        )?);
+    }
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
     println!("To:       {}", issue.status);
+    print_effect_results(&effect_results);
     print_heading("Next Commands");
     println!("  atelier issue show {}", issue.id);
     println!("  atelier issue transition {} --options", issue.id);
@@ -477,12 +561,336 @@ fn report_blocked_transition(
     )
 }
 
+fn print_transition_preview(
+    issue: &Issue,
+    transition_name: &str,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+    validator_results: &[ValidatorResult],
+) {
+    println!("Issue Transition Preview {} - {}", issue.id, issue.title);
+    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 28));
+    println!("Transition: {}", transition_name);
+    println!("From:       {}", issue.status);
+    println!("To:         {}", transition.to);
+    print_transition_detail("Validators", validator_results);
+    print_name_list("Before Effects", &effect_names(&transition.effects.before));
+    print_name_list("After Effects", &effect_names(&transition.effects.after));
+    println!();
+    println!("Dry run passed; no state was changed.");
+}
+
+fn run_effects(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    effects: &[atelier_app::workflow_policy::EffectDefinition],
+    phase: &'static str,
+) -> Result<Vec<EffectResult>> {
+    let mut results = Vec::new();
+    for effect in effects {
+        let detail = match effect.builtin.as_str() {
+            "branch.prepare" => effect_branch_prepare(db, repo_root, &issue.id)?,
+            "review.open" => {
+                effect_review_open(db, state_dir, db_path, repo_root, issue, transition_name)?
+            }
+            "review.merge" => effect_review_merge(db, state_dir, db_path, repo_root, issue)?,
+            "tracker.commit" => effect_tracker_commit(repo_root, &issue.id, transition_name)?,
+            "branch.merge" => effect_branch_merge(db, repo_root, &issue.id)?,
+            other => bail!("unsupported transition effect: {other}"),
+        };
+        results.push(EffectResult {
+            phase,
+            effect: effect.builtin.clone(),
+            status: "done".to_string(),
+            detail,
+        });
+    }
+    Ok(results)
+}
+
+fn skipped_effect_results(
+    phase: &'static str,
+    effects: &[atelier_app::workflow_policy::EffectDefinition],
+) -> Vec<EffectResult> {
+    effects
+        .iter()
+        .map(|effect| EffectResult {
+            phase,
+            effect: effect.builtin.clone(),
+            status: "skipped".to_string(),
+            detail: "skipped by --skip-effects".to_string(),
+        })
+        .collect()
+}
+
+fn print_effect_results(results: &[EffectResult]) {
+    print_heading("Effects");
+    if results.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for result in results {
+        println!(
+            "  {} {} {} - {}",
+            result.phase, result.status, result.effect, result.detail
+        );
+    }
+}
+
+fn effect_branch_prepare(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    ensure_no_non_tracker_dirty(repo_root)?;
+    let current = git_current_branch(repo_root)?;
+    if current == resolution.expected_branch {
+        return Ok(format!("already on {}", resolution.expected_branch));
+    }
+    if branch_exists_at(repo_root, &resolution.expected_branch)? {
+        git_checked(
+            repo_root,
+            &["switch", &resolution.expected_branch],
+            "switch to transition branch",
+        )?;
+        return Ok(format!("switched to {}", resolution.expected_branch));
+    }
+    ensure_branch_exists(repo_root, &resolution.base_branch)?;
+    git_checked(
+        repo_root,
+        &["switch", &resolution.base_branch],
+        "switch to transition base branch",
+    )?;
+    git_checked(
+        repo_root,
+        &["switch", "-c", &resolution.expected_branch],
+        "create transition branch",
+    )?;
+    Ok(format!(
+        "created {} from {}",
+        resolution.expected_branch, resolution.base_branch
+    ))
+}
+
+fn effect_review_open(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution =
+        atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+    if atelier_app::workflow_policy::effective_review_field(db, &issue.id)?.is_some() {
+        return Ok("reused existing linked review artifact".to_string());
+    }
+    let owner = db.require_issue(&resolution.owner_id)?;
+    let title = format!("{} {}", owner.id, owner.title);
+    let body = format!("Opened by workflow transition `{transition_name}`.");
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => {
+            let outcome = review_room::open(
+                db,
+                review_room::RoomOpenRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "worker",
+                    title: &title,
+                    body: &body,
+                    source_branch: &resolution.expected_branch,
+                    target_branch: &resolution.base_branch,
+                },
+            )?;
+            Ok(format!("opened room {}", outcome.review_id))
+        }
+        ReviewConfig::Provider(_) => {
+            let forgejo = app_pr::load_forgejo(repo_root)?;
+            let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                format!(
+                    "forgejo_config_missing_token: environment variable {} is required for review.open effect",
+                    forgejo.admin_token_env
+                )
+            })?;
+            let client = ForgejoClient::new(
+                forgejo.clone(),
+                UreqForgejoTransport::new(&forgejo.host, token),
+            );
+            let outcome = app_pr::open_with_client(
+                db,
+                app_pr::PrOpenRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "worker",
+                    title: &title,
+                    body: &body,
+                    source_branch: &resolution.expected_branch,
+                    target_branch: &resolution.base_branch,
+                },
+                &forgejo,
+                &client,
+            )?;
+            Ok(format!("opened {}", outcome.pull.url))
+        }
+    }
+}
+
+fn effect_review_merge(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+) -> Result<String> {
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => {
+            let outcome = review_room::merge(
+                db,
+                review_room::RoomMergeRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "manager",
+                },
+            )?;
+            Ok(format!("room {} {}", outcome.review_id, outcome.status))
+        }
+        ReviewConfig::Provider(_) => {
+            let forgejo = app_pr::load_forgejo(repo_root)?;
+            let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                format!(
+                    "forgejo_config_missing_token: environment variable {} is required for review.merge effect",
+                    forgejo.admin_token_env
+                )
+            })?;
+            let client = ForgejoClient::new(
+                forgejo.clone(),
+                UreqForgejoTransport::new(&forgejo.host, token),
+            );
+            let outcome = app_pr::merge_with_client(
+                db,
+                app_pr::PrMergeRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "manager",
+                },
+                &forgejo,
+                &client,
+            )?;
+            Ok(format!("merged {}", outcome.pull.url))
+        }
+    }
+}
+
+fn effect_tracker_commit(
+    repo_root: &Path,
+    issue_id: &str,
+    transition_name: &str,
+) -> Result<String> {
+    git_checked(
+        repo_root,
+        &["add", "-A", ".atelier"],
+        "stage transition tracker state",
+    )?;
+    let status = git_stdout(
+        repo_root,
+        &["status", "--porcelain", "--", ".atelier"],
+        "inspect staged tracker state",
+    )?;
+    if status.trim().is_empty() {
+        return Ok("no tracker changes to commit".to_string());
+    }
+    let message = format!("Apply transition {transition_name} for {issue_id}");
+    git_checked(
+        repo_root,
+        &["commit", "-m", &message],
+        "commit transition tracker state",
+    )?;
+    let sha = git_stdout(
+        repo_root,
+        &["rev-parse", "--short", "HEAD"],
+        "read transition tracker commit",
+    )?;
+    Ok(format!("commit {}", sha.trim()))
+}
+
+fn effect_branch_merge(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if !resolution.merge_owned {
+        return Ok("deferred to owning epic branch".to_string());
+    }
+    ensure_branch_exists(repo_root, &resolution.expected_branch)?;
+    ensure_branch_exists(repo_root, &resolution.base_branch)?;
+    git_checked(
+        repo_root,
+        &["switch", &resolution.base_branch],
+        "switch to base branch before transition merge",
+    )?;
+    match resolution.merge_strategy {
+        MergeStrategy::Squash => {
+            git_checked(
+                repo_root,
+                &["merge", "--squash", &resolution.expected_branch],
+                "squash merge transition branch",
+            )?;
+            let message = format!(
+                "Squash merge {} into {}",
+                resolution.expected_branch, resolution.base_branch
+            );
+            git_checked(
+                repo_root,
+                &["commit", "-m", &message],
+                "commit squash merge",
+            )?;
+        }
+        MergeStrategy::MergeCommit => {
+            let message = format!(
+                "Merge {} into {}",
+                resolution.expected_branch, resolution.base_branch
+            );
+            git_checked(
+                repo_root,
+                &[
+                    "merge",
+                    "--no-ff",
+                    &resolution.expected_branch,
+                    "-m",
+                    &message,
+                ],
+                "merge transition branch",
+            )?;
+        }
+        MergeStrategy::FastForwardOnly => {
+            git_checked(
+                repo_root,
+                &["merge", "--ff-only", &resolution.expected_branch],
+                "fast-forward transition branch",
+            )?;
+        }
+    }
+    let sha = git_stdout(
+        repo_root,
+        &["rev-parse", "--short", "HEAD"],
+        "read merge head",
+    )?;
+    Ok(format!("integrated at {}", sha.trim()))
+}
+
 fn apply_transition_record(
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
     state_dir: &Path,
     record: &mut CanonicalIssueRecord,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
-    close_reason: Option<&str>,
 ) -> Result<()> {
     let now = Utc::now();
     record.issue.status = transition.to.clone();
@@ -493,9 +901,6 @@ fn apply_transition_record(
         None
     };
     app_use_cases::write_canonical_issue(state_dir, record)?;
-    if let Some(reason) = close_reason {
-        crate::commands::activity_log::record_close_reason(&record.issue.id, reason)?;
-    }
     Ok(())
 }
 
@@ -565,7 +970,7 @@ pub fn close_issue(
             .collect::<BTreeSet<_>>();
         if destinations.len() > 1 {
             bail!(
-                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue close {} --to <status> --reason \"...\"` (available: {})",
+                "Issue {} has multiple terminal done targets from '{}'; run `atelier issue transition {} --options` and choose the explicit terminal transition (available statuses: {})",
                 issue.id,
                 issue.status,
                 issue.id,
@@ -639,7 +1044,7 @@ impl CloseGitIntegration {
         if resolution.merge_owned {
             ensure_branch_exists(&repo_root, &resolution.base_branch).with_context(|| {
                 format!(
-                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue transition {} close`.",
                     resolution.base_branch, issue.id
                 )
             })?;
@@ -653,7 +1058,7 @@ impl CloseGitIntegration {
             )
             .with_context(|| {
                 format!(
-                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                     resolution.expected_branch, issue.id
                 )
             })?;
@@ -706,7 +1111,7 @@ impl CloseGitIntegration {
             println!("Merge result:   deferred to epic close");
         }
         println!(
-            "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
+            "Recovery:      rerun `atelier issue transition {} close` only if a later step reports failure",
             self.issue_id
         );
         let _ = app_use_cases::open_database(db_path)?;
@@ -735,7 +1140,7 @@ impl CloseGitIntegration {
         })
         .with_context(|| {
             format!(
-                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                 self.issue_id, self.issue_id
             )
         })?;
@@ -768,7 +1173,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -783,7 +1188,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -806,7 +1211,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -825,7 +1230,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -909,7 +1314,7 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
     )
     .with_context(|| {
         format!(
-            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue close {} --reason \"...\"`.",
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier issue transition {} start` to prepare the branch, then retry `atelier issue transition {} close`.",
             resolution.expected_branch, resolution.issue_id, resolution.issue_id
         )
     })
@@ -936,7 +1341,7 @@ fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
         .collect::<Vec<_>>();
     if !dirty.is_empty() {
         bail!(
-            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
+            "Worktree has uncommitted non-tracker changes:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue transition <issue-id> start`.",
             dirty.join("\n")
         );
     }
@@ -1077,6 +1482,8 @@ pub fn print_issue_transition_options(
         println!("  To:   {}", option.to);
         println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
+        print_name_list("Before Effects", &option.before_effects);
+        print_name_list("After Effects", &option.after_effects);
         print_text_list("Blockers", &option.blockers);
         print_text_list("Description", &option.descriptions);
     }
@@ -1167,6 +1574,24 @@ fn print_text_list(title: &str, values: &[String]) {
     for value in values {
         println!("  {value}");
     }
+}
+
+fn print_name_list(title: &str, values: &[String]) {
+    print_heading(title);
+    if values.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for value in values {
+        println!("  {value}");
+    }
+}
+
+fn effect_names(effects: &[atelier_app::workflow_policy::EffectDefinition]) -> Vec<String> {
+    effects
+        .iter()
+        .map(|effect| effect.builtin.clone())
+        .collect()
 }
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
@@ -1262,17 +1687,9 @@ fn required_field_failures(
 fn transition_command(
     issue_id: &str,
     transition_name: &str,
-    transition: &atelier_app::workflow_policy::TransitionDefinition,
+    _transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> String {
-    let mut command = format!("atelier issue transition {issue_id} {transition_name}");
-    if transition
-        .required_fields
-        .iter()
-        .any(|field| field == "close_reason")
-    {
-        command.push_str(" --reason \"...\"");
-    }
-    command
+    format!("atelier issue transition {issue_id} {transition_name}")
 }
 
 fn evaluate_policy_transition(

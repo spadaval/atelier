@@ -15,13 +15,17 @@ current chat?"
 - Output hierarchy: No v1 plan command output contract. Plan paths or prose are
   inspected through the record that references them.
 
-## Subcommands
+## Deferred Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| `plan create` | Manager/orchestrator | Create durable plan record. | Removed/deferred; use ordinary Markdown referenced from mission, epic, issue, or evidence prose. |
-| `plan show` | Manager/orchestrator | Inspect plan content and links. | Removed/deferred; open the referenced Markdown path or inspect the accountable record. |
-| `plan list` | Manager/orchestrator | Find plans by status. | Removed/deferred; plan records do not have v1 lifecycle state. |
-| `plan revise` | Manager/orchestrator | Record a new plan revision. | Removed/deferred; revise the Markdown artifact or record a note/evidence explaining the plan change. |
-| `plan link` | Manager/orchestrator | Attach plan intent to mission/issue/etc. | Removed/deferred; reference plan paths or prose directly from accountable record bodies. |
-| `bundle preview/apply` | Manager/orchestrator | Validate or create records from authored bundle JSON. | Active advanced orchestration; use preview first and require `apply --yes` for mutation. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| removed `plan create` | Manager/orchestrator | Legacy attempt to create a first-class plan record. | Replacement path for durable execution intent. | Write ordinary Markdown and reference it from mission/issue/evidence, or use `bundle preview` for graph creation. | Correctly removed/deferred, but generic unknown-command errors should eventually give product guidance without adding an alias. |
+| removed `plan show/list/revise/link` | Manager/orchestrator | Legacy attempt to inspect, revise, or attach plan records. | Where the plan content now lives and how to inspect it. | Inspect the referenced Markdown path, `mission show`, `issue show`, or `history`. | No v1 lifecycle state exists for plans. |
+| `bundle preview/apply` | Manager/orchestrator | Replacement for authored bulk graph creation, not plan CRUD. | Bundle validation and mutation details. | Preview first, then apply with `--yes` when reviewed. | Active surface; see [bundle](bundle.md). |
+
+## Guidance Finding
+
+The removal is conceptually right, but known retired commands are predictable
+friction points. A future CLI error can say "plans are ordinary Markdown; use
+`bundle preview` for authored graph creation" without reintroducing a
+compatibility command.

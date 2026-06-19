@@ -64,12 +64,12 @@ Required sections for issue detail views:
 - canonical Markdown file path when a `.atelier/issues/<id>.md` record exists;
 - hierarchy parent;
 - description and acceptance criteria when present;
-- close reason when present;
+- completion notes or outcome evidence when present;
 - blockers and dependents;
 - subissue summary and bounded child rows;
 - recent activity;
 - next actions for editing the Markdown record, validating the issue, adding a
-  note, starting work, reopening, or closing as appropriate.
+  note, or running the appropriate issue transition.
 
 Required sections for mission detail views:
 
@@ -106,7 +106,7 @@ Blockers
 Next Commands
 -------------
   atelier issue note atelier-1234 "..."
-  atelier issue close atelier-1234 --reason "..."
+  atelier issue transition atelier-1234 --options
 ```
 
 ## Setup And Health Views

@@ -1616,19 +1616,27 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, validation]
         to: blocked
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
           - no_open_blockers
           - no_blocking_lints
           - durable_state_current
+        effects:
+          after:
+            - tracker.commit
+            - branch.merge
 
   epic_reviewed:
     applies_to: [epic]
@@ -1638,21 +1646,33 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       request_validation:
         from: [in_progress, review]
         to: validation
         validators: [review_complete]
+        effects:
+          after:
+            - tracker.commit
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, validation, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -1660,6 +1680,12 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 
   validation_reviewed:
     applies_to: [validation]
@@ -1669,21 +1695,33 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       request_validation:
         from: [in_progress, review]
         to: validation
         validators: [review_complete]
+        effects:
+          after:
+            - tracker.commit
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -1691,6 +1729,12 @@ workflows:
           - no_blocking_lints
           - durable_state_current
           - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 
   spike:
     applies_to: [spike]
@@ -1700,23 +1744,38 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
       block:
         from: [todo, in_progress, review]
         to: blocked
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
       revise:
         from: [review]
         to: in_progress
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record a concise close reason that captures what changed."
+        description: "Closing requires review completion and durable tracker state."
         validators:
           - review_complete
           - durable_state_current
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
 "#,
         )
         .unwrap();

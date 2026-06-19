@@ -47,7 +47,10 @@ room summaries that drift from their event history.
    recording a merge event. In provider mode it delegates merge or merge
    confirmation to the configured provider. It never starts, closes, blocks, or
    otherwise transitions Atelier issues. Workflow transitions continue to use
-   explicit `atelier issue` and `atelier mission` commands.
+   explicit `atelier issue transition` commands. Normal worker flow reaches
+   review creation or merge checks through workflow-declared effects and
+   read-only validators; `atelier review open/merge` remain primitives for the
+   configured review artifact backend.
 
 ## Consequences
 

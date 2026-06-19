@@ -112,7 +112,10 @@ pub fn run(db: &Database) -> Result<()> {
     println!("Next Actions");
     println!("------------");
     println!("  Inspect this issue: atelier issue show {}", top.id);
-    println!("  Start tracked work: atelier start {}", top.id);
+    println!(
+        "  Start tracked work: atelier issue transition {} start",
+        top.id
+    );
     println!("  Check checkout status: atelier status");
 
     // Show runners-up if any

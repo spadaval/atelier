@@ -17,10 +17,17 @@ this repository?"
   verification commands last. It should point to `atelier lint`,
   `atelier man admin`, and `atelier status` before issue creation.
 
-## Role Use
+## Operator Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| `atelier init` | Admin | Create first-class Atelier state. | Good. |
-| `atelier init --force` | Admin | Reconcile existing setup. | Good, but should clearly say what was reused or repaired. |
-| `atelier init --import-beads` | Admin | Explicit predecessor import during setup. | Good as a migration option, not as default setup behavior. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| `atelier init` | Admin, bootstrap agent | Initialize first-class Atelier state; create canonical tracker scaffolding; prepare a fresh checkout for agent work. | Created vs reused paths, tracked vs ignored state, config/workflow locations, and first verification command. | Run `atelier lint`, `atelier man admin`, then `atelier status`. | Good setup verb. Current implementation should orient before nudging issue creation. |
+| `atelier init --force` | Admin | Reconcile a partial setup; refresh core tracker scaffolding; recover from interrupted setup. | Exactly what was reused, overwritten, repaired, or preserved. | Run `atelier lint` and `atelier doctor`. | Good if output keeps mutation scope explicit. |
+| `atelier init --import-beads` | Admin/migration operator | Import repo-local predecessor data; perform explicit migration during setup. | Input path, imported counts, skipped/conflicting records, resulting canonical paths. | Run `atelier lint`, inspect imported work, then `atelier status`. | Correctly explicit; predecessor import must not be silent default behavior. |
+
+## Guidance Finding
+
+The current setup guidance should prefer orientation before creation. The command
+implementation prints `atelier issue create "Task"` before `atelier man admin`
+and does not name `atelier status`; that can push a fresh operator toward
+creating work before checking tracker health and role guidance.

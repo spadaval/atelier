@@ -46,7 +46,8 @@
   prove. Broad green test suites and mission summaries can support strong proof,
   but they are weak when they are the only proof for a concrete outcome.
 - Workflow: repository-owned policy that defines issue workflow statuses,
-  transitions, terminal states, validators, descriptions, and applicability.
+  transitions, terminal states, read-only validators, mandatory transition
+  effects, descriptions, and applicability.
 - Workflow applicability: the issue type coverage owned by each workflow through
   `workflows.*.applies_to`. Every built-in issue type must be covered exactly
   once by the committed workflow policy.
@@ -57,10 +58,18 @@
   into stable operator-facing buckets such as ready, active, blocked, done, or
   archived. Categories help commands summarize work but do not replace workflow
   status in durable state or transition checks.
-- Transition: a named workflow action that moves a record from one workflow
-  status to another after required fields, evidence, and validators succeed.
-- Validator: a machine-readable workflow transition check that controls whether
-  a transition can proceed and returns an actionable failure reason.
+- Transition: a named workflow action executed through
+  `atelier issue transition` that evaluates validators, runs configured
+  `effects.before`, moves a record from one workflow status to another, and
+  then runs configured `effects.after`.
+- Validator: a read-only machine-readable workflow transition check that
+  controls whether a transition can proceed and returns an actionable failure
+  reason. Validators inspect state but do not mutate records, branches,
+  worktrees, or review artifacts.
+- Transition effect: a mandatory mutating workflow action attached to
+  `effects.before` or `effects.after`. Effects own lifecycle side effects such
+  as branch preparation, tracker commits, review artifact creation, and branch
+  integration when the workflow declares them.
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
@@ -194,14 +203,15 @@
   issues own local implementation proof. Per-issue worktrees or branches are
   exceptional isolation tools, not the default assignment model.
 - Branch policy is workflow-owned rather than a separate routine setup step.
-  `atelier start <id>` prepares the owner branch from the work graph: child
-  issues use the nearest parent epic branch, standalone issues use an issue
-  branch, and epics use an epic branch. `atelier issue close <id>` commits the
-  close state on the owner branch; child issues stop there, while standalone
-  issues and epics merge that owner branch to the configured base branch.
-  Squash merge is the default integration strategy, with repository policy able
-  to select alternatives and branch naming templates. A failed close-time
-  commit or merge must not leave the item closed in the integration branch.
+  Normal workers do not use root `atelier start` or `atelier issue close`.
+  `atelier issue transition <id> <transition>` is the lifecycle surface, and
+  workflow-declared effects prepare the owner branch, commit tracker state, open
+  or merge review artifacts, and integrate branches when the transition
+  requires those mutations. Child issues use the nearest parent epic branch,
+  standalone issues use an issue branch, and epics use an epic branch. Squash
+  merge is the default integration strategy, with repository policy able to
+  select alternatives and branch naming templates. A failed mutating transition
+  effect must not leave the item advanced in the integration branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic
   modules under `crates/atelier-cli/src/` are migration input for lower crates,

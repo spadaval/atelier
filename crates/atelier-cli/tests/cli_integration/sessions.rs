@@ -188,7 +188,8 @@ fn start_does_not_create_standalone_session_records() {
     let issue_id = issue_id_by_title(dir.path(), "Start without standalone session");
     commit_all(dir.path(), "start item");
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
     assert!(!start_out.contains("Session:"), "{start_out}");
     let session_files = std::fs::read_dir(dir.path().join(".atelier").join("sessions"))
@@ -224,7 +225,7 @@ fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
 
     let (success, _, stderr) = run_atelier_with_env(
         dir.path(),
-        &["start", &issue_id],
+        &["issue", "transition", &issue_id, "start"],
         &[
             ("ATELIER_AGENT", "worker-agent"),
             ("ATELIER_SUBSKILL", "implement"),
@@ -273,8 +274,9 @@ fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
     let activity = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
         &activity,
-        "work_started",
+        "transition_applied",
         &[
+            "transition: \"start\"",
             "attempt:\n",
             "  role: worker",
             "  serial: 1",

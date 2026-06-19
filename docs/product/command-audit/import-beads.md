@@ -14,8 +14,8 @@ backup file?"
 - Output hierarchy: Input path, imported record counts, canonical output path,
   validation commands.
 
-## Role Use
+## Hidden Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| hidden `atelier import-beads <input>` | Admin | Import external predecessor backup. | Good as hidden migration-only surface. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| hidden `atelier import-beads <input>` | Admin/migration operator | Import external predecessor backup; recover migration from a non-standard Beads path. | Input path, imported counts, generated IDs, skipped/conflicting records, canonical output path. | Run `atelier lint`, inspect imported records, then use normal issue/mission commands. | Good as hidden migration-only surface. Standard repo-local import belongs to `init --import-beads`. |

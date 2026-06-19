@@ -21,8 +21,8 @@ cache_dir = ".atelier/cache"
 # Choose exactly one review mode. Native room mode stores review rooms under
 # .atelier/reviews. Provider mode currently supports Forgejo.
 #
-# [review]
-# mode = "room"
+[review]
+mode = "room"
 #
 # Or:
 #

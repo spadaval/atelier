@@ -265,7 +265,8 @@ uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
 policy path. The file defines branch policy, shared statuses with explicit
 categories, named issue workflows, workflow-owned issue type applicability,
 terminal done states, transition rules, inline built-in validators with params,
-static transition descriptions, and strict configuration errors.
+mandatory mutating transition effects, static transition descriptions, and
+strict configuration errors.
 
 Example workflow:
 
@@ -298,15 +299,18 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
           - no_open_blockers
           - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 
   epic_reviewed:
     applies_to: [epic]
@@ -316,21 +320,26 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          after: [open_review_artifact]
       request_validation:
         from: [in_progress, review]
         to: validation
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
           - linked_pr_merged
           - durable_state_current
+        effects:
+          after: [commit_tracker_state, integrate_owner_branch]
 
   validation_reviewed:
     applies_to: [validation]
@@ -340,6 +349,8 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       request_review:
         from: [in_progress]
         to: review
@@ -349,11 +360,12 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
           - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 
   spike:
     applies_to: [spike]
@@ -363,22 +375,28 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
         validators:
           - review_complete
           - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
-ceremony unless policy says so. The starter contract uses proof-first closure
-for ordinary implementation tasks, keeps review/proof workflows for epics,
-validation and other risk-bearing issue types, and keeps a lighter spike
-workflow that records an inspectable close reason. Every built-in issue type
-must appear exactly once across `workflows.*.applies_to`; missing, duplicate, or
-unknown issue types are config errors.
+ceremony unless policy says so. The starter contract uses proof-first
+completion for ordinary implementation tasks, keeps review/proof workflows for
+epics, validation and other risk-bearing issue types, and keeps a lighter spike
+workflow for bounded inquiry. Issue transitions no longer require a close
+reason field. Operators should record meaningful outcome context as notes or
+evidence, while the lifecycle move itself stays under
+`atelier issue transition`. Every built-in issue type must appear exactly once
+across `workflows.*.applies_to`; missing, duplicate, or unknown issue types are
+config errors.
 
 ## Rules, Lint, And Guidance
 
@@ -408,7 +426,8 @@ Process should be:
 
 - Configurable.
 - Risk-scaled.
-- Split between start requirements and close requirements.
+- Split between transition requirements, read-only validators, and mutating
+  before/after effects.
 - Strict only where strictness protects correctness or coordination.
 
 Rules should have severities:
@@ -430,15 +449,18 @@ Desired commands:
 
 ```text
 atelier agent init <name>
-atelier start atelier-z1p8
-atelier issue close atelier-z1p8 --reason "done"
+atelier issue transition atelier-z1p8 start
+atelier issue transition atelier-z1p8 close
 ```
 
-`atelier start <id>` owns routine branch preparation. It derives the owner
-branch from the work graph, creates or checks out that branch when needed,
-refreshes local runtime/projection state, and then transitions the issue into
-the checkout's current-work set. Routine workers should not run explicit branch
-setup before issue work.
+`atelier issue transition <id> <transition>` owns normal issue lifecycle
+movement. Validators run as read-only gates before mutation. A transition may
+declare `effects.before` for mandatory mutations that must happen before the
+status changes, such as preparing the owner branch, and `effects.after` for
+mandatory mutations after the status changes, such as opening a review artifact,
+committing tracker state, or integrating the owner branch. Routine workers
+should not run explicit branch setup before issue work or use separate
+start/close commands.
 
 The default branch model should be opinionated but configurable. Branch owner
 derivation is:
@@ -466,52 +488,56 @@ issue/atelier-z1p8-short-slug
   owner branch for standalone issues or exceptional issue isolation
 ```
 
-Close-time integration is part of the workflow contract:
+Integration is part of the workflow contract when a transition declares the
+corresponding effects:
 
-- Closing a child issue commits its tracker-state change on the parent epic
+- Completing a child issue commits its tracker-state change on the parent epic
   branch and does not merge that branch to base.
-- Closing a standalone issue commits its tracker-state change on the issue
-  branch and merges that owner branch to the configured base branch.
-- Closing an epic commits its tracker-state change on the epic branch and
-  merges that owner branch to the configured base branch.
+- Completing a standalone issue commits its tracker-state change on the issue
+  branch and merges that owner branch to the configured base branch when the
+  workflow asks for integration.
+- Completing an epic commits its tracker-state change on the epic branch and
+  merges that owner branch to the configured base branch when the workflow asks
+  for integration.
 - The default merge strategy is squash merge. Configurable alternatives may
   include merge commit and fast-forward-only where repository policy allows.
 - Base branch selection is configurable by repository, mission, or epic policy,
   defaulting to the repository's integration branch when no narrower policy is
   set.
 
-Close must be atomic with respect to durable workflow state: if the tracker
-commit, integration merge, or required push fails, the item must not be left
-closed in the integration branch. The command should report the failed step and
-leave the operator on a repair path that can retry or inspect state without
-claiming a completed close.
+Mutating effects must be atomic with respect to durable workflow state: if the
+tracker commit, integration merge, review operation, or required push fails,
+the item must not be left advanced in the integration branch. The command
+should report the failed step and leave the operator on a repair path that can
+retry or inspect state without claiming a completed transition.
 
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
-- Refuse start or close when the worktree is dirty unless policy allows the
-  specific operation.
+- Refuse a transition whose effects require a clean worktree when the worktree
+  is dirty unless policy allows the specific operation.
 - Record mission workspace, owner branch, base branch, merge strategy, and
   current issue association.
-- Refuse close when durable records or derived projections are stale.
+- Refuse a transition when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
-Normal tracked work uses explicit work association rather than inherited
+Normal tracked work uses explicit workflow transitions rather than inherited
 Chainlink lock sync. The default workflow is one mission worktree when the work
-belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
-preparation through `atelier start`, lifecycle-owned close integration through
-`atelier issue close` or `atelier mission close`, and `lint`/`doctor` health
-checks. Explicit branch commands such as `atelier branch for-epic`
-are internal, diagnostic, or advanced repair surfaces; they are not the normal
-mutating-subagent default.
+belongs to a mission, one reviewable branch per epic, branch preparation and
+issue integration through workflow transition effects, mission completion
+through mission lifecycle commands, and `lint`/`doctor` health checks. Explicit
+branch commands such as `atelier branch for-epic` are internal, diagnostic, or
+advanced repair surfaces; they are not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 
-Evidence should be a first-class condition for closing work. Workflow validators
-evaluate whether a record can advance or close.
+Evidence should be a first-class condition for completing work. Workflow
+validators evaluate whether a record can advance. Validators are read-only:
+they report pass/fail guidance, and workflow effects perform any configured
+mutation.
 
 Version 1 built-in validators include:
 

@@ -23,10 +23,9 @@ use std::time::Instant;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
-  start         Start tracked work on an issue
 
 Issues:
-  issue         Create, list, show, update, close, and manage blockers
+  issue         Create, list, show, update, transition, and manage blockers
   search        Search issue text
   graph         Inspect mission and issue hierarchy and impact
 
@@ -75,9 +74,8 @@ Common commands:
   atelier forgejo roles check
   atelier history --mission <id>
   atelier history --issue <id>
-  atelier start <issue-id>
   atelier issue transition <issue-id> --options
-  atelier issue close <issue-id> --reason \"...\"
+  atelier issue transition <issue-id> start
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -124,18 +122,7 @@ enum Commands {
     /// Show checkout, mission, work, and tracker signposts
     Status,
 
-    /// Start tracked work on an issue
-    Start {
-        id: String,
-        /// Do not emit legacy session output for this start
-        #[arg(long, hide = true)]
-        no_session: bool,
-        /// Legacy option retained only to reject stale scripts with a direct error
-        #[arg(long, hide = true)]
-        reuse_session: Option<String>,
-    },
-
-    /// Issue lifecycle commands (create, show, list, close, ...)
+    /// Issue lifecycle commands (create, show, list, transition, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
@@ -356,9 +343,15 @@ enum IssueCommands {
         /// Show the full option list
         #[arg(long)]
         options: bool,
-        /// Close reason used by transitions that require it
+        /// Preview validators and effects without mutating state
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip configured transition effects after validators pass
+        #[arg(long)]
+        skip_effects: bool,
+        /// Required audit reason when skipping configured effects
         #[arg(long = "reason")]
-        close_reason: Option<String>,
+        reason: Option<String>,
     },
 
     /// Update an issue
@@ -397,18 +390,6 @@ enum IssueCommands {
         /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
         #[arg(long, default_value = "note")]
         kind: String,
-    },
-
-    /// Close an issue
-    Close {
-        /// Issue ID
-        id: String,
-        /// Explicit terminal workflow status when multiple done targets are available
-        #[arg(long)]
-        to: Option<String>,
-        /// Close reason recorded in issue activity
-        #[arg(short, long)]
-        reason: String,
     },
 
     /// Mark an issue as blocked by another
@@ -992,11 +973,18 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             id,
             transition,
             options,
-            close_reason,
+            dry_run,
+            skip_effects,
+            reason,
         } => {
             if options {
                 if transition.is_some() {
                     bail!("--options cannot be combined with a transition name");
+                }
+                if dry_run || skip_effects || reason.is_some() {
+                    bail!(
+                        "--options cannot be combined with --dry-run, --skip-effects, or --reason"
+                    );
                 }
                 let db = degraded_projection_query_db()?;
                 commands::agent_factory::transition_options(&db, &id)
@@ -1009,13 +997,17 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 })?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
-                commands::workflow::transition_issue(
+                commands::workflow::transition_issue_with_options(
                     &db,
                     &state_dir,
                     &db_path,
                     &id,
                     &transition,
-                    close_reason.as_deref(),
+                    commands::workflow::TransitionExecutionOptions {
+                        dry_run,
+                        skip_effects,
+                        reason: reason.as_deref(),
+                    },
                 )
             }
         }
@@ -1055,18 +1047,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::comment::run_issue_note(&db, &id, &text, &kind)
-        }
-
-        IssueCommands::Close { id, to, reason } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let _ = quiet;
-            commands::agent_factory::close_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                &reason,
-                to.as_deref(),
-            )
         }
 
         IssueCommands::Block { id, blocker } => {
@@ -1137,25 +1117,6 @@ fn run() -> Result<()> {
         Commands::Status => {
             let storage = use_cases::status_storage()?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
-        }
-
-        Commands::Start {
-            id,
-            no_session,
-            reuse_session,
-        } => {
-            let db = projection_query_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::work::start_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                commands::work::StartSessionOptions {
-                    no_session,
-                    reuse_session: reuse_session.as_deref(),
-                },
-            )
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -1750,7 +1711,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Init { .. } => "init",
         Commands::Man { .. } => "man",
         Commands::Status => "status",
-        Commands::Start { .. } => "start",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
@@ -1758,7 +1718,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
-            IssueCommands::Close { .. } => "issue close",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",

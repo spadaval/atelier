@@ -353,20 +353,21 @@ An agent tasked with a mission should be able to:
 2. Inspect linked epics, issues, and evidence to understand what has already
    been proven and what remains.
 3. Select a ready issue or epic slice that advances the mission.
-4. Follow the issue workflow: start with `atelier start <issue-id>`, implement
-   or validate, record notes, attach evidence, inspect transition options with
-   `atelier issue transition <id> --options`, and close only when validators
-   allow the transition.
+4. Follow the issue workflow through `atelier issue transition`: inspect
+   transition options, run the transition that moves the issue into active
+   work, implement or validate, record notes, attach evidence, and run the
+   completion transition only when validators allow it.
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
 
 `atelier status` is the normal current-work orientation surface. In a checkout,
 current work is the set of canonical issue records in that checkout's tracked
-`.atelier/` tree whose workflow status is `in_progress`. Root `atelier start
-<issue-id>` is the convenience entrypoint for moving an issue into that set
-after preparing the branch owner required by the work graph. Root `atelier
-issue close <issue-id> --reason "..."` is the normal completion path for
-tracked work and owns the close-time tracker commit and integration behavior.
+`.atelier/` tree whose workflow status is `in_progress`. `atelier issue
+transition <issue-id> <transition>` is the single normal issue lifecycle
+surface. Workflow-declared effects prepare the branch owner, open review
+artifacts, commit tracker state, or integrate branches when the transition
+requires those mutations. The removed root lifecycle opener and removed issue
+closer are not normal target-state guidance.
 
 Branch owner derivation is deterministic:
 
@@ -380,19 +381,22 @@ alternatives may include merge commit or fast-forward-only when a repository
 chooses them. Base branch selection defaults to the repository integration
 branch unless mission or epic policy selects a narrower base.
 
-Close behavior follows the owner boundary:
+Completion effects follow the owner boundary:
 
-- Closing a child issue commits the tracker-state close on the parent epic
-  branch and leaves the epic branch open for grouped review.
-- Closing a standalone issue commits the tracker-state close on the issue
-  branch and merges that owner branch to the configured base.
-- Closing an epic commits the tracker-state close on the epic branch and merges
-  that owner branch to the configured base.
+- Completing a child issue commits the tracker-state transition on the parent
+  epic branch and leaves the epic branch open for grouped review.
+- Completing a standalone issue commits the tracker-state transition on the
+  issue branch and merges that owner branch to the configured base when the
+  workflow declares integration.
+- Completing an epic commits the tracker-state transition on the epic branch
+  and merges that owner branch to the configured base when the workflow
+  declares integration.
 
-Close must be failure-atomic for durable workflow state. If the tracker commit,
-merge, push, or configured integration step fails, the item must not appear
-closed on the integration branch. The command should leave enough state for a
-repair or retry command to explain which step failed.
+Mutating transition effects must be failure-atomic for durable workflow state.
+If the tracker commit, review operation, merge, push, or configured integration
+step fails, the item must not appear advanced on the integration branch. The
+command should leave enough state for a repair or retry command to explain
+which step failed.
 
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
@@ -417,9 +421,10 @@ worktree using the configured path policy, rebuilds local SQLite state from
 tracked `.atelier/` records, and reports the mission workspace association.
 Explicit branch helpers such as `atelier branch for-epic <epic-id>` create or
 locate reviewable branches for diagnostics, advanced repair, or manual
-recovery. Routine worker starts should use `atelier start <id>` so lifecycle
-policy owns branch preparation. Workflow-defined hooks are deferred in v1 and
-are not part of the current worktree contract.
+recovery. Routine workers should use `atelier issue transition <id>
+<transition>` so workflow effects own branch preparation and integration.
+Workflow-defined hooks are deferred in v1 and are not part of the current
+worktree contract.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated mission/epic/issue work,
 and operator-facing health when available. `atelier worktree merge <id>`,
@@ -451,10 +456,14 @@ transitions:
       - required_validation_criteria_satisfied
       - no_open_blockers
       - evidence_records_present
+    effects:
+      after:
+        - commit_tracker_state
 ```
 
-The validator does not define the checkpoint's meaning. It only enforces whether
-the issue transition is allowed.
+The validator does not define the checkpoint's meaning and does not mutate
+state. It only enforces whether the issue transition is allowed. Effects own
+any required mutation around the transition.
 
 See [Deferred Checkpoint Semantics](milestone-records.md) for the v1 rule that
 checkpoint data stays in accountable record prose and evidence.

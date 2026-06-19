@@ -791,10 +791,8 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
         "wrong-kind issue read should suggest mission show: {stderr}"
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", mission_id, "--reason", "wrong kind"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", mission_id, "close"]);
     assert!(!success, "mission ID should not close as an issue");
     assert!(
         stderr.contains(&format!(
@@ -1658,10 +1656,8 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
 
     move_issue_to_validation(dir.path(), target_id);
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", target_id, "--reason", "done"],
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", target_id, "close"]);
     assert!(
         !success,
         "issue closeout must reject evidence linked only to another issue"
@@ -1679,10 +1675,8 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
         &["evidence", "attach", &evidence_id, "issue", target_id],
     );
     assert!(success, "target evidence attach failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", target_id, "--reason", "target proof"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", target_id, "close"]);
     assert!(
         success,
         "target closeout should pass after direct proof: {stderr}"
@@ -1716,16 +1710,8 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
         "workflow close gate regression transcript recorded",
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "close",
-            &issue_id,
-            "--reason",
-            "workflow proof attached",
-        ],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(
         success,
         "issue closeout should use attached pass evidence rather than Evidence text matching: {stderr}"
@@ -1773,13 +1759,7 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "close",
-            &validation_id,
-            "--reason",
-            "independent approval attached",
-        ],
+        &["issue", "transition", &validation_id, "close"],
     );
     assert!(
         success,
@@ -1822,15 +1802,17 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     assert!(transitions.contains("close"));
     assert!(transitions.contains("expected at least 1 passing evidence record"));
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "still blocked"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(
         !success,
         "closeout must reject evidence that is attached but not passing"
     );
-    assert!(stderr.contains("expected at least 1 passing evidence record"));
+    assert!(
+        stderr.contains("expected at least 1 passing evidence record")
+            || stderr.contains("expected at least 1 validating evidence record"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -2064,10 +2046,8 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
         "independent mission approval captured",
     );
     commit_all(dir.path(), "mission approval ready");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", approval_id, "--reason", "approved"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", approval_id, "close"]);
     assert!(success, "validation issue close failed: {stderr}");
 
     let (success, ready_out, stderr) =
@@ -2218,7 +2198,8 @@ fn test_issue_create_after_workflow_init_uses_configured_initial_status() {
     assert!(options.contains("start [allowed]"), "{options}");
 
     commit_all(dir.path(), "workflow-ready issue");
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "root start failed: {stderr}");
     assert!(
         start_out.contains("Applied transition start"),

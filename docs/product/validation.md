@@ -69,10 +69,10 @@ validation rather than duplicating every child proof record.
 
 Proof requirements must be visible before completion.
 
-Agents should not discover required proof only after `atelier issue close` or
-`atelier mission close` fails. The normal workflow surfaces should show the
-expected proof early, summarize whether it is satisfied, and provide the next
-command that moves the work forward.
+Agents should not discover required proof only after `atelier issue transition
+<id> close` or `atelier mission close` fails. The normal workflow surfaces
+should show the expected proof early, summarize whether it is satisfied, and
+provide the next command that moves the work forward.
 
 ## Ordinary Issue Flow
 
@@ -148,8 +148,8 @@ Next:
 
 When proof is present, the same block should name the evidence IDs and results.
 
-`atelier start <id>` should remind the worker what proof will be needed before
-close, because this is where the operator forms the work plan.
+`atelier issue transition <id> start` should remind the worker what proof will
+be needed before close, because this is where the operator forms the work plan.
 
 `atelier issue transition <id> --options` should preview completion blockers in
 operator language:
