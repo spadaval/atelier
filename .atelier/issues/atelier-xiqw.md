@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Execute transition effects with issue status changes"
-updated_at: "2026-06-19T20:14:25.097863580+00:00"
+updated_at: "2026-06-19T21:03:40.921699602+00:00"
 ---
 
 ## Description
