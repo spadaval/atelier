@@ -28,9 +28,10 @@ separate issue hierarchy.
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
 - Transition action: configured work run by an explicit issue transition after
-  required fields and validators pass. Actions may write issue status, activity,
-  owner branch commits, integration results, or review artifact links, but they
-  do not replace explicit review or issue commands.
+  required fields and validators pass. Actions may create owner branch commits,
+  integrate owner branches, or open/link review artifacts. Intrinsic workflow
+  status and transition activity writes are engine behavior, not configurable
+  action authority, and actions do not replace explicit review or issue commands.
 - Evidence: durable proof that accountable work, review, validation, or completion
   happened. Normal evidence attaches to issue-shaped work because issues own
   accountability. Parent completion is derived from linked implementation,
