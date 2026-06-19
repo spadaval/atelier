@@ -236,7 +236,13 @@ fn test_issue_tree_deep_nesting() {
 fn test_issue_tree_status_filter() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["issue", "create", "Filterable parent"]);
+    h.run_ok(&[
+        "issue",
+        "create",
+        "Filterable parent",
+        "--issue-type",
+        "epic",
+    ]);
     let parent_id = h.issue_id(1);
     h.run_ok(&["issue", "subissue", "1", "Todo child"]);
     h.run_ok(&[

@@ -18,13 +18,12 @@ runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
 
-# Choose exactly one review mode. Native room mode stores review rooms under
-# .atelier/reviews. Provider mode currently supports Forgejo.
-#
-# [review]
-# mode = "room"
-#
-# Or:
+# Native room mode stores review rooms under .atelier/reviews. Provider mode
+# currently supports Forgejo.
+[review]
+mode = "room"
+
+# To use Forgejo instead, replace the [review] table above with:
 #
 # [review]
 # mode = "provider"
