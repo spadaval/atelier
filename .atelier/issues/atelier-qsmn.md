@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Validation and workflow migration for transition effects"
-updated_at: "2026-06-19T20:14:36.022769773+00:00"
+updated_at: "2026-06-19T21:28:03.245754059+00:00"
 ---
 
 ## Description
