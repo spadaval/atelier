@@ -36,8 +36,21 @@ pub struct IssueTransitionOption {
     pub allowed: bool,
     pub blockers: Vec<String>,
     pub validator_results: Vec<ValidatorResult>,
+    pub planned_effects: Vec<PlannedEffect>,
     pub descriptions: Vec<String>,
     pub command: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannedEffect {
+    pub order: usize,
+    pub name: String,
+    pub target_issue_id: String,
+    pub branch_owner_id: String,
+    pub review_artifact_target: Option<String>,
+    pub confirmation_required: bool,
+    pub skip_reason: Option<String>,
+    pub block_reason: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +124,7 @@ pub fn issue_transition_options(
         );
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
+        let planned_effects = plan_transition_effects(db, &issue, transition)?;
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -118,6 +132,7 @@ pub fn issue_transition_options(
             allowed: blockers.is_empty(),
             blockers,
             validator_results,
+            planned_effects,
             descriptions,
             command: transition_command(&issue.id, name, transition),
         });
@@ -132,6 +147,53 @@ pub fn issue_transition_options(
     }
 
     Ok(options)
+}
+
+fn plan_transition_effects(
+    db: &Database,
+    issue: &Issue,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+) -> Result<Vec<PlannedEffect>> {
+    let repo_root = repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    let resolution =
+        atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+    Ok(plan_effects_for_resolution(
+        issue,
+        &resolution,
+        &transition.effects,
+    ))
+}
+
+fn plan_effects_for_resolution(
+    issue: &Issue,
+    resolution: &BranchLifecycleResolution,
+    effects: &[atelier_app::workflow_policy::EffectDefinition],
+) -> Vec<PlannedEffect> {
+    effects
+        .iter()
+        .enumerate()
+        .map(|(index, effect)| {
+            let review_artifact_target = if matches!(
+                effect.builtin.as_str(),
+                "review_artifact_open" | "review_artifact_link"
+            ) {
+                Some(resolution.owner_id.clone())
+            } else {
+                None
+            };
+            PlannedEffect {
+                order: index + 1,
+                name: effect.builtin.clone(),
+                target_issue_id: issue.id.clone(),
+                branch_owner_id: resolution.owner_id.clone(),
+                review_artifact_target,
+                confirmation_required: effect.builtin == "owner_branch_integrate",
+                skip_reason: None,
+                block_reason: None,
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn branch_lifecycle_context(
@@ -2311,6 +2373,28 @@ mod tests {
         json!({"kind": "pull_request", "provider": "forgejo", "number": 42})
     }
 
+    fn test_issue(id: &str) -> Issue {
+        Issue {
+            id: id.to_string(),
+            title: "Issue".to_string(),
+            description: None,
+            status: "in_progress".to_string(),
+            priority: "medium".to_string(),
+            issue_type: "epic".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            closed_at: None,
+        }
+    }
+
+    fn effect(name: &str) -> atelier_app::workflow_policy::EffectDefinition {
+        atelier_app::workflow_policy::EffectDefinition {
+            builtin: name.to_string(),
+        }
+    }
+
     fn setup_pr_validator_repo() -> (TempDir, Database) {
         let dir = tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
@@ -2393,6 +2477,46 @@ mod tests {
                 "git_worktree_clean"
             ]
         );
+    }
+
+    #[test]
+    fn transition_effect_plan_is_ordered_and_side_effect_free() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let effects = vec![
+            effect("review_artifact_open"),
+            effect("owner_branch_integrate"),
+        ];
+
+        let plan = plan_effects_for_resolution(&issue, &resolution, &effects);
+
+        assert_eq!(issue.status, "in_progress");
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].order, 1);
+        assert_eq!(plan[0].name, "review_artifact_open");
+        assert_eq!(plan[0].target_issue_id, "atelier-epic1");
+        assert_eq!(plan[0].branch_owner_id, "atelier-epic1");
+        assert_eq!(
+            plan[0].review_artifact_target.as_deref(),
+            Some("atelier-epic1")
+        );
+        assert!(!plan[0].confirmation_required);
+        assert_eq!(plan[1].order, 2);
+        assert_eq!(plan[1].name, "owner_branch_integrate");
+        assert!(plan[1].review_artifact_target.is_none());
+        assert!(plan[1].confirmation_required);
+        assert!(plan.iter().all(|effect| effect.skip_reason.is_none()));
+        assert!(plan.iter().all(|effect| effect.block_reason.is_none()));
     }
 
     #[test]

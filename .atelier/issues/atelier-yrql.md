@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add transition effect planning and preflight"
-updated_at: "2026-06-19T20:14:22.363363767+00:00"
+updated_at: "2026-06-19T20:59:42.069285905+00:00"
 ---
 
 ## Description
