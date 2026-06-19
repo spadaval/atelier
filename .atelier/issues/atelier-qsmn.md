@@ -6,6 +6,10 @@ labels:
 - "migration"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 6
+  provider: forgejo
 priority: "P2"
 relationships:
   blocks: []
