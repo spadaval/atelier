@@ -660,6 +660,9 @@ fn open_review_artifact_effect(
     let policy = atelier_app::workflow_policy::load(repo_root)?;
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+    if let Some(detail) = existing_review_artifact_detail(state_dir, &resolution.owner_id)? {
+        return Ok(detail);
+    }
     let title = format!("Review {} {}", resolution.owner_id, transition_name);
     let body = format!(
         "Opened by transition effect `{}` for issue {}.",
@@ -715,6 +718,38 @@ fn open_review_artifact_effect(
             }
         },
     }
+}
+
+fn existing_review_artifact_detail(state_dir: &Path, owner_id: &str) -> Result<Option<String>> {
+    let owner = app_use_cases::load_canonical_issue(state_dir, owner_id)?;
+    let Some(review) = owner.issue.fields.get("review") else {
+        return Ok(None);
+    };
+    let kind = review
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("review");
+    let detail = match kind {
+        "room" => review
+            .get("id")
+            .and_then(Value::as_str)
+            .map(|id| format!("reused room {id}"))
+            .unwrap_or_else(|| "reused room review".to_string()),
+        "pull_request" => {
+            let provider = review
+                .get("provider")
+                .and_then(Value::as_str)
+                .unwrap_or("provider");
+            let number = review
+                .get("number")
+                .and_then(Value::as_i64)
+                .map(|number| format!("#{number}"))
+                .unwrap_or_else(|| "review".to_string());
+            format!("reused provider review {provider}{number}")
+        }
+        other => format!("reused {other} review"),
+    };
+    Ok(Some(detail))
 }
 
 fn record_applied_effects(
@@ -2863,6 +2898,18 @@ mode = "room"
         let review = owner.issue.fields.get("review").unwrap();
         assert_eq!(review["kind"], "room");
         assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
+
+        let second_detail = open_review_artifact_effect(
+            &db,
+            &state_dir,
+            &db_path,
+            dir.path(),
+            &issue,
+            "request_review",
+            &effect,
+        )
+        .unwrap();
+        assert!(second_detail.contains("reused room"));
     }
 
     #[test]
