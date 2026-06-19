@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:38:47.274725912+00:00"
+status: "done"
 title: "Add structured review issue field and inheritance rules"
-updated_at: "2026-06-19T03:58:25.483033697+00:00"
+updated_at: "2026-06-19T04:38:47.274725912+00:00"
 ---
 
 ## Description
