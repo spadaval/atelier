@@ -50,6 +50,8 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0004: Work Association Replaces Default Lock Sync](../adr/0004-work-lock-sync-policy.md)
 - [ADR 0009: Virtual Workspace Root And CLI-Owned Binary](../adr/0009-virtual-workspace-root-and-cli-binary.md)
 - [ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries](../adr/0010-session-aware-pr-coordination-boundaries.md)
+- [ADR 0011: Native Review Modes And Room Authority](../adr/0011-native-review-modes-and-room-authority.md)
+- [ADR 0012: Explicit Workflow Transition Effects](../adr/0012-explicit-workflow-transition-effects.md)
 
 ## Target Architecture
 
