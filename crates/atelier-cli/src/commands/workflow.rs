@@ -411,6 +411,7 @@ pub fn transition_issue(
             transition,
             &validator_results,
             &blockers,
+            &planned_effects,
         )?;
     }
 
@@ -533,6 +534,7 @@ fn report_blocked_transition(
     transition: &atelier_app::workflow_policy::TransitionDefinition,
     validator_results: &[ValidatorResult],
     blockers: &[String],
+    planned_effects: &[PlannedEffect],
 ) -> Result<()> {
     let reason = blockers.join("; ");
     crate::commands::activity_log::record_transition_blocked(
@@ -548,6 +550,7 @@ fn report_blocked_transition(
         &transition.to,
         validator_results,
         blockers,
+        planned_effects,
         &transition_descriptions(transition),
         &transition_command(&issue.id, transition_name, transition),
     );
@@ -1340,6 +1343,10 @@ pub fn print_issue_transition_options(
         println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
         print_text_list("Blockers", &option.blockers);
+        print_text_list(
+            "Planned Effects",
+            &planned_effect_lines(&option.planned_effects),
+        );
         print_text_list("Description", &option.descriptions);
     }
 }
@@ -1390,6 +1397,7 @@ fn print_transition_attempt(
     destination: &str,
     validator_results: &[ValidatorResult],
     blockers: &[String],
+    planned_effects: &[PlannedEffect],
     descriptions: &[String],
     command: &str,
 ) {
@@ -1401,7 +1409,33 @@ fn print_transition_attempt(
     println!("Command:    {}", command);
     print_transition_detail("Validators", validator_results);
     print_text_list("Blockers", blockers);
+    print_text_list("Planned Effects", &planned_effect_lines(planned_effects));
     print_text_list("Description", descriptions);
+}
+
+fn planned_effect_lines(planned_effects: &[PlannedEffect]) -> Vec<String> {
+    planned_effects
+        .iter()
+        .map(|effect| {
+            let mut line = format!(
+                "{}. {} target={} owner={}",
+                effect.order, effect.name, effect.target_issue_id, effect.branch_owner_id
+            );
+            if let Some(review_target) = &effect.review_artifact_target {
+                line.push_str(&format!(" review_target={review_target}"));
+            }
+            if effect.confirmation_required {
+                line.push_str(" confirmation=required");
+            }
+            if let Some(skip_reason) = &effect.skip_reason {
+                line.push_str(&format!(" skip={skip_reason}"));
+            }
+            if let Some(block_reason) = &effect.block_reason {
+                line.push_str(&format!(" block={block_reason}"));
+            }
+            line
+        })
+        .collect()
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
