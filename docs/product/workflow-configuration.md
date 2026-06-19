@@ -58,6 +58,7 @@ Workflow policy applies to issues. The contract defines:
 
 - a required branch policy for owner branch names, base branch, and merge
   strategy;
+- a repository-defined issue type registry;
 - a shared status catalog with explicit status categories;
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
@@ -85,12 +86,20 @@ branch_policy:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
 
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
+
 statuses:
   todo: { category: todo }
   in_progress: { category: active }
   blocked: { category: blocked }
-  review: { category: review }
-  validation: { category: validation }
+  review: { category: active }
+  validation: { category: active }
   done: { category: done }
   archived: { category: done }
 
@@ -111,10 +120,10 @@ workflows:
         to: done
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -135,19 +144,19 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_complete]
+        validators: [review.complete]
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - linked_pr_merged
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - review.linked_pr_merged
+          - tracker.current
+          - git.worktree_clean
 
   validation_reviewed:
     applies_to: [validation]
@@ -168,18 +177,18 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_complete]
+        validators: [review.complete]
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   spike:
     applies_to: [spike]
@@ -203,15 +212,15 @@ workflows:
         to: done
         description: "Closing requires complete review and current durable state."
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current
 ```
 
 Required top-level fields are `schema`, `schema_version`, `branch_policy`,
-`statuses`, and `workflows`. Unknown top-level fields are hard errors.
-Obsolete top-level fields such as `issue_types`, `branch_lifecycle`,
-`validators`, `guidance_templates`, and `fields` are rejected. Obsolete
-transition fields such as `effects` are rejected for the target contract.
+`issue_types`, `statuses`, and `workflows`. Unknown top-level fields are hard
+errors. Obsolete top-level fields such as `branch_lifecycle`, `validators`,
+`guidance_templates`, and `fields` are rejected. Obsolete transition fields
+such as `effects` are rejected for the target contract.
 
 ## Branch Policy
 
@@ -238,6 +247,26 @@ Branch templates support only `{{ issue.id }}` and `{{ issue.type }}`. In this
 context, `issue` means the branch owner, not necessarily the child issue being
 started or closed.
 
+## Issue Types
+
+`issue_types` is the repository issue type registry. It makes the set of valid
+issue type names explicit before workflows claim coverage.
+
+Issue type names use stable lowercase ASCII identifiers:
+`^[a-z][a-z0-9_]*$`.
+
+Each issue type object currently has one required field:
+
+| Field | Rule |
+| --- | --- |
+| `label` | Required non-empty user-facing label. |
+
+The starter registry defines `bug`, `epic`, `feature`, `spike`, `task`, and
+`validation`. Repositories may add custom issue types by adding registry
+entries and then covering them from exactly one workflow. Unknown issue types
+in issue records are hard config or lint errors because the workflow resolver
+cannot know which status and transition rules apply.
+
 ## Statuses And Categories
 
 `statuses` is a shared catalog of named status objects. Status names use stable
@@ -247,10 +276,12 @@ Each status object currently has one required field:
 
 | Field | Rule |
 | --- | --- |
-| `category` | Required. One of `todo`, `active`, `blocked`, `review`, `validation`, or `done`. |
+| `category` | Required. One of `todo`, `active`, `blocked`, or `done`. |
 
 Status categories are operator-facing summary buckets. They help commands
 summarize work but do not replace workflow status in canonical issue records.
+`review` and `validation` may be configured as user-facing workflow statuses or
+issue types, but they are not required global categories.
 
 Statuses in a workflow's `done_statuses` list are terminal for that workflow:
 
@@ -260,11 +291,11 @@ Statuses in a workflow's `done_statuses` list are terminal for that workflow:
 
 ## Workflow Applicability
 
-Each workflow owns its issue type coverage through `applies_to`.
+Each workflow owns registry coverage through `applies_to`.
 
-Built-in issue types are `bug`, `epic`, `feature`, `spike`, `task`, and
-`validation`. Every built-in issue type must appear exactly once across all
-workflows. Missing, duplicate, or unknown issue types are hard config errors.
+Every `issue_types` registry key must appear exactly once across all workflow
+`applies_to` lists. Missing coverage, duplicate coverage, and workflow
+references to an unregistered issue type are hard config errors.
 
 Starter workflow names are:
 
@@ -337,23 +368,23 @@ Failure behavior is part of the action contract:
 
 ## Validators
 
-Transition validators use built-in names directly:
+Transition validators use namespaced built-in names directly:
 
 ```yaml
 validators:
-  - no_open_blockers
-  - durable_state_current
+  - blockers.none_open
+  - tracker.current
 ```
 
 Parameterized validators use single-key map syntax:
 
 ```yaml
 validators:
-  - evidence_attached: { min_count: 1 }
+  - evidence.attached: { min_count: 1 }
 ```
 
-There is no top-level validator alias registry. Unknown validators and invalid
-params are hard config errors.
+There is no top-level validator alias registry. Unknown validators, obsolete
+flat validator names, and invalid params are hard config errors.
 Validators must be read-only. They may inspect canonical records, projection
 freshness, worktree state, evidence, blockers, and review artifacts, but they
 must not write records, create commits, change branches, open reviews, or merge
@@ -363,15 +394,15 @@ Supported built-ins include:
 
 | Validator | Purpose |
 | --- | --- |
-| `durable_state_current` | Canonical state and local projection are current enough for the transition. |
-| `issue_sections_parseable` | Issue Markdown sections can be parsed. |
-| `evidence_attached` | Required evidence is attached; supports `min_count`. |
-| `review_complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
-| `epic_child_proof_complete` | Epic child work is closed with validating proof. |
-| `no_open_blockers` | Target has no open blockers. |
-| `no_blocking_lints` | Blocking lint checks pass. |
-| `git_worktree_clean` | Worktree cleanliness gate passes. |
-| `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
+| `tracker.current` | Canonical state and local projection are current enough for the transition. |
+| `issue.sections_parseable` | Issue Markdown sections can be parsed. |
+| `evidence.attached` | Required evidence is attached; supports `min_count`. |
+| `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
+| `children.proof_complete` | Child work is closed with validating proof. |
+| `blockers.none_open` | Target has no open blockers. |
+| `lint.none_blocking` | Blocking lint checks pass. |
+| `git.worktree_clean` | Worktree cleanliness gate passes. |
+| `review.linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 
 Actions are not validators. They may mutate Git state, canonical review
 records, provider review artifacts, and committed tracker state. Unknown
@@ -436,21 +467,21 @@ child issue is invalid unless the child owns its own branch by policy. Legacy
 top-level `pull_request` fields are migration input only: migrated records must
 render the structured `review` field, and strict validation rejects the old
 shape after migration. The starter policy attaches
-`linked_pr_merged` only to epic close, so validation issues and ordinary child
-issues can close on their own proof while the epic remains the merged review
-artifact boundary. In provider mode `linked_pr_merged` derives provider
-host/owner/repo from `.atelier/config.toml` and expected source/target branches
-from `branch_policy`. In room mode equivalent review readiness comes from the
-room merge event rather than provider PR state.
+`review.linked_pr_merged` only to epic close, so validation issues and ordinary
+child issues can close on their own proof while the epic remains the merged
+review artifact boundary. In provider mode `review.linked_pr_merged` derives
+provider host/owner/repo from `.atelier/config.toml` and expected source/target
+branches from `branch_policy`. In room mode equivalent review readiness comes
+from the room merge event rather than provider PR state.
 
-`linked_pr_merged` is deliberately a fact check, not a second review-provider
-policy engine. Atelier validates the review artifact link, remote identity,
-branch match, and merged state because those facts decide whether the local
-workflow gate is satisfied. The configured review provider owns branch
-protection, required approvals, allowed merge strategies, and final merge
-authorization. If a repository needs Atelier to enforce additional review
-policy locally, that is a new product decision rather than an extension of the
-starter workflow.
+`review.linked_pr_merged` is deliberately a fact check, not a second
+review-provider policy engine. Atelier validates the review artifact link,
+remote identity, branch match, and merged state because those facts decide
+whether the local workflow gate is satisfied. The configured review provider
+owns branch protection, required approvals, allowed merge strategies, and final
+merge authorization. If a repository needs Atelier to enforce additional
+review policy locally, that is a new product decision rather than an extension
+of the starter workflow.
 
 ## Review Artifact Guidance
 

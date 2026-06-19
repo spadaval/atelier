@@ -263,10 +263,10 @@ v1.
 Atelier supports repository-owned configurable issue workflows. Schema version 3
 uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
 policy path. The file defines branch policy, shared statuses with explicit
-categories, named issue workflows, workflow-owned issue type applicability,
-terminal done states, transition rules, inline built-in validators with params,
-configured transition actions, static transition descriptions, and strict
-configuration errors.
+categories, a repository-defined issue type registry, named issue workflows,
+workflow-owned issue type applicability, terminal done states, transition
+rules, inline built-in validators with params, configured transition actions,
+static transition descriptions, and strict configuration errors.
 
 Example workflow:
 
@@ -281,12 +281,20 @@ branch_policy:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
 
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
+
 statuses:
   todo: { category: todo }
   in_progress: { category: active }
   blocked: { category: blocked }
-  review: { category: review }
-  validation: { category: validation }
+  review: { category: active }
+  validation: { category: active }
   done: { category: done }
   archived: { category: done }
 
@@ -305,9 +313,9 @@ workflows:
         required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -330,10 +338,10 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - linked_pr_merged
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - review.linked_pr_merged
+          - tracker.current
 
   validation_reviewed:
     applies_to: [validation]
@@ -356,9 +364,9 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - tracker.current
 
   spike:
     applies_to: [spike]
@@ -373,8 +381,8 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
@@ -382,8 +390,11 @@ ceremony unless policy says so. The starter contract uses proof-first closure
 for ordinary implementation tasks, keeps review/proof workflows for epics,
 validation and other risk-bearing issue types, and keeps a lighter spike
 workflow that records an inspectable close reason. Every built-in issue type
-must appear exactly once across `workflows.*.applies_to`; missing, duplicate, or
-unknown issue types are config errors.
+is listed in `issue_types`, and every registered issue type must appear exactly
+once across `workflows.*.applies_to`; missing, duplicate, or unknown issue
+types are config errors. Status categories are summary buckets such as `todo`,
+`active`, `blocked`, and `done`; `review` and `validation` are configurable
+statuses or issue types, not required global categories.
 
 ## Rules, Lint, And Guidance
 
@@ -579,13 +590,14 @@ evaluate whether a record can advance or close.
 
 Version 1 built-in validators include:
 
-- `durable_state_current`
-- `review_complete`
-- `evidence_attached`
-- `validation_criteria_satisfied`
-- `no_open_blockers`
-- `no_blocking_lints`
-- `git_worktree_clean`
+- `tracker.current`
+- `review.complete`
+- `review.linked_pr_merged`
+- `evidence.attached`
+- `validation.criteria_satisfied`
+- `blockers.none_open`
+- `lint.none_blocking`
+- `git.worktree_clean`
 
 Validators should produce machine-readable results for Mission Control.
 
