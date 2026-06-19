@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:47:39.558506607+00:00"
+status: "done"
 title: "Epic: Rename provider PR commands to review"
-updated_at: "2026-06-19T03:58:54.855785909+00:00"
+updated_at: "2026-06-19T04:47:39.558506607+00:00"
 ---
 
 ## Description
