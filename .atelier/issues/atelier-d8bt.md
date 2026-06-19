@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate transition effects and review integration end to end"
-updated_at: "2026-06-19T21:36:16.344333991+00:00"
+updated_at: "2026-06-19T21:36:48.933982165+00:00"
 ---
 
 ## Description
