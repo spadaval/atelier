@@ -24,9 +24,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-19T21:25:46.853195827+00:00"
+status: "done"
 title: "Epic: CLI surface cleanup for issue transitions"
-updated_at: "2026-06-19T21:25:24.871410333+00:00"
+updated_at: "2026-06-19T21:25:46.853195827+00:00"
 ---
 
 ## Description
