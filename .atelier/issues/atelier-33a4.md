@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Define workflow policy target model"
-updated_at: "2026-06-19T22:54:23.414921149+00:00"
+updated_at: "2026-06-19T23:49:43.990910503+00:00"
 ---
 
 ## Description
