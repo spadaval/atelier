@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted.
+Superseded by
+[ADR 0013](0013-workflow-transition-actions-and-branching.md), which replaces
+transition effects with transition actions and makes branch operations explicit
+workflow actions.
 
 ## Context
 

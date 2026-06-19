@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. Amended by
+[ADR 0013](0013-workflow-transition-actions-and-branching.md), which renames
+workflow transition effects to transition actions.
 
 ## Context
 
@@ -49,10 +51,10 @@ room summaries that drift from their event history.
    otherwise transitions Atelier issues. Workflow transitions continue to use
    explicit `atelier issue` and `atelier mission` commands.
 
-6. Workflow transition effects may prepare review artifacts.
-   A successful explicit issue transition may declare a bounded effect that
+6. Workflow transition actions may prepare review artifacts.
+   A successful explicit issue transition may declare a bounded action that
    opens or links the configured review artifact and writes the branch owner's
-   `review` field. That setup effect uses the active review mode but does not
+   `review` field. That setup action uses the active review mode but does not
    approve, comment, request changes, resolve findings, merge, or transition
    issues outside the declaring workflow transition.
 
@@ -67,7 +69,7 @@ room summaries that drift from their event history.
 - Room projections must be rebuildable from canonical YAML and event order.
 - A future GitHub or GitLab provider requires a separate provider decision; it
   is not implied by the provider mode introduced here.
-- Workflow effect implementations must preserve this review boundary: they can
+- Workflow action implementations must preserve this review boundary: they can
   prepare the configured artifact for a transition but cannot make review
   commands hidden issue workflow authority.
 
