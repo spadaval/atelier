@@ -398,10 +398,10 @@ impl<'a> ProjectionLoader<'a> {
                 if issue
                     .issue
                     .fields
-                    .contains_key(crate::workflow_policy::PULL_REQUEST_FIELD)
+                    .contains_key(crate::workflow_policy::REVIEW_FIELD)
                 {
                     bail!(
-                        "workflow_issue_field_invalid: issue {} defines pull_request directly, but child issues inherit pull_request from parent issue {}; move pull_request to the owning epic or remove it from the child",
+                        "workflow_issue_field_invalid: issue {} defines review directly, but child issues inherit review from parent issue {}; move review to the owning epic or remove it from the child",
                         issue.issue.id,
                         parent_id
                     );
@@ -536,39 +536,6 @@ impl IssueRelationshipProjection {
     }
 }
 
-fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
-            collect_issue_record_paths(root, &path, records)?;
-        } else if path.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .context("Failed to relativize canonical issue path")?
-                .to_path_buf();
-            if crate::storage_layout::is_local_atelier_path(&relative) {
-                continue;
-            }
-            if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
-                bail!(
-                    "Unsupported canonical issue file {}; expected Markdown .md record",
-                    display_state_path(&relative)
-                );
-            }
-            records.push(relative);
-        }
-    }
-    Ok(())
-}
-
 fn discover_record_paths(
     state_dir: &Path,
     spec: &record_store::RecordKindSpec,
@@ -584,9 +551,49 @@ fn discover_record_paths(
         return Ok(Vec::new());
     }
     let mut records = Vec::new();
-    collect_issue_record_paths(state_dir, &record_dir, &mut records)?;
+    collect_canonical_record_paths(
+        state_dir,
+        &record_dir,
+        spec.extension,
+        spec.kind,
+        &mut records,
+    )?;
     records.sort();
     Ok(records)
+}
+
+fn collect_canonical_record_paths(
+    root: &Path,
+    dir: &Path,
+    extension: &str,
+    kind_name: &str,
+    records: &mut Vec<PathBuf>,
+) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_canonical_record_paths(root, &path, extension, kind_name, records)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize canonical record path")?
+                .to_path_buf();
+            if crate::storage_layout::is_local_atelier_path(&relative) {
+                continue;
+            }
+            if relative.extension().and_then(|ext| ext.to_str()) != Some(extension) {
+                bail!(
+                    "Unsupported canonical {} file {}; expected .{} record",
+                    kind_name,
+                    display_state_path(&relative),
+                    extension
+                );
+            }
+            records.push(relative);
+        }
+    }
+    Ok(())
 }
 
 fn discover_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -1095,7 +1102,10 @@ mod tests {
         let (db, dir) = setup_test_db();
         let now = chrono::Utc::now();
         let mut fields = BTreeMap::new();
-        fields.insert("pull_request".to_string(), serde_json::json!(42));
+        fields.insert(
+            "review".to_string(),
+            serde_json::json!({"kind": "pull_request", "provider": "forgejo", "number": 42}),
+        );
         db.insert_issue_rebuild(&Issue {
             id: "atelier-flds".to_string(),
             title: "Fielded issue".to_string(),
@@ -1136,7 +1146,7 @@ mod tests {
         let path = state_dir.join(issue_record_path(&id));
         let text = fs::read_to_string(&path).unwrap().replace(
             "labels: []\n",
-            "labels: []\npull_request: \"not-a-number\"\n",
+            "labels: []\nreview:\n  kind: \"pull_request\"\n  provider: \"forgejo\"\n",
         );
         fs::write(path, text).unwrap();
 
@@ -1144,9 +1154,7 @@ mod tests {
 
         assert!(error.to_string().contains("workflow_issue_field_invalid"));
         assert!(error.to_string().contains("issue "));
-        assert!(error
-            .to_string()
-            .contains("must be a positive integer PR number"));
+        assert!(error.to_string().contains("positive number"));
     }
 
     #[test]
@@ -1162,17 +1170,16 @@ mod tests {
         export::run_canonical(&db, &state_dir, false).unwrap();
         write_schema_v3_policy(&state_dir);
         let path = state_dir.join(issue_record_path(&child));
-        let text = fs::read_to_string(&path)
-            .unwrap()
-            .replace("labels: []\n", "labels: []\npull_request: 42\n");
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "labels: []\n",
+            "labels: []\nreview:\n  kind: \"room\"\n  id: \"atelier-rvw1\"\n",
+        );
         fs::write(path, text).unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
 
         assert!(error.to_string().contains("workflow_issue_field_invalid"));
-        assert!(error
-            .to_string()
-            .contains("child issues inherit pull_request"));
+        assert!(error.to_string().contains("child issues inherit review"));
     }
 
     #[test]
@@ -1611,13 +1618,12 @@ workflows:
         from: [validation]
         to: done
         required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, validation, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
           - no_open_blockers
           - no_blocking_lints
-          - linked_pr_merged
           - durable_state_current
           - git_worktree_clean
 

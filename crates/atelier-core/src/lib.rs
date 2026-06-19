@@ -214,6 +214,7 @@ pub enum Record {
     Mission(MissionRecord),
     Evidence(EvidenceRecord),
     Session(SessionRecord),
+    Review(ReviewRecord),
 }
 
 impl Record {
@@ -223,6 +224,7 @@ impl Record {
             Record::Mission(record) => &record.header,
             Record::Evidence(record) => &record.header,
             Record::Session(record) => &record.header,
+            Record::Review(record) => &record.header,
         }
     }
 
@@ -232,6 +234,7 @@ impl Record {
             Record::Mission(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
             Record::Session(record) => &mut record.header,
+            Record::Review(record) => &mut record.header,
         }
     }
 
@@ -253,6 +256,16 @@ pub struct IssueRecord {
     pub fields: BTreeMap<String, serde_json::Value>,
     pub closed_at: Option<DateTime<Utc>>,
     pub sections: IssueSections,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReviewRecord {
+    pub header: RecordHeader,
+    pub mode: String,
+    pub issue_id: String,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub events: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
