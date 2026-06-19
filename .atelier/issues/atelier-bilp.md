@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T05:14:43.260519819+00:00"
+status: "done"
 title: "Slim Agent Factory guidance to orchestration-only role"
-updated_at: "2026-06-19T01:43:11.589867283+00:00"
+updated_at: "2026-06-19T05:14:43.260519819+00:00"
 ---
 
 ## Description
