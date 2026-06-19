@@ -6,7 +6,10 @@ labels:
 - "pr"
 - "validator"
 - "workflow"
-pull_request: 1
+review:
+  kind: "pull_request"
+  provider: "forgejo"
+  number: 1
 priority: "P1"
 relationships:
   blocks:

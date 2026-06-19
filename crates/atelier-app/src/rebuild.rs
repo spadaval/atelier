@@ -573,6 +573,13 @@ fn collect_canonical_record_paths(
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".activity"))
+            {
+                continue;
+            }
             collect_canonical_record_paths(root, &path, extension, kind_name, records)?;
         } else if path.is_file() {
             let relative = path
@@ -618,7 +625,7 @@ fn collect_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.ends_with(".activity"))
             {
-                collect_canonical_files(root, &path, records)?;
+                collect_activity_files(root, &path, records)?;
             } else {
                 collect_activity_paths(root, &path, records)?;
             }
@@ -680,8 +687,35 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
         if crate::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
+        if relative.components().any(|component| {
+            component
+                .as_os_str()
+                .to_string_lossy()
+                .ends_with(".activity")
+        }) {
+            continue;
+        }
         if path.is_dir() {
             collect_canonical_files(root, &path, files)?;
+        } else if path.is_file() {
+            files.push(relative.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
+fn collect_activity_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .context("Failed to relativize activity path")?;
+        if crate::storage_layout::is_local_atelier_path(relative) {
+            continue;
+        }
+        if path.is_dir() {
+            collect_activity_files(root, &path, files)?;
         } else if path.is_file() {
             files.push(relative.to_path_buf());
         }

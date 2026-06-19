@@ -6,7 +6,10 @@ labels:
 - "architecture"
 - "pr"
 - "workflow"
-pull_request: 2
+review:
+  kind: "pull_request"
+  provider: "forgejo"
+  number: 2
 priority: "P1"
 relationships:
   blocks: []
