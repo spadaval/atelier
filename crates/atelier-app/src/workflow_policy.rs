@@ -8,9 +8,9 @@ use serde_json::Value;
 
 pub use atelier_workflow::{
     configured_initial_status, load, validate_issue_against_policy, BranchLifecycleConfig,
-    BranchLifecycleResolution, BranchOwnerKind, BranchTemplates, GuidanceTemplate, MergeStrategy,
-    StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
-    WorkflowDefinition, WorkflowPolicy, WORKFLOW_POLICY_PATH,
+    BranchLifecycleResolution, BranchOwnerKind, BranchTemplates, EffectDefinition,
+    GuidanceTemplate, MergeStrategy, StatusDefinition, TransitionDefinition, ValidatorDefinition,
+    ValidatorParams, WorkflowDefinition, WorkflowPolicy, WORKFLOW_POLICY_PATH,
 };
 
 pub use atelier_workflow::STARTER_POLICY_YAML;
