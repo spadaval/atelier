@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-19T21:17:40.920784970+00:00"
+status: "done"
 title: "Align review and transition docs with explicit effects"
-updated_at: "2026-06-19T21:15:30.542748497+00:00"
+updated_at: "2026-06-19T21:17:40.920784970+00:00"
 ---
 
 ## Description
