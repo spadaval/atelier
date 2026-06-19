@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Add workflow schema for declared transition effects"
-updated_at: "2026-06-19T20:14:19.582245658+00:00"
+updated_at: "2026-06-19T20:51:35.821240089+00:00"
 ---
 
 ## Description
