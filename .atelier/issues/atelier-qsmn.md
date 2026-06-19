@@ -20,9 +20,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-19T21:39:13.463876106+00:00"
+status: "done"
 title: "Epic: Validation and workflow migration for transition effects"
-updated_at: "2026-06-19T21:39:06.296954831+00:00"
+updated_at: "2026-06-19T21:39:13.463876106+00:00"
 ---
 
 ## Description
