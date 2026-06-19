@@ -39,6 +39,10 @@ Be adversarial about behavior:
   claim or when passing tests are used as proof.
 - Check docs/help consistency when public commands, documented workflows, or
   Agent Factory guidance are part of the claim.
+- When a PR-equivalent review artifact exists, comment there only for bugs or
+  merge-readiness concerns tied to changed code, tests, or review threads.
+  Record scenario proof, transcripts, blockers, and non-code-specific findings
+  in Atelier evidence or issue activity.
 - Do not fix defects unless the tracker item explicitly assigns implementation
   work.
 - File or recommend follow-up items for real discovered work.

@@ -291,42 +291,65 @@ Supported built-ins include:
 | `durable_state_current` | Canonical state and local projection are current enough for the transition. |
 | `issue_sections_parseable` | Issue Markdown sections can be parsed. |
 | `evidence_attached` | Required evidence is attached; supports `min_count`. |
-| `review_complete` | Required review artifact state is complete enough for the configured transition; Forgejo remains the authority for approval rules and branch protection. |
+| `review_complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
 | `epic_child_proof_complete` | Epic child work is closed with validating proof. |
 | `no_open_blockers` | Target has no open blockers. |
 | `no_blocking_lints` | Blocking lint checks pass. |
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
-| `linked_pr_merged` | The linked Forgejo PR number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
+| `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 
 ## Pull Request Link
 
-`pull_request` is the built-in canonical issue field for the active Forgejo PR
-artifact link. It is stored as a normalized positive PR number:
+`pull_request` is the built-in canonical issue field for the active
+PR-equivalent review artifact link. It is stored as a normalized positive
+provider-local review number:
 
 ```yaml
 pull_request: 42
 ```
 
-PR command inputs may accept a PR number or a full Forgejo PR URL, but canonical
-issue records store only the number. URL inputs must match the configured
-Forgejo host, owner, and repository before they normalize to a number.
+PR command inputs may accept a review number or a full provider URL, but
+canonical issue records store only the number. URL inputs must match the
+configured review provider, host, owner, and repository before they normalize to
+a number. The current implementation uses Forgejo as the first provider, but
+the workflow concept is a provider-backed review artifact rather than Forgejo
+itself.
 
 The active PR link belongs to the branch-owning issue or epic. Child issues
 inherit the nearest parent epic's `pull_request`; defining `pull_request`
 directly on a child issue is invalid. The starter policy attaches
 `linked_pr_merged` only to epic close, so validation issues and ordinary child
-issues can close on their own proof while the epic remains the merged-PR
-boundary. `linked_pr_merged` derives Forgejo host/owner/repo from
+issues can close on their own proof while the epic remains the merged review
+artifact boundary. `linked_pr_merged` derives provider host/owner/repo from
 `.atelier/config.toml` and derives expected source/target branches from
 `branch_policy`.
 
-`linked_pr_merged` is deliberately a fact check, not a second Forgejo policy
-engine. Atelier validates the PR link, remote identity, branch match, and
-merged state because those facts decide whether the local workflow gate is
-satisfied. Forgejo owns branch protection, required approvals, allowed merge
-strategies, and final merge authorization. If a repository needs Atelier to
-enforce additional PR policy locally, that is a new product decision rather
-than an extension of the starter workflow.
+`linked_pr_merged` is deliberately a fact check, not a second review-provider
+policy engine. Atelier validates the review artifact link, remote identity,
+branch match, and merged state because those facts decide whether the local
+workflow gate is satisfied. The configured review provider owns branch
+protection, required approvals, allowed merge strategies, and final merge
+authorization. If a repository needs Atelier to enforce additional review
+policy locally, that is a new product decision rather than an extension of the
+starter workflow.
+
+## Review Artifact Guidance
+
+Code-changing epic work should have a PR-equivalent review artifact when the
+workflow requires review or merged-PR closeout. Ordinary child implementation
+issues use the nearest parent epic's review artifact; standalone code-changing
+issues may own their own artifact. Planning, tracker-only, docs-only, and
+scenario-validation work do not need a review artifact unless their workflow or
+human assignment explicitly asks for one.
+
+Agents use the review artifact for code discussion: worker context for the diff,
+reviewer findings and review decisions, validator bugs tied to changed code or
+tests, and worker responses plus follow-up commits. Agents keep Atelier as the
+durable work record: issue status, blockers, evidence transcripts, scenario
+validation, mission or epic closeout, and proof summaries remain in canonical
+records. Native Markdown comments or activity sidecars may capture durable
+notes, but they are not a second PR system and do not satisfy review-provider
+merge gates.
 
 ## Errors
 

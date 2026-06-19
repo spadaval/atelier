@@ -48,6 +48,8 @@ Before editing, verify:
 - the expected proof for the owned slice is clear;
 - whether the proof can be issue-local or requires first-class evidence and
   independent validation or review;
+- whether the issue belongs to a code-changing epic or standalone branch that
+  requires a PR-equivalent review artifact, and where that artifact is linked;
 - the parent epic validation criterion advanced by the slice is clear, when
   applicable;
 - the item is linked to the assigned mission or epic graph, or the prompt
@@ -100,6 +102,16 @@ workflow validator does not replace issue-local proof or attached evidence.
 If a broader check fails because the repo is intentionally mid-migration,
 record the command, concrete failure shape, and item expected to reconnect or
 close it out.
+
+## Review Artifact Use
+
+For code-changing work under a review artifact, use the artifact for code
+discussion: summarize the worker context for the diff, respond to reviewer
+findings, and push follow-up commits that address review threads. Do not copy
+routine proof transcripts, tracker gate output, or scenario validation logs into
+the PR-equivalent workspace. Those belong in Atelier evidence or issue
+activity, linked from the review artifact only when the reader needs the proof
+to understand the diff or merge readiness.
 
 ## Tracker Hygiene
 

@@ -86,11 +86,12 @@
   from canonical issue activity. A session can explain who did what and when,
   but it does not define current work, it is inspection-only, and it is not a
   standalone workflow record.
-- Pull request artifact: a Forgejo review object linked from issue state through
-  the built-in canonical `pull_request` field. Canonical storage is the
-  normalized PR number; Forgejo host, owner, repo, and branch expectations are
-  derived from project config and workflow branch policy. It is a review
-  artifact, not an Atelier workflow transition.
+- Review artifact: the configured provider's PR-equivalent code review object
+  linked from issue state through the built-in canonical `pull_request` field.
+  Canonical storage is the normalized provider-local review number. Provider
+  host, owner, repo, and branch expectations are derived from project config
+  and workflow branch policy. It is a code review workspace, not an Atelier
+  workflow transition, and it does not replace evidence records.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -158,14 +159,14 @@
   Sessions summarize bounded worker, reviewer, and validator attempts from
   canonical issue activity. Local command diagnostics are ignored runtime
   telemetry for command health and are not exported work records.
-- Pull request artifacts and validators are distinct. `atelier pr` commands
-  operate on Forgejo review artifacts and record their issue or epic linkage,
-  while workflow validators such as `linked_pr_merged` only read PR state to
+- Review artifacts and validators are distinct. `atelier pr` commands operate
+  on provider-backed review artifacts and record their issue or epic linkage,
+  while workflow validators such as `linked_pr_merged` only read review state to
   decide whether an Atelier transition is allowed.
 - Pull request links and evidence attachments are distinct. The `pull_request`
-  field stores the active PR artifact number for a branch-owning issue or epic;
-  evidence attachments prove claims with command transcripts, reviews, or
-  validation records.
+  field stores the active provider-local review artifact number for a
+  branch-owning issue or epic; evidence attachments prove claims with command
+  transcripts, review summaries, or validation records.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are

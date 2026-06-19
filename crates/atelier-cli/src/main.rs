@@ -37,7 +37,7 @@ Missions and planning:
 Records:
   evidence      Capture validation evidence
   session       Inspect derived issue attempts
-  pr            Manage Forgejo pull request review artifacts
+  pr            Manage PR-equivalent review artifacts
   forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
@@ -206,7 +206,7 @@ enum Commands {
         action: SessionCommands,
     },
 
-    /// Forgejo pull request review artifacts
+    /// PR-equivalent review artifacts
     Pr {
         #[command(subcommand)]
         action: PrCommands,
@@ -616,7 +616,7 @@ enum SessionCommands {
 
 #[derive(Subcommand)]
 enum PrCommands {
-    /// Open or confirm the active Forgejo pull request for an issue owner
+    /// Open or confirm the active review artifact for an issue owner
     Open {
         #[arg(long)]
         issue: Option<String>,
@@ -631,7 +631,7 @@ enum PrCommands {
         #[arg(long, default_value = "master")]
         target_branch: String,
     },
-    /// Link an existing Forgejo PR by number or URL
+    /// Link an existing review artifact by number or URL
     Link {
         #[arg(long)]
         issue: Option<String>,
@@ -647,7 +647,7 @@ enum PrCommands {
         #[arg(long)]
         issue: Option<String>,
     },
-    /// Merge or confirm the linked Forgejo PR without changing Atelier workflow state
+    /// Merge or confirm the linked review artifact without changing Atelier workflow state
     Merge {
         #[arg(long)]
         issue: Option<String>,
@@ -661,7 +661,7 @@ enum PrCommands {
         #[arg(long)]
         unresolved: bool,
     },
-    /// Add a Forgejo PR comment
+    /// Add a review artifact comment
     Comment {
         #[arg(long)]
         issue: Option<String>,
@@ -669,7 +669,7 @@ enum PrCommands {
         role: String,
         body: String,
     },
-    /// Submit a Forgejo PR review
+    /// Submit a review artifact review
     Review {
         #[arg(long)]
         issue: Option<String>,

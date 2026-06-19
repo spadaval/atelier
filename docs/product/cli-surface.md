@@ -117,7 +117,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `bundle` | Preview and apply one-shot graph bundles from files. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
 | `session` | Inspect derived issue-scoped worker/reviewer/validator attempts. | `show` and `list` name the linked issue or epic, role, state, serial, and bounded recent activity reconstructed from canonical issue events. Session commands do not start, end, or mutate workflow state. | Session IDs, linked work IDs, role, state, and timestamps only. | `status`, `history --issue <id>`, `issue show <id>`, `mission status`. |
-| `pr` | Manage Forgejo pull request review artifacts associated with issue or epic work. | `open`, `link`, `status`, `show`, `merge`, `comments`, `comment`, and `review` name the linked issue or epic, remote PR URL/number, author identity, merge state, review state, unresolved inline comment count, and next review command. `link` accepts a PR number or matching Forgejo URL and stores only the normalized `pull_request` number. `merge` merges or confirms the linked Forgejo PR without changing Atelier workflow state. PR commands do not transition Atelier workflow and do not reimplement Forgejo branch-protection, approval, or merge-policy decisions; workflow gates read only the PR facts Atelier depends on. | Issue ID, PR number/URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote Forgejo PR. |
+| `pr` | Manage PR-equivalent review artifacts associated with issue or epic work. | `open`, `link`, `status`, `show`, `merge`, `comments`, `comment`, and `review` name the linked issue or epic, remote review artifact URL/number, author identity, merge state, review state, unresolved inline comment count, and next review command. `link` accepts a review number or matching provider URL and stores only the normalized `pull_request` number. `merge` merges or confirms the linked provider review artifact without changing Atelier workflow state. PR commands do not transition Atelier workflow and do not reimplement review-provider branch-protection, approval, or merge-policy decisions; workflow gates read only the review facts Atelier depends on. The current provider is Forgejo. | Issue ID, PR/review number or URL, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, remote review artifact. |
 | `forgejo` | Configure and verify Forgejo integration. | `atelier forgejo roles check` verifies configured role authors, repo write permission, sudo behavior, and collapsed mappings; `atelier forgejo roles provision` creates missing service accounts, grants repo access, and optionally writes `[forgejo.role_authors]`. | Role names, pass/fail tokens, and remediation text only. | `.atelier/config.toml`, `pr`, `issue transition <id> --options`, remote Forgejo admin UI. |
 | `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
 | `worktree` | Create, inspect, merge, repair, and remove mission worktrees, with per-issue isolation available only when explicitly requested. | `for-mission`, `for`, `merge`, `repair`, and `remove` acknowledge the affected mission/issue/path; `status` stays scan-friendly and bounded. | Mission IDs, issue IDs, paths, and worktree-state tokens. | `worktree status`, `mission status`, `issue show <id>`. |
@@ -505,22 +505,23 @@ set, and session output is a projection of worker/reviewer/validator attempts
 derived from issue activity.
 
 PR commands are visible only for review artifacts. They may create, inspect,
-merge or confirm merge state for, comment on, and review Forgejo pull requests.
-Forgejo role authorship is
-configured through `[forgejo.role_authors]`, and `atelier forgejo roles`
-provisions and verifies the service accounts used for worker, reviewer,
-validator, and manager PR actions. PR commands must not close, start, or
-otherwise transition Atelier issues.
+merge or confirm merge state for, comment on, and review PR-equivalent artifacts
+owned by the configured review provider. The current provider is Forgejo:
+Forgejo role authorship is configured through `[forgejo.role_authors]`, and
+`atelier forgejo roles` provisions and verifies the service accounts used for
+worker, reviewer, validator, and manager PR actions. PR commands must not close,
+start, or otherwise transition Atelier issues.
 Workflow validators such as `linked_pr_merged` read external PR state and
 return actionable pass/fail guidance through transition/status surfaces. The
-local facts Atelier owns are the linked PR number, configured Forgejo remote
-identity, expected source and target branches from workflow branch policy,
-merged state, review-complete state when a configured transition asks for it,
-and unresolved review-comment counts for operator guidance. Forgejo remains the
-authority for fine-grained branch protection, required approvals, merge method
-allowance, and who may merge. The starter workflow uses `linked_pr_merged` only
-on epic close; validation issues and ordinary implementation issues rely on
-their own proof and local workflow checks.
+local facts Atelier owns are the linked provider-local review number, configured
+provider remote identity, expected source and target branches from workflow
+branch policy, merged state, review-complete state when a configured transition
+asks for it, and unresolved review-comment counts for operator guidance. The
+configured review provider remains the authority for fine-grained branch
+protection, required approvals, merge method allowance, and who may merge. The
+starter workflow uses `linked_pr_merged` only on epic close; validation issues
+and ordinary implementation issues rely on their own proof and local workflow
+checks.
 
 ## Integration Or Experimental
 
