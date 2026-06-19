@@ -52,9 +52,27 @@ Optional environment variables are limited to local behavior overrides:
   retention.
 - `ATELIER_AGENT` and `ATELIER_AGENT_ID` can label local activity/diagnostic
   records.
+- Provider admin token variables named by tracked project config, such as
+  `FORGEJO_ADMIN_TOKEN`, are required only for commands that mutate the
+  configured provider review artifact. The token value is local secret material
+  and must not be committed.
 
 These variables are optional local overrides, not required setup inputs. Keep
 secrets out of committed files.
+
+## Local Runtime And Cache
+
+Tracked `.atelier/config.toml` names the local runtime and cache paths so
+commands agree where to rebuild projections and store disposable machine-local
+state. The contents of `.atelier/runtime/`, `.atelier/cache/`, and any
+compatibility cache directories are ignored local files. They may contain
+SQLite projections, locks, diagnostics, identity hints, or UI caches, but they
+must not be treated as durable project policy or committed work records.
+
+If runtime or cache state is missing or stale, prefer normal Atelier health and
+repair surfaces such as `atelier doctor` and commands named by `atelier status`.
+Do not edit ignored runtime/cache files as a substitute for updating tracked
+Markdown records, `.atelier/config.toml`, or `.atelier/workflow.yaml`.
 
 Diagnostics storage and retention details are defined in
 [Local Command Diagnostics](../architecture/local-command-diagnostics.md).

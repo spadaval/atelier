@@ -29,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "active"
 title: "Workflow policy cleanup and custom issue types"
-updated_at: "2026-06-19T22:43:00.322852794+00:00"
+updated_at: "2026-06-19T23:29:57.319600215+00:00"
 ---
 
 ## Intent

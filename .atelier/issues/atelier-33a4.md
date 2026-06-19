@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "architecture"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 7
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -25,9 +29,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T23:54:30.111060251+00:00"
+status: "done"
 title: "Epic: Define workflow policy target model"
-updated_at: "2026-06-19T22:54:23.414921149+00:00"
+updated_at: "2026-06-19T23:54:30.111060251+00:00"
 ---
 
 ## Description

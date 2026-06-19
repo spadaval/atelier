@@ -27,10 +27,11 @@ separate issue hierarchy.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
-- Transition effect: configured work run by an explicit issue transition after
-  required fields and validators pass. Effects may write issue status, activity,
-  owner branch commits, integration results, or review artifact links, but they
-  do not replace explicit review or issue commands.
+- Transition action: configured work run by an explicit issue transition after
+  required fields and validators pass. Actions may create owner branch commits,
+  integrate owner branches, or open/link review artifacts. Intrinsic workflow
+  status and transition activity writes are engine behavior, not configurable
+  action authority, and actions do not replace explicit review or issue commands.
 - Evidence: durable proof that accountable work, review, validation, or completion
   happened. Normal evidence attaches to issue-shaped work because issues own
   accountability. Parent completion is derived from linked implementation,
@@ -230,10 +231,10 @@ Independent review moves to the epic by default. Ordinary implementation issues
 close with their own proof, while epic completion maps child issue proof to the
 parent outcome and records the review or validation judgment for the branch.
 
-Workflow transitions may prepare review state through declared effects. For
+Workflow transitions may prepare review state through declared actions. For
 example, an epic `request_review` transition can open or link the configured
 review artifact after validators pass, then write the artifact link to the
-branch-owning issue. That effect prepares the review workspace only. Review
+branch-owning issue. That action prepares the review workspace only. Review
 comments, approvals, change requests, finding resolution, and merge stay on
 `atelier review`; issue status changes stay on `atelier issue transition`.
 
@@ -394,21 +395,21 @@ merge, push, or configured integration step fails, the item must not appear
 closed on the integration branch. The command should leave enough state for a
 repair or retry command to explain which step failed.
 
-Workflow transitions may declare transition effects. A transition effect is
+Workflow transitions may declare transition actions. A transition action is
 configured work run by the explicit issue transition after required fields and
-validators pass. The transition is complete only after required effects and the
-final canonical status write succeed; effect output must name the affected
+validators pass. The transition is complete only after required actions and the
+final canonical status write succeed; action output must name the affected
 artifact, local record path when relevant, and retry or recovery command.
 
-The v1 effect set is limited to review artifact open/link. The effect uses the
-repository's configured review mode to create, locate, or link the review
-artifact for the branch-owning issue or epic, then writes the canonical
-`review` field. It does not merge the artifact, approve review, request
-changes, post comments, close hidden issues, revive `pr` aliases, or provide a
-general automation-hook mechanism. Those actions remain separate review or
-workflow commands.
+The v1 action set is limited to the built-in transition actions described by
+workflow policy. Review artifact actions use the repository's configured review
+mode to create, locate, or link the review artifact for the branch-owning issue
+or epic, then write the canonical `review` field. They do not merge the
+artifact, approve review, request changes, post comments, close hidden issues,
+revive `pr` aliases, or provide a general automation-hook mechanism. Those
+operations remain separate review or workflow commands.
 
-Effect failure handling must be explicit:
+Action failure handling must be explicit:
 
 - Preflight failure stops before canonical status or review-link writes.
 - Local write failure names the failed write and does not report transition
@@ -443,7 +444,7 @@ Explicit branch helpers such as `atelier branch for-epic <epic-id>` create or
 locate reviewable branches for diagnostics, advanced repair, or manual
 recovery. Routine worker guidance should come from `atelier status`, issue
 detail, transition options, and any recovery text they print. Workflow-defined
-general hooks are deferred in v1; transition effects are the narrow configured
+general hooks are deferred in v1; transition actions are the narrow configured
 integration points described by workflow policy.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated mission/epic/issue work,
@@ -473,9 +474,9 @@ A workflow may say:
 transitions:
   complete:
     validators:
-      - required_validation_criteria_satisfied
-      - no_open_blockers
-      - evidence_records_present
+      - validation.criteria_satisfied
+      - blockers.none_open
+      - evidence.attached
 ```
 
 The validator does not define the checkpoint's meaning. It only enforces whether

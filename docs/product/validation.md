@@ -42,7 +42,7 @@ validation work. Validator names are diagnostic detail, not the main product
 language for normal operators.
 
 External-state validator is a workflow validator that reads a system outside
-Atelier without mutating it. `linked_pr_merged` is the product model for
+Atelier without mutating it. `review.linked_pr_merged` is the product model for
 provider-backed review artifact gates: it reads the issue's active structured
 `review` artifact link, verifies the remote PR-equivalent artifact against
 configured repo and branch policy, then reports whether the required review

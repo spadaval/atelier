@@ -10,9 +10,9 @@ relationships:
   relates: []
 schema: "atelier.mission"
 schema_version: 1
-status: "draft"
+status: "ready"
 title: "Superseded by 0v3f: Add session-aware Forgejo PR coordination"
-updated_at: "2026-06-17T21:43:44.680857129+00:00"
+updated_at: "2026-06-19T23:29:57.319328552+00:00"
 ---
 
 ## Intent

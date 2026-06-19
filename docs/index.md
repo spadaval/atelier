@@ -28,6 +28,10 @@
   accepted choice that projects configure exactly one review mode, native
   rooms live under `.atelier/reviews/`, the public command surface is
   `atelier review`, and review merge does not transition issue workflow.
+- [docs/adr/0013-workflow-transition-actions-and-branching.md](adr/0013-workflow-transition-actions-and-branching.md):
+  accepted choice that transition actions replace effects, branch mutation is
+  declared transition work, and v1 rejects generic capabilities, separate
+  branch lifecycles, mission-only branching, and arbitrary hooks.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required

@@ -263,10 +263,10 @@ v1.
 Atelier supports repository-owned configurable issue workflows. Schema version 3
 uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
 policy path. The file defines branch policy, shared statuses with explicit
-categories, named issue workflows, workflow-owned issue type applicability,
-terminal done states, transition rules, inline built-in validators with params,
-configured transition effects, static transition descriptions, and strict
-configuration errors.
+categories, a repository-defined issue type registry, named issue workflows,
+workflow-owned issue type applicability, terminal done states, transition
+rules, inline built-in validators with params, configured transition actions,
+static transition descriptions, and strict configuration errors.
 
 Example workflow:
 
@@ -281,12 +281,20 @@ branch_policy:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
 
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
+
 statuses:
   todo: { category: todo }
   in_progress: { category: active }
   blocked: { category: blocked }
-  review: { category: review }
-  validation: { category: validation }
+  review: { category: active }
+  validation: { category: active }
   done: { category: done }
   archived: { category: done }
 
@@ -305,9 +313,9 @@ workflows:
         required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -320,7 +328,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -330,10 +338,10 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - linked_pr_merged
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - review.linked_pr_merged
+          - tracker.current
 
   validation_reviewed:
     applies_to: [validation]
@@ -346,7 +354,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -356,9 +364,9 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - tracker.current
 
   spike:
     applies_to: [spike]
@@ -373,8 +381,8 @@ workflows:
         to: done
         required_fields: [close_reason]
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
@@ -382,8 +390,11 @@ ceremony unless policy says so. The starter contract uses proof-first closure
 for ordinary implementation tasks, keeps review/proof workflows for epics,
 validation and other risk-bearing issue types, and keeps a lighter spike
 workflow that records an inspectable close reason. Every built-in issue type
-must appear exactly once across `workflows.*.applies_to`; missing, duplicate, or
-unknown issue types are config errors.
+is listed in `issue_types`, and every registered issue type must appear exactly
+once across `workflows.*.applies_to`; missing, duplicate, or unknown issue
+types are config errors. Status categories are summary buckets such as `todo`,
+`active`, `blocked`, and `done`; `review` and `validation` are configurable
+statuses or issue types, not required global categories.
 
 ## Rules, Lint, And Guidance
 
@@ -405,29 +416,33 @@ Examples:
 Fuzzy guidance should live close to the action it affects. Agents should receive
 the relevant rule at the point of use, not a wall of generic process text.
 
-## Transition Effects
+## Transition Actions
 
-A transition effect is configured work run by an explicit issue transition
-after required fields and validators pass. Effects are part of workflow policy:
+A transition action is configured work run by an explicit issue transition
+after required fields and validators pass. Actions are part of workflow policy:
 they are declared on a transition, run in declaration order, and report
 actionable recovery text when they cannot complete. They are not background
 automation hooks, aliases for review commands, or authority to skip issue
 workflow.
 
-Version 1 built-in effects include:
+Version 1 built-in actions include:
 
-- `issue_status_write`: write the canonical issue status and corresponding
-  transition activity entry.
-- `owner_branch_commit`: commit the transition's canonical tracker changes on
+- `branch_prepare`: create or check out the workflow-derived owner branch when
+  the transition needs branch preparation.
+- `branch_commit`: commit the transition's canonical tracker changes on
   the workflow-derived owner branch.
-- `owner_branch_integrate`: integrate the owner branch to the configured base
+- `branch_integrate`: integrate the owner branch to the configured base
   branch using the configured merge strategy.
 - `review_artifact_open`: open or reuse the branch owner's configured review
   artifact and write the canonical `review` link.
 - `review_artifact_link`: normalize and write an existing configured provider
   review artifact link.
 
-The review artifact effects are intentionally narrow. They may create or link
+The workflow engine intrinsically writes the canonical issue status and
+transition activity entry for a successful transition. That status write is not
+a configurable action.
+
+The review artifact actions are intentionally narrow. They may create or link
 the artifact that an epic, standalone issue, or exceptional branch-owning child
 issue will use for review. They do not approve, comment on, request changes,
 resolve findings, merge review artifacts, hide issue close, or replace
@@ -437,8 +452,8 @@ for v1.
 Failure semantics are explicit:
 
 - Preflight failure: missing required fields, invalid source status, failed
-  validators, invalid review mode, or invalid effect configuration stops before
-  any effect mutates durable state.
+  validators, invalid review mode, or invalid action configuration stops before
+  any action mutates durable state.
 - Local write failure: if canonical Markdown, activity, branch checkout, or
   commit fails, the command reports the failed local step and leaves the issue
   transition unapplied unless the write already completed and can be retried
@@ -447,17 +462,17 @@ Failure semantics are explicit:
   command preserves any already-written local state only when it can be safely
   retried or explicitly repaired; otherwise it reports the provider step that
   failed and the next inspection command.
-- Idempotent retry: effects must detect an already-created review artifact,
+- Idempotent retry: actions must detect an already-created review artifact,
   already-written review link, already-applied activity entry, or already-made
   branch commit and continue without duplicating records.
-- Recovery text: blocked or failed transitions name the failed effect,
+- Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
   `atelier issue transition <id> --options`, `atelier review status <id>`, or
   `atelier lint <id>`.
 
 This contract blocks implementation work that adds workflow schema support,
 transition execution, review-open/link integration, or docs/help parity until
-those slices implement only the declared effect semantics and keep review merge
+those slices implement only the declared action semantics and keep review merge
 separate from issue workflow authority.
 
 ## Avoiding Red Tape
@@ -575,13 +590,14 @@ evaluate whether a record can advance or close.
 
 Version 1 built-in validators include:
 
-- `durable_state_current`
-- `review_complete`
-- `evidence_attached`
-- `validation_criteria_satisfied`
-- `no_open_blockers`
-- `no_blocking_lints`
-- `git_worktree_clean`
+- `tracker.current`
+- `review.complete`
+- `review.linked_pr_merged`
+- `evidence.attached`
+- `validation.criteria_satisfied`
+- `blockers.none_open`
+- `lint.none_blocking`
+- `git.worktree_clean`
 
 Validators should produce machine-readable results for Mission Control.
 

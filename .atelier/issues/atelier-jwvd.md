@@ -19,9 +19,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T23:48:47.397686185+00:00"
+status: "done"
 title: "Update workflow policy docs for target schema"
-updated_at: "2026-06-19T22:42:56.454130436+00:00"
+updated_at: "2026-06-19T23:48:47.397686185+00:00"
 ---
 
 ## Description
