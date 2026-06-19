@@ -13,6 +13,7 @@ pub mod pr;
 pub mod project_config;
 pub mod projection;
 pub mod rebuild;
+pub mod review_room;
 pub mod storage_layout;
 pub mod use_cases;
 pub mod workflow_policy;
