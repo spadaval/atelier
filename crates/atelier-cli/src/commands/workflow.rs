@@ -125,6 +125,7 @@ pub fn issue_transition_options(
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
         let planned_effects = plan_transition_effects(db, &issue, transition)?;
+        blockers.extend(effect_preflight_blockers(&planned_effects));
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -389,7 +390,7 @@ pub fn transition_issue(
     ensure_transition_available(&before, transition_name, transition)?;
 
     let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
-    let (blockers, validator_results) = transition_blockers(
+    let (mut blockers, validator_results) = transition_blockers(
         db,
         &policy,
         &record,
@@ -397,6 +398,8 @@ pub fn transition_issue(
         transition,
         close_reason,
     )?;
+    let planned_effects = plan_transition_effects(db, &before, transition)?;
+    blockers.extend(effect_preflight_blockers(&planned_effects));
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -409,6 +412,7 @@ pub fn transition_issue(
     }
 
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
+    record_applied_effects(&before.id, transition_name, &planned_effects)?;
     record_applied_transition(&before, transition_name, transition)?;
 
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
@@ -537,6 +541,51 @@ fn report_blocked_transition(
         issue.id,
         reason
     )
+}
+
+fn effect_preflight_blockers(planned_effects: &[PlannedEffect]) -> Vec<String> {
+    planned_effects
+        .iter()
+        .filter_map(|effect| {
+            if supported_effect(effect.name.as_str()) {
+                None
+            } else {
+                Some(format!(
+                    "effect {} failed preflight: effect execution is not implemented yet; retry after the owning effect issue lands",
+                    effect.name
+                ))
+            }
+        })
+        .collect()
+}
+
+fn supported_effect(effect_name: &str) -> bool {
+    effect_name == "issue_status_write"
+}
+
+fn record_applied_effects(
+    issue_id: &str,
+    transition_name: &str,
+    planned_effects: &[PlannedEffect],
+) -> Result<()> {
+    for effect in planned_effects {
+        crate::commands::activity_log::record_note(
+            issue_id,
+            &format!(
+                "transition: {}\neffect: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}",
+                transition_name,
+                effect.name,
+                effect.order,
+                effect.target_issue_id,
+                effect.branch_owner_id,
+                effect
+                    .review_artifact_target
+                    .as_deref()
+                    .unwrap_or("(none)")
+            ),
+        )?;
+    }
+    Ok(())
 }
 
 fn apply_transition_record(
@@ -2517,6 +2566,32 @@ mod tests {
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|effect| effect.skip_reason.is_none()));
         assert!(plan.iter().all(|effect| effect.block_reason.is_none()));
+    }
+
+    #[test]
+    fn effect_preflight_blocks_unsupported_effects_before_execution() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let supported =
+            plan_effects_for_resolution(&issue, &resolution, &[effect("issue_status_write")]);
+        assert!(effect_preflight_blockers(&supported).is_empty());
+
+        let unsupported =
+            plan_effects_for_resolution(&issue, &resolution, &[effect("review_artifact_open")]);
+        let blockers = effect_preflight_blockers(&unsupported);
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("review_artifact_open"));
+        assert!(blockers[0].contains("not implemented yet"));
     }
 
     #[test]
