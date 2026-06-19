@@ -65,6 +65,15 @@ atelier issue transition <id> --options
 atelier issue close <id> --reason "..."
 ```
 
+For code-changing epics and standalone branch owners whose workflow requires
+review, use the configured PR-equivalent review artifact as the code discussion
+surface. Workers post diff context and answer review threads there. Reviewers
+leave code findings and review decisions there. Validators comment there only
+when a discovered bug is tied to the changed code, tests, or merge readiness.
+Atelier remains the durable state and proof system: issue status, blockers,
+evidence transcripts, scenario validation, and closeout summaries belong in
+canonical records.
+
 If the assignment requires checkout setup, follow the tracker-owned workspace
 guidance before mutating. For Atelier, use mission workspaces by default and let
 `atelier start <id>` prepare owner branches. Extra issue worktrees are

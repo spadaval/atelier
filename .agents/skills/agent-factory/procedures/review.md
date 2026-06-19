@@ -18,6 +18,11 @@ Read the changed files and relevant:
 ## Review Stance
 
 Reviewers are read-only by default. Do not edit files unless explicitly asked.
+When a PR-equivalent review artifact exists, use it as the primary surface for
+code review findings, inline comments, review decisions, and follow-up
+discussion with the worker. Keep Atelier evidence for proof summaries,
+transcripts, residual risk, and review records that must stand on their own
+after the provider UI is unavailable.
 
 Lead with findings ordered by severity. Focus on:
 

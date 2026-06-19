@@ -102,16 +102,21 @@ child issue is ready to assign.
 4. Ensure every epic validation criterion is owned by child proof, a validation
    item, or an explicit blocked/deferred/not-applicable
    classification.
-5. Shape or close duplicate, vague, or stale items before implementation starts.
-6. Commit coherent implementation slices with the mapped tracker backup when
+5. For code-changing epics or standalone branch owners whose workflow requires
+   review, ensure a PR-equivalent review artifact exists or is planned before
+   review and closeout. Treat the artifact as the code discussion surface for
+   workers, reviewers, and code-specific validator findings; keep issue state,
+   blockers, proof transcripts, and scenario validation in Atelier records.
+6. Shape or close duplicate, vague, or stale items before implementation starts.
+7. Commit coherent implementation slices with the mapped tracker backup when
    the tracker update records the same work.
-7. Use `show`, `status`, `list`, and `ready` commands for normal drill-down.
+8. Use `show`, `status`, `list`, and `ready` commands for normal drill-down.
    Run raw workflow validators only as explicit advanced policy checks when
    the binding, assignment, or terminal contract requires them. They support
    terminal validation but do not replace attached proof.
-8. Use `atelier issue close <id> --reason "..."` only when the item is actually
+9. Use `atelier issue close <id> --reason "..."` only when the item is actually
    complete and the required proof is attached or recorded.
-9. Before terminal validation closes, run the mission contract audit, residue searches,
+10. Before terminal validation closes, run the mission contract audit, residue searches,
    docs reconciliation, broad validation, evidence attachment, tracker
    sync/export, and worktree verification.
 

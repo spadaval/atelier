@@ -54,8 +54,9 @@ where they live, not their contents. The current tracked config also carries
 `compatibility_state_root` as a compatibility-only path while `.atelier-state/`
 repair and migration flows still exist.
 
-Forgejo PR integration is optional tracked project configuration. Repositories
-that use `atelier pr` or PR validators configure the remote and role author
+Review provider integration is optional tracked project configuration. The
+current implementation ships a Forgejo provider, so repositories that use
+`atelier pr` or PR validators with Forgejo configure the remote and role author
 mapping in `.atelier/config.toml`:
 
 ```toml

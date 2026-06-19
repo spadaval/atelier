@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Document provider-neutral PR review artifact guidance"
-updated_at: "2026-06-19T01:24:05.576534698+00:00"
+updated_at: "2026-06-19T01:25:02.119830324+00:00"
 ---
 
 ## Description
