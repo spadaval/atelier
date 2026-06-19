@@ -2252,9 +2252,9 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Workflow Check"));
     assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
     assert!(stdout.contains("Policy:         pass"));
-    assert!(stdout.contains("Issue Types:"));
+    assert!(stdout.contains("Applicability:"));
     assert!(stdout.contains("Statuses:       7"));
-    assert!(stdout.contains("Workflows:      3"));
+    assert!(stdout.contains("Workflows:      4"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
     assert!(stdout.contains("Docs/Help Drift: clear"));

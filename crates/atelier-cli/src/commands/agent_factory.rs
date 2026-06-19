@@ -2001,7 +2001,6 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         println!("Next Commands");
         println!("-------------");
         println!("  atelier lint");
-        println!("  atelier doctor");
         Ok(())
     }
 }

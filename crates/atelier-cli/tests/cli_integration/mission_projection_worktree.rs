@@ -1372,7 +1372,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Open Blockers: 1 open"));
     assert!(status_out.contains(&format!("atelier mission status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
-    assert!(status_out.contains("atelier doctor"));
+    assert!(!status_out.contains("atelier doctor"));
     assert!(status_out.contains("Terminal Checks"));
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure detected."));

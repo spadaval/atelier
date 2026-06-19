@@ -44,7 +44,7 @@ atelier status
 atelier issue list --ready
 atelier issue show <id>
 atelier start <id>
-atelier pr comment --issue <id> --role worker --body "..."
+atelier review comment --issue <id> --role worker --body "..."
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
 atelier issue transition <id> --options
@@ -65,9 +65,9 @@ Core loop:
 ```text
 atelier issue show <id>
 atelier issue transition <id> --options
-atelier pr comments --issue <id>
-atelier pr comment --issue <id> --role reviewer --body "..."
-atelier pr review --issue <id> --role reviewer --event request-changes --body "..."
+atelier review comments --issue <id>
+atelier review comment --issue <id> --role reviewer --body "..."
+atelier review request-changes --issue <id> --role reviewer --body "..."
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
@@ -92,8 +92,8 @@ atelier issue show <id>
 atelier issue transition <id> --options
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
-atelier pr comments --issue <id>
-atelier pr review --issue <id> --role validator --event approve --body "..."
+atelier review comments --issue <id>
+atelier review approve --issue <id> --role validator --body "..."
 ```
 
 Validator guide should make PR validation visible as process guidance. It
@@ -115,6 +115,8 @@ Core loop:
 atelier mission list
 atelier mission show <id>
 atelier mission start <id> --switch
+atelier bundle preview <file>
+atelier bundle apply <file> --yes
 atelier issue create "..."
 atelier mission add-work <mission-id> <issue-id>
 atelier issue block <blocked-id> <blocker-id>
@@ -122,11 +124,13 @@ atelier graph tree --compact
 atelier worktree for-mission <mission-id>
 ```
 
-Manager guide should include `bundle preview <file>` and
-`bundle apply <file> --yes` as advanced bundle graph commands, not as the
-ordinary way to make every issue. Explicit branch commands belong in advanced
-repair and diagnostic guidance; normal branch preparation belongs to
-`atelier start <id>`.
+Manager guidance should make `bundle preview <file>` and
+`bundle apply <file> --yes` the expected path for bulk graph creation, such as a
+mission with many epics, issues, blockers, mission links, or evidence links.
+Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
+for one-off edits, not for shell loops that recreate bundle behavior. Explicit
+branch commands belong in advanced repair and diagnostic guidance; normal branch
+preparation belongs to `atelier start <id>`.
 
 ## Admin Guide
 
@@ -144,7 +148,8 @@ atelier doctor --fix
 atelier maintenance delete <kind> <id> --force
 ```
 
-Admin guide should name hidden diagnostics only when they are explicitly useful:
+Admin guide is the only role guide that should teach local tracker machinery.
+It should name hidden diagnostics only when they are explicitly useful:
 `workflow check`, `diagnostics slow`, `import-beads`, hidden/admin `export`,
 and hidden/admin `rebuild`.
 

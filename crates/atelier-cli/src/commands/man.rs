@@ -60,7 +60,7 @@ struct Snapshot {
 fn run_stateful(role: Role) -> Result<()> {
     let storage = command_storage(CommandStorageAccess::ProjectionQuery).map_err(|error| {
         anyhow::anyhow!(
-            "{error:#}\nRecovery: use `atelier man admin` for setup/repair guidance, or run `atelier doctor` when this is an initialized checkout."
+            "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
         )
     })?;
     let repo = storage.repo_root().display().to_string();
@@ -239,12 +239,14 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 println!(
                     "  1. atelier mission status - Review active mission readiness and blockers."
                 );
-                println!("  2. atelier issue create \"...\" - Create an actionable work item.");
-                println!("  3. atelier mission add-work <mission-id> <issue-id> - Link work to mission scope.");
+                println!("  2. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
+                println!(
+                    "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
+                );
             } else {
                 println!("  1. atelier mission list - Choose mission focus.");
                 println!("  2. atelier mission start <id> --switch - Set active mission focus.");
-                println!("  3. atelier graph tree --compact - Inspect work hierarchy.");
+                println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
             }
         }
         Role::Admin => {
@@ -295,6 +297,8 @@ fn print_normal_loop(role: Role) {
         }
         Role::Manager => {
             println!("  atelier mission status");
+            println!("  atelier bundle preview <file>");
+            println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
             println!("  atelier mission add-work <mission-id> <issue-id>");
             println!("  atelier issue block <blocked-id> <blocker-id>");
@@ -325,7 +329,7 @@ fn print_not_usually(role: Role) {
         }
         Role::Manager => {
             println!(
-                "  diagnostics slow, rebuild, maintenance delete except during explicit repair"
+                "  diagnostics slow, rebuild, maintenance delete except during explicit repair; shell loops for bulk graph creation"
             );
         }
         Role::Admin => {

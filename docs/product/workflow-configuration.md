@@ -298,31 +298,70 @@ Supported built-ins include:
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
 | `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 
-## Pull Request Link
+## Review Field
 
-`pull_request` is the built-in canonical issue field for the active
-PR-equivalent review artifact link. It is stored as a normalized positive
-provider-local review number:
+`review` is the built-in canonical issue field for the active review artifact
+link. In room mode it points at a native room record:
 
 ```yaml
-pull_request: 42
+review:
+  kind: room
+  id: atelier-rvw1
 ```
 
-PR command inputs may accept a review number or a full provider URL, but
-canonical issue records store only the number. URL inputs must match the
-configured review provider, host, owner, and repository before they normalize to
-a number. The current implementation uses Forgejo as the first provider, but
-the workflow concept is a provider-backed review artifact rather than Forgejo
-itself.
+In provider mode it stores the provider-backed review artifact as structured
+data:
 
-The active PR link belongs to the branch-owning issue or epic. Child issues
-inherit the nearest parent epic's `pull_request`; defining `pull_request`
-directly on a child issue is invalid. The starter policy attaches
+```yaml
+review:
+  kind: pull_request
+  provider: forgejo
+  number: 42
+```
+
+Room records live in tracked YAML under `.atelier/reviews/<id>.yaml`:
+
+```yaml
+id: atelier-rvw1
+issue: atelier-epic
+mode: room
+source_branch: epic/atelier-epic
+target_branch: master
+events:
+  - id: evt-0001
+    kind: comment
+    actor: reviewer
+    body: "Initial review note"
+  - id: evt-0002
+    kind: finding
+    actor: reviewer
+    severity: blocking
+    body: "Fix the failing path"
+```
+
+The current room status is derived from metadata plus ordered events. Room
+projections may index open findings, approvals, stale approvals, and merge
+state, but canonical records must not store a second mutable summary that can
+drift from the event timeline.
+
+Provider-mode `review link` inputs may accept a review number or a full
+provider URL, but canonical issue records store only the normalized structured
+field. URL inputs must match the configured review provider, host, owner, and
+repository before they normalize to a number. The current provider
+implementation is Forgejo.
+
+The active review link belongs to the branch-owning issue or epic. Child issues
+inherit the nearest parent epic's `review`; defining `review` directly on a
+child issue is invalid unless the child owns its own branch by policy. Legacy
+top-level `pull_request` fields are migration input only: migrated records must
+render the structured `review` field, and strict validation rejects the old
+shape after migration. The starter policy attaches
 `linked_pr_merged` only to epic close, so validation issues and ordinary child
 issues can close on their own proof while the epic remains the merged review
-artifact boundary. `linked_pr_merged` derives provider host/owner/repo from
-`.atelier/config.toml` and derives expected source/target branches from
-`branch_policy`.
+artifact boundary. In provider mode `linked_pr_merged` derives provider
+host/owner/repo from `.atelier/config.toml` and expected source/target branches
+from `branch_policy`. In room mode equivalent review readiness comes from the
+room merge event rather than provider PR state.
 
 `linked_pr_merged` is deliberately a fact check, not a second review-provider
 policy engine. Atelier validates the review artifact link, remote identity,
@@ -335,8 +374,8 @@ starter workflow.
 
 ## Review Artifact Guidance
 
-Code-changing epic work should have a PR-equivalent review artifact when the
-workflow requires review or merged-PR closeout. Ordinary child implementation
+Code-changing epic work should have a review artifact when the workflow
+requires review or merged-review closeout. Ordinary child implementation
 issues use the nearest parent epic's review artifact; standalone code-changing
 issues may own their own artifact. Planning, tracker-only, docs-only, and
 scenario-validation work do not need a review artifact unless their workflow or

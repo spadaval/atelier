@@ -657,16 +657,17 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier pr open/status/show/comments/comment/review`
+- `atelier forgejo roles check`
 - `atelier session`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
 - `atelier maintenance delete`
 - `atelier lint`
-- `atelier doctor`
 
 ## Advanced Repair
 
 - `atelier branch for-epic/status/merge`
+- `atelier doctor`
 "#
 }
 
@@ -680,7 +681,7 @@ fn write_valid_command_guidance(dir: &Path) {
     write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
+        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier lint`\n",
     )
     .unwrap();
 }

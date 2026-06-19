@@ -667,20 +667,35 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier mission list",
         "atelier mission show <id>",
+        "atelier bundle preview <file>",
+        "atelier bundle apply <file> --yes",
         "atelier session list --active",
         "atelier history --mission <id>",
         "atelier history --issue <id>",
         "atelier start <issue-id>",
         "atelier issue transition <issue-id> --options",
         "atelier issue close <issue-id> --reason",
-        "atelier doctor",
-        "atelier doctor --fix",
     ] {
         assert!(
             stdout.contains(common),
             "missing common command example {common}"
         );
     }
+    assert!(
+        stdout.contains(
+            "  doctor        Check runtime and derived-state health; use --fix for local repair"
+        ),
+        "maintenance section should still expose doctor:\n{stdout}"
+    );
+    let common_commands = stdout
+        .split("Common commands:")
+        .nth(1)
+        .and_then(|section| section.split("Options:").next())
+        .unwrap_or("");
+    assert!(
+        !common_commands.contains("atelier doctor"),
+        "common commands should not teach doctor as routine work:\n{stdout}"
+    );
     assert!(!stdout.contains("workflow validate"));
 
     assert!(
@@ -920,7 +935,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
     assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
-    assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
+    assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
     assert!(stdout.contains("Active sessions: none"));
@@ -1230,7 +1245,10 @@ fn test_man_manager_names_active_mission() {
     assert!(stdout.contains("Atelier Man: Manager"));
     assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
     assert!(stdout.contains("atelier mission status"));
+    assert!(stdout.contains("atelier bundle preview <file>"));
+    assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier mission add-work <mission-id> <issue-id>"));
+    assert!(stdout.contains("shell loops for bulk graph creation"));
 }
 
 #[test]

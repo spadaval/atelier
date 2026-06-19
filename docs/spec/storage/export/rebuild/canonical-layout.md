@@ -367,9 +367,10 @@ The required section policy is:
 - `Outcome` is required for every issue and describes the desired finished
   world in observable terms.
 - `Evidence` is required for every issue and describes the proof artifacts,
-  commands, file contents, rejected commands, screenshots, lint/export checks,
-  or evidence records needed to show the outcome was met. When no proof artifact
-  is meaningful, the section must explicitly say why it is not applicable.
+  commands, file contents, rejected commands, screenshots, lint/doctor checks,
+  explicit deterministic export diagnostics, or evidence records needed to show
+  the outcome was met. When no proof artifact is meaningful, the section must
+  explicitly say why it is not applicable.
 - `Notes` is optional and carries handoff context, sequencing notes, caveats,
   or non-contract background.
 
@@ -520,7 +521,7 @@ from canonical records and focused command output.
 ## Validation
 
 - Mission closeout requires linked work closed, validation evidence attached,
-  workflow validators passing, and tracker export/lint checks passing.
+  workflow validators passing, and tracker lint/doctor checks passing.
 
 Planning notes: see `docs/plans/cli-workflow-repair.md`.
 Checkpoint criteria: closeout proof must show every linked work item closed and
@@ -630,8 +631,8 @@ defines its durable layout.
 ## Mutating Command Rollout
 
 Hidden/admin `atelier export` remains the deterministic check surface for
-canonical records during migration, and normal durable writes target
-`.atelier/` directly.
+canonical records during migration or targeted maintenance, and normal durable
+writes target `.atelier/` directly.
 
 Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
 tracked `.atelier/` canonical records and may create ignored runtime/cache

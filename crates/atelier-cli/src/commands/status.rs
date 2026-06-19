@@ -108,7 +108,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     }
 
     if !export_stale.is_empty() {
-        println!("Export issues: {}", export_stale.len());
+        println!("Local state issues: {}", export_stale.len());
     }
 
     println!();
@@ -297,14 +297,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         );
         println!("  Start selected work (ready work exists): atelier start <issue-id>");
     }
-    if export_stale.is_empty() {
-        println!("  Check runtime health (tracker records are current): atelier doctor");
-    } else {
+    if !export_stale.is_empty() {
         println!(
-            "  Repair ignored projection state ({} stale record(s)): atelier doctor --fix",
+            "  Repair local Atelier state ({} stale record(s)): atelier doctor --fix",
             export_stale.len()
         );
-        println!("  Check tracker records (projection is stale): atelier lint");
+        println!("  Check committed tracker records after repair: atelier lint");
     }
     Ok(())
 }

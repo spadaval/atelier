@@ -86,12 +86,33 @@
   from canonical issue activity. A session can explain who did what and when,
   but it does not define current work, it is inspection-only, and it is not a
   standalone workflow record.
-- Review artifact: the configured provider's PR-equivalent code review object
-  linked from issue state through the built-in canonical `pull_request` field.
-  Canonical storage is the normalized provider-local review number. Provider
-  host, owner, repo, and branch expectations are derived from project config
-  and workflow branch policy. It is a code review workspace, not an Atelier
-  workflow transition, and it does not replace evidence records.
+- Review mode: the repository-wide review backend selected in
+  `.atelier/config.toml`. Exactly one mode is active for a project:
+  `room` for native Atelier review rooms or `provider` for a hosted
+  PR-equivalent provider such as Forgejo.
+- Review artifact: the configured review object linked from issue state
+  through the canonical `review` field. In room mode this is a native
+  `.atelier/reviews/<id>.yaml` room. In provider mode this is the normalized
+  provider-local review number plus provider kind. Review artifacts are code
+  review workspaces, not Atelier workflow transitions, and they do not replace
+  evidence records.
+- Review room: a native Atelier review artifact stored as tracked YAML under
+  `.atelier/reviews/<id>.yaml`. Its current state is derived from room metadata
+  plus ordered events such as comments, findings, approvals, change requests,
+  resolutions, stale-approval invalidations, and merge.
+- Room event: an append-only review-room timeline entry. Events are the durable
+  source for comments, decisions, approvals, finding resolution, stale approval
+  invalidation, and merge state.
+- Finding: a review-room decision event that names a blocking or non-blocking
+  problem. Blocking findings must be resolved before room merge can succeed.
+- Approval: a review-room decision event that can satisfy merge readiness until
+  it becomes stale. New commits or change-request events invalidate previous
+  approvals rather than mutating them in place.
+- Merge authority: the `atelier review merge` boundary. In room mode it checks
+  room approvals, stale approvals, blocking findings, and expected branch state
+  and records a room merge event. In provider mode it delegates merge or merge
+  confirmation to the configured provider. In both modes it does not transition
+  Atelier issue workflow.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -159,14 +180,15 @@
   Sessions summarize bounded worker, reviewer, and validator attempts from
   canonical issue activity. Local command diagnostics are ignored runtime
   telemetry for command health and are not exported work records.
-- Review artifacts and validators are distinct. `atelier pr` commands operate
-  on provider-backed review artifacts and record their issue or epic linkage,
-  while workflow validators such as `linked_pr_merged` only read review state to
-  decide whether an Atelier transition is allowed.
-- Pull request links and evidence attachments are distinct. The `pull_request`
-  field stores the active provider-local review artifact number for a
-  branch-owning issue or epic; evidence attachments prove claims with command
-  transcripts, review summaries, or validation records.
+- Review artifacts and validators are distinct. `atelier review` commands
+  operate on native rooms or provider-backed review artifacts and record their
+  issue or epic linkage, while workflow validators such as `linked_pr_merged`
+  only read review state to decide whether an Atelier transition is allowed.
+- Review links and evidence attachments are distinct. The `review` field stores
+  the active review artifact for a branch-owning issue or epic; evidence
+  attachments prove claims with command transcripts, review summaries, or
+  validation records. Legacy `pull_request` fields are migration input, not the
+  durable target shape.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are

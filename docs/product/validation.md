@@ -43,21 +43,22 @@ language for normal operators.
 
 External-state validator is a workflow validator that reads a system outside
 Atelier without mutating it. `linked_pr_merged` is the product model for
-provider-backed review artifact gates: it reads the issue's active
-`pull_request` artifact link, verifies the remote PR-equivalent artifact against
+provider-backed review artifact gates: it reads the issue's active structured
+`review` artifact link, verifies the remote PR-equivalent artifact against
 configured repo and branch policy, then reports whether the required review
 artifact is merged. It must not create, comment on, review, merge, or close the
-artifact, and it must not transition Atelier workflow. PR commands perform
+artifact, and it must not transition Atelier workflow. Review commands perform
 review-artifact actions; validators only decide whether the configured workflow
 transition is currently allowed. In the starter policy, this is an epic close
 gate only; validation issues and ordinary implementation issues close from
 attached proof and local workflow checks.
 
-PR validators check the local workflow facts Atelier depends on: the normalized
-provider-local review number, configured review provider remote, expected source
-and target branches, merged state, and review-complete state when the workflow
-names that validator. They do not duplicate provider branch-protection,
-required-approval, merge strategy, or merge-authorization policy.
+Review validators check the local workflow facts Atelier depends on: the active
+review kind, native room merge state or normalized provider-local review
+number, configured review provider remote, expected source and target branches,
+merged state, and review-complete state when the workflow names that validator.
+They do not duplicate provider branch-protection, required-approval, merge
+strategy, or merge-authorization policy.
 
 Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or

@@ -30,5 +30,5 @@ canonical records?"
 Rebuild must only recreate ignored local projection/runtime/cache state from
 tracked canonical Markdown. It must not change canonical `.atelier/` records,
 and a successful rebuild is not evidence that issue content, mission closeout,
-or validation proof is correct. Normal health proof uses `lint`, `doctor`, and
-the workflow command being retried after repair.
+or validation proof is correct. Ordinary proof uses `lint` and the workflow
+command being retried after repair.

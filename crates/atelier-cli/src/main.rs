@@ -69,6 +69,8 @@ Common commands:
   atelier mission show <id>
   atelier mission status
   atelier mission close <id> --reason \"...\"
+  atelier bundle preview <file>
+  atelier bundle apply <file> --yes
   atelier session list --active
   atelier forgejo roles check
   atelier history --mission <id>
@@ -76,8 +78,6 @@ Common commands:
   atelier start <issue-id>
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
-  atelier doctor
-  atelier doctor --fix
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -153,7 +153,7 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and doctor
+    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
     #[command(hide = true)]
     Export {
         /// State directory for canonical export diagnostics
@@ -164,7 +164,7 @@ enum Commands {
         check: bool,
     },
 
-    /// Advanced projection diagnostic; normal local repair uses doctor --fix
+    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
     #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from

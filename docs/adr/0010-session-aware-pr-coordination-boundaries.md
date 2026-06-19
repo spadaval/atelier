@@ -1,8 +1,12 @@
-# ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries
+# ADR 0010: Session-As-Issue-Events And Provider Review Boundaries
 
 ## Status
 
-Accepted.
+Accepted. Provider-specific review terminology in this ADR is superseded for
+new work by [ADR 0011](0011-native-review-modes-and-room-authority.md), which
+renames the public command surface to `atelier review`, introduces native room
+mode, and migrates issue links from `pull_request` to the structured `review`
+field.
 
 ## Context
 

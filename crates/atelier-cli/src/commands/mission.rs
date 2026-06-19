@@ -166,7 +166,6 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     println!("  atelier mission list");
     println!("  atelier issue list --ready");
-    println!("  atelier doctor");
     Ok(())
 }
 
@@ -512,7 +511,6 @@ fn print_status_next_commands(
             );
         }
     }
-    println!("  Check runtime health (tracker and projection state): atelier doctor");
 }
 
 pub fn view(db: &Database, id: &str) -> Result<()> {
@@ -913,7 +911,7 @@ fn print_reliability_summary(
             "Projection Freshness: stale - {}",
             compact_strings(&tracker.stale_entries)
         );
-        println!("  Next: atelier doctor");
+        println!("  Next: atelier doctor --fix");
     }
 
     if let Some(result) = terminal_validator_result(terminal, "issue_sections_parseable") {
@@ -976,7 +974,6 @@ fn print_reliability_summary(
     println!("Drill-downs:");
     println!("  atelier mission status {} --verbose", mission.id);
     println!("  atelier lint");
-    println!("  atelier doctor");
     Ok(())
 }
 
@@ -1144,7 +1141,9 @@ fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "durable_state_current" => Some(("Tracker State", "current", "stale", "atelier doctor")),
+        "durable_state_current" => {
+            Some(("Tracker State", "current", "stale", "atelier doctor --fix"))
+        }
         "issue_sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",
@@ -2024,7 +2023,7 @@ impl TrackerHealth {
 
 fn tracker_health(db: &Database, state_dir: &Path) -> TrackerHealth {
     let stale_entries = atelier_app::export::canonical_stale_entries(db, state_dir)
-        .unwrap_or_else(|error| vec![format!("tracker health check failed: {error:#}")]);
+        .unwrap_or_else(|error| vec![format!("committed-state check failed: {error:#}")]);
     TrackerHealth { stale_entries }
 }
 

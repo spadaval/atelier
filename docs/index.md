@@ -24,6 +24,10 @@
   accepted choice that Markdown records are canonical, SQLite is a
   rebuildable projection index, and export is a
   hidden/admin compatibility and determinism-check path during migration.
+- [docs/adr/0011-native-review-modes-and-room-authority.md](adr/0011-native-review-modes-and-room-authority.md):
+  accepted choice that projects configure exactly one review mode, native
+  rooms live under `.atelier/reviews/`, the public command surface is
+  `atelier review`, and review merge does not transition issue workflow.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required
@@ -50,7 +54,8 @@
   epics, missions, and evidence.
 - [docs/product/workflow-configuration.md](product/workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
-  guidance templates, strict errors, and starter workflow examples.
+  review field and review room records, strict errors, and starter workflow
+  examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
   RecordStore and ProjectionIndex boundaries for Markdown-first durable writes,
   issue activity sidecars, rebuildable SQLite indexes, and local cache data.
