@@ -56,7 +56,7 @@ repair and migration flows still exist.
 
 Review provider integration is optional tracked project configuration. The
 current implementation ships a Forgejo provider, so repositories that use
-`atelier pr` or PR validators with Forgejo configure the remote and role author
+`atelier review` commands or review validators with Forgejo configure the remote and role author
 mapping in `.atelier/config.toml`:
 
 ```toml
