@@ -15,7 +15,7 @@ pub struct ProjectConfig {
     pub project_slug: String,
     pub paths: ProjectPaths,
     pub compatibility_state_root: Option<String>,
-    pub forgejo: Option<ForgejoConfig>,
+    pub review: ReviewConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -24,6 +24,22 @@ pub struct ProjectPaths {
     pub runtime_dir: String,
     pub runtime_database: String,
     pub cache_dir: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ReviewConfig {
+    Room,
+    Provider(ReviewProviderConfig),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ReviewProviderConfig {
+    pub provider: ReviewProviderKind,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ReviewProviderKind {
+    Forgejo(ForgejoConfig),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -49,12 +65,15 @@ impl ProjectConfig {
     }
 
     pub fn require_forgejo(&self, config_path: &Path) -> Result<&ForgejoConfig> {
-        self.forgejo.as_ref().ok_or_else(|| {
-            anyhow!(
-                "forgejo_config_missing: {} is missing [forgejo]; configure host, owner, repo, admin_token_env, and [forgejo.role_authors] role mappings before running `atelier pr` or PR validators",
+        match &self.review {
+            ReviewConfig::Provider(ReviewProviderConfig {
+                provider: ReviewProviderKind::Forgejo(forgejo),
+            }) => Ok(forgejo),
+            ReviewConfig::Room => Err(anyhow!(
+                "review_mode_invalid: {} uses review.mode = \"room\"; provider-only commands require review.mode = \"provider\" and provider = \"forgejo\"",
                 config_path.display()
-            )
-        })
+            )),
+        }
     }
 }
 
@@ -84,7 +103,9 @@ struct RawProjectConfig {
     #[serde(default)]
     compatibility_state_root: Option<String>,
     #[serde(default)]
-    forgejo: Option<RawForgejoConfig>,
+    review: Option<RawReviewConfig>,
+    #[serde(default)]
+    forgejo: Option<toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,6 +115,20 @@ struct RawProjectPaths {
     runtime_dir: String,
     runtime_database: String,
     cache_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawReviewConfig {
+    mode: Option<String>,
+    provider: Option<String>,
+    providers: Option<RawReviewProviders>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawReviewProviders {
+    forgejo: Option<RawForgejoConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,20 +169,34 @@ pub fn load_forgejo_with_default_role_authors(
     let raw = parse_raw_project_config(&text, &config_path)?;
     validate_schema_fields(&raw, &config_path)?;
     require_non_empty(&raw.project_slug, &config_path, "project_slug")?;
-    let raw_forgejo = raw.forgejo.ok_or_else(|| {
+    reject_legacy_forgejo(&raw, &config_path)?;
+    let raw_review = raw.review.ok_or_else(|| {
         anyhow!(
-            "forgejo_config_missing: {} is missing [forgejo]; configure host, owner, repo, and admin_token_env before provisioning Forgejo role authors",
+            "review_config_missing: {} is missing [review]; configure review.mode = \"room\" or review.mode = \"provider\" with provider = \"forgejo\"",
             config_path.display()
         )
     })?;
+    let raw_forgejo = provider_forgejo_config(raw_review, &config_path)?;
     Ok(ForgejoConfig {
-        host: require_owned_option(raw_forgejo.host, &config_path, "forgejo.host")?,
-        owner: require_owned_option(raw_forgejo.owner, &config_path, "forgejo.owner")?,
-        repo: require_owned_option(raw_forgejo.repo, &config_path, "forgejo.repo")?,
+        host: require_owned_option(
+            raw_forgejo.host,
+            &config_path,
+            "review.providers.forgejo.host",
+        )?,
+        owner: require_owned_option(
+            raw_forgejo.owner,
+            &config_path,
+            "review.providers.forgejo.owner",
+        )?,
+        repo: require_owned_option(
+            raw_forgejo.repo,
+            &config_path,
+            "review.providers.forgejo.repo",
+        )?,
         admin_token_env: require_env_var_name(
             raw_forgejo.admin_token_env,
             &config_path,
-            "forgejo.admin_token_env",
+            "review.providers.forgejo.admin_token_env",
         )?,
         role_authors,
     })
@@ -156,6 +205,7 @@ pub fn load_forgejo_with_default_role_authors(
 fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
     let raw = parse_raw_project_config(text, config_path)?;
     validate_schema_fields(&raw, config_path)?;
+    reject_legacy_forgejo(&raw, config_path)?;
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;
     let paths = ProjectPaths {
         state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
@@ -167,15 +217,12 @@ fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig>
         )?,
         cache_dir: require_owned(raw.paths.cache_dir, config_path, "paths.cache_dir")?,
     };
-    let forgejo = raw
-        .forgejo
-        .map(|forgejo| parse_forgejo_config(forgejo, config_path))
-        .transpose()?;
+    let review = parse_review_config(raw.review, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
         paths,
         compatibility_state_root: raw.compatibility_state_root,
-        forgejo,
+        review,
     })
 }
 
@@ -207,43 +254,111 @@ fn validate_schema_fields(raw: &RawProjectConfig, config_path: &Path) -> Result<
     Ok(())
 }
 
+fn reject_legacy_forgejo(raw: &RawProjectConfig, config_path: &Path) -> Result<()> {
+    if raw.forgejo.is_some() {
+        return Err(anyhow!(
+            "review_config_legacy_forgejo: {} top-level [forgejo] is no longer accepted; move settings under [review] mode = \"provider\", provider = \"forgejo\", and [review.providers.forgejo]",
+            config_path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn parse_review_config(raw: Option<RawReviewConfig>, config_path: &Path) -> Result<ReviewConfig> {
+    let raw = raw.ok_or_else(|| {
+        anyhow!(
+            "review_config_missing: {} is missing [review]; configure review.mode = \"room\" or review.mode = \"provider\"",
+            config_path.display()
+        )
+    })?;
+    let mode = require_owned_option(raw.mode.clone(), config_path, "review.mode")?;
+    match mode.as_str() {
+        "room" => {
+            if raw.provider.is_some() || raw.providers.is_some() {
+                return Err(anyhow!(
+                    "review_config_invalid: {} review.mode = \"room\" must not define provider settings",
+                    config_path.display()
+                ));
+            }
+            Ok(ReviewConfig::Room)
+        }
+        "provider" => {
+            let raw_forgejo = provider_forgejo_config(raw, config_path)?;
+            Ok(ReviewConfig::Provider(ReviewProviderConfig {
+                provider: ReviewProviderKind::Forgejo(parse_forgejo_config(
+                    raw_forgejo,
+                    config_path,
+                )?),
+            }))
+        }
+        other => Err(anyhow!(
+            "review_config_invalid: {} review.mode must be \"room\" or \"provider\", got '{}'",
+            config_path.display(),
+            other
+        )),
+    }
+}
+
+fn provider_forgejo_config(raw: RawReviewConfig, config_path: &Path) -> Result<RawForgejoConfig> {
+    let provider = require_owned_option(raw.provider, config_path, "review.provider")?;
+    if provider != "forgejo" {
+        return Err(anyhow!(
+            "review_config_invalid: {} review.provider must be \"forgejo\", got '{}'",
+            config_path.display(),
+            provider
+        ));
+    }
+    let providers = raw.providers.ok_or_else(|| {
+        anyhow!(
+            "forgejo_config_missing: {} is missing [review.providers.forgejo]",
+            config_path.display()
+        )
+    })?;
+    providers.forgejo.ok_or_else(|| {
+        anyhow!(
+            "forgejo_config_missing: {} is missing [review.providers.forgejo]",
+            config_path.display()
+        )
+    })
+}
+
 fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<ForgejoConfig> {
     let role_authors = raw.role_authors.ok_or_else(|| {
         anyhow!(
-            "forgejo_config_invalid: {} [forgejo.role_authors] is required; map {} to Forgejo role author users",
+            "forgejo_config_invalid: {} [review.providers.forgejo.role_authors] is required; map {} to Forgejo role author users",
             config_path.display(),
             FORGEJO_ROLES.join(", ")
         )
     })?;
     let config = ForgejoConfig {
-        host: require_owned_option(raw.host, config_path, "forgejo.host")?,
-        owner: require_owned_option(raw.owner, config_path, "forgejo.owner")?,
-        repo: require_owned_option(raw.repo, config_path, "forgejo.repo")?,
+        host: require_owned_option(raw.host, config_path, "review.providers.forgejo.host")?,
+        owner: require_owned_option(raw.owner, config_path, "review.providers.forgejo.owner")?,
+        repo: require_owned_option(raw.repo, config_path, "review.providers.forgejo.repo")?,
         admin_token_env: require_env_var_name(
             raw.admin_token_env,
             config_path,
-            "forgejo.admin_token_env",
+            "review.providers.forgejo.admin_token_env",
         )?,
         role_authors: ForgejoRoleAuthors {
             worker: require_owned_option(
                 role_authors.worker,
                 config_path,
-                "forgejo.role_authors.worker",
+                "review.providers.forgejo.role_authors.worker",
             )?,
             reviewer: require_owned_option(
                 role_authors.reviewer,
                 config_path,
-                "forgejo.role_authors.reviewer",
+                "review.providers.forgejo.role_authors.reviewer",
             )?,
             validator: require_owned_option(
                 role_authors.validator,
                 config_path,
-                "forgejo.role_authors.validator",
+                "review.providers.forgejo.role_authors.validator",
             )?,
             manager: require_owned_option(
                 role_authors.manager,
                 config_path,
-                "forgejo.role_authors.manager",
+                "review.providers.forgejo.role_authors.manager",
             )?,
         },
     };
@@ -314,13 +429,17 @@ runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
 
-[forgejo]
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
 host = "forge.example.test"
 owner = "tools"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
-[forgejo.role_authors]
+[review.providers.forgejo.role_authors]
 worker = "atelier-worker"
 reviewer = "atelier-reviewer"
 validator = "atelier-validator"
@@ -360,6 +479,9 @@ state_root = ".atelier"
 runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
+
+[review]
+mode = "room"
 "#,
             &path(),
         )
@@ -367,8 +489,8 @@ cache_dir = ".atelier/cache"
 
         let error = config.require_forgejo(&path()).unwrap_err().to_string();
 
-        assert!(error.contains("forgejo_config_missing"));
-        assert!(error.contains("before running `atelier pr` or PR validators"));
+        assert!(error.contains("review_mode_invalid"));
+        assert!(error.contains("review.mode = \"room\""));
     }
 
     #[test]
@@ -377,11 +499,12 @@ cache_dir = ".atelier/cache"
         let error = parse_project_config(&missing_role, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("forgejo.role_authors.validator"));
+        assert!(error.contains("review.providers.forgejo.role_authors.validator"));
 
-        let old_sudo_users = valid_config()
-            .replace("[forgejo.role_authors]", "[forgejo.sudo_users]")
-            + "admin = \"atelier-admin\"\n";
+        let old_sudo_users = valid_config().replace(
+            "[review.providers.forgejo.role_authors]",
+            "[review.providers.forgejo.sudo_users]",
+        ) + "admin = \"atelier-admin\"\n";
         let error = parse_project_config(&old_sudo_users, &path())
             .unwrap_err()
             .to_string();
@@ -394,7 +517,38 @@ cache_dir = ".atelier/cache"
         let error = parse_project_config(&bad_token, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("forgejo.admin_token_env"));
+        assert!(error.contains("review.providers.forgejo.admin_token_env"));
         assert!(error.contains("FORGEJO_ADMIN_TOKEN"));
+    }
+
+    #[test]
+    fn rejects_legacy_top_level_forgejo_config() {
+        let legacy = valid_config()
+            .replace(
+                "[review]\nmode = \"provider\"\nprovider = \"forgejo\"\n\n[review.providers.forgejo]",
+                "[forgejo]",
+            )
+            .replace(
+                "[review.providers.forgejo.role_authors]",
+                "[forgejo.role_authors]",
+            );
+
+        let error = parse_project_config(&legacy, &path())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("review_config_legacy_forgejo"));
+        assert!(error.contains("[review.providers.forgejo]"));
+    }
+
+    #[test]
+    fn rejects_mixed_room_and_provider_config() {
+        let mixed = valid_config().replace("mode = \"provider\"", "mode = \"room\"");
+        let error = parse_project_config(&mixed, &path())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("review_config_invalid"));
+        assert!(error.contains("must not define provider settings"));
     }
 }
