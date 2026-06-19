@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,7 +10,9 @@ use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
-use atelier_app::project_config::ProjectConfig;
+use atelier_app::pr as app_pr;
+use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
+use atelier_app::review_room;
 use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
 use atelier_core::{EvidenceRecord, Issue, Record};
@@ -125,7 +128,7 @@ pub fn issue_transition_options(
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
         let planned_effects = plan_transition_effects(db, &issue, transition)?;
-        blockers.extend(effect_preflight_blockers(&planned_effects));
+        blockers.extend(effect_preflight_blockers(&repo_root, &planned_effects));
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -399,7 +402,7 @@ pub fn transition_issue(
         close_reason,
     )?;
     let planned_effects = plan_transition_effects(db, &before, transition)?;
-    blockers.extend(effect_preflight_blockers(&planned_effects));
+    blockers.extend(effect_preflight_blockers(&repo_root, &planned_effects));
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -411,6 +414,16 @@ pub fn transition_issue(
         )?;
     }
 
+    let effect_results = execute_transition_effects(
+        db,
+        state_dir,
+        db_path,
+        &repo_root,
+        &before,
+        transition_name,
+        &planned_effects,
+    )?;
+    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     record_applied_effects(&before.id, transition_name, &planned_effects)?;
     record_applied_transition(&before, transition_name, transition)?;
@@ -421,6 +434,9 @@ pub fn transition_issue(
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
     println!("To:       {}", issue.status);
+    for result in effect_results {
+        println!("Effect:   {} {}", result.name, result.detail);
+    }
     print_heading("Next Commands");
     println!("  atelier issue show {}", issue.id);
     println!("  atelier issue transition {} --options", issue.id);
@@ -543,24 +559,159 @@ fn report_blocked_transition(
     )
 }
 
-fn effect_preflight_blockers(planned_effects: &[PlannedEffect]) -> Vec<String> {
+#[derive(Debug, Clone)]
+struct AppliedEffect {
+    name: String,
+    detail: String,
+}
+
+fn effect_preflight_blockers(repo_root: &Path, planned_effects: &[PlannedEffect]) -> Vec<String> {
     planned_effects
         .iter()
         .filter_map(|effect| {
-            if supported_effect(effect.name.as_str()) {
-                None
-            } else {
-                Some(format!(
-                    "effect {} failed preflight: effect execution is not implemented yet; retry after the owning effect issue lands",
-                    effect.name
-                ))
+            match effect.name.as_str() {
+                "issue_status_write" => None,
+                "review_artifact_open" => review_open_preflight(repo_root, effect),
+                other => Some(format!(
+                    "effect {other} failed preflight: effect execution is not implemented yet; retry after the owning effect issue lands"
+                )),
             }
         })
         .collect()
 }
 
-fn supported_effect(effect_name: &str) -> bool {
-    effect_name == "issue_status_write"
+fn review_open_preflight(repo_root: &Path, effect: &PlannedEffect) -> Option<String> {
+    if effect.review_artifact_target.is_none() {
+        return Some(format!(
+            "effect {} failed preflight: missing review artifact target",
+            effect.name
+        ));
+    }
+    match ProjectConfig::load(repo_root).map(|config| config.review) {
+        Ok(ReviewConfig::Room) => None,
+        Ok(ReviewConfig::Provider(provider)) => match provider.provider {
+            ReviewProviderKind::Forgejo(forgejo) => env::var(&forgejo.admin_token_env)
+                .err()
+                .map(|_| {
+                    format!(
+                        "effect {} failed preflight: environment variable {} is required for provider review open",
+                        effect.name, forgejo.admin_token_env
+                    )
+                }),
+        },
+        Err(error) => Some(format!(
+            "effect {} failed preflight: {}",
+            effect.name, error
+        )),
+    }
+}
+
+fn execute_transition_effects(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    planned_effects: &[PlannedEffect],
+) -> Result<Vec<AppliedEffect>> {
+    let mut applied = Vec::new();
+    for effect in planned_effects {
+        match effect.name.as_str() {
+            "issue_status_write" => applied.push(AppliedEffect {
+                name: effect.name.clone(),
+                detail: "status write is handled by the transition executor".to_string(),
+            }),
+            "review_artifact_open" => {
+                let detail = open_review_artifact_effect(
+                    db,
+                    state_dir,
+                    db_path,
+                    repo_root,
+                    issue,
+                    transition_name,
+                    effect,
+                )?;
+                applied.push(AppliedEffect {
+                    name: effect.name.clone(),
+                    detail,
+                });
+            }
+            other => bail!(
+                "effect {other} failed: effect execution is not implemented; status was not changed"
+            ),
+        }
+    }
+    Ok(applied)
+}
+
+fn open_review_artifact_effect(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    effect: &PlannedEffect,
+) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution =
+        atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+    let title = format!("Review {} {}", resolution.owner_id, transition_name);
+    let body = format!(
+        "Opened by transition effect `{}` for issue {}.",
+        effect.name, issue.id
+    );
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => {
+            let outcome = review_room::open(
+                db,
+                review_room::RoomOpenRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&resolution.owner_id),
+                    role: "worker",
+                    title: &title,
+                    body: &body,
+                    source_branch: &resolution.expected_branch,
+                    target_branch: &resolution.base_branch,
+                },
+            )?;
+            Ok(format!("opened room {}", outcome.review_id))
+        }
+        ReviewConfig::Provider(provider) => match provider.provider {
+            ReviewProviderKind::Forgejo(forgejo) => {
+                let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                    format!(
+                        "effect {} failed: environment variable {} is required for provider review open",
+                        effect.name, forgejo.admin_token_env
+                    )
+                })?;
+                let client = ForgejoClient::new(
+                    forgejo.clone(),
+                    UreqForgejoTransport::new(&forgejo.host, token),
+                );
+                let outcome = app_pr::open_with_client(
+                    db,
+                    app_pr::PrOpenRequest {
+                        repo_root,
+                        state_dir,
+                        db_path,
+                        issue_ref: Some(&resolution.owner_id),
+                        role: "worker",
+                        title: &title,
+                        body: &body,
+                        source_branch: &resolution.expected_branch,
+                        target_branch: &resolution.base_branch,
+                    },
+                    &forgejo,
+                    &client,
+                )?;
+                Ok(format!("opened provider review {}", outcome.pull.url))
+            }
+        },
+    }
 }
 
 fn record_applied_effects(
@@ -2359,6 +2510,7 @@ mod tests {
     use anyhow::Result;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
     use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
+    use atelier_records::{RecordStore, Relationships};
     use chrono::Utc;
     use serde_json::json;
     use std::collections::BTreeMap;
@@ -2442,6 +2594,48 @@ mod tests {
         atelier_app::workflow_policy::EffectDefinition {
             builtin: name.to_string(),
         }
+    }
+
+    fn write_room_config_and_workflow(dir: &TempDir) {
+        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/config.toml"),
+            r#"schema = "atelier.project_config"
+schema_version = 1
+project_slug = "atelier-test"
+
+[paths]
+state_root = ".atelier"
+runtime_dir = ".atelier/runtime"
+runtime_database = ".atelier/runtime/state.db"
+cache_dir = ".atelier/cache"
+
+[review]
+mode = "room"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/workflow.yaml"),
+            atelier_app::workflow_policy::STARTER_POLICY_YAML
+                .replace("base_branch: main", "base_branch: master"),
+        )
+        .unwrap();
+    }
+
+    fn insert_canonical_issue(db: &Database, state_dir: &Path, issue: Issue) {
+        db.insert_issue_rebuild(&issue).unwrap();
+        let record = CanonicalIssueRecord {
+            issue,
+            labels: Vec::new(),
+            sections: IssueSections::unchecked_from_body(Some(
+                "## Description\n\nbody\n\n## Outcome\n\nworks\n\n## Evidence\n\nproof",
+            )),
+            relationships: Relationships::default(),
+        };
+        RecordStore::new(state_dir)
+            .write_issue_atomic(&record)
+            .unwrap();
     }
 
     fn setup_pr_validator_repo() -> (TempDir, Database) {
@@ -2582,16 +2776,59 @@ mod tests {
             merge_owned: true,
             nested_under_epic: false,
         };
+        let dir = tempdir().unwrap();
         let supported =
             plan_effects_for_resolution(&issue, &resolution, &[effect("issue_status_write")]);
-        assert!(effect_preflight_blockers(&supported).is_empty());
+        assert!(effect_preflight_blockers(dir.path(), &supported).is_empty());
 
         let unsupported =
-            plan_effects_for_resolution(&issue, &resolution, &[effect("review_artifact_open")]);
-        let blockers = effect_preflight_blockers(&unsupported);
+            plan_effects_for_resolution(&issue, &resolution, &[effect("owner_branch_integrate")]);
+        let blockers = effect_preflight_blockers(dir.path(), &unsupported);
         assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("review_artifact_open"));
+        assert!(blockers[0].contains("owner_branch_integrate"));
         assert!(blockers[0].contains("not implemented yet"));
+    }
+
+    #[test]
+    fn review_artifact_open_effect_persists_room_review_field() {
+        let dir = tempdir().unwrap();
+        write_room_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let issue = test_issue("atelier-epic1");
+        insert_canonical_issue(&db, &state_dir, issue.clone());
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let effect =
+            plan_effects_for_resolution(&issue, &resolution, &[effect("review_artifact_open")])
+                .remove(0);
+
+        let detail = open_review_artifact_effect(
+            &db,
+            &state_dir,
+            &db_path,
+            dir.path(),
+            &issue,
+            "request_review",
+            &effect,
+        )
+        .unwrap();
+
+        assert!(detail.contains("opened room"));
+        let owner = app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let review = owner.issue.fields.get("review").unwrap();
+        assert_eq!(review["kind"], "room");
+        assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
     }
 
     #[test]
