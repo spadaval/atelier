@@ -9,15 +9,19 @@ runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
 
-# Forgejo PR integration uses an environment variable for the admin token; the
-# token value must not be committed.
-[forgejo]
+# Review provider integration uses an environment variable for the admin token;
+# the token value must not be committed.
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
 host = "http://iiot-grand-central.cisco.com:3000"
 owner = "supadava"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 
-[forgejo.role_authors]
+[review.providers.forgejo.role_authors]
 worker = "atelier-worker"
 reviewer = "atelier-reviewer"
 validator = "atelier-validator"

@@ -235,7 +235,7 @@ fn random_password() -> Result<String> {
 
 fn role_authors_config_block(forgejo: &ForgejoConfig) -> String {
     format!(
-        "[forgejo.role_authors]\nworker = \"{}\"\nreviewer = \"{}\"\nvalidator = \"{}\"\nmanager = \"{}\"\n",
+        "[review.providers.forgejo.role_authors]\nworker = \"{}\"\nreviewer = \"{}\"\nvalidator = \"{}\"\nmanager = \"{}\"\n",
         forgejo.role_authors.worker,
         forgejo.role_authors.reviewer,
         forgejo.role_authors.validator,
@@ -251,7 +251,9 @@ fn write_role_authors_config(repo_root: &Path, block: &str) -> Result<()> {
     let mut skipping_role_table = false;
     for line in text.lines() {
         let trimmed = line.trim();
-        if trimmed == "[forgejo.role_authors]" {
+        if trimmed == "[forgejo.role_authors]"
+            || trimmed == "[review.providers.forgejo.role_authors]"
+        {
             skipping_role_table = true;
             continue;
         }
@@ -385,7 +387,7 @@ mod tests {
         fs::create_dir_all(dir.path().join(".atelier")).unwrap();
         fs::write(
             dir.path().join(".atelier/config.toml"),
-            "schema = \"atelier.project_config\"\n\n[forgejo]\nhost = \"forge\"\n\n[forgejo.role_authors]\nworker = \"old\"\nreviewer = \"old\"\nvalidator = \"old\"\nmanager = \"old\"\n",
+            "schema = \"atelier.project_config\"\n\n[review]\nmode = \"provider\"\nprovider = \"forgejo\"\n\n[review.providers.forgejo]\nhost = \"forge\"\n\n[review.providers.forgejo.role_authors]\nworker = \"old\"\nreviewer = \"old\"\nvalidator = \"old\"\nmanager = \"old\"\n",
         )
         .unwrap();
 
@@ -393,7 +395,9 @@ mod tests {
             .unwrap();
         let text = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
 
-        assert!(text.contains("[forgejo.role_authors]\nworker = \"atelier-worker\""));
+        assert!(
+            text.contains("[review.providers.forgejo.role_authors]\nworker = \"atelier-worker\"")
+        );
         assert!(!text.contains("worker = \"old\""));
     }
 }

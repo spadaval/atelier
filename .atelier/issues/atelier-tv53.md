@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:26:55.579979001+00:00"
+status: "done"
 title: "Validate review mode config and starter workflow guidance"
-updated_at: "2026-06-19T03:58:38.908306324+00:00"
+updated_at: "2026-06-19T04:26:55.579979001+00:00"
 ---
 
 ## Description
