@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 1
 status: "in_progress"
 title: "Epic: Workflow schema and transition planner"
-updated_at: "2026-06-19T21:02:48.229908271+00:00"
+updated_at: "2026-06-19T21:21:20.735519596+00:00"
 ---
 
 ## Description
