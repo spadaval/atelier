@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:19:06.189492575+00:00"
+status: "done"
 title: "Update domain, product, workflow, and CLI docs for review modes"
-updated_at: "2026-06-19T03:58:22.932154053+00:00"
+updated_at: "2026-06-19T04:19:06.189492575+00:00"
 ---
 
 ## Description
