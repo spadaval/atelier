@@ -31,9 +31,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Native review rooms and review commands"
-updated_at: "2026-06-19T04:11:54.209873463+00:00"
+updated_at: "2026-06-19T05:15:03.850098831+00:00"
 ---
 
 ## Intent
@@ -62,3 +62,7 @@ Atelier supports exactly one configured review mode per project: native review r
 - Provider mode proves Forgejo open/link/status/show/comment/approve/request-changes/merge parity through atelier review commands.
 - Negative validation proves atelier pr is rejected and room-only/provider-only commands fail with direct guidance.
 - Final checks include cargo fmt -- --check, focused tests, cargo nextest run, git diff --check, atelier lint, and atelier doctor.
+
+## Terminal Notes
+
+- Close reason: Native review rooms and review command migration completed and validated.
