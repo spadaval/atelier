@@ -1,6 +1,6 @@
 [package]
 name = "atelier-sqlite"
-description = "Rebuildable SQLite projection and runtime state for Atelier"
+description = "Rebuildable SQLite projection for Atelier"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true

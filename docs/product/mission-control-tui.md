@@ -44,7 +44,6 @@ Dashboard and summary fields:
 | `summary.ready_work_count` | Dashboard count and ready-view badge. |
 | `summary.backlog_count` | Dashboard count. |
 | `summary.open_blocker_count` | Dashboard count and blocker badge. |
-| `summary.plan_drift_count` | Dashboard count and plan badge. |
 | `summary.evidence_gap_count` | Dashboard count and evidence badge. |
 | `summary.validator_failure_count` | Dashboard count and validator badge. |
 | `summary.artifact_update_count` | Dashboard count and artifact-update badge. |
@@ -60,26 +59,19 @@ Mission fields:
 | `missions[].summary` | Detail overview. |
 | `missions[].constraints[]` | Detail view. |
 | `missions[].current_risks[]` | Detail view and health context. |
-| `missions[].milestone_ids[]` | Detail links to milestones. |
-| `missions[].plan_ids[]` | Detail links to plans. |
+| `missions[].planning_references[]` | Optional prose or repository Markdown paths copied from accountable mission or linked-work content. |
+| `missions[].checkpoint_references[]` | Optional prose or repository Markdown paths for deferred checkpoint intent. |
 | `missions[].evidence_gap_count` | Mission row badge. |
 | `missions[].validator_failure_count` | Mission row badge. |
 | `missions[].updated_at` | Sort and detail timestamp. |
 
-Milestone and checkpoint fields:
+Deferred checkpoint fields:
 
 | Field path | Use |
 | --- | --- |
-| `milestones[].id` | Row key, copy target, and detail identifier. |
-| `milestones[].title` | Primary row label. |
-| `milestones[].status` | Status chip and filtering. |
-| `milestones[].mission_ids[]` | Mission cross-linking. |
-| `milestones[].desired_state` | Detail view. |
-| `milestones[].completion_state` | Detail view. |
-| `milestones[].validation_criteria[]` | Detail checklist. |
-| `milestones[].accepted_evidence_ids[]` | Evidence cross-linking. |
-| `milestones[].contributing_work_ids[]` | Work cross-linking. |
-| `milestones[].progress` | Checkpoint progress display. |
+| `checkpoint_references[].source_id` | Accountable mission, issue, or evidence record that contains the checkpoint prose. |
+| `checkpoint_references[].path` | Optional repository Markdown path when checkpoint intent lives outside the record body. |
+| `checkpoint_references[].summary` | Short excerpt or title for display. |
 
 Backlog, ready work, review, and validation fields:
 
@@ -92,7 +84,6 @@ Backlog, ready work, review, and validation fields:
 | `work_items[].priority` | Sort and row label. |
 | `work_items[].parent_id` | Hierarchy context. |
 | `work_items[].mission_ids[]` | Mission filtering. |
-| `work_items[].milestone_ids[]` | Milestone filtering. |
 | `work_items[].labels[]` | Filtering and detail view. |
 | `work_items[].assignee` | Claim display. |
 | `work_items[].queue` | One of `ready`, `backlog`, `blocked`, `review`, or `validation`. |
@@ -117,19 +108,14 @@ Blocker fields:
 | `blockers[].since` | Sort and age display. |
 | `blockers[].actions[]` | Suggested CLI follow-up text. |
 
-Plan fields:
+Planning reference fields:
 
 | Field path | Use |
 | --- | --- |
-| `plans[].id` | Row key, copy target, and detail identifier. |
-| `plans[].title` | Primary row label. |
-| `plans[].owner` | Detail metadata. |
-| `plans[].applies_to[]` | Cross-links to missions, milestones, or issues. |
-| `plans[].revision` | Detail metadata. |
-| `plans[].supersedes[]` | Revision cross-links. |
-| `plans[].drift_status` | Plan badge and filtering. |
-| `plans[].summary` | Detail overview. |
-| `plans[].updated_at` | Sort and detail timestamp. |
+| `planning_references[].source_id` | Accountable mission, issue, or evidence record that contains the planning reference. |
+| `planning_references[].path` | Optional repository Markdown path when detailed plan prose lives outside the record body. |
+| `planning_references[].summary` | Short excerpt or title for display. |
+| `planning_references[].updated_at` | Sort and detail timestamp when the referenced artifact is tracked. |
 
 Evidence gap fields:
 
@@ -307,11 +293,11 @@ asserts timestamp rendering.
 
 Required fixture coverage:
 
-- active mission with linked milestones, plans, risks, evidence gaps, and
+- active mission with planning/checkpoint references, risks, evidence gaps, and
   validator failures;
 - backlog and ready work, including review and validation queues;
 - open blockers with both issue blockers and artifact-update blockers;
-- plan states for current, drifted, and superseded plans;
+- artifact-update rows for stale or superseded planning artifacts;
 - evidence gaps for missing count, missing evidence type, and linked validator;
 - workflow validator failures using the machine-readable result shape from the
   workflow configuration contract;

@@ -715,7 +715,6 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
         vec!["issue", "list", "--status", "all"],
         vec!["search", "Factory"],
         vec!["lint"],
-        vec!["export"],
         vec!["export", "--check"],
         vec!["doctor"],
         vec!["rebuild"],
@@ -792,10 +791,8 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
         "wrong-kind issue read should suggest mission show: {stderr}"
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", mission_id, "--reason", "wrong kind"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", mission_id, "close"]);
     assert!(!success, "mission ID should not close as an issue");
     assert!(
         stderr.contains(&format!(
@@ -901,28 +898,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(success, "mission update failed: {stderr}");
     assert!(mission_update.contains("Status: ready"));
 
-    let (success, plan_out, stderr) = run_atelier(
-        dir.path(),
-        &["plan", "create", "Execution plan", "--body", "Do the thing"],
-    );
-    assert!(success, "plan create failed: {stderr}");
-    assert!(plan_out.contains("[plan] open - Execution plan"));
-    let plan_id = record_id_by_title(dir.path(), "plans", "Execution plan");
-    let plan_id = plan_id.as_str();
-    let (success, revise_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "plan",
-            "revise",
-            plan_id,
-            "Do the thing, then verify the projection.",
-            "--reason",
-            "projection-first",
-        ],
-    );
-    assert!(success, "plan revise failed: {stderr}");
-    assert!(revise_out.contains("Revision: 2"));
-
     let (success, evidence_out, stderr) = run_atelier(
         dir.path(),
         &["evidence", "record", "--kind", "test", "cargo test passed"],
@@ -957,19 +932,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
         "unknown ID should not imply a wrong-kind match: {stderr}"
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "plan",
-            "link",
-            plan_id,
-            "mission",
-            mission_id,
-            "--type",
-            "planned_by",
-        ],
-    );
-    assert!(success, "mission-plan link failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["evidence", "attach", evidence_id, "mission", mission_id],
@@ -1039,19 +1001,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
         "  - kind: \"issue\"\n    id: \"{issue_id}\"\n    type: \"advances\""
     )));
 
-    let plan_path = dir
-        .path()
-        .join(".atelier")
-        .join("plans")
-        .join(format!("{plan_id}.md"));
-    let plan_markdown = std::fs::read_to_string(&plan_path).unwrap();
-    assert!(plan_markdown.contains("schema: \"atelier.plan\""));
-    assert!(!plan_markdown.contains("\ndata: "));
-    assert!(plan_markdown.contains("Do the thing, then verify the projection."));
-    assert!(plan_markdown.contains("revision: 2"));
-    assert!(plan_markdown.contains("reason: \"projection-first\""));
-    assert!(plan_markdown.contains(&format!("id: \"{mission_id}\"")));
-
     let evidence_path = dir
         .path()
         .join(".atelier")
@@ -1069,13 +1018,12 @@ fn test_first_class_records_export_rebuild_and_validate() {
 
     let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    assert!(view_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(view_out.contains("Records: evidence=1"));
     assert!(view_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
     assert!(view_out.contains(&blocker_id));
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["mission", "show", mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    assert!(show_out.contains("Plans"));
     assert!(show_out.contains("Evidence"));
     assert!(show_out.contains("Mission Blockers"));
 
@@ -1085,10 +1033,8 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("Constraints"));
     assert!(human_out.contains("Keep issues accountable"));
     assert!(human_out.contains("Progress"));
-    assert!(human_out.contains("Records: plans=1 milestones=0 evidence=1"));
+    assert!(human_out.contains("Records: evidence=1"));
     assert!(human_out.contains("Work: ready=1 blocked=0 done=0 backlog=0"));
-    assert!(human_out.contains("Plans"));
-    assert!(human_out.contains("Execution plan"));
     assert!(human_out.contains("Evidence"));
     assert!(human_out.contains("cargo test passed"));
     assert!(human_out.contains("Mission Blockers"));
@@ -1101,20 +1047,6 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("(none)"));
     assert!(human_out.contains("Next Commands"));
     assert!(human_out.contains("atelier mission status"));
-
-    let (success, plan_show, stderr) = run_atelier(dir.path(), &["plan", "show", plan_id]);
-    assert!(success, "human plan show failed: {stderr}");
-    assert!(plan_show.contains(&format!("{plan_id} [plan] open - Execution plan")));
-    assert!(plan_show.contains("Revision: 2"));
-    assert!(plan_show.contains("Body"));
-    assert!(plan_show.contains("Do the thing, then verify the projection."));
-    assert!(plan_show.contains("Links:"));
-
-    let (success, plan_list, stderr) = run_atelier(dir.path(), &["plan", "list"]);
-    assert!(success, "human plan list failed: {stderr}");
-    assert!(plan_list.contains("Plans"));
-    assert!(plan_list.contains("1 total"));
-    assert!(plan_list.contains("Execution plan"));
 
     let (success, evidence_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", evidence_id]);
@@ -1724,15 +1656,18 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
 
     move_issue_to_validation(dir.path(), target_id);
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", target_id, "--reason", "done"],
-    );
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", target_id, "close"]);
     assert!(
         !success,
         "issue closeout must reject evidence linked only to another issue"
     );
-    assert!(stderr.contains("expected at least 1 passing evidence record"));
+    assert!(
+        stderr.contains("expected at least 1 passing evidence record")
+            || stderr.contains("expected at least 1 validating evidence record")
+            || stderr.contains("no validating evidence link found"),
+        "{stderr}"
+    );
     assert!(stderr.contains(target_id));
 
     let (success, _, stderr) = run_atelier(
@@ -1740,10 +1675,8 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
         &["evidence", "attach", &evidence_id, "issue", target_id],
     );
     assert!(success, "target evidence attach failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", target_id, "--reason", "target proof"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", target_id, "close"]);
     assert!(
         success,
         "target closeout should pass after direct proof: {stderr}"
@@ -1777,16 +1710,8 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
         "workflow close gate regression transcript recorded",
     );
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "close",
-            &issue_id,
-            "--reason",
-            "workflow proof attached",
-        ],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(
         success,
         "issue closeout should use attached pass evidence rather than Evidence text matching: {stderr}"
@@ -1829,18 +1754,12 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
     );
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("pass  proof_attached"));
+    assert!(transitions.contains("pass  evidence_attached"));
     assert!(!transitions.contains("contract-audit"));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "close",
-            &validation_id,
-            "--reason",
-            "independent approval attached",
-        ],
+        &["issue", "transition", &validation_id, "close"],
     );
     assert!(
         success,
@@ -1883,15 +1802,17 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     assert!(transitions.contains("close"));
     assert!(transitions.contains("expected at least 1 passing evidence record"));
 
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "still blocked"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(
         !success,
         "closeout must reject evidence that is attached but not passing"
     );
-    assert!(stderr.contains("expected at least 1 passing evidence record"));
+    assert!(
+        stderr.contains("expected at least 1 passing evidence record")
+            || stderr.contains("expected at least 1 validating evidence record"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -2125,10 +2046,8 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
         "independent mission approval captured",
     );
     commit_all(dir.path(), "mission approval ready");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", approval_id, "--reason", "approved"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", approval_id, "close"]);
     assert!(success, "validation issue close failed: {stderr}");
 
     let (success, ready_out, stderr) =
@@ -2204,11 +2123,17 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
 
     let policy_path = dir.path().join(".atelier").join("workflow.yaml");
     let policy = std::fs::read_to_string(&policy_path).unwrap();
+    assert!(policy.contains("schema_version: 3"));
+    assert!(policy.contains("branch_policy:"));
     assert!(policy.contains("  todo:\n    category: todo"));
     assert!(policy.contains("  archived:\n    category: done"));
     assert!(policy.contains("    initial_status: todo"));
     assert!(policy.contains("    done_statuses: [done, archived]"));
-    assert!(policy.contains("  lightweight_spike:"));
+    assert!(policy.contains("  standard:"));
+    assert!(policy.contains("  epic_reviewed:"));
+    assert!(policy.contains("  validation_reviewed:"));
+    assert!(policy.contains("  spike:"));
+    assert!(policy.contains("applies_to:"));
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "init"]);
     assert!(!success, "workflow init should be removed");
@@ -2273,7 +2198,8 @@ fn test_issue_create_after_workflow_init_uses_configured_initial_status() {
     assert!(options.contains("start [allowed]"), "{options}");
 
     commit_all(dir.path(), "workflow-ready issue");
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "root start failed: {stderr}");
     assert!(
         start_out.contains("Applied transition start"),
@@ -2307,9 +2233,9 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Workflow Check"));
     assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
     assert!(stdout.contains("Policy:         pass"));
-    assert!(stdout.contains("Issue Types:    7"));
+    assert!(stdout.contains("Applicability:"));
     assert!(stdout.contains("Statuses:       7"));
-    assert!(stdout.contains("Workflows:      3"));
+    assert!(stdout.contains("Workflows:      4"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
     assert!(stdout.contains("Docs/Help Drift: clear"));
@@ -2322,7 +2248,7 @@ fn test_workflow_check_rejects_stale_agent_guidance_commands() {
     write_valid_command_guidance(dir.path());
     fs::write(
         dir.path().join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier session start`\n",
+        "# Agent Instructions\n\n- `atelier timer start`\n",
     )
     .unwrap();
 
@@ -2334,7 +2260,7 @@ fn test_workflow_check_rejects_stale_agent_guidance_commands() {
     );
     assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
     assert!(stdout.contains("AGENTS.md"), "{stdout}");
-    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(stdout.contains("atelier timer"), "{stdout}");
     assert!(
         stderr.contains("workflow_command_surface_drift"),
         "{stderr}"
@@ -2439,7 +2365,7 @@ fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
     write_valid_command_guidance(dir.path());
 
     let surface = format!(
-        "{}\n## Core\n\n- `atelier session start`\n",
+        "{}\n## Core\n\n- `atelier timer start`\n",
         valid_command_surface_doc()
     );
     write_command_surface_doc(dir.path(), &surface);
@@ -2451,7 +2377,7 @@ fn test_workflow_check_rejects_removed_command_as_normal_workflow() {
         "workflow check should reject removed command as normal guidance"
     );
     assert!(stdout.contains("Docs/Help Drift: detected"), "{stdout}");
-    assert!(stdout.contains("atelier session"), "{stdout}");
+    assert!(stdout.contains("atelier timer"), "{stdout}");
     assert!(
         stderr.contains("workflow_command_surface_drift"),
         "{stderr}"

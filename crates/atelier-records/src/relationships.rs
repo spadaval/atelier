@@ -1,32 +1,7 @@
 use super::record_kinds::ISSUE_KIND;
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RelationshipTarget {
-    pub kind: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct AttachmentRelationship {
-    pub kind: String,
-    pub id: String,
-    pub role: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RelatesRelationship {
-    pub kind: String,
-    pub id: String,
-    pub relation_type: String,
-}
-
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
-pub struct Relationships {
-    pub blocks: Vec<RelationshipTarget>,
-    pub children: Vec<RelationshipTarget>,
-    pub attachments: Vec<AttachmentRelationship>,
-    pub relates: Vec<RelatesRelationship>,
-}
+pub use atelier_core::{
+    AttachmentRelationship, RelatesRelationship, RelationshipTarget, Relationships,
+};
 
 pub fn issue_relationship_target(id: &str) -> RelationshipTarget {
     relationship_target(ISSUE_KIND.kind, id)

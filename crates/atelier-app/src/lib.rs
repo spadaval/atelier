@@ -5,12 +5,17 @@
 
 pub mod command_storage;
 pub mod export;
+pub mod forgejo;
 pub mod health;
 pub mod init;
 pub mod lint;
+pub mod pr;
+pub mod project_config;
 pub mod projection;
 pub mod rebuild;
+pub mod review_room;
 pub mod storage_layout;
+pub mod use_cases;
 pub mod workflow_policy;
 
 /// Minimal outcome wrapper for early app-layer extraction.

@@ -64,18 +64,18 @@ Required sections for issue detail views:
 - canonical Markdown file path when a `.atelier/issues/<id>.md` record exists;
 - hierarchy parent;
 - description and acceptance criteria when present;
-- close reason when present;
+- completion notes or outcome evidence when present;
 - blockers and dependents;
 - subissue summary and bounded child rows;
 - recent activity;
 - next actions for editing the Markdown record, validating the issue, adding a
-  note, starting work, reopening, or closing as appropriate.
+  note, or running the appropriate issue transition.
 
 Required sections for mission detail views:
 
 - identity and status;
 - body, constraints, risks, and validation expectations when present;
-- plans, milestones, and evidence summaries;
+- planning/checkpoint references from mission prose and evidence summaries;
 - mission blockers with open blockers visibly marked;
 - linked work grouped by ready, blocked, done, and backlog;
 - evidence gaps;
@@ -106,7 +106,7 @@ Blockers
 Next Commands
 -------------
   atelier issue note atelier-1234 "..."
-  atelier issue close atelier-1234 --reason "..."
+  atelier issue transition atelier-1234 --options
 ```
 
 ## Setup And Health Views
@@ -116,7 +116,7 @@ the current state. A fresh `atelier init` checkout creates tracker directories,
 runtime state, and starter workflow policy. Its default next steps point to
 `atelier lint` before issue creation. Health commands may name low-level repair
 commands only when the checked state is actually stale, invalid, missing, or
-otherwise degraded; `doctor --fix` is the normal explicit local repair path.
+otherwise degraded; `doctor --fix` is the admin explicit local repair path.
 
 ## Queue Views
 
@@ -175,11 +175,12 @@ their need:
   views.
 - Read canonical records under `.atelier/` when durable tracker state is
   needed. These Markdown records are the reviewable, mergeable source of truth
-  for issues, missions, milestones, plans, evidence, and activity sidecars.
-- Use health commands for handoff gates. `atelier lint` and `atelier doctor`
-  are the supported noninteractive checks for invalid tracker state, degraded
-  local runtime, and repair guidance. Low-level projection repair commands are
-  diagnostic tools, not normal script workflow.
+  for issues, missions, evidence, and activity sidecars. Planning and
+  checkpoint intent lives in the accountable record prose or referenced
+  repository Markdown artifacts until first-class records are reintroduced.
+- Use committed-state commands for handoff gates. `atelier lint` is the
+  supported noninteractive check for invalid tracker state. Local runtime repair
+  commands are admin repair tools, not normal script workflow.
 - Preserve blocked-command and record context in stale projection or invalid
   canonical-record errors, then give one ordered recovery path through lint,
   record repair, health check or fix, and rerunning the blocked command.
@@ -189,7 +190,7 @@ their need:
   `atelier graph tree --compact`, and issue blocker commands over scraping
   broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
-  specific document defines that contract, such as bulk-plan input JSON or a
+  specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
 
 Full human output is allowed to change for readability, grouping, width, color,
@@ -289,7 +290,8 @@ The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
 stabilization mission: `status`, `mission status`, `mission show`,
 `mission list`, `issue show`, `issue list --ready`, `evidence record`,
 `evidence show/list`, dependency and link list output, `graph impact`,
-`worktree status`, `lint`, `doctor`, and `doctor --fix`.
+`worktree status`, `lint`, and admin repair commands when local state is
+degraded.
 
 Classification:
 
@@ -297,8 +299,8 @@ Classification:
   health-check views have concise default answers and explicit drill-down
   commands in existing focused tests.
 - Degraded orientation and mission status output keeps ordinary reads usable
-  while routing repair to `atelier lint`, `atelier doctor`, or `doctor --fix`
-  only when the tracker or projection is degraded.
+  while routing repair to `atelier lint` or admin repair commands only when
+  committed records or local state are degraded.
 - Fresh `atelier init` previously suggested `atelier issue create "Task"` before
   workflow setup, which produced an immediate workflow-policy error. The default
   setup output now creates workflow policy and routes through `atelier lint`

@@ -2,16 +2,23 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
+use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
+use atelier_app::project_config::ProjectConfig;
+use atelier_app::project_config::ReviewConfig;
+use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
-use atelier_core::{EvidenceRecordData, Issue};
-use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore};
+use atelier_app::{pr as app_pr, review_room};
+use atelier_core::{EvidenceRecord, Issue, Record};
+use atelier_records::{CanonicalIssueRecord, IssueSections};
 use atelier_sqlite::Database;
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidatorResult {
@@ -32,8 +39,25 @@ pub struct IssueTransitionOption {
     pub allowed: bool,
     pub blockers: Vec<String>,
     pub validator_results: Vec<ValidatorResult>,
-    pub guidance: Vec<String>,
+    pub before_effects: Vec<String>,
+    pub after_effects: Vec<String>,
+    pub descriptions: Vec<String>,
     pub command: String,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TransitionExecutionOptions<'a> {
+    pub dry_run: bool,
+    pub skip_effects: bool,
+    pub reason: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+struct EffectResult {
+    phase: &'static str,
+    effect: String,
+    status: String,
+    detail: String,
 }
 
 #[derive(Debug, Clone)]
@@ -55,9 +79,11 @@ pub fn check(db: &Database) -> Result<()> {
         atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
     );
     println!("Policy:         pass");
-    println!("Issue Types:    {}", report.policy.issue_types.len());
+    println!(
+        "Applicability:  {}",
+        report.policy.workflow_by_issue_type.len()
+    );
     println!("Statuses:       {}", report.policy.statuses.len());
-    println!("Validators:     {}", report.policy.validators.len());
     println!("Workflows:      {}", report.policy.workflows.len());
     println!("Record Health:  pass");
     println!("Issues Checked: {}", report.issue_count);
@@ -82,16 +108,11 @@ pub fn issue_transition_options(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
     let state_dir = atelier_app::storage_layout::StorageLayout::new(&repo_root).canonical_dir();
-    let store = RecordStore::new(&state_dir);
-    let record = store.load_issue_by_id(&issue.id)?;
+    let record = app_use_cases::load_canonical_issue(&state_dir, &issue.id)?;
     let mut options = Vec::new();
 
-    for (name, transition) in &workflow.transitions {
-        if !transition.from.iter().any(|from| from == &issue.status) {
-            continue;
-        }
+    for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let mut blockers = required_field_failures(&record, transition, None)?;
         blockers.extend(branch_context_blockers(db, &issue, name, transition)?);
         let validator_results = evaluate_policy_transition(
@@ -108,16 +129,18 @@ pub fn issue_transition_options(
                 .filter(|result| !result.passed)
                 .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
         );
-        let mut guidance = render_transition_guidance(&policy, &issue, name, transition)?;
-        guidance.extend(branch_context_guidance(db, &issue, name, transition)?);
+        let mut descriptions = transition_descriptions(transition);
+        descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
         options.push(IssueTransitionOption {
-            name: name.clone(),
+            name: name.to_string(),
             from: transition.from.clone(),
             to: transition.to.clone(),
             allowed: blockers.is_empty(),
             blockers,
             validator_results,
-            guidance,
+            before_effects: effect_names(&transition.effects.before),
+            after_effects: effect_names(&transition.effects.after),
+            descriptions,
             command: transition_command(&issue.id, name, transition),
         });
     }
@@ -139,7 +162,7 @@ pub(crate) fn branch_lifecycle_context(
 ) -> Result<BranchLifecycleContext> {
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let resolution = policy.resolve_branch_lifecycle(db, issue_id)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
     Ok(BranchLifecycleContext {
         expected_branch_exists: branch_exists_at(&repo_root, &resolution.expected_branch)?,
         base_branch_exists: branch_exists_at(&repo_root, &resolution.base_branch)?,
@@ -159,7 +182,8 @@ pub(crate) fn known_branch_owner(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let mut owner_ids = BTreeSet::new();
     for issue in db.list_issues(Some("all"), None, None)? {
-        let resolution = policy.resolve_branch_lifecycle(db, &issue.id)?;
+        let resolution =
+            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
         if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
             return Ok(Some(resolution));
         }
@@ -169,7 +193,7 @@ pub(crate) fn known_branch_owner(
 
 pub(crate) fn configured_base_branch() -> Result<String> {
     Ok(atelier_app::workflow_policy::load(&repo_root()?)?
-        .branch_lifecycle
+        .branch_policy
         .base_branch)
 }
 
@@ -207,11 +231,11 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             "current branch matches expected branch".to_string()
         }
         Some(current) => format!(
-            "mismatch - current branch {current}; run `atelier start {}` before continuing work",
+            "mismatch - current branch {current}; run `atelier issue transition {} start` before continuing work",
             context.resolution.issue_id
         ),
         None => format!(
-            "detached or unknown - run `atelier start {}` before continuing work",
+            "detached or unknown - run `atelier issue transition {} start` before continuing work",
             context.resolution.issue_id
         ),
     }
@@ -243,7 +267,7 @@ fn branch_context_blockers(
     if is_start {
         if !context.dirty_entries.is_empty() {
             blockers.push(format!(
-                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier start {}`",
+                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier issue transition {} start`",
                 issue.id
             ));
         }
@@ -252,15 +276,15 @@ fn branch_context_blockers(
             && !context.base_branch_exists
         {
             blockers.push(format!(
-                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier start {}`",
+                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} start`",
                 context.resolution.base_branch, issue.id
             ));
         }
     }
     if is_close && context.resolution.merge_owned && !context.base_branch_exists {
         blockers.push(format!(
-            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue close {} --reason \"...\"`",
-            context.resolution.base_branch, issue.id
+            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} {}`",
+            context.resolution.base_branch, issue.id, transition_name
         ));
     }
     Ok(blockers)
@@ -295,14 +319,14 @@ fn branch_context_guidance(
     guidance.push(branch_lifecycle_state_line(&context));
     if is_start {
         guidance.push(format!(
-            "Corrective lifecycle command: atelier start {}",
+            "Corrective lifecycle command: atelier issue transition {} start",
             issue.id
         ));
     }
     if is_close {
         guidance.push(format!(
-            "Close lifecycle command: atelier issue close {} --reason \"...\"",
-            issue.id
+            "Terminal lifecycle command: atelier issue transition {} {}",
+            issue.id, transition_name
         ));
     }
     Ok(guidance)
@@ -316,25 +340,36 @@ pub fn transition_issue(
     transition_name: &str,
     close_reason: Option<&str>,
 ) -> Result<()> {
+    let _ = close_reason;
+    transition_issue_with_options(
+        db,
+        state_dir,
+        db_path,
+        issue_ref,
+        transition_name,
+        TransitionExecutionOptions::default(),
+    )
+}
+
+pub fn transition_issue_with_options(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    transition_name: &str,
+    options: TransitionExecutionOptions<'_>,
+) -> Result<()> {
     let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let before = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &before)?;
-    let workflow = policy.workflow_for_issue_type(&before.issue_type)?;
-    let transition = resolve_issue_transition(workflow, &before, transition_name)?;
+    let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
 
-    let store = RecordStore::new(state_dir);
-    let mut record = store.load_issue_by_id(&before.id)?;
-    let (blockers, validator_results) = transition_blockers(
-        db,
-        &policy,
-        &record,
-        transition_name,
-        transition,
-        close_reason,
-    )?;
+    let mut record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    let (blockers, validator_results) =
+        transition_blockers(db, &policy, &record, transition_name, transition, None)?;
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -346,15 +381,64 @@ pub fn transition_issue(
         )?;
     }
 
-    apply_transition_record(&policy, &store, &mut record, transition, close_reason)?;
+    if options.skip_effects && options.reason.is_none_or(|reason| reason.trim().is_empty()) {
+        bail!("--skip-effects requires --reason \"...\" so the repair bypass is auditable");
+    }
+
+    if options.dry_run {
+        print_transition_preview(&before, transition_name, transition, &validator_results);
+        return Ok(());
+    }
+
+    let mut effect_results = Vec::new();
+    if options.skip_effects {
+        let reason = options.reason.unwrap_or_default();
+        crate::commands::activity_log::record_note(
+            &before.id,
+            &format!(
+                "Skipped configured transition effects for `{}`.\n\nreason: {}",
+                transition_name, reason
+            ),
+        )?;
+        effect_results.extend(skipped_effect_results("before", &transition.effects.before));
+    } else {
+        effect_results.extend(run_effects(
+            db,
+            state_dir,
+            db_path,
+            &repo_root,
+            &before,
+            transition_name,
+            &transition.effects.before,
+            "before",
+        )?);
+    }
+
+    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
+    apply_transition_record(&policy, state_dir, &mut record, transition)?;
     record_applied_transition(&before, transition_name, transition)?;
 
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
-    let refreshed = Database::open(db_path)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
+    if options.skip_effects {
+        effect_results.extend(skipped_effect_results("after", &transition.effects.after));
+    } else {
+        effect_results.extend(run_effects(
+            &refreshed,
+            state_dir,
+            db_path,
+            &repo_root,
+            &issue,
+            transition_name,
+            &transition.effects.after,
+            "after",
+        )?);
+    }
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
     println!("To:       {}", issue.status);
+    print_effect_results(&effect_results);
     print_heading("Next Commands");
     println!("  atelier issue show {}", issue.id);
     println!("  atelier issue transition {} --options", issue.id);
@@ -362,18 +446,17 @@ pub fn transition_issue(
 }
 
 fn resolve_issue_transition<'a>(
-    workflow: &'a atelier_app::workflow_policy::WorkflowDefinition,
+    policy: &'a atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
 ) -> Result<&'a atelier_app::workflow_policy::TransitionDefinition> {
-    if let Some(transition) = workflow.transitions.get(transition_name) {
+    if let Ok(transition) = policy.transition_for_issue_type(&issue.issue_type, transition_name) {
         return Ok(transition);
     }
-    let available = workflow
-        .transitions
-        .iter()
-        .filter(|(_, candidate)| candidate.from.iter().any(|from| from == &issue.status))
-        .map(|(name, _)| name.as_str())
+    let available = policy
+        .transitions_from_status(&issue.issue_type, &issue.status)?
+        .into_iter()
+        .map(|(name, _)| name)
         .collect::<Vec<_>>();
     if available.is_empty() {
         bail!(
@@ -446,7 +529,7 @@ fn transition_blockers(
 }
 
 fn report_blocked_transition(
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
@@ -467,7 +550,7 @@ fn report_blocked_transition(
         &transition.to,
         validator_results,
         blockers,
-        &render_transition_guidance(policy, issue, transition_name, transition)?,
+        &transition_descriptions(transition),
         &transition_command(&issue.id, transition_name, transition),
     );
     bail!(
@@ -478,12 +561,336 @@ fn report_blocked_transition(
     )
 }
 
+fn print_transition_preview(
+    issue: &Issue,
+    transition_name: &str,
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+    validator_results: &[ValidatorResult],
+) {
+    println!("Issue Transition Preview {} - {}", issue.id, issue.title);
+    println!("{}", "=".repeat(issue.id.len() + issue.title.len() + 28));
+    println!("Transition: {}", transition_name);
+    println!("From:       {}", issue.status);
+    println!("To:         {}", transition.to);
+    print_transition_detail("Validators", validator_results);
+    print_name_list("Before Effects", &effect_names(&transition.effects.before));
+    print_name_list("After Effects", &effect_names(&transition.effects.after));
+    println!();
+    println!("Dry run passed; no state was changed.");
+}
+
+fn run_effects(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    effects: &[atelier_app::workflow_policy::EffectDefinition],
+    phase: &'static str,
+) -> Result<Vec<EffectResult>> {
+    let mut results = Vec::new();
+    for effect in effects {
+        let detail = match effect.builtin.as_str() {
+            "branch.prepare" => effect_branch_prepare(db, repo_root, &issue.id)?,
+            "review.open" => {
+                effect_review_open(db, state_dir, db_path, repo_root, issue, transition_name)?
+            }
+            "review.merge" => effect_review_merge(db, state_dir, db_path, repo_root, issue)?,
+            "tracker.commit" => effect_tracker_commit(repo_root, &issue.id, transition_name)?,
+            "branch.merge" => effect_branch_merge(db, repo_root, &issue.id)?,
+            other => bail!("unsupported transition effect: {other}"),
+        };
+        results.push(EffectResult {
+            phase,
+            effect: effect.builtin.clone(),
+            status: "done".to_string(),
+            detail,
+        });
+    }
+    Ok(results)
+}
+
+fn skipped_effect_results(
+    phase: &'static str,
+    effects: &[atelier_app::workflow_policy::EffectDefinition],
+) -> Vec<EffectResult> {
+    effects
+        .iter()
+        .map(|effect| EffectResult {
+            phase,
+            effect: effect.builtin.clone(),
+            status: "skipped".to_string(),
+            detail: "skipped by --skip-effects".to_string(),
+        })
+        .collect()
+}
+
+fn print_effect_results(results: &[EffectResult]) {
+    print_heading("Effects");
+    if results.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for result in results {
+        println!(
+            "  {} {} {} - {}",
+            result.phase, result.status, result.effect, result.detail
+        );
+    }
+}
+
+fn effect_branch_prepare(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    ensure_no_non_tracker_dirty(repo_root)?;
+    let current = git_current_branch(repo_root)?;
+    if current == resolution.expected_branch {
+        return Ok(format!("already on {}", resolution.expected_branch));
+    }
+    if branch_exists_at(repo_root, &resolution.expected_branch)? {
+        git_checked(
+            repo_root,
+            &["switch", &resolution.expected_branch],
+            "switch to transition branch",
+        )?;
+        return Ok(format!("switched to {}", resolution.expected_branch));
+    }
+    ensure_branch_exists(repo_root, &resolution.base_branch)?;
+    git_checked(
+        repo_root,
+        &["switch", &resolution.base_branch],
+        "switch to transition base branch",
+    )?;
+    git_checked(
+        repo_root,
+        &["switch", "-c", &resolution.expected_branch],
+        "create transition branch",
+    )?;
+    Ok(format!(
+        "created {} from {}",
+        resolution.expected_branch, resolution.base_branch
+    ))
+}
+
+fn effect_review_open(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution =
+        atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
+    if atelier_app::workflow_policy::effective_review_field(db, &issue.id)?.is_some() {
+        return Ok("reused existing linked review artifact".to_string());
+    }
+    let owner = db.require_issue(&resolution.owner_id)?;
+    let title = format!("{} {}", owner.id, owner.title);
+    let body = format!("Opened by workflow transition `{transition_name}`.");
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => {
+            let outcome = review_room::open(
+                db,
+                review_room::RoomOpenRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "worker",
+                    title: &title,
+                    body: &body,
+                    source_branch: &resolution.expected_branch,
+                    target_branch: &resolution.base_branch,
+                },
+            )?;
+            Ok(format!("opened room {}", outcome.review_id))
+        }
+        ReviewConfig::Provider(_) => {
+            let forgejo = app_pr::load_forgejo(repo_root)?;
+            let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                format!(
+                    "forgejo_config_missing_token: environment variable {} is required for review.open effect",
+                    forgejo.admin_token_env
+                )
+            })?;
+            let client = ForgejoClient::new(
+                forgejo.clone(),
+                UreqForgejoTransport::new(&forgejo.host, token),
+            );
+            let outcome = app_pr::open_with_client(
+                db,
+                app_pr::PrOpenRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "worker",
+                    title: &title,
+                    body: &body,
+                    source_branch: &resolution.expected_branch,
+                    target_branch: &resolution.base_branch,
+                },
+                &forgejo,
+                &client,
+            )?;
+            Ok(format!("opened {}", outcome.pull.url))
+        }
+    }
+}
+
+fn effect_review_merge(
+    db: &Database,
+    state_dir: &Path,
+    db_path: &Path,
+    repo_root: &Path,
+    issue: &Issue,
+) -> Result<String> {
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => {
+            let outcome = review_room::merge(
+                db,
+                review_room::RoomMergeRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "manager",
+                },
+            )?;
+            Ok(format!("room {} {}", outcome.review_id, outcome.status))
+        }
+        ReviewConfig::Provider(_) => {
+            let forgejo = app_pr::load_forgejo(repo_root)?;
+            let token = env::var(&forgejo.admin_token_env).with_context(|| {
+                format!(
+                    "forgejo_config_missing_token: environment variable {} is required for review.merge effect",
+                    forgejo.admin_token_env
+                )
+            })?;
+            let client = ForgejoClient::new(
+                forgejo.clone(),
+                UreqForgejoTransport::new(&forgejo.host, token),
+            );
+            let outcome = app_pr::merge_with_client(
+                db,
+                app_pr::PrMergeRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref: Some(&issue.id),
+                    role: "manager",
+                },
+                &forgejo,
+                &client,
+            )?;
+            Ok(format!("merged {}", outcome.pull.url))
+        }
+    }
+}
+
+fn effect_tracker_commit(
+    repo_root: &Path,
+    issue_id: &str,
+    transition_name: &str,
+) -> Result<String> {
+    git_checked(
+        repo_root,
+        &["add", "-A", ".atelier"],
+        "stage transition tracker state",
+    )?;
+    let status = git_stdout(
+        repo_root,
+        &["status", "--porcelain", "--", ".atelier"],
+        "inspect staged tracker state",
+    )?;
+    if status.trim().is_empty() {
+        return Ok("no tracker changes to commit".to_string());
+    }
+    let message = format!("Apply transition {transition_name} for {issue_id}");
+    git_checked(
+        repo_root,
+        &["commit", "-m", &message],
+        "commit transition tracker state",
+    )?;
+    let sha = git_stdout(
+        repo_root,
+        &["rev-parse", "--short", "HEAD"],
+        "read transition tracker commit",
+    )?;
+    Ok(format!("commit {}", sha.trim()))
+}
+
+fn effect_branch_merge(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if !resolution.merge_owned {
+        return Ok("deferred to owning epic branch".to_string());
+    }
+    ensure_branch_exists(repo_root, &resolution.expected_branch)?;
+    ensure_branch_exists(repo_root, &resolution.base_branch)?;
+    git_checked(
+        repo_root,
+        &["switch", &resolution.base_branch],
+        "switch to base branch before transition merge",
+    )?;
+    match resolution.merge_strategy {
+        MergeStrategy::Squash => {
+            git_checked(
+                repo_root,
+                &["merge", "--squash", &resolution.expected_branch],
+                "squash merge transition branch",
+            )?;
+            let message = format!(
+                "Squash merge {} into {}",
+                resolution.expected_branch, resolution.base_branch
+            );
+            git_checked(
+                repo_root,
+                &["commit", "-m", &message],
+                "commit squash merge",
+            )?;
+        }
+        MergeStrategy::MergeCommit => {
+            let message = format!(
+                "Merge {} into {}",
+                resolution.expected_branch, resolution.base_branch
+            );
+            git_checked(
+                repo_root,
+                &[
+                    "merge",
+                    "--no-ff",
+                    &resolution.expected_branch,
+                    "-m",
+                    &message,
+                ],
+                "merge transition branch",
+            )?;
+        }
+        MergeStrategy::FastForwardOnly => {
+            git_checked(
+                repo_root,
+                &["merge", "--ff-only", &resolution.expected_branch],
+                "fast-forward transition branch",
+            )?;
+        }
+    }
+    let sha = git_stdout(
+        repo_root,
+        &["rev-parse", "--short", "HEAD"],
+        "read merge head",
+    )?;
+    Ok(format!("integrated at {}", sha.trim()))
+}
+
 fn apply_transition_record(
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    store: &RecordStore,
+    state_dir: &Path,
     record: &mut CanonicalIssueRecord,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
-    close_reason: Option<&str>,
 ) -> Result<()> {
     let now = Utc::now();
     record.issue.status = transition.to.clone();
@@ -493,10 +900,7 @@ fn apply_transition_record(
     } else {
         None
     };
-    store.write_issue_atomic(record)?;
-    if let Some(reason) = close_reason {
-        crate::commands::activity_log::record_close_reason(&record.issue.id, reason)?;
-    }
+    app_use_cases::write_canonical_issue(state_dir, record)?;
     Ok(())
 }
 
@@ -526,16 +930,11 @@ pub fn close_issue(
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;
     ensure_transitionable_status(&policy, &issue)?;
-    let workflow = policy.workflow_for_issue_type(&issue.issue_type)?;
-
-    let mut candidates = workflow
-        .transitions
-        .iter()
-        .filter(|(_, transition)| {
-            transition.from.iter().any(|from| from == &issue.status)
-                && policy.status_category(&transition.to) == Some("done")
-        })
-        .map(|(name, transition)| (name.as_str(), transition.to.as_str()))
+    let mut candidates = policy
+        .transitions_from_status(&issue.issue_type, &issue.status)?
+        .into_iter()
+        .filter(|(_, transition)| policy.status_category(&transition.to) == Some("done"))
+        .map(|(name, transition)| (name, transition.to.as_str()))
         .collect::<Vec<_>>();
 
     if candidates.is_empty() {
@@ -550,13 +949,10 @@ pub fn close_issue(
     if let Some(to_status) = to_status {
         candidates.retain(|(_, destination)| *destination == to_status);
         if candidates.is_empty() {
-            let available = workflow
-                .transitions
-                .iter()
-                .filter(|(_, transition)| {
-                    transition.from.iter().any(|from| from == &issue.status)
-                        && policy.status_category(&transition.to) == Some("done")
-                })
+            let available = policy
+                .transitions_from_status(&issue.issue_type, &issue.status)?
+                .into_iter()
+                .filter(|(_, transition)| policy.status_category(&transition.to) == Some("done"))
                 .map(|(_, transition)| transition.to.as_str())
                 .collect::<BTreeSet<_>>();
             bail!(
@@ -574,7 +970,7 @@ pub fn close_issue(
             .collect::<BTreeSet<_>>();
         if destinations.len() > 1 {
             bail!(
-                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue close {} --to <status> --reason \"...\"` (available: {})",
+                "Issue {} has multiple terminal done targets from '{}'; run `atelier issue transition {} --options` and choose the explicit terminal transition (available statuses: {})",
                 issue.id,
                 issue.status,
                 issue.id,
@@ -613,7 +1009,7 @@ pub fn close_issue(
             bail!("{error:#}");
         }
     } else {
-        let _ = Database::open(db_path)?;
+        let _ = app_use_cases::open_database(db_path)?;
     }
     Ok(())
 }
@@ -637,9 +1033,9 @@ impl CloseGitIntegration {
         if !is_git_repo(&repo_root)? {
             return Ok(None);
         }
-        let resolution = policy.resolve_branch_lifecycle(db, &issue.id).with_context(|| {
+        let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id).with_context(|| {
             format!(
-                "Close Git integration could not resolve branch lifecycle for {}. Inspect parent links with `atelier issue show {}`.",
+                "Close Git integration could not resolve branch policy for {}. Inspect parent links with `atelier issue show {}`.",
                 issue.id, issue.id
             )
         })?;
@@ -648,7 +1044,7 @@ impl CloseGitIntegration {
         if resolution.merge_owned {
             ensure_branch_exists(&repo_root, &resolution.base_branch).with_context(|| {
                 format!(
-                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue transition {} close`.",
                     resolution.base_branch, issue.id
                 )
             })?;
@@ -662,7 +1058,7 @@ impl CloseGitIntegration {
             )
             .with_context(|| {
                 format!(
-                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                     resolution.expected_branch, issue.id
                 )
             })?;
@@ -715,10 +1111,10 @@ impl CloseGitIntegration {
             println!("Merge result:   deferred to epic close");
         }
         println!(
-            "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
+            "Recovery:      rerun `atelier issue transition {} close` only if a later step reports failure",
             self.issue_id
         );
-        let _ = Database::open(db_path)?;
+        let _ = app_use_cases::open_database(db_path)?;
         Ok(())
     }
 
@@ -744,7 +1140,7 @@ impl CloseGitIntegration {
         })
         .with_context(|| {
             format!(
-                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                 self.issue_id, self.issue_id
             )
         })?;
@@ -777,7 +1173,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -792,7 +1188,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -815,7 +1211,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -834,7 +1230,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -890,7 +1286,7 @@ impl CloseGitIntegration {
                 bail!("failed to restore pre-close tracker changes after rollback");
             }
         }
-        atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
+        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
         Ok(())
     }
 }
@@ -918,7 +1314,7 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
     )
     .with_context(|| {
         format!(
-            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue close {} --reason \"...\"`.",
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier issue transition {} start` to prepare the branch, then retry `atelier issue transition {} close`.",
             resolution.expected_branch, resolution.issue_id, resolution.issue_id
         )
     })
@@ -945,7 +1341,7 @@ fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
         .collect::<Vec<_>>();
     if !dirty.is_empty() {
         bail!(
-            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
+            "Worktree has uncommitted non-tracker changes:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue transition <issue-id> start`.",
             dirty.join("\n")
         );
     }
@@ -1086,8 +1482,10 @@ pub fn print_issue_transition_options(
         println!("  To:   {}", option.to);
         println!("  Command: {}", option.command);
         print_transition_detail("Validators", &option.validator_results);
+        print_name_list("Before Effects", &option.before_effects);
+        print_name_list("After Effects", &option.after_effects);
         print_text_list("Blockers", &option.blockers);
-        print_text_list("Guidance", &option.guidance);
+        print_text_list("Description", &option.descriptions);
     }
 }
 
@@ -1137,7 +1535,7 @@ fn print_transition_attempt(
     destination: &str,
     validator_results: &[ValidatorResult],
     blockers: &[String],
-    guidance: &[String],
+    descriptions: &[String],
     command: &str,
 ) {
     println!("Issue Transition {} - {}", issue.id, issue.title);
@@ -1148,7 +1546,7 @@ fn print_transition_attempt(
     println!("Command:    {}", command);
     print_transition_detail("Validators", validator_results);
     print_text_list("Blockers", blockers);
-    print_text_list("Guidance", guidance);
+    print_text_list("Description", descriptions);
 }
 
 fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
@@ -1176,6 +1574,24 @@ fn print_text_list(title: &str, values: &[String]) {
     for value in values {
         println!("  {value}");
     }
+}
+
+fn print_name_list(title: &str, values: &[String]) {
+    print_heading(title);
+    if values.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for value in values {
+        println!("  {value}");
+    }
+}
+
+fn effect_names(effects: &[atelier_app::workflow_policy::EffectDefinition]) -> Vec<String> {
+    effects
+        .iter()
+        .map(|effect| effect.builtin.clone())
+        .collect()
 }
 
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
@@ -1271,17 +1687,9 @@ fn required_field_failures(
 fn transition_command(
     issue_id: &str,
     transition_name: &str,
-    transition: &atelier_app::workflow_policy::TransitionDefinition,
+    _transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> String {
-    let mut command = format!("atelier issue transition {issue_id} {transition_name}");
-    if transition
-        .required_fields
-        .iter()
-        .any(|field| field == "close_reason")
-    {
-        command.push_str(" --reason \"...\"");
-    }
-    command
+    format!("atelier issue transition {issue_id} {transition_name}")
 }
 
 fn evaluate_policy_transition(
@@ -1290,17 +1698,11 @@ fn evaluate_policy_transition(
     target_kind: &str,
     target_id: &str,
     transition: &str,
-    validators: &[String],
+    validators: &[atelier_app::workflow_policy::ValidatorDefinition],
 ) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
     let mut results = Vec::new();
-    for validator_name in validators {
-        let definition = policy.validators.get(validator_name).ok_or_else(|| {
-            anyhow!(
-                "workflow policy references unknown validator '{}'",
-                validator_name
-            )
-        })?;
+    for definition in validators {
         let started = Instant::now();
         let (passed, reason) = evaluate_builtin_with_params(
             db,
@@ -1315,7 +1717,7 @@ fn evaluate_policy_transition(
             target_kind: target_kind.to_string(),
             target_id: target_id.to_string(),
             transition: transition.to_string(),
-            validator: validator_name.clone(),
+            validator: definition.builtin.clone(),
             passed,
             reason,
             elapsed_ms: started.elapsed().as_millis(),
@@ -1324,36 +1726,15 @@ fn evaluate_policy_transition(
     Ok(results)
 }
 
-fn render_transition_guidance(
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    issue: &Issue,
-    transition_name: &str,
+fn transition_descriptions(
     transition: &atelier_app::workflow_policy::TransitionDefinition,
-) -> Result<Vec<String>> {
-    let mut rendered = Vec::new();
-    for guidance_name in &transition.guidance {
-        let template = policy
-            .guidance_templates
-            .get(guidance_name)
-            .ok_or_else(|| {
-                anyhow!(
-                    "workflow policy references undefined guidance template '{}'",
-                    guidance_name
-                )
-            })?;
-        rendered.push(
-            template
-                .template
-                .replace("{{ issue.id }}", &issue.id)
-                .replace("{{ issue.type }}", &issue.issue_type)
-                .replace("{{ transition.name }}", transition_name)
-                .replace("{{ transition.from }}", &issue.status)
-                .replace("{{ transition.to }}", &transition.to)
-                .trim()
-                .to_string(),
-        );
-    }
-    Ok(rendered)
+) -> Vec<String> {
+    transition
+        .description
+        .iter()
+        .map(|description| description.trim().to_string())
+        .filter(|description| !description.is_empty())
+        .collect()
 }
 
 fn ensure_target_exists(db: &Database, kind: &str, id: &str) -> Result<()> {
@@ -1401,8 +1782,7 @@ fn evaluate_builtin_with_params(
                 let issue = db.require_issue(target_id)?;
                 let state_dir =
                     atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-                let store = RecordStore::new(&state_dir);
-                let record = store.load_issue_by_id(target_id)?;
+                let record = app_use_cases::load_canonical_issue(&state_dir, target_id)?;
                 let gate = issue_evidence_gate_status(db, &issue, Some(&record.sections))?;
                 if let Some(atelier_app::workflow_policy::ValidatorParams::EvidenceAttached {
                     min_count,
@@ -1473,11 +1853,122 @@ fn evaluate_builtin_with_params(
         "validation_criteria_satisfied" => {
             validation_criteria_satisfied(db, target_kind, target_id)
         }
+        "linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
         "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
         "epic_child_proof_complete" => {
             epic_child_proof_complete(db, policy, target_kind, target_id)
         }
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
+    }
+}
+
+fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("linked PR merge state does not apply to {target_kind} records"),
+        ));
+    }
+
+    let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
+    if field.is_none() {
+        return Ok((
+            false,
+            format!("no linked review field; run `atelier review open --issue {target_id}`"),
+        ));
+    }
+    let repo_root = repo_root()?;
+    let config_path = repo_root.join(".atelier/config.toml");
+    let forgejo = match ProjectConfig::load(&repo_root)
+        .and_then(|config| config.require_forgejo(&config_path).cloned())
+    {
+        Ok(forgejo) => forgejo,
+        Err(error) => {
+            return Ok((
+                false,
+                format!(
+                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
+                    error,
+                    target_id,
+                    target_id
+                ),
+            ));
+        }
+    };
+    let token = match std::env::var(&forgejo.admin_token_env) {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok((
+                false,
+                format!(
+                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
+                    forgejo.admin_token_env,
+                    target_id
+                ),
+            ));
+        }
+    };
+    let client = ForgejoClient::new(
+        forgejo.clone(),
+        UreqForgejoTransport::new(&forgejo.host, token),
+    );
+    linked_pr_merged_with_client(db, &repo_root, field, &client, target_id)
+}
+
+fn linked_pr_merged_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
+    field: Option<Value>,
+    client: &ForgejoClient<T>,
+    issue_id: &str,
+) -> Result<(bool, String)> {
+    let Some(field) = field else {
+        return Ok((
+            false,
+            format!("no linked review field; run `atelier review open --issue {issue_id}`"),
+        ));
+    };
+    let number = field
+        .as_object()
+        .filter(|object| {
+            object.get("kind").and_then(Value::as_str) == Some("pull_request")
+                && object.get("provider").and_then(Value::as_str) == Some("forgejo")
+        })
+        .and_then(|object| object.get("number"))
+        .and_then(Value::as_u64)
+        .filter(|number| *number > 0)
+        .ok_or_else(|| {
+            anyhow!("pull_request_invalid: field review must be a provider pull_request object")
+        })?;
+    let pull = client.show_pull(number)?;
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
+        return Ok((
+            false,
+            format!(
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
+                pull.source_branch,
+                pull.target_branch,
+                resolution.owner_id,
+                resolution.expected_branch,
+                resolution.base_branch,
+                issue_id
+            ),
+        ));
+    }
+    if pull.merged {
+        Ok((true, format!("linked PR {} is merged", pull.number)))
+    } else {
+        Ok((
+            false,
+            format!(
+                "linked PR {} is {} and not merged; run `atelier review status --issue {}`",
+                pull.number, pull.state, issue_id
+            ),
+        ))
     }
 }
 
@@ -1573,10 +2064,9 @@ fn issue_sections_parseable(
     }
 
     let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
-    let store = RecordStore::new(&state_dir);
     let mut checked = 0;
     for issue_id in issue_ids {
-        let record = match store.load_issue_by_id(&issue_id) {
+        let record = match app_use_cases::load_canonical_issue(&state_dir, &issue_id) {
             Ok(record) => record,
             Err(error) => return Ok((false, error.to_string())),
         };
@@ -1618,7 +2108,7 @@ fn linked_evidence_records(
     db: &Database,
     issue_id: &str,
     required_kind: Option<&str>,
-) -> Result<Vec<atelier_core::DomainRecord>> {
+) -> Result<Vec<EvidenceRecord>> {
     let mut records = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
@@ -1634,35 +2124,30 @@ fn linked_evidence_records(
         let Some(evidence_id) = evidence_id else {
             continue;
         };
-        let record = db.require_record("evidence", &evidence_id)?;
+        db.require_record("evidence", &evidence_id)?;
+        let Some(record) = canonical_evidence_record(&evidence_id)? else {
+            continue;
+        };
         if let Some(required_kind) = required_kind {
-            let data = serde_json::from_str::<EvidenceRecordData>(&record.data_json)
-                .unwrap_or_else(|_| EvidenceRecordData {
-                    evidence_type: String::new(),
-                    captured_at: chrono::Utc::now(),
-                    command: None,
-                    path: None,
-                    uri: None,
-                    producer: None,
-                    proof_scope: None,
-                    agent_identity: None,
-                    independence_level: None,
-                    residual_risks: Vec::new(),
-                    follow_up_ids: Vec::new(),
-                    exit_code: None,
-                    exit_status: None,
-                    success: None,
-                    spawn_error: None,
-                    output: None,
-                    target: None,
-                });
-            if data.evidence_type != required_kind {
+            if record.data.evidence_type != required_kind {
                 continue;
             }
         }
         records.push(record);
     }
     Ok(records)
+}
+
+fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
+    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    Ok(
+        match app_use_cases::load_canonical_record(&state_dir, "evidence", id) {
+            Ok(Record::Evidence(record)) => Some(record),
+            Ok(_) | Err(_) => None,
+        },
+    )
 }
 
 fn review_complete(
@@ -2177,6 +2662,113 @@ fn repo_root() -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
+    use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
+    use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
+    use chrono::Utc;
+    use serde_json::json;
+    use std::collections::BTreeMap;
+    use tempfile::{tempdir, TempDir};
+
+    struct FakeForgejoTransport {
+        state: &'static str,
+        merged: bool,
+        source_branch: &'static str,
+        target_branch: &'static str,
+    }
+
+    impl FakeForgejoTransport {
+        fn merged() -> Self {
+            Self {
+                state: "closed",
+                merged: true,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+            }
+        }
+    }
+
+    impl ForgejoTransport for FakeForgejoTransport {
+        fn send(&self, request: ForgejoRequest) -> Result<ForgejoResponse> {
+            assert_eq!(request.method, "GET");
+            assert_eq!(request.path, "/api/v1/repos/tools/atelier/pulls/42");
+            Ok(ForgejoResponse {
+                status: 200,
+                body: format!(
+                    r#"{{
+                        "number": 42,
+                        "url": "https://forge.example.test/tools/atelier/pulls/42",
+                        "state": "{}",
+                        "merged": {},
+                        "head": {{ "ref": "{}" }},
+                        "base": {{ "ref": "{}" }}
+                    }}"#,
+                    self.state, self.merged, self.source_branch, self.target_branch
+                ),
+            })
+        }
+    }
+
+    fn forgejo_config() -> ForgejoConfig {
+        ForgejoConfig {
+            host: "https://forge.example.test".to_string(),
+            owner: "tools".to_string(),
+            repo: "atelier".to_string(),
+            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
+            role_authors: ForgejoRoleAuthors {
+                worker: "forge-worker".to_string(),
+                reviewer: "forge-reviewer".to_string(),
+                validator: "forge-validator".to_string(),
+                manager: "forge-manager".to_string(),
+            },
+        }
+    }
+
+    fn pull_request_field() -> Value {
+        json!({"kind": "pull_request", "provider": "forgejo", "number": 42})
+    }
+
+    fn setup_pr_validator_repo() -> (TempDir, Database) {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/workflow.yaml"),
+            atelier_app::workflow_policy::STARTER_POLICY_YAML
+                .replace("base_branch: main", "base_branch: master"),
+        )
+        .unwrap();
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+        let now = Utc::now();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-hw9t".to_string(),
+            title: "Epic".to_string(),
+            description: None,
+            status: "validation".to_string(),
+            issue_type: "epic".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-val1".to_string(),
+            title: "Validation".to_string(),
+            description: None,
+            status: "validation".to_string(),
+            issue_type: "validation".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+        (dir, db)
+    }
 
     #[test]
     fn default_validators_are_target_and_transition_aware() {
@@ -2218,5 +2810,129 @@ mod tests {
                 "git_worktree_clean"
             ]
         );
+    }
+
+    #[test]
+    fn linked_pr_merged_validator_reports_required_states() {
+        let (dir, db) = setup_pr_validator_repo();
+        let forgejo = forgejo_config();
+        let merged_client = ForgejoClient::new(forgejo.clone(), FakeForgejoTransport::merged());
+
+        let (passed, reason) =
+            linked_pr_merged_with_client(&db, dir.path(), None, &merged_client, "atelier-hw9t")
+                .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("atelier review open --issue atelier-hw9t"));
+
+        let open_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "open",
+                merged: false,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+            },
+        );
+        let (passed, reason) = linked_pr_merged_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &open_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("not merged"));
+        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
+
+        let closed_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "closed",
+                merged: false,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+            },
+        );
+        let (passed, reason) = linked_pr_merged_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &closed_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("closed and not merged"));
+
+        let (passed, reason) = linked_pr_merged_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &merged_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(passed);
+        assert_eq!(reason, "linked PR 42 is merged");
+    }
+
+    #[test]
+    fn linked_pr_merged_is_not_in_starter_close_policy() {
+        let (dir, db) = setup_pr_validator_repo();
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let epic_workflow = policy.workflow_by_issue_type.get("epic").unwrap();
+        let epic_close = &policy.workflows[epic_workflow].transitions["close"];
+        let linked_pr_validators = epic_close
+            .validators
+            .iter()
+            .filter(|validator| validator.builtin == "linked_pr_merged")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(linked_pr_validators.is_empty());
+
+        let results = evaluate_policy_transition(
+            &db,
+            &policy,
+            "issue",
+            "atelier-hw9t",
+            "close",
+            &linked_pr_validators,
+        )
+        .unwrap();
+        assert!(results.is_empty());
+
+        let validation_workflow = policy.workflow_by_issue_type.get("validation").unwrap();
+        let validation_close = &policy.workflows[validation_workflow].transitions["close"];
+        assert!(!validation_close
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == "linked_pr_merged"));
+    }
+
+    #[test]
+    fn linked_pr_merged_validator_rejects_branch_mismatch() {
+        let (dir, db) = setup_pr_validator_repo();
+        let forgejo = forgejo_config();
+        let wrong_branch_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "closed",
+                merged: true,
+                source_branch: "epic/other",
+                target_branch: "master",
+            },
+        );
+        let (passed, reason) = linked_pr_merged_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &wrong_branch_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("linked PR branches"));
+        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
     }
 }

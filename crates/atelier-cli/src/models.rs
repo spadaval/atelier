@@ -1,7 +1,6 @@
 pub use atelier_core::{
-    Comment, DomainRecord, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary,
-    EvidenceTarget, Issue, IssueId, MilestoneRecordData, PlanRecordData, PlanRevision, RecordLink,
-    Relation, Session, WorkAssociation,
+    Comment, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
+    Issue, IssueId, RecordLink, Relation, Session, WorkAssociation,
 };
 
 #[cfg(test)]
@@ -21,6 +20,7 @@ mod tests {
             status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "high".to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -47,6 +47,7 @@ mod tests {
             status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "medium".to_string(),
+            fields: Default::default(),
             parent_id: Some("atelier-0001".to_string()),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -69,6 +70,7 @@ mod tests {
             status: "done".to_string(),
             issue_type: "task".to_string(),
             priority: "low".to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: now,
             updated_at: now,
@@ -90,6 +92,7 @@ mod tests {
             status: "todo".to_string(),
             issue_type: "task".to_string(),
             priority: "high".to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -201,6 +204,7 @@ mod tests {
                 status: status.clone(),
                 issue_type: "task".to_string(),
                 priority: priority.clone(),
+                fields: Default::default(),
                 parent_id: None,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
@@ -279,6 +283,7 @@ mod tests {
                 status: if is_closed { "closed".to_string() } else { "open".to_string() },
                 issue_type: "task".to_string(),
                 priority: "medium".to_string(),
+                fields: Default::default(),
                 parent_id: if has_parent { Some("atelier-002r".to_string()) } else { None },
                 created_at: now,
                 updated_at: now,

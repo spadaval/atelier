@@ -21,9 +21,9 @@ before deciding what guidance to show.
 
 The repository needs one clear authority for tactical operator guidance.
 Duplicating command cookbooks and workflow policy across Agent Factory prompts,
-`AGENTFACTORY.md`, static docs, and executable CLI output creates drift. It also
-makes repo-owned process changes harder to validate because some important
-instructions live outside the repository.
+repository instructions, static docs, and executable CLI output creates drift.
+It also makes repo-owned process changes harder to validate because some
+important instructions live outside the repository.
 
 ## Decision
 
@@ -43,12 +43,11 @@ Agent Factory remains the portable orchestration discipline.
    review or validation posture, dissent preservation, and orchestration
    discipline that should travel across repositories.
 
-3. `AGENTFACTORY.md` is a thin repository binding.
-   The binding identifies authoritative repository sources, tracker identity,
-   durable versus runtime tracker state, preferred binary rules, and the small
-   set of repository-specific constraints needed before invoking Atelier-owned
-   guidance. It should route recurring tactical behavior to Atelier rather than
-   restating a full command or policy contract.
+3. Repository instructions identify source locations, not workflow policy.
+   `AGENTS.md` identifies authoritative repository sources, tracker identity,
+   durable versus runtime tracker state, and the small set of repository-specific
+   constraints needed before invoking Atelier-owned guidance. It should not
+   restate a full command or policy contract.
 
 4. Tactical guidance should be executable before it is copied into prompts.
    When a repo-specific instruction can depend on current tracker state,
@@ -57,7 +56,8 @@ Agent Factory remains the portable orchestration discipline.
 
 5. Role-scoped guidance belongs in Atelier when it helps operators.
    `atelier man <role>` is the repo-owned guide namespace for tactical role
-   guidance. Valid roles are `worker`, `reviewer`, `manager`, and `admin`.
+   guidance. Valid roles are `worker`, `reviewer`, `validator`, `manager`, and
+   `admin`.
    `manager` is the broad CLI role class for work coordination; `orchestrator`
    remains an Agent Factory agent type within that class.
 
@@ -69,10 +69,10 @@ Agent Factory remains the portable orchestration discipline.
   workflow policy, and tracker evidence.
 - Agent Factory can stay smaller and more portable because it no longer needs
   to carry this repository's tactical command cookbook.
-- `AGENTFACTORY.md` should shrink over time as Atelier surfaces take over
+- Repository instructions should stay small as Atelier surfaces take over
   recurring tracker and workflow instructions.
 - Adding new context tools to Atelier is useful only when paired with removing
-  duplicated tactical guidance from Agent Factory or the binding.
+  duplicated tactical guidance from Agent Factory or static repository docs.
 
 ## Tradeoffs
 

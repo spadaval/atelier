@@ -17,9 +17,9 @@ behind the lower target crate boundary.
 | --- | --- | --- |
 | `atelier-core` | Shared domain types, record IDs, typed relationships, workflow status/category vocabulary, and pure formatting helpers that do not touch the filesystem, SQLite, Clap, or Git. | External pure utility crates only. |
 | `atelier-workflow` | Repository-owned workflow policy loading, transition validation, readiness checks, and guidance text evaluation. | `atelier-core`. |
-| `atelier-records` | Canonical `.atelier/` Markdown record discovery, parsing, deterministic rendering, ID allocation, relationship rendering, and atomic tracked-file mutation. | `atelier-core`, `atelier-workflow` when validation needs workflow policy. |
-| `atelier-sqlite` | Rebuildable SQLite `ProjectionIndex` and local `RuntimeState` schema/query code for projection freshness, graph/search/list/status queries, diagnostics, and ignored runtime/cache recovery. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
-| `atelier-app` | Use-case orchestration for mission, issue, evidence, workflow, status, doctor, export, lint, worktree, branch, and rebuild operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`, `atelier-sqlite`. |
+| `atelier-records` | Canonical `.atelier/` Markdown record discovery, parsing, deterministic rendering, ID allocation, relationship rendering, activity sidecar schema/IO, and atomic tracked-file mutation. | `atelier-core`, `atelier-workflow` when validation needs workflow policy. |
+| `atelier-sqlite` | Rebuildable SQLite `ProjectionIndex` schema/query code for projection freshness and graph/search/list/status queries. It may project enough metadata to filter and order results, but it must not own canonical activity sidecar reads or writes. | `atelier-core`, `atelier-records`, `atelier-workflow`. |
+| `atelier-app` | Use-case orchestration for mission, issue, issue-note/activity, evidence, workflow, status, doctor, export, lint, worktree, branch, and rebuild operations. It exposes request, outcome, and view-model APIs that are independent of Clap rendering. | `atelier-core`, `atelier-records`, `atelier-workflow`, `atelier-sqlite`. |
 | `atelier-cli` | The `atelier` binary, Clap parser, command dispatch telemetry, terminal rendering, process exit mapping, and CLI-only transcript formatting. | `atelier-app`, plus lower crates only for types explicitly re-exported by `atelier-app` contracts. |
 
 ## Layering Rules
@@ -35,6 +35,67 @@ behind the lower target crate boundary.
 - Temporary adapters are allowed only when tracked by explicit removal work.
   They must not become compatibility aliases, old-path re-exports, or staged
   deprecations unless a human explicitly requests a compatibility window.
+
+## Workflow Ownership Contract
+
+`atelier-workflow` is the single implementation owner for repository issue
+workflow semantics. It owns:
+
+- loading `.atelier/workflow.yaml` and rejecting missing, invalid, unknown, or
+  deferred configuration;
+- schema identity and version checks for `atelier.workflow`;
+- status catalog parsing, status-category lookup, initial status lookup, and
+  done-status membership;
+- issue-type to workflow resolution;
+- transition lookup from a record's current workflow status;
+- required-field checks that are part of transition policy;
+- built-in validator definitions, validator parameter parsing, and
+  machine-readable validator results;
+- transition guidance template evaluation; and
+- branch policy derived from workflow configuration and the work
+  graph.
+
+`atelier-workflow` must not own terminal output, command parsing, Git command
+execution, SQLite persistence, or canonical Markdown mutation. It returns typed
+policy, transition, validator, guidance, and branch-lifecycle outcomes that
+callers can render or apply.
+
+`atelier-app` owns orchestration around those workflow APIs. It chooses when to
+load policy for a use case, combines workflow results with RecordStore writes,
+ProjectionIndex queries, Git/worktree checks, evidence lookup, lint/export
+checks, and mission readiness, then returns request/outcome/view-model structs.
+It may not duplicate workflow policy tables, hard-code status categories, or
+reimplement transition availability rules as a parallel source of truth.
+
+`atelier-cli` owns Clap command shape, process exit mapping, and terminal
+rendering only. Commands such as `atelier issue transition <id> --options`,
+`atelier issue transition <id> <transition>`, `atelier mission status`, and
+`atelier issue list --ready` should render the app/workflow outcomes they
+receive. CLI code may contain formatting labels such as section headings, but
+not workflow policy decisions.
+
+`atelier-records` owns durable issue status storage as canonical Markdown data.
+When it validates or defaults a status during record creation or bundle apply,
+it should ask `atelier-workflow` for the configured initial status and status
+catalog instead of using a local lifecycle constant.
+
+`atelier-sqlite` owns rebuildable projection fields used for filtering and
+ordering. It may store status strings and indexed relationships, but category
+classification and transition readiness remain workflow/app questions. SQLite
+queries should not decide whether a transition is allowed.
+
+Follow-on workflow extraction issues should be accepted only when command output
+and tests show that:
+
+- `workflow check`, `issue transition --options`, `issue transition`,
+  `issue list --ready`, `mission status`, bundle status defaults, and closeout
+  validators all consume the same `atelier-workflow` policy API;
+- invalid statuses and missing workflow configuration fail through the shared
+  workflow diagnostics rather than command-specific messages;
+- CLI integration tests remain only for command shape, rendered transcript, and
+  exit behavior; and
+- lower-crate unit tests cover parsing, status categories, transition
+  selection, validator results, guidance rendering, and branch policy.
 
 ## Temporary Adapter Policy
 

@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::commands::work_order::WorkOrderRow;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{DomainRecord, Issue};
-use atelier_sqlite::Database;
+use atelier_core::Issue;
+use atelier_sqlite::{Database, RecordSummary};
 
 const COMPACT_MAX_DEPTH: usize = 3;
 const COMPACT_MAX_SIBLINGS: usize = 6;
@@ -30,7 +30,7 @@ fn print_issue(
     Ok(())
 }
 
-fn print_mission(mission: &DomainRecord, indent: usize) {
+fn print_mission(mission: &RecordSummary, indent: usize) {
     let prefix = "  ".repeat(indent);
     println!(
         "{}[mission {}] #{} - {}",
@@ -308,7 +308,7 @@ fn compact_issue_line(
 fn compact_missions(
     db: &Database,
     status_filter: Option<&str>,
-) -> Result<Vec<(DomainRecord, Vec<Issue>)>> {
+) -> Result<Vec<(RecordSummary, Vec<Issue>)>> {
     let mut rows = Vec::new();
     for mission in db.list_records("mission", None)? {
         let issues = mission_linked_issue_ids(db, &mission.id)?
@@ -329,7 +329,7 @@ fn compact_missions(
     Ok(rows)
 }
 
-fn print_compact_mission(mission: &DomainRecord, issues: &[Issue]) {
+fn print_compact_mission(mission: &RecordSummary, issues: &[Issue]) {
     let summary = direct_child_summary(issues);
     println!(
         "[mission {}] {} - {} linked={} {}",

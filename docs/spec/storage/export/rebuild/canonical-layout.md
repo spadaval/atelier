@@ -28,10 +28,6 @@ ignored local state.
       20260611T160930000000Z.md
   missions/
     atelier-k7mq.md
-  milestones/
-    atelier-4x9t.md
-  plans/
-    atelier-p3v6.md
   evidence/
     atelier-n8da.md
   runtime/
@@ -42,7 +38,7 @@ ignored local state.
 ```
 
 Tracked canonical paths are `config.toml`, `issues/`, `missions/`,
-`milestones/`, `plans/`, `evidence/`, and canonical activity sidecars.
+`evidence/`, and canonical activity sidecars.
 `.atelier/runtime/state.db`, `.atelier/runtime/`, and `.atelier/cache/` are ignored.
 Copied rule trees, editor integration files, hook scaffolding, and UI caches
 are not project tracker state unless a future contract explicitly promotes a
@@ -57,6 +53,30 @@ named by the config remain local-only and must stay ignored; the config records
 where they live, not their contents. The current tracked config also carries
 `compatibility_state_root` as a compatibility-only path while `.atelier-state/`
 repair and migration flows still exist.
+
+Review provider integration is optional tracked project configuration. The
+current implementation ships a Forgejo provider, so repositories that use
+`atelier review` commands or review validators with Forgejo configure the remote and role author
+mapping in `.atelier/config.toml`:
+
+```toml
+[forgejo]
+host = "forge.example.test"
+owner = "workspace"
+repo = "atelier"
+admin_token_env = "FORGEJO_ADMIN_TOKEN"
+
+[forgejo.role_authors]
+worker = "atelier-worker"
+reviewer = "atelier-reviewer"
+validator = "atelier-validator"
+manager = "atelier-manager"
+```
+
+The admin token value stays in the named environment variable. The config parser
+rejects missing Forgejo remote fields, missing role author mappings, empty
+values, obsolete sudo-user mappings, and invalid token environment variable
+names with errors that name the required key.
 
 ## Schema Identity
 
@@ -92,8 +112,6 @@ The canonical file path is derived from the record ID:
 | --- | --- | --- |
 | Issue | `atelier-z1p8` | `.atelier/issues/atelier-z1p8.md` |
 | Mission | `atelier-k7mq` | `.atelier/missions/atelier-k7mq.md` |
-| Milestone | `atelier-4x9t` | `.atelier/milestones/atelier-4x9t.md` |
-| Plan | `atelier-p3v6` | `.atelier/plans/atelier-p3v6.md` |
 | Evidence | `atelier-n8da` | `.atelier/evidence/atelier-n8da.md` |
 
 IDs use `<project-slug>-<random-base36>`. The project slug is lowercase ASCII
@@ -106,8 +124,8 @@ renumber records.
 
 ## Markdown Record Layout
 
-Issues, missions, milestones, plans, and evidence are Markdown records with YAML
-front matter followed by the human-readable body.
+Issues, missions, and evidence are Markdown records with YAML front matter
+followed by the human-readable body.
 
 ```markdown
 ---
@@ -140,7 +158,7 @@ record body without front matter.
 `relationships` is the canonical record relationship model. `blocks` stores
 operational blocker edges from the source record to blocked issue targets.
 `children` stores record-kind child edges such as issue hierarchy. `attachments`
-stores supporting plan/evidence/milestone records with a `role`. `relates`
+stores supporting evidence records with a `role`. `relates`
 stores peer semantic relationships with a `type`; mission work and direct
 mission blockers use this typed relationship surface. Rebuild derives issue
 readiness, hierarchy, and runtime relation indexes from these buckets;
@@ -349,9 +367,10 @@ The required section policy is:
 - `Outcome` is required for every issue and describes the desired finished
   world in observable terms.
 - `Evidence` is required for every issue and describes the proof artifacts,
-  commands, file contents, rejected commands, screenshots, lint/export checks,
-  or evidence records needed to show the outcome was met. When no proof artifact
-  is meaningful, the section must explicitly say why it is not applicable.
+  commands, file contents, rejected commands, screenshots, lint/doctor checks,
+  explicit deterministic export diagnostics, or evidence records needed to show
+  the outcome was met. When no proof artifact is meaningful, the section must
+  explicitly say why it is not applicable.
 - `Notes` is optional and carries handoff context, sequencing notes, caveats,
   or non-contract background.
 
@@ -382,7 +401,7 @@ Allowed mission front matter:
 | `relationships` | object | Required; contains `attachments`, `blocks`, `children`, and `relates`. |
 | `schema` | string | Required; exactly `atelier.mission`. |
 | `schema_version` | integer | Required; exactly `1` until a migration changes it. |
-| `status` | string | Required; one of `draft`, `ready`, `active`, or `closed`. |
+| `status` | string | Required; one of `draft`, `ready`, `active`, `superseded`, or `closed`. |
 | `title` | string | Required human-readable mission title. |
 | `updated_at` | string | Required UTC RFC 3339 timestamp. |
 
@@ -421,10 +440,10 @@ Mission relationship semantics are explicit:
 | --- | --- |
 | Linked execution work, including epics, tasks, reviews, validations, artifact updates, and closeouts | Mission `relationships.relates[]` entries with `kind: issue` and `type: advances`. |
 | Direct mission blockers | Mission `relationships.relates[]` entries with `kind: issue` and `type: blocked_by`. Linked work item blockers remain ordinary issue dependency edges and are projected into mission status; do not duplicate them in mission prose. |
-| Checkpoints | Mission `relationships.attachments[]` entries with `kind: milestone` and `role: has_checkpoint`. |
-| Plans | Mission `relationships.attachments[]` entries with `kind: plan` and `role: planned_by`. |
+| Checkpoints | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 milestone relationship table exists. |
+| Plans | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 plan relationship table exists. |
 | Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission with a `relationships.attachments[]` entry using `kind: mission`, the mission ID, and `role: validates`. Mission status derives incoming evidence links instead of storing evidence summaries in the mission body. |
-| Supporting records that are not mission work, blockers, checkpoints, plans, or evidence | Mission `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
+| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
 | Terminal notes | The optional `## Terminal Notes` section; terminal proof remains evidence records plus workflow validation output. |
 
 For mission records, `relationships.children` is reserved and should be `[]`.
@@ -464,12 +483,9 @@ labels:
   - "mission"
 relationships:
   attachments:
-  - kind: "milestone"
-    id: "atelier-cp01"
-    role: "has_checkpoint"
-  - kind: "plan"
-    id: "atelier-p123"
-    role: "planned_by"
+  - kind: "evidence"
+    id: "atelier-ev01"
+    role: "validates"
   blocks: []
   children: []
   relates:
@@ -505,7 +521,11 @@ from canonical records and focused command output.
 ## Validation
 
 - Mission closeout requires linked work closed, validation evidence attached,
-  workflow validators passing, and tracker export/lint checks passing.
+  workflow validators passing, and tracker lint/doctor checks passing.
+
+Planning notes: see `docs/plans/cli-workflow-repair.md`.
+Checkpoint criteria: closeout proof must show every linked work item closed and
+mission evidence attached.
 ```
 
 A validating evidence record carries this relationship fragment instead of
@@ -522,31 +542,17 @@ relationships:
   relates: []
 ```
 
-## Milestones
+## Deferred Plan And Checkpoint Records
 
-Path: `.atelier/milestones/<record-id>.md`
+`.atelier/plans/` and `.atelier/milestones/` are not active v1 canonical record
+directories. Plan intent and checkpoint criteria may be ordinary Markdown files
+elsewhere in the repository or prose inside missions, epics, issues, and
+evidence. They are referenced by path or text, not by a first-class plan or
+milestone record ID.
 
-Milestone front matter adds `desired_state`, `scope`,
-`validation_criteria`, `accepted_evidence`, and `completion_state`. Mission
-membership and contributing work are modeled through canonical
-`relationships`, not duplicate `missions` or `contributing_work` arrays. ID
-arrays are sorted lexically; text arrays preserve author order. Milestones are
-checkpoint records, not work containers; epics and issues link to them through
-typed relationships.
-
-## Plans
-
-Path: `.atelier/plans/<record-id>.md`
-
-Required plan front matter is the common record contract plus `revision`.
-Optional plan front matter is `owner`, `applies_to`, `supersedes`, and
-`drift_status`. `applies_to` and `supersedes` are sorted lexically. The body is
-the durable execution intent. Version 1 does not require a section grammar for
-plan bodies.
-
-Current staged support still writes some plan records with a quoted JSON `data`
-field containing `revision` and `revisions`. That payload is compatibility
-residue and must not remain the long-term field owner.
+If a later feature reintroduces first-class plan or checkpoint records, it must
+add a new storage contract directly instead of relying on the legacy staged
+fields described in older tracker records.
 
 ## Evidence
 
@@ -600,9 +606,8 @@ contract does not make `mission-control.json` a rebuild source.
 
 Rebuild proceeds in this order:
 
-1. Discover canonical Markdown records under `issues/`, `missions/`, `plans/`,
-   and `evidence/`. Milestone checkpoint records join this list when their
-   command slice lands.
+1. Discover canonical Markdown records under `issues/`, `missions/`, and
+   `evidence/`.
 2. Validate each record's schema, schema version, ID, path, front matter shape,
    and body encoding.
 3. Validate that `relationships` references point to discovered records, that
@@ -626,8 +631,8 @@ defines its durable layout.
 ## Mutating Command Rollout
 
 Hidden/admin `atelier export` remains the deterministic check surface for
-canonical records during migration, and normal durable writes target
-`.atelier/` directly.
+canonical records during migration or targeted maintenance, and normal durable
+writes target `.atelier/` directly.
 
 Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
 tracked `.atelier/` canonical records and may create ignored runtime/cache

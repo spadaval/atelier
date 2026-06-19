@@ -1,0 +1,94 @@
+{
+  "command": "bundle.preview",
+  "data": {
+    "client_ref_map": {
+      "evidence.bundle-contract": "<allocated:evidence.bundle-contract>",
+      "issue.define-schema": "<allocated:issue.define-schema>",
+      "issue.validate-fixtures": "<allocated:issue.validate-fixtures>",
+      "mission.bundle-contract": "<allocated:mission.bundle-contract>"
+    },
+    "valid": true,
+    "would_create": [
+      {
+        "client_ref": "issue.define-schema",
+        "kind": "issue",
+        "proposed_id": "<allocated:issue.define-schema>",
+        "title": "Define bundle JSON schema"
+      },
+      {
+        "client_ref": "issue.validate-fixtures",
+        "kind": "issue",
+        "proposed_id": "<allocated:issue.validate-fixtures>",
+        "title": "Validate bundle fixtures"
+      },
+      {
+        "client_ref": "mission.bundle-contract",
+        "kind": "mission",
+        "proposed_id": "<allocated:mission.bundle-contract>",
+        "title": "Bundle contract mission"
+      },
+      {
+        "client_ref": "evidence.bundle-contract",
+        "kind": "evidence",
+        "proposed_id": "<allocated:evidence.bundle-contract>",
+        "title": "Bundle contract proof"
+      }
+    ],
+    "would_link": [
+      {
+        "source": {
+          "client_ref": "issue.define-schema"
+        },
+        "target": {
+          "id": "atelier-z1p8"
+        },
+        "type": "blocks"
+      },
+      {
+        "source": {
+          "client_ref": "issue.validate-fixtures"
+        },
+        "target": {
+          "client_ref": "issue.define-schema"
+        },
+        "type": "depends_on"
+      },
+      {
+        "source": {
+          "client_ref": "mission.bundle-contract"
+        },
+        "target": {
+          "client_ref": "issue.define-schema"
+        },
+        "type": "work"
+      },
+      {
+        "source": {
+          "client_ref": "mission.bundle-contract"
+        },
+        "target": {
+          "client_ref": "issue.validate-fixtures"
+        },
+        "type": "work"
+      },
+      {
+        "source": {
+          "client_ref": "evidence.bundle-contract"
+        },
+        "target": {
+          "client_ref": "issue.define-schema"
+        },
+        "type": "validates"
+      }
+    ],
+    "would_note": [
+      {
+        "client_ref": "issue.define-schema",
+        "count": 1,
+        "kind": "issue"
+      }
+    ]
+  },
+  "ok": true,
+  "warnings": []
+}

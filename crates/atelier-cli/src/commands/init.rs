@@ -59,8 +59,8 @@ mod tests {
         assert!(dir.path().join(".atelier/config.toml").exists());
         assert!(dir.path().join(".atelier/issues").exists());
         assert!(dir.path().join(".atelier/missions").exists());
-        assert!(dir.path().join(".atelier/milestones").exists());
-        assert!(dir.path().join(".atelier/plans").exists());
+        assert!(!dir.path().join(".atelier/milestones").exists());
+        assert!(!dir.path().join(".atelier/plans").exists());
         assert!(dir.path().join(".atelier/evidence").exists());
         assert!(dir.path().join(".atelier/workflow.yaml").exists());
         assert!(dir.path().join(".atelier/runtime/state.db").exists());
@@ -88,7 +88,13 @@ mod tests {
 
         let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
         assert!(workflow.contains("schema: atelier.workflow"));
-        assert!(workflow.contains("standard_review_proof"));
+        assert!(workflow.contains("schema_version: 3"));
+        assert!(workflow.contains("branch_policy:"));
+        assert!(workflow.contains("  standard:"));
+        assert!(workflow.contains("  epic_reviewed:"));
+        assert!(workflow.contains("  validation_reviewed:"));
+        assert!(workflow.contains("  spike:"));
+        assert!(workflow.contains("applies_to:"));
     }
 
     #[test]

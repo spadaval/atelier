@@ -14,8 +14,8 @@ Primary question: "How do I inspect raw workflow-policy diagnostics?"
 - Output hierarchy: Raw validator or policy detail, failed configuration path,
   replacement normal commands.
 
-## Role Use
+## Hidden Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| hidden `workflow check` | Admin | Debug workflow policy evaluation. | Good only if hidden and referenced by diagnostics. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| hidden `workflow check` | Admin, workflow-policy implementer | Debug raw policy evaluation; inspect validator behavior during migration or tests. | Policy file, target record, transition/validator results, raw failure reason. | Fix workflow config, rerun `lint`, or use `issue transition --options` for normal readiness. | Good only if hidden. Normal operators should use `lint`, `mission status`, and `issue transition --options`. |

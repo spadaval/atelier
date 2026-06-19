@@ -9,7 +9,7 @@ ownership that is not recorded elsewhere.
 
 | Surface | Decision | Rationale |
 | --- | --- | --- |
-| `CONTRIBUTING.md` | Add | A root contribution entry point reduces setup and workflow mistakes by routing contributors to `AGENTS.md`, `AGENTFACTORY.md`, and Atelier issue evidence. |
+| `CONTRIBUTING.md` | Add | A root contribution entry point reduces setup and workflow mistakes by routing contributors to `AGENTS.md` and Atelier issue evidence. |
 | Pull request template | Add | Pull requests are a useful review boundary when they require linked Atelier work, evidence, and validation commands. |
 | GitHub issue templates | Not applicable | Atelier issues are canonical. GitHub issue templates would create a parallel intake path and weaken tracker-first coordination. |
 | `CODEOWNERS` | Defer | The repository does not have durable human or team owner identifiers to encode. A placeholder owner file would create false review expectations. |

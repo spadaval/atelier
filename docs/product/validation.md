@@ -41,6 +41,25 @@ as missing proof, open blockers, stale tracker state, dirty worktree, or pending
 validation work. Validator names are diagnostic detail, not the main product
 language for normal operators.
 
+External-state validator is a workflow validator that reads a system outside
+Atelier without mutating it. `linked_pr_merged` is the product model for
+provider-backed review artifact gates: it reads the issue's active structured
+`review` artifact link, verifies the remote PR-equivalent artifact against
+configured repo and branch policy, then reports whether the required review
+artifact is merged. It must not create, comment on, review, merge, or close the
+artifact, and it must not transition Atelier workflow. Review commands perform
+review-artifact actions; validators only decide whether the configured workflow
+transition is currently allowed. In the starter policy, this is an epic close
+gate only; validation issues and ordinary implementation issues close from
+attached proof and local workflow checks.
+
+Review validators check the local workflow facts Atelier depends on: the active
+review kind, native room merge state or normalized provider-local review
+number, configured review provider remote, expected source and target branches,
+merged state, and review-complete state when the workflow names that validator.
+They do not duplicate provider branch-protection, required-approval, merge
+strategy, or merge-authorization policy.
+
 Completion is the final completion judgment. For an ordinary issue, completion means
 the issue outcome is done and the required proof is attached. For an epic or
 mission, completion synthesizes child work, blockers, proof, review, and
@@ -50,10 +69,10 @@ validation rather than duplicating every child proof record.
 
 Proof requirements must be visible before completion.
 
-Agents should not discover required proof only after `atelier issue close` or
-`atelier mission close` fails. The normal workflow surfaces should show the
-expected proof early, summarize whether it is satisfied, and provide the next
-command that moves the work forward.
+Agents should not discover required proof only after `atelier issue transition
+<id> close` or `atelier mission close` fails. The normal workflow surfaces
+should show the expected proof early, summarize whether it is satisfied, and
+provide the next command that moves the work forward.
 
 ## Ordinary Issue Flow
 
@@ -84,6 +103,7 @@ agents or users depend on:
 
 - public CLI behavior, help text, or command contracts;
 - workflow policy, transition gates, or proof behavior;
+- external review-artifact gates such as linked PR merge state;
 - canonical records, projection rebuild, migration, or runtime repair;
 - mission, epic, milestone, or other parent-level completion claims;
 - security, data-loss, irreversible, or hard-to-reproduce behavior;
@@ -100,7 +120,8 @@ Missions and epics coordinate work; they are not proof dumping grounds.
 
 An epic completion should answer whether the reviewable branch is coherent, child
 work is closed, child proof exists, and any explicit review or validation work
-has approved the branch.
+has approved the branch. The configured epic close transition also requires the
+linked provider-backed review artifact to be merged.
 
 A mission completion should answer whether linked work is closed, blockers are
 clear, configured health gates pass, and any explicit mission-level validation
@@ -127,8 +148,8 @@ Next:
 
 When proof is present, the same block should name the evidence IDs and results.
 
-`atelier start <id>` should remind the worker what proof will be needed before
-close, because this is where the operator forms the work plan.
+`atelier issue transition <id> start` should remind the worker what proof will
+be needed before close, because this is where the operator forms the work plan.
 
 `atelier issue transition <id> --options` should preview completion blockers in
 operator language:

@@ -18,8 +18,8 @@ or cleanup was interrupted?"
 - Output hierarchy: If it remains temporarily for compatibility, stale
   issue/path first and an explicit statement that the command is legacy.
 
-## Role Use
+## Retired Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| `atelier repair [issue-id]` | Worker | Legacy cleanup for hidden active-pointer state. | Remove or replace. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| removed `atelier repair [issue-id]` | Worker, admin | Legacy cleanup for hidden active work after worktree disappearance or interrupted cleanup. | Replacement repair boundary and whether state is canonical or ignored runtime. | Use `atelier doctor --fix` for ignored runtime/projection repair or `atelier worktree repair <id>` for stale worktree associations. | Remove or keep rejected; root repair overlaps with better-scoped commands. |

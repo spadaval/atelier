@@ -8,7 +8,7 @@ use std::path::Path;
 
 use crate::record_id;
 use crate::utils::format_issue_id;
-use atelier_core::Issue;
+use atelier_core::{Issue, IssuePriority};
 use atelier_sqlite::Database;
 
 #[derive(Debug, Deserialize)]
@@ -245,6 +245,7 @@ fn imported_issue(
             .clone()
             .unwrap_or_else(|| "task".to_string()),
         priority: import_priority(record.priority, &record.id, lossy_fields),
+        fields: Default::default(),
         parent_id: None,
         created_at,
         updated_at,
@@ -266,24 +267,20 @@ fn imported_description(record: &BeadsIssue) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("Imported Beads issue did not include acceptance criteria.");
     format!(
-        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier export --check` validates canonical Markdown."
+        "## Description\n\n{description}\n\n## Outcome\n\n{outcome}\n\n## Evidence\n\n- `atelier import-beads <path>` imports this record and `atelier lint` validates canonical Markdown."
     )
 }
 
 fn import_priority(priority: i64, source_id: &str, lossy_fields: &mut Vec<LossyField>) -> String {
-    match priority {
-        0 => "critical",
-        1 => "high",
-        2 => "medium",
-        3 | 4 => "low",
-        other => {
-            lossy_fields.push(lossy(
-                source_id,
-                "priority",
-                format!("mapped unsupported numeric priority {other} to medium"),
-            ));
-            "medium"
-        }
+    if let Some(priority) = IssuePriority::from_beads_numeric(priority) {
+        priority.label()
+    } else {
+        lossy_fields.push(lossy(
+            source_id,
+            "priority",
+            format!("mapped unsupported numeric priority {priority} to medium"),
+        ));
+        IssuePriority::P2.label()
     }
     .to_string()
 }
@@ -301,12 +298,12 @@ fn add_preservation_comments(
         .unwrap_or("1970-01-01T00:00:00Z");
     if let Some(notes) = record.notes.as_deref() {
         if !notes.trim().is_empty() {
-            db.add_comment_at(id, notes.trim(), "note", created_at)?;
+            db.record_legacy_import_comment_at(id, notes.trim(), "note", created_at)?;
         }
     }
     if let Some(reason) = record.close_reason.as_deref() {
         if !reason.trim().is_empty() {
-            db.add_comment_at(id, reason.trim(), "close-reason", created_at)?;
+            db.record_legacy_import_comment_at(id, reason.trim(), "close-reason", created_at)?;
         }
     }
 

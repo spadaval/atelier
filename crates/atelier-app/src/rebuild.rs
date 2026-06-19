@@ -8,12 +8,10 @@ use std::process;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use atelier_core::Issue;
+use atelier_core::{Issue, Record, RecordLink};
 use atelier_records as record_store;
 use atelier_records::activity::IssueActivity;
-use atelier_records::{
-    CanonicalDomainRecord, IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
-};
+use atelier_records::{IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS};
 use atelier_sqlite::projection_index;
 use atelier_sqlite::Database;
 
@@ -28,7 +26,7 @@ struct CanonicalIssue {
 #[derive(Debug)]
 struct RebuildProjection {
     issues: Vec<CanonicalIssue>,
-    records: Vec<CanonicalDomainRecord>,
+    records: Vec<Record>,
     child_edges: Vec<(String, String)>,
     dependency_edges: Vec<(String, String)>,
     relations: Vec<(String, String, String)>,
@@ -38,21 +36,88 @@ struct RebuildProjection {
 pub fn run(state_dir: &Path, db_path: &Path) -> Result<()> {
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(state_dir, db_path, &rebuild, None)?;
+    write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!("Rebuilt {} from {}", db_path.display(), state_dir.display());
     Ok(())
 }
 
-pub fn refresh_projection_preserving_runtime(state_dir: &Path, db_path: &Path) -> Result<()> {
+pub fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
     let _lock = ProjectionRebuildLock::acquire(db_path)?;
     let rebuild = load_projection(state_dir)?;
-    write_rebuilt_database(state_dir, db_path, &rebuild, Some(db_path))?;
+    write_rebuilt_database(state_dir, db_path, &rebuild)?;
     tracing::info!(
         "Refreshed projection in {} from {}",
         db_path.display(),
         state_dir.display()
     );
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IncrementalRepair {
+    Repaired,
+    NeedsFullRebuild,
+}
+
+pub fn repair_incremental(
+    db: &Database,
+    state_dir: &Path,
+    report: &projection_index::FreshnessReport,
+) -> Result<IncrementalRepair> {
+    if report.problems.is_empty() {
+        return Ok(IncrementalRepair::Repaired);
+    }
+    if report.problems.len() > 32 {
+        return Ok(IncrementalRepair::NeedsFullRebuild);
+    }
+
+    let stored_sources = db.projection_sources()?;
+    let stored_by_path = stored_sources
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let store = record_store::RecordStore::new(state_dir);
+
+    db.transaction(|| {
+        for problem in &report.problems {
+            match problem {
+                projection_index::FreshnessProblem::MissingMetadata { .. } => {
+                    return Ok(IncrementalRepair::NeedsFullRebuild);
+                }
+                projection_index::FreshnessProblem::MissingSource { path } => {
+                    let Some(source) = stored_by_path.get(path.as_str()) else {
+                        return Ok(IncrementalRepair::NeedsFullRebuild);
+                    };
+                    db.remove_projected_record(&source.kind, &source.id)?;
+                    db.remove_projection_source(path)?;
+                }
+                projection_index::FreshnessProblem::ChangedSource { path }
+                | projection_index::FreshnessProblem::UnindexedSource { path } => {
+                    let Some(spec) = first_class_spec_for_path(path) else {
+                        return Ok(IncrementalRepair::NeedsFullRebuild);
+                    };
+                    let relative = Path::new(path);
+                    let record = store.load_record_at(relative, spec).with_context(|| {
+                        format!(
+                            "Failed to parse changed canonical record {}",
+                            display_state_path(relative)
+                        )
+                    })?;
+                    db.replace_record(&record, path)?;
+                    db.replace_record_labels(
+                        &record.header().kind,
+                        &record.header().id,
+                        &record.header().labels,
+                    )?;
+                    let links = outgoing_record_links(&record);
+                    db.replace_outgoing_links(&record.header().kind, &record.header().id, &links)?;
+                    let source = projection_index::source_entry_for_path(state_dir, path)?;
+                    db.upsert_projection_source(&source)?;
+                }
+            }
+        }
+        Ok(IncrementalRepair::Repaired)
+    })
 }
 
 struct ProjectionRebuildLock {
@@ -151,7 +216,7 @@ struct ProjectionLoader<'a> {
     state_dir: &'a Path,
     store: record_store::RecordStore,
     issues: Vec<CanonicalIssue>,
-    records: Vec<CanonicalDomainRecord>,
+    records: Vec<Record>,
     issue_ids: BTreeSet<String>,
     global_ids: BTreeSet<String>,
     record_refs: BTreeSet<(String, String)>,
@@ -179,17 +244,19 @@ impl<'a> ProjectionLoader<'a> {
     fn load(mut self) -> Result<RebuildProjection> {
         self.load_issues()?;
         self.load_issue_activities()?;
-        self.load_domain_records()?;
+        self.load_records()?;
         ensure_no_unsupported_canonical_files(self.state_dir, &self.canonical_paths)?;
 
         let (child_edges, dependency_edges, relations) = self.validate_issue_relationships()?;
         let record_links = self.collect_record_links()?;
+        self.validate_issue_fields(&child_edges)?;
         validate_issue_child_cycles(&child_edges)?;
         validate_dependency_cycles(&dependency_edges)?;
 
         self.issues.sort_by(|a, b| a.issue.id.cmp(&b.issue.id));
-        self.records
-            .sort_by(|a, b| (&a.record.kind, &a.record.id).cmp(&(&b.record.kind, &b.record.id)));
+        self.records.sort_by(|a, b| {
+            (&a.header().kind, &a.header().id).cmp(&(&b.header().kind, &b.header().id))
+        });
         Ok(RebuildProjection {
             issues: self.issues,
             records: self.records,
@@ -240,33 +307,31 @@ impl<'a> ProjectionLoader<'a> {
         Ok(())
     }
 
-    fn load_domain_records(&mut self) -> Result<()> {
+    fn load_records(&mut self) -> Result<()> {
         for spec in FIRST_CLASS_RECORD_KINDS {
             for relative in discover_record_paths(self.state_dir, spec)? {
                 self.canonical_paths.insert(relative.clone());
-                let record = self.store.load_domain_record(&relative, spec)?;
-                self.register_domain_record(&record)?;
+                let record = self.store.load_record_at(&relative, spec)?;
+                self.register_record(&record)?;
                 self.records.push(record);
             }
         }
         Ok(())
     }
 
-    fn register_domain_record(&mut self, record: &CanonicalDomainRecord) -> Result<()> {
-        if !self.global_ids.insert(record.record.id.clone()) {
-            bail!(
-                "Duplicate record ID in canonical projection: {}",
-                record.record.id
-            );
+    fn register_record(&mut self, record: &Record) -> Result<()> {
+        let header = record.header();
+        if !self.global_ids.insert(header.id.clone()) {
+            bail!("Duplicate record ID in canonical projection: {}", header.id);
         }
         if !self
             .record_refs
-            .insert((record.record.kind.clone(), record.record.id.clone()))
+            .insert((header.kind.clone(), header.id.clone()))
         {
             bail!(
                 "Duplicate {} ID in canonical projection: {}",
-                record.record.kind,
-                record.record.id
+                header.kind,
+                header.id
             );
         }
         Ok(())
@@ -309,17 +374,63 @@ impl<'a> ProjectionLoader<'a> {
             )?;
         }
         for record in &self.records {
+            let header = record.header();
             collect_record_relationship_links(
                 &mut record_links,
                 &mut record_link_keys,
-                &record.record.kind,
-                &record.record.id,
-                &record.relationships,
+                &header.kind,
+                &header.id,
+                &header.relationships,
                 &self.issue_ids,
                 &self.record_refs,
             )?;
         }
         Ok(record_links)
+    }
+
+    fn validate_issue_fields(&self, child_edges: &[(String, String)]) -> Result<()> {
+        let parent_by_child = child_edges
+            .iter()
+            .map(|(child_id, parent_id)| (child_id.as_str(), parent_id.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        for issue in &self.issues {
+            if let Some(parent_id) = parent_by_child.get(issue.issue.id.as_str()) {
+                if issue
+                    .issue
+                    .fields
+                    .contains_key(crate::workflow_policy::REVIEW_FIELD)
+                {
+                    bail!(
+                        "workflow_issue_field_invalid: issue {} defines review directly, but child issues inherit review from parent issue {}; move review to the owning epic or remove it from the child",
+                        issue.issue.id,
+                        parent_id
+                    );
+                }
+            }
+        }
+        if self
+            .issues
+            .iter()
+            .all(|issue| issue.issue.fields.is_empty())
+        {
+            return Ok(());
+        }
+        let repo_root = self.state_dir.parent().ok_or_else(|| {
+            anyhow!(
+                "Cannot determine repository root for {}",
+                self.state_dir.display()
+            )
+        })?;
+        let policy = crate::workflow_policy::load(repo_root)?;
+        let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+        for issue in &self.issues {
+            crate::workflow_policy::validate_issue_against_policy(
+                &policy,
+                &issue.issue,
+                &policy_path,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -425,39 +536,6 @@ impl IssueRelationshipProjection {
     }
 }
 
-fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".activity"))
-            {
-                continue;
-            }
-            collect_issue_record_paths(root, &path, records)?;
-        } else if path.is_file() {
-            let relative = path
-                .strip_prefix(root)
-                .context("Failed to relativize canonical issue path")?
-                .to_path_buf();
-            if crate::storage_layout::is_local_atelier_path(&relative) {
-                continue;
-            }
-            if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
-                bail!(
-                    "Unsupported canonical issue file {}; expected Markdown .md record",
-                    display_state_path(&relative)
-                );
-            }
-            records.push(relative);
-        }
-    }
-    Ok(())
-}
-
 fn discover_record_paths(
     state_dir: &Path,
     spec: &record_store::RecordKindSpec,
@@ -473,9 +551,56 @@ fn discover_record_paths(
         return Ok(Vec::new());
     }
     let mut records = Vec::new();
-    collect_issue_record_paths(state_dir, &record_dir, &mut records)?;
+    collect_canonical_record_paths(
+        state_dir,
+        &record_dir,
+        spec.extension,
+        spec.kind,
+        &mut records,
+    )?;
     records.sort();
     Ok(records)
+}
+
+fn collect_canonical_record_paths(
+    root: &Path,
+    dir: &Path,
+    extension: &str,
+    kind_name: &str,
+    records: &mut Vec<PathBuf>,
+) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".activity"))
+            {
+                continue;
+            }
+            collect_canonical_record_paths(root, &path, extension, kind_name, records)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize canonical record path")?
+                .to_path_buf();
+            if crate::storage_layout::is_local_atelier_path(&relative) {
+                continue;
+            }
+            if relative.extension().and_then(|ext| ext.to_str()) != Some(extension) {
+                bail!(
+                    "Unsupported canonical {} file {}; expected .{} record",
+                    kind_name,
+                    display_state_path(&relative),
+                    extension
+                );
+            }
+            records.push(relative);
+        }
+    }
+    Ok(())
 }
 
 fn discover_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
@@ -500,7 +625,7 @@ fn collect_activity_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -
                 .and_then(|name| name.to_str())
                 .is_some_and(|name| name.ends_with(".activity"))
             {
-                collect_canonical_files(root, &path, records)?;
+                collect_activity_files(root, &path, records)?;
             } else {
                 collect_activity_paths(root, &path, records)?;
             }
@@ -562,8 +687,35 @@ fn collect_canonical_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) ->
         if crate::storage_layout::is_local_atelier_path(relative) {
             continue;
         }
+        if relative.components().any(|component| {
+            component
+                .as_os_str()
+                .to_string_lossy()
+                .ends_with(".activity")
+        }) {
+            continue;
+        }
         if path.is_dir() {
             collect_canonical_files(root, &path, files)?;
+        } else if path.is_file() {
+            files.push(relative.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
+fn collect_activity_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .context("Failed to relativize activity path")?;
+        if crate::storage_layout::is_local_atelier_path(relative) {
+            continue;
+        }
+        if path.is_dir() {
+            collect_activity_files(root, &path, files)?;
         } else if path.is_file() {
             files.push(relative.to_path_buf());
         }
@@ -575,7 +727,6 @@ fn write_rebuilt_database(
     state_dir: &Path,
     db_path: &Path,
     rebuild: &RebuildProjection,
-    preserve_runtime_from: Option<&Path>,
 ) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
         anyhow!(
@@ -621,7 +772,13 @@ fn write_rebuilt_database(
                 db.add_typed_relation(&source, &target, relation_type)?;
             }
             for record in &rebuild.records {
-                db.insert_record_rebuild(&record.record)?;
+                let header = record.header();
+                let spec = record_store::canonical_record_kind(&header.kind)?;
+                let source_path = record_store::canonical_record_path(spec, &header.id)?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                db.insert_record_rebuild_from_source(record, &source_path)?;
+                db.replace_record_labels(&header.kind, &header.id, &header.labels)?;
             }
             for (source_kind, source_id, target_kind, target_id, relation_type) in
                 &rebuild.record_links
@@ -633,9 +790,6 @@ fn write_rebuilt_database(
                     target_id,
                     relation_type,
                 )?;
-            }
-            if let Some(source_db_path) = preserve_runtime_from.filter(|path| path.exists()) {
-                copy_runtime_state(&db, source_db_path)?;
             }
             Ok(())
         })?;
@@ -652,6 +806,53 @@ fn write_rebuilt_database(
     Ok(())
 }
 
+fn first_class_spec_for_path(path: &str) -> Option<&'static record_store::RecordKindSpec> {
+    let first = Path::new(path)
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())?;
+    record_store::FIRST_CLASS_RECORD_KINDS
+        .iter()
+        .find(|spec| spec.canonical_dir == Some(first))
+}
+
+fn outgoing_record_links(record: &Record) -> Vec<RecordLink> {
+    let created_at = chrono::Utc::now();
+    let mut links = Vec::new();
+    let header = record.header();
+    for child in &header.relationships.children {
+        links.push(RecordLink {
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
+            target_kind: child.kind.clone(),
+            target_id: child.id.clone(),
+            relation_type: child_relation_type(&child.kind).to_string(),
+            created_at,
+        });
+    }
+    for attachment in &header.relationships.attachments {
+        links.push(RecordLink {
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
+            target_kind: attachment.kind.clone(),
+            target_id: attachment.id.clone(),
+            relation_type: attachment.role.clone(),
+            created_at,
+        });
+    }
+    for relation in &header.relationships.relates {
+        links.push(RecordLink {
+            source_kind: header.kind.clone(),
+            source_id: header.id.clone(),
+            target_kind: relation.kind.clone(),
+            target_id: relation.id.clone(),
+            relation_type: relation.relation_type.clone(),
+            created_at,
+        });
+    }
+    links
+}
+
 fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
     let file_name = db_path
         .file_name()
@@ -666,19 +867,6 @@ fn unique_rebuild_path(db_path: &Path) -> Result<PathBuf> {
         process::id(),
         nanos
     )))
-}
-
-fn copy_runtime_state(db: &Database, source_db_path: &Path) -> Result<()> {
-    let source = source_db_path.to_string_lossy();
-    db.conn
-        .execute("ATTACH DATABASE ?1 AS runtime_src", [&source.as_ref()])
-        .with_context(|| {
-            format!(
-                "Failed to attach runtime state {}",
-                source_db_path.display()
-            )
-        })?;
-    Ok(())
 }
 
 fn collect_record_relationship_links(
@@ -787,10 +975,8 @@ fn push_record_link(
 }
 
 fn child_relation_type(target_kind: &str) -> &'static str {
-    match target_kind {
-        "milestone" => "has_checkpoint",
-        _ => "advances",
-    }
+    let _ = target_kind;
+    "advances"
 }
 
 fn ensure_record_exists(
@@ -946,6 +1132,91 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_round_trips_canonical_issue_fields() {
+        let (db, dir) = setup_test_db();
+        let now = chrono::Utc::now();
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "review".to_string(),
+            serde_json::json!({"kind": "pull_request", "provider": "forgejo", "number": 42}),
+        );
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-flds".to_string(),
+            title: "Fielded issue".to_string(),
+            description: Some("Field body".to_string()),
+            status: "todo".to_string(),
+            issue_type: "task".to_string(),
+            priority: "medium".to_string(),
+            fields: fields.clone(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v3_policy(&state_dir);
+
+        let rebuilt_path = dir.path().join(".atelier/runtime/state.db");
+        run(&state_dir, &rebuilt_path).unwrap();
+        let rebuilt = Database::open(&rebuilt_path).unwrap();
+
+        assert_eq!(
+            rebuilt.require_issue("atelier-flds").unwrap().fields,
+            fields
+        );
+        validate_canonical_state(&state_dir).unwrap();
+    }
+
+    #[test]
+    fn rebuild_rejects_issue_fields_that_violate_workflow_schema() {
+        let (db, dir) = setup_test_db();
+        let id = db.create_issue("Invalid field", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v3_policy(&state_dir);
+        let path = state_dir.join(issue_record_path(&id));
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "labels: []\n",
+            "labels: []\nreview:\n  kind: \"pull_request\"\n  provider: \"forgejo\"\n",
+        );
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
+
+        assert!(error.to_string().contains("workflow_issue_field_invalid"));
+        assert!(error.to_string().contains("issue "));
+        assert!(error.to_string().contains("positive number"));
+    }
+
+    #[test]
+    fn rebuild_rejects_child_local_pull_request_field() {
+        let (db, dir) = setup_test_db();
+        let parent = db
+            .create_issue_with_type("Parent", None, "medium", "epic")
+            .unwrap();
+        let child = db
+            .create_subissue(&parent, "Child", None, "medium")
+            .unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        write_schema_v3_policy(&state_dir);
+        let path = state_dir.join(issue_record_path(&child));
+        let text = fs::read_to_string(&path).unwrap().replace(
+            "labels: []\n",
+            "labels: []\nreview:\n  kind: \"room\"\n  id: \"atelier-rvw1\"\n",
+        );
+        fs::write(path, text).unwrap();
+
+        let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();
+
+        assert!(error.to_string().contains("workflow_issue_field_invalid"));
+        assert!(error.to_string().contains("child issues inherit review"));
+    }
+
+    #[test]
     fn rebuild_allows_parent_records_after_children() {
         let (db, dir) = setup_test_db();
         let child = db.create_issue("Child", Some("Child body"), "low").unwrap();
@@ -967,7 +1238,9 @@ mod tests {
 
     #[test]
     fn rebuild_round_trips_canonical_domain_records() {
-        let (db, dir) = setup_test_db();
+        let (_db, dir) = setup_test_db();
+        let state_dir = dir.path().join(".atelier");
+        let store = record_store::RecordStore::new(&state_dir);
         let mission_sections = record_store::mission_sections_from_inputs(
             "Mission",
             Some("Mission body"),
@@ -975,47 +1248,51 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let mission_body = record_store::render_mission_sections(&mission_sections);
-        let mission_id = db
-            .create_record(
-                "mission",
-                "Mission",
-                "ready",
-                Some(&mission_body),
-                record_store::MISSION_EMPTY_DATA_JSON,
-            )
-            .unwrap();
-        let plan_id = db
-            .create_record(
-                "plan",
-                "Plan",
-                "open",
-                Some("Plan body"),
-                r#"{"revision":1,"revisions":[{"revision":1,"reason":"initial","body":"Plan body"}]}"#,
-            )
-            .unwrap();
-        let evidence_id = db
-            .create_record(
-                "evidence",
+        let mission_id = store
+            .create_mission("Mission", "ready", mission_sections)
+            .unwrap()
+            .header
+            .id;
+        let evidence_id = store
+            .create_evidence(
                 "Evidence",
-                "pass",
-                Some("Evidence body"),
-                r#"{"kind":"test","captured_at":"2026-06-15T12:00:00Z","result":"pass"}"#,
+                "recorded",
+                "Evidence body",
+                atelier_core::EvidenceRecordData {
+                    evidence_type: "test".to_string(),
+                    captured_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                    command: None,
+                    path: None,
+                    uri: None,
+                    producer: None,
+                    proof_scope: None,
+                    agent_identity: None,
+                    independence_level: None,
+                    residual_risks: Vec::new(),
+                    follow_up_ids: Vec::new(),
+                    exit_code: None,
+                    exit_status: None,
+                    success: Some(true),
+                    spawn_error: None,
+                    output: None,
+                    target: None,
+                },
+            )
+            .unwrap()
+            .header
+            .id;
+        store
+            .add_attachment_relationship(
+                "evidence",
+                &evidence_id,
+                "mission",
+                &mission_id,
+                "validates",
             )
             .unwrap();
-        db.add_record_link("mission", &mission_id, "plan", &plan_id, "planned_by")
-            .unwrap();
-        db.add_record_link(
-            "evidence",
-            &evidence_id,
-            "mission",
-            &mission_id,
-            "validates",
-        )
-        .unwrap();
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
         let mission_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let mission_markdown = fs::read_to_string(&mission_path).unwrap();
         assert!(mission_markdown.contains("schema: \"atelier.mission\""));
@@ -1024,9 +1301,6 @@ mod tests {
         assert!(mission_markdown.contains("labels:\n- \"mission\"\n"));
         assert!(mission_markdown.contains("## Intent\n\nMission body"));
         assert!(mission_markdown.contains("## Constraints\n\n- keep contract"));
-        assert!(mission_markdown.contains(&format!(
-            "  attachments:\n  - kind: \"plan\"\n    id: \"{plan_id}\"\n    role: \"planned_by\"\n"
-        )));
         assert!(!mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
 
         let evidence_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
@@ -1039,31 +1313,13 @@ mod tests {
 
         let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
-        assert!(mission
-            .body
-            .as_deref()
-            .unwrap()
-            .contains("## Intent\n\nMission body"));
-        assert!(mission
-            .body
-            .as_deref()
-            .unwrap()
-            .contains("## Constraints\n\n- keep contract"));
-        assert_eq!(mission.data_json, "{}");
-        assert!(rebuilt.get_record("plan", &plan_id).unwrap().is_some());
+        assert_eq!(mission.kind, "mission");
         assert!(rebuilt
             .get_record("evidence", &evidence_id)
             .unwrap()
             .is_some());
 
         let mission_links = rebuilt.list_record_links("mission", &mission_id).unwrap();
-        assert!(mission_links.iter().any(|link| {
-            link.source_kind == "mission"
-                && link.source_id == mission_id
-                && link.target_kind == "plan"
-                && link.target_id == plan_id
-                && link.relation_type == "planned_by"
-        }));
         assert!(mission_links.iter().any(|link| {
             link.source_kind == "evidence"
                 && link.source_id == evidence_id
@@ -1077,13 +1333,7 @@ mod tests {
     fn record_table_rejects_non_canonical_record_kinds() {
         let (db, _dir) = setup_test_db();
         let error = db
-            .create_record(
-                "workflow_validator",
-                "Deferred validator",
-                "open",
-                None,
-                "{}",
-            )
+            .create_record("workflow_validator", "Deferred validator", "open")
             .unwrap_err();
         assert!(error
             .to_string()
@@ -1094,6 +1344,9 @@ mod tests {
     fn rebuild_rejects_global_id_collision_across_record_kinds() {
         let (db, dir) = setup_test_db();
         let issue_id = db.create_issue("Issue", None, "medium").unwrap();
+        let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
+        let store = record_store::RecordStore::new(&state_dir);
         let mission_sections = record_store::mission_sections_from_inputs(
             "Mission",
             Some("Mission body"),
@@ -1101,19 +1354,12 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let mission_body = record_store::render_mission_sections(&mission_sections);
-        let mission_id = db
-            .create_record(
-                "mission",
-                "Mission",
-                "ready",
-                Some(&mission_body),
-                record_store::MISSION_EMPTY_DATA_JSON,
-            )
-            .unwrap();
+        let mission_id = store
+            .create_mission("Mission", "ready", mission_sections)
+            .unwrap()
+            .header
+            .id;
 
-        let state_dir = dir.path().join(".atelier");
-        export::run_canonical(&db, &state_dir, false).unwrap();
         let old_path = state_dir.join("missions").join(format!("{mission_id}.md"));
         let new_path = state_dir.join("missions").join(format!("{issue_id}.md"));
         let mission_markdown = fs::read_to_string(&old_path).unwrap().replace(
@@ -1142,7 +1388,7 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_recreates_canonical_projection_without_runtime_state() {
+    fn rebuild_recreates_canonical_projection_without_local_only_state() {
         let (db, dir) = setup_test_db();
         let id = db.create_issue("Runtime reset", None, "medium").unwrap();
         let state_dir = dir.path().join(".atelier");
@@ -1153,13 +1399,10 @@ mod tests {
         let rebuilt = Database::open(&db_path).unwrap();
 
         assert!(rebuilt.require_issue(&id).is_ok());
-        assert!(rebuilt.runtime_state_tables_available().unwrap());
-        assert!(rebuilt.get_current_session().unwrap().is_none());
-        assert!(rebuilt.get_active_work_association().unwrap().is_none());
     }
 
     #[test]
-    fn refresh_projection_rebuilds_without_runtime_state() {
+    fn refresh_projection_rebuilds_without_local_only_state() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join(".atelier/runtime/state.db");
         fs::create_dir_all(db_path.parent().unwrap()).unwrap();
@@ -1172,12 +1415,10 @@ mod tests {
 
         drop(db);
 
-        refresh_projection_preserving_runtime(&state_dir, &db_path).unwrap();
+        refresh_projection(&state_dir, &db_path).unwrap();
         let refreshed = Database::open(&db_path).unwrap();
 
         assert!(refreshed.require_issue(&id).is_ok());
-        assert!(refreshed.get_current_session().unwrap().is_none());
-        assert!(refreshed.get_active_work_association().unwrap().is_none());
     }
 
     #[test]
@@ -1333,6 +1574,209 @@ mod tests {
             format!(
                 "---\nschema: \"atelier.activity\"\nschema_version: 1\nid: \"20260610T181920123456Z\"\nsubject_kind: \"issue\"\nsubject_id: \"{issue_id}\"\nevent_type: \"comment\"\nactor: \"tester\"\ncreated_at: \"2026-06-10T18:19:20.123456Z\"\nsummary: \"Activity\"\n---\n\nBody\n"
             ),
+        )
+        .unwrap();
+    }
+
+    fn write_schema_v3_policy(state_dir: &Path) {
+        fs::write(
+            state_dir.join("workflow.yaml"),
+            r#"schema: atelier.workflow
+schema_version: 3
+
+branch_policy:
+  base_branch: main
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
+
+statuses:
+  todo:
+    category: todo
+  in_progress:
+    category: active
+  blocked:
+    category: blocked
+  review:
+    category: review
+  validation:
+    category: validation
+  done:
+    category: done
+  archived:
+    category: done
+
+workflows:
+  standard:
+    applies_to: [bug, feature, task]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
+      block:
+        from: [todo, in_progress, validation]
+        to: blocked
+      close:
+        from: [in_progress, validation]
+        to: done
+        description: "Closing requires attached evidence and no open blockers."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
+        effects:
+          after:
+            - tracker.commit
+            - branch.merge
+
+  epic_reviewed:
+    applies_to: [epic]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_complete]
+        effects:
+          after:
+            - tracker.commit
+      close:
+        from: [validation]
+        to: done
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
+          - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
+      block:
+        from: [todo, in_progress, review, validation]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+        validators: [review_complete]
+        effects:
+          after:
+            - tracker.commit
+      close:
+        from: [validation]
+        to: done
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - no_open_blockers
+          - no_blocking_lints
+          - durable_state_current
+          - git_worktree_clean
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
+
+  spike:
+    applies_to: [spike]
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before:
+            - branch.prepare
+          after:
+            - tracker.commit
+      block:
+        from: [todo, in_progress, review]
+        to: blocked
+      request_review:
+        from: [in_progress]
+        to: review
+        effects:
+          before:
+            - review.open
+          after:
+            - tracker.commit
+      revise:
+        from: [review]
+        to: in_progress
+      close:
+        from: [review]
+        to: done
+        description: "Closing requires review completion and durable tracker state."
+        validators:
+          - review_complete
+          - durable_state_current
+        effects:
+          before:
+            - review.merge
+          after:
+            - tracker.commit
+            - branch.merge
+"#,
         )
         .unwrap();
     }

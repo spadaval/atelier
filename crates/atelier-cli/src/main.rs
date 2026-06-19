@@ -1,9 +1,11 @@
 use anyhow::{bail, Result};
 use atelier::{commands, telemetry};
 use atelier_app::command_storage::{
-    canonical_mutation_db, command_storage, degraded_projection_query_db, lint_db,
-    projection_query_db, runtime_db, state_and_db_paths, CommandStorageAccess,
+    canonical_mutation_db, command_storage, degraded_projection_query_db, existing_projection_db,
+    lint_db, projection_query_db, state_and_db_paths, CommandStorageAccess,
 };
+use atelier_app::use_cases;
+use atelier_core::IssuePriority;
 use atelier_records::RecordStore;
 use atelier_sqlite::Database;
 use chrono::Utc;
@@ -21,19 +23,21 @@ use std::time::Instant;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
-  start         Start tracked work on an issue
 
 Issues:
-  issue         Create, list, show, update, close, and manage blockers
+  issue         Create, list, show, update, transition, and manage blockers
   search        Search issue text
   graph         Inspect mission and issue hierarchy and impact
 
 Missions and planning:
   mission       Create, list, show, status, close, and update durable missions
-  plan          Create, apply, revise, list, and link durable plans
+  bundle        Preview and apply one-shot graph bundle files
 
 Records:
   evidence      Capture validation evidence
+  session       Inspect derived issue attempts
+  review        Manage configured review artifacts
+  forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
@@ -49,6 +53,7 @@ Common commands:
   atelier man
   atelier man worker
   atelier man reviewer
+  atelier man validator
   atelier man manager
   atelier man admin
   atelier status
@@ -63,13 +68,14 @@ Common commands:
   atelier mission show <id>
   atelier mission status
   atelier mission close <id> --reason \"...\"
+  atelier bundle preview <file>
+  atelier bundle apply <file> --yes
+  atelier session list --active
+  atelier forgejo roles check
   atelier history --mission <id>
   atelier history --issue <id>
-  atelier start <issue-id>
   atelier issue transition <issue-id> --options
-  atelier issue close <issue-id> --reason \"...\"
-  atelier doctor
-  atelier doctor --fix
+  atelier issue transition <issue-id> start
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -109,17 +115,14 @@ enum Commands {
 
     /// Show role-specific operating guidance
     Man {
-        /// Role guide to print: worker, reviewer, manager, or admin
+        /// Role guide to print: worker, reviewer, validator, manager, or admin
         role: Option<String>,
     },
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
 
-    /// Start tracked work on an issue
-    Start { id: String },
-
-    /// Issue lifecycle commands (create, show, list, close, ...)
+    /// Issue lifecycle commands (create, show, list, transition, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
@@ -137,7 +140,7 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and doctor
+    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
     #[command(hide = true)]
     Export {
         /// State directory for canonical export diagnostics
@@ -148,7 +151,7 @@ enum Commands {
         check: bool,
     },
 
-    /// Advanced projection diagnostic; normal local repair uses doctor --fix
+    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
     #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from
@@ -172,16 +175,34 @@ enum Commands {
         action: MissionCommands,
     },
 
-    /// First-class durable plan records
-    Plan {
+    /// One-shot graph bundle files
+    Bundle {
         #[command(subcommand)]
-        action: PlanCommands,
+        action: BundleCommands,
     },
 
     /// First-class evidence records
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
+    },
+
+    /// Inspect derived issue-scoped worker, reviewer, and validator attempts
+    Session {
+        #[command(subcommand)]
+        action: SessionCommands,
+    },
+
+    /// Configured review artifacts
+    Review {
+        #[command(subcommand)]
+        action: ReviewCommands,
+    },
+
+    /// Configure and verify Forgejo integration
+    Forgejo {
+        #[command(subcommand)]
+        action: ForgejoCommands,
     },
 
     /// Inspect canonical repo, mission, issue, or epic activity
@@ -322,9 +343,15 @@ enum IssueCommands {
         /// Show the full option list
         #[arg(long)]
         options: bool,
-        /// Close reason used by transitions that require it
+        /// Preview validators and effects without mutating state
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip configured transition effects after validators pass
+        #[arg(long)]
+        skip_effects: bool,
+        /// Required audit reason when skipping configured effects
         #[arg(long = "reason")]
-        close_reason: Option<String>,
+        reason: Option<String>,
     },
 
     /// Update an issue
@@ -363,18 +390,6 @@ enum IssueCommands {
         /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
         #[arg(long, default_value = "note")]
         kind: String,
-    },
-
-    /// Close an issue
-    Close {
-        /// Issue ID
-        id: String,
-        /// Explicit terminal workflow status when multiple done targets are available
-        #[arg(long)]
-        to: Option<String>,
-        /// Close reason recorded in issue activity
-        #[arg(short, long)]
-        reason: String,
     },
 
     /// Mark an issue as blocked by another
@@ -448,7 +463,7 @@ enum MissionCommands {
         #[arg(long)]
         validation: Vec<String>,
     },
-    /// Show a mission with linked plans, work, blockers, and evidence
+    /// Show a mission with linked work, blockers, and evidence
     Show { id: String },
     /// Focus a mission as the active orchestration context
     Start {
@@ -510,44 +525,14 @@ enum MissionCommands {
 }
 
 #[derive(Subcommand)]
-enum PlanCommands {
-    /// Create a durable plan
-    Create {
-        title: String,
-        #[arg(short, long)]
-        body: Option<String>,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Show a plan
-    Show { id: String },
-    /// Apply an authored bulk plan JSON file
+enum BundleCommands {
+    /// Preview an authored bundle JSON file without mutating tracker state
+    Preview { input: String },
+    /// Apply an authored bundle JSON file
     Apply {
         input: String,
         #[arg(long)]
-        dry_run: bool,
-        #[arg(long)]
-        validate_only: bool,
-    },
-    /// List plans
-    List {
-        #[arg(short, long)]
-        status: Option<String>,
-    },
-    /// Add a new plan revision
-    Revise {
-        id: String,
-        body: String,
-        #[arg(long)]
-        reason: Option<String>,
-    },
-    /// Link a plan to a target record
-    Link {
-        id: String,
-        target_kind: String,
-        target_id: String,
-        #[arg(short = 't', long = "type", default_value = "planned_by")]
-        relation_type: String,
+        yes: bool,
     },
 }
 
@@ -595,6 +580,126 @@ another target.")]
     List {
         #[arg(long)]
         status: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SessionCommands {
+    /// Show a derived issue attempt
+    Show { id: String },
+    /// List derived issue attempts
+    List {
+        /// Show only active attempts
+        #[arg(long)]
+        active: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReviewCommands {
+    /// Open or confirm the active review artifact for an issue owner
+    Open {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, default_value = "")]
+        body: String,
+        #[arg(long)]
+        source_branch: String,
+        #[arg(long, default_value = "master")]
+        target_branch: String,
+    },
+    /// Link an existing review artifact by number or URL
+    Link {
+        #[arg(long)]
+        issue: Option<String>,
+        pull_request: String,
+    },
+    /// Show concise linked review status
+    Status {
+        #[arg(long)]
+        issue: Option<String>,
+    },
+    /// Show linked review details
+    Show {
+        #[arg(long)]
+        issue: Option<String>,
+    },
+    /// Merge or confirm the linked review artifact without changing Atelier workflow state
+    Merge {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+    },
+    /// List live review comments
+    Comments {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        unresolved: bool,
+    },
+    /// Add a review artifact comment
+    Comment {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        /// Record this room comment as a finding instead of a plain timeline comment
+        #[arg(long)]
+        finding: bool,
+        /// Finding severity for native room mode
+        #[arg(long, default_value = "blocking")]
+        severity: String,
+        body: String,
+    },
+    /// Approve a review artifact
+    Approve {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long, default_value = "")]
+        body: String,
+    },
+    /// Request changes on a review artifact
+    RequestChanges {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long, default_value = "")]
+        body: String,
+    },
+    /// Resolve a native room finding
+    Resolve {
+        #[arg(long)]
+        issue: Option<String>,
+        finding: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForgejoCommands {
+    /// Provision and verify Forgejo role author accounts
+    Roles {
+        #[command(subcommand)]
+        action: ForgejoRolesCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ForgejoRolesCommands {
+    /// Verify configured role author users, repo permissions, and sudo access
+    Check,
+    /// Create missing role author users and grant repository access
+    Provision {
+        /// Persist the role author mapping in .atelier/config.toml
+        #[arg(long)]
+        write_config: bool,
     },
 }
 
@@ -692,12 +797,7 @@ fn issue_create_parts(
             (priority.to_string(), None, None)
         };
 
-    if !commands::create::validate_priority(&final_priority) {
-        bail!(
-            "Invalid priority '{}'. Must be one of: low, medium, high, critical",
-            final_priority
-        );
-    }
+    IssuePriority::from_cli_input(&final_priority)?;
     let final_issue_type = match (issue_type, template_issue_type) {
         (Some(explicit), Some(default)) if explicit != default => {
             bail!(
@@ -746,14 +846,6 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
-fn resolve_optional_record_arg(
-    db: &Database,
-    kind: &str,
-    id: Option<String>,
-) -> Result<Option<String>> {
-    id.map(|id| resolve_record_arg(db, kind, &id)).transpose()
-}
-
 fn resolve_graph_record_arg(db: &Database, id: &str) -> Result<(String, String)> {
     match commands::agent_factory::resolve_id(db, id) {
         Ok(issue_id) => Ok(("issue".to_string(), issue_id)),
@@ -778,7 +870,6 @@ fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
         "issue" | "epic" => Some("atelier issue show"),
         "mission" => Some("atelier mission show"),
-        "plan" => Some("atelier plan show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
@@ -789,24 +880,6 @@ fn require_issue_kind(kind: &str, command: &str) -> Result<()> {
         bail!("{command} currently supports issue records only; got '{kind}'");
     }
     Ok(())
-}
-
-fn parse_evidence_target(target: &str) -> Result<(&str, &str)> {
-    let Some((kind, id)) = target.split_once('/') else {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
-    };
-    if kind.trim().is_empty() || id.trim().is_empty() {
-        bail!("--target must use kind/id syntax, for example issue/atelier-1234");
-    }
-    Ok((kind, id))
-}
-
-fn resolve_evidence_target_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
-    if matches!(kind, "issue" | "epic") {
-        resolve_issue_arg(db, id)
-    } else {
-        Ok(id.to_string())
-    }
 }
 
 fn init_tracing(log_level: &str, log_format: &str) {
@@ -900,11 +973,18 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             id,
             transition,
             options,
-            close_reason,
+            dry_run,
+            skip_effects,
+            reason,
         } => {
             if options {
                 if transition.is_some() {
                     bail!("--options cannot be combined with a transition name");
+                }
+                if dry_run || skip_effects || reason.is_some() {
+                    bail!(
+                        "--options cannot be combined with --dry-run, --skip-effects, or --reason"
+                    );
                 }
                 let db = degraded_projection_query_db()?;
                 commands::agent_factory::transition_options(&db, &id)
@@ -917,13 +997,17 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 })?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
-                commands::workflow::transition_issue(
+                commands::workflow::transition_issue_with_options(
                     &db,
                     &state_dir,
                     &db_path,
                     &id,
                     &transition,
-                    close_reason.as_deref(),
+                    commands::workflow::TransitionExecutionOptions {
+                        dry_run,
+                        skip_effects,
+                        reason: reason.as_deref(),
+                    },
                 )
             }
         }
@@ -965,18 +1049,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::comment::run_issue_note(&db, &id, &text, &kind)
         }
 
-        IssueCommands::Close { id, to, reason } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let _ = quiet;
-            commands::agent_factory::close_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                &reason,
-                to.as_deref(),
-            )
-        }
-
         IssueCommands::Block { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
@@ -1011,7 +1083,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 // ============================================================================
 
 fn main() -> Result<()> {
+    load_dotenv()?;
     run()
+}
+
+fn load_dotenv() -> Result<()> {
+    match dotenvy::dotenv() {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn run() -> Result<()> {
@@ -1034,15 +1115,8 @@ fn run() -> Result<()> {
         Commands::Man { role } => commands::man::run(role),
 
         Commands::Status => {
-            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+            let storage = use_cases::status_storage()?;
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
-        }
-
-        Commands::Start { id } => {
-            let db = projection_query_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::work::start_lifecycle(&state_dir, &db_path, &id)
         }
 
         Commands::Issue { action } => dispatch_issue(action, quiet),
@@ -1108,7 +1182,7 @@ fn run() -> Result<()> {
                 risk,
                 validation,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
                 commands::mission::create(
@@ -1122,20 +1196,21 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Show { id } => {
-                let db = degraded_projection_query_db()?;
-                let id = resolve_record_arg(&db, "mission", &id)?;
-                commands::mission::show(&db, &id)
+                let storage = use_cases::mission_query_storage()?;
+                let db = storage.db();
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                commands::mission::show(db, &id)
             }
             MissionCommands::Start { id, switch_active } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::start(&state_dir, &db_path, &id, switch_active)
             }
             MissionCommands::Status { id, verbose } => {
-                let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
-                let id = resolve_optional_record_arg(storage.db(), "mission", id)?;
+                let storage = use_cases::mission_query_storage()?;
+                let id = use_cases::resolve_optional_record_ref(&storage, "mission", id)?;
                 commands::mission::status(
                     storage.db(),
                     &storage.state_dir(),
@@ -1145,14 +1220,15 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Close { id, reason } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::close(&state_dir, &db_path, &id, &reason)
             }
             MissionCommands::List { status } => {
-                let db = degraded_projection_query_db()?;
+                let storage = use_cases::mission_query_storage()?;
+                let db = storage.db();
                 commands::mission::list(&db, status.as_deref())
             }
             MissionCommands::Update {
@@ -1164,10 +1240,10 @@ fn run() -> Result<()> {
                 risk,
                 validation,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::update(
                     &state_dir,
                     &db_path,
@@ -1181,101 +1257,49 @@ fn run() -> Result<()> {
                 )
             }
             MissionCommands::Note { id, text, kind } => {
-                let db = canonical_mutation_db()?;
-                let id = resolve_record_arg(&db, "mission", &id)?;
-                commands::comment::run_mission_note(&db, &id, &text, &kind)
+                let storage = use_cases::mission_mutation_storage()?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                commands::comment::run_mission_note(storage.db(), &id, &text, &kind)
             }
             MissionCommands::AddWork { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::add_work(&state_dir, &db_path, &id, &issue)
             }
             MissionCommands::Unlink { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::unlink(&state_dir, &db_path, &id, &issue)
             }
             MissionCommands::AddBlocker { id, issue } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::mission_mutation_storage()?;
                 let db_path = storage.db_path();
                 let state_dir = storage.state_dir();
-                let id = resolve_record_arg(storage.db(), "mission", &id)?;
-                let issue = resolve_issue_arg(storage.db(), &issue)?;
+                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
+                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
                 commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
             }
         },
 
-        Commands::Plan { action } => match action {
-            PlanCommands::Create {
-                title,
-                body,
-                reason,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                commands::plan::create(
-                    &state_dir,
-                    &db_path,
-                    &title,
-                    body.as_deref(),
-                    reason.as_deref(),
-                )
+        Commands::Bundle { action } => match action {
+            BundleCommands::Preview { input } => {
+                let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
+                commands::bundle::preview(storage.db(), &input)
             }
-            PlanCommands::Show { id } => {
-                let db = projection_query_db()?;
-                commands::plan::show(&db, &id)
-            }
-            PlanCommands::Apply {
-                input,
-                dry_run,
-                validate_only,
-            } => {
+            BundleCommands::Apply { input, yes } => {
                 let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                commands::plan::apply(
+                commands::bundle::apply(
                     storage.db(),
                     &storage.state_dir(),
                     &storage.db_path(),
                     &input,
-                    dry_run,
-                    validate_only,
-                )
-            }
-            PlanCommands::List { status } => {
-                let db = projection_query_db()?;
-                commands::plan::list(&db, status.as_deref())
-            }
-            PlanCommands::Revise { id, body, reason } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                commands::plan::revise(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &id,
-                    &body,
-                    reason.as_deref(),
-                )
-            }
-            PlanCommands::Link {
-                id,
-                target_kind,
-                target_id,
-                relation_type,
-            } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
-                let target_id = resolve_record_arg(storage.db(), &target_kind, &target_id)?;
-                commands::plan::link(
-                    &storage.state_dir(),
-                    &storage.db_path(),
-                    &id,
-                    &target_kind,
-                    &target_id,
-                    &relation_type,
+                    yes,
                 )
             }
         },
@@ -1292,12 +1316,16 @@ fn run() -> Result<()> {
                 summary_text,
                 command,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::evidence_mutation_storage()?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => {
-                        let (kind, id) = parse_evidence_target(target)?;
-                        let id = resolve_evidence_target_arg(storage.db(), kind, id)?;
-                        Some((kind.to_string(), id))
+                        let target = use_cases::parse_evidence_target_arg(target)?;
+                        let id = use_cases::resolve_evidence_target_ref(
+                            &storage,
+                            &target.kind,
+                            &target.id,
+                        )?;
+                        Some((target.kind, id))
                     }
                     None => None,
                 };
@@ -1337,9 +1365,8 @@ fn run() -> Result<()> {
                             &role,
                         )?;
                     }
-                    let db = Database::open(&storage.db_path())?;
-                    let record = db.require_record("evidence", &evidence_id)?;
-                    commands::evidence::print_record(&db, &record)
+                    let db = use_cases::refreshed_mutation_db(&storage)?;
+                    commands::evidence::show(&db, &evidence_id)
                 } else {
                     let command_summary = match (summary.as_deref(), summary_text.as_deref()) {
                         (Some(_), Some(_)) => {
@@ -1366,7 +1393,8 @@ fn run() -> Result<()> {
                 }
             }
             EvidenceCommands::Show { id } => {
-                let db = projection_query_db()?;
+                let storage = use_cases::evidence_query_storage()?;
+                let db = storage.db();
                 commands::evidence::show(&db, &id)
             }
             EvidenceCommands::Attach {
@@ -1375,9 +1403,9 @@ fn run() -> Result<()> {
                 target_id,
                 role,
             } => {
-                let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+                let storage = use_cases::evidence_mutation_storage()?;
                 let target_id =
-                    resolve_evidence_target_arg(storage.db(), &target_kind, &target_id)?;
+                    use_cases::resolve_evidence_target_ref(&storage, &target_kind, &target_id)?;
                 commands::evidence::attach(
                     &storage.state_dir(),
                     &storage.db_path(),
@@ -1388,10 +1416,142 @@ fn run() -> Result<()> {
                 )
             }
             EvidenceCommands::List { status } => {
-                let db = projection_query_db()?;
+                let storage = use_cases::evidence_query_storage()?;
+                let db = storage.db();
                 commands::evidence::list(&db, status.as_deref())
             }
         },
+
+        Commands::Session { action } => match action {
+            SessionCommands::Show { id } => {
+                let storage = use_cases::mission_query_storage()?;
+                commands::session::show(&storage.state_dir(), &id)
+            }
+            SessionCommands::List { active } => {
+                let storage = use_cases::mission_query_storage()?;
+                commands::session::list(&storage.state_dir(), active)
+            }
+        },
+
+        Commands::Review { action } => {
+            let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
+            match action {
+                ReviewCommands::Open {
+                    issue,
+                    role,
+                    title,
+                    body,
+                    source_branch,
+                    target_branch,
+                } => commands::pr::open(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    &title,
+                    &body,
+                    &source_branch,
+                    &target_branch,
+                ),
+                ReviewCommands::Link {
+                    issue,
+                    pull_request,
+                } => commands::pr::link(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &pull_request,
+                ),
+                ReviewCommands::Status { issue } => commands::pr::status(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                ),
+                ReviewCommands::Show { issue } => commands::pr::show(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                ),
+                ReviewCommands::Merge { issue, role } => commands::pr::merge(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                ),
+                ReviewCommands::Comments { issue, unresolved } => commands::pr::comments(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                    unresolved,
+                ),
+                ReviewCommands::Comment {
+                    issue,
+                    role,
+                    finding,
+                    severity,
+                    body,
+                } => commands::pr::comment(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    &body,
+                    finding,
+                    finding.then_some(severity.as_str()),
+                ),
+                ReviewCommands::Approve { issue, role, body } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    "approve",
+                    &body,
+                ),
+                ReviewCommands::RequestChanges { issue, role, body } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    "request-changes",
+                    &body,
+                ),
+                ReviewCommands::Resolve { issue, finding } => commands::pr::resolve(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &finding,
+                ),
+            }
+        }
+
+        Commands::Forgejo { action } => {
+            let repo_root = atelier_app::storage_layout::find_repo_root()?;
+            match action {
+                ForgejoCommands::Roles { action } => match action {
+                    ForgejoRolesCommands::Check => commands::forgejo::roles_check(&repo_root),
+                    ForgejoRolesCommands::Provision { write_config } => {
+                        commands::forgejo::roles_provision(&repo_root, write_config)
+                    }
+                },
+            }
+        }
 
         Commands::History {
             mission,
@@ -1434,13 +1594,14 @@ fn run() -> Result<()> {
 
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => {
-                let db = projection_query_db()?;
+                let storage = use_cases::workflow_query_storage()?;
+                let db = storage.db();
                 commands::workflow::check(&db)
             }
         },
 
         Commands::Worktree { action } => {
-            let db = runtime_db()?;
+            let db = existing_projection_db()?;
             match action {
                 WorktreeCommands::ForMission { id, path } => {
                     commands::work::worktree_for_mission(&db, &id, path.as_deref())
@@ -1466,7 +1627,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Branch { action } => {
-            let db = runtime_db()?;
+            let db = existing_projection_db()?;
             match action {
                 BranchCommands::ForEpic { id } => {
                     let id = resolve_issue_arg(&db, &id)?;
@@ -1515,7 +1676,7 @@ fn run() -> Result<()> {
                 storage.repo_root(),
                 &storage.state_dir(),
                 &storage.db_path(),
-                storage.runtime_db_existed,
+                storage.projection_db_existed,
                 fix,
             )
         }
@@ -1550,7 +1711,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Init { .. } => "init",
         Commands::Man { .. } => "man",
         Commands::Status => "status",
-        Commands::Start { .. } => "start",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
@@ -1558,7 +1718,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
-            IssueCommands::Close { .. } => "issue close",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",
@@ -1590,19 +1749,37 @@ fn command_identity(command: &Commands) -> &'static str {
             MissionCommands::Unlink { .. } => "mission unlink",
             MissionCommands::AddBlocker { .. } => "mission add-blocker",
         },
-        Commands::Plan { action } => match action {
-            PlanCommands::Create { .. } => "plan create",
-            PlanCommands::Show { .. } => "plan show",
-            PlanCommands::Apply { .. } => "plan apply",
-            PlanCommands::List { .. } => "plan list",
-            PlanCommands::Revise { .. } => "plan revise",
-            PlanCommands::Link { .. } => "plan link",
+        Commands::Bundle { action } => match action {
+            BundleCommands::Preview { .. } => "bundle preview",
+            BundleCommands::Apply { .. } => "bundle apply",
         },
         Commands::Evidence { action } => match action {
             EvidenceCommands::Record { .. } => "evidence record",
             EvidenceCommands::Show { .. } => "evidence show",
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
+        },
+        Commands::Session { action } => match action {
+            SessionCommands::Show { .. } => "session show",
+            SessionCommands::List { .. } => "session list",
+        },
+        Commands::Review { action } => match action {
+            ReviewCommands::Open { .. } => "review open",
+            ReviewCommands::Link { .. } => "review link",
+            ReviewCommands::Status { .. } => "review status",
+            ReviewCommands::Show { .. } => "review show",
+            ReviewCommands::Merge { .. } => "review merge",
+            ReviewCommands::Comments { .. } => "review comments",
+            ReviewCommands::Comment { .. } => "review comment",
+            ReviewCommands::Approve { .. } => "review approve",
+            ReviewCommands::RequestChanges { .. } => "review request-changes",
+            ReviewCommands::Resolve { .. } => "review resolve",
+        },
+        Commands::Forgejo { action } => match action {
+            ForgejoCommands::Roles { action } => match action {
+                ForgejoRolesCommands::Check => "forgejo roles check",
+                ForgejoRolesCommands::Provision { .. } => "forgejo roles provision",
+            },
         },
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {

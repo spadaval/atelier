@@ -239,25 +239,9 @@ fn test_issue_tree_status_filter() {
     h.run_ok(&["issue", "create", "Filterable parent"]);
     let parent_id = h.issue_id(1);
     h.run_ok(&["issue", "subissue", "1", "Todo child"]);
-    h.run_ok(&[
-        "issue",
-        "create",
-        "Done child",
-        "--parent",
-        &parent_id,
-        "--issue-type",
-        "spike",
-    ]);
+    h.run_ok(&["issue", "create", "Done child", "--parent", &parent_id]);
     let done_child_id = h.issue_id(3);
-    h.run_ok(&["issue", "transition", &done_child_id, "start"]);
-    h.run_ok(&["issue", "transition", &done_child_id, "request_review"]);
-    h.run_ok(&[
-        "issue",
-        "close",
-        &done_child_id,
-        "--reason",
-        "fixture complete",
-    ]);
+    h.close_issue_with_evidence(&done_child_id);
 
     let tree = h.run_ok(&["issue", "tree", "-s", "todo"]);
     assert!(tree.stdout.contains("Todo child"));

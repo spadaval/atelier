@@ -1,17 +1,18 @@
 # Documentation Map
 
-- `AGENTFACTORY.md`: thin Agent Factory binding for this repository; per
-  [ADR 0006](adr/0006-agent-guidance-ownership-boundary.md), it routes
-  repo-specific tactical guidance to Atelier-owned surfaces.
-- `AGENTS.md`: concise entry point for agents working in this repository.
+- `.agents/skills/agent-factory/SKILL.md`: repository-owned Agent Factory skill
+  source and subskill references used while Atelier's workflow is still being
+  refined.
+- `AGENTS.md`: concise entry point and repository reference map for agents
+  working in this repository.
 - [CONTEXT.md](../CONTEXT.md): domain language and resolved model choices.
 - [SPEC.md](../SPEC.md): product intent and target behavior for Atelier.
 - [docs/spec/storage/export/rebuild/canonical-layout.md](spec/storage/export/rebuild/canonical-layout.md):
-  canonical `.atelier/` record file, ignored runtime/cache, compatibility, and
+  canonical `.atelier/` record file, ignored projection/cache, compatibility, and
   rebuild layout.
-- [docs/spec/bulk-plan/schema.md](spec/bulk-plan/schema.md):
-  versioned JSON contract, validation diagnostics, dry-run preview shape, and
-  fixtures for authored bulk graph plans.
+- [docs/spec/bundle/schema.md](spec/bundle/schema.md):
+  versioned JSON contract, validation diagnostics, preview output shape, and
+  fixtures for authored bundle graph deltas.
 - [docs/spec/agent-factory/tracker-replacement-mvp.md](spec/agent-factory/tracker-replacement-mvp.md):
   minimum human command, storage, and workflow contract required before Atelier
   replaces Beads for this repository and Agent Factory.
@@ -21,8 +22,12 @@
   such as `atelier-z1p8`, not typed numeric IDs or semantic slugs.
 - [docs/adr/0002-markdown-first-record-store.md](adr/0002-markdown-first-record-store.md):
   accepted choice that Markdown records are canonical, SQLite is a
-  rebuildable projection index plus local runtime state, and export is a
+  rebuildable projection index, and export is a
   hidden/admin compatibility and determinism-check path during migration.
+- [docs/adr/0011-native-review-modes-and-room-authority.md](adr/0011-native-review-modes-and-room-authority.md):
+  accepted choice that projects configure exactly one review mode, native
+  rooms live under `.atelier/reviews/`, the public command surface is
+  `atelier review`, and review merge does not transition issue workflow.
 - [docs/product/index.md](product/index.md): product behavior, workflow model,
   public command surface, and human interface contracts.
 - [docs/product/development-setup.md](product/development-setup.md): required
@@ -38,21 +43,22 @@
 - [docs/architecture/provenance.md](architecture/provenance.md): Chainlink
   provenance, inherited module boundaries, preservation expectations, and
   deferred migration areas.
-- [docs/product/work-model.md](product/work-model.md): mission,
-  milestone, epic, issue, workflow validator, and evidence relationships.
+- [docs/product/work-model.md](product/work-model.md): mission, deferred
+  checkpoint semantics, epic, issue, workflow validator, and evidence
+  relationships.
 - [docs/product/validation.md](product/validation.md): product language for
   outcomes, proof, evidence, validation, closeout, and proof visibility in
   normal operator surfaces.
-- [docs/product/milestone-records.md](product/milestone-records.md):
-  first-class checkpoint record fields, validation model, evidence links, and
-  command-surface ownership.
+- [docs/product/milestone-records.md](product/milestone-records.md): deferred
+  checkpoint semantics and the v1 rule that validation data stays on issues,
+  epics, missions, and evidence.
 - [docs/product/workflow-configuration.md](product/workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
-  guidance templates, strict errors, and starter workflow examples.
+  review field and review room records, strict errors, and starter workflow
+  examples.
 - [docs/architecture/markdown-first-record-store.md](architecture/markdown-first-record-store.md):
-  RecordStore, ProjectionIndex, and RuntimeState boundaries for Markdown-first
-  durable writes, issue activity sidecars, rebuildable SQLite indexes, and
-  local runtime data.
+  RecordStore and ProjectionIndex boundaries for Markdown-first durable writes,
+  issue activity sidecars, rebuildable SQLite indexes, and local cache data.
 - [docs/architecture/local-command-diagnostics.md](architecture/local-command-diagnostics.md):
   local command telemetry storage, redaction defaults, opt-out controls,
   retention behavior, event fields, and Mission Control export boundary.

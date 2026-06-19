@@ -18,8 +18,9 @@ pub enum CommandStorageAccess {
     DegradedProjectionQuery,
     /// Commands that write canonical Markdown and then refresh the projection.
     CanonicalMutation,
-    /// Runtime-local commands that must not refresh or mutate canonical state.
-    RuntimeOnly,
+    /// Commands that intentionally inspect the existing projection and own any
+    /// command-specific freshness or degraded-state behavior.
+    ExistingProjection,
     /// Diagnostics, export, rebuild, and repair flows that own freshness policy.
     HealthRepair,
 }
@@ -42,7 +43,7 @@ impl CommandStorageAccess {
 pub struct CommandStorage {
     layout: storage_layout::StorageLayout,
     db: Database,
-    pub runtime_db_existed: bool,
+    pub projection_db_existed: bool,
 }
 
 impl CommandStorage {
@@ -73,13 +74,13 @@ impl CommandStorage {
 
 pub fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     let layout = storage_layout::StorageLayout::discover()?;
-    let runtime_db_existed = layout.runtime_db_path().exists();
+    let projection_db_existed = layout.runtime_db_path().exists();
     let db = Database::open(&layout.runtime_db_path()).context("Failed to open database")?;
     let db = if mode.requires_fresh_projection() {
         ensure_fresh_projection_db(
             db,
             &layout,
-            runtime_db_existed,
+            projection_db_existed,
             mode.allows_degraded_projection(),
         )?
     } else {
@@ -88,19 +89,19 @@ pub fn command_storage(mode: CommandStorageAccess) -> Result<CommandStorage> {
     Ok(CommandStorage {
         layout,
         db,
-        runtime_db_existed,
+        projection_db_existed,
     })
 }
 
 fn ensure_fresh_projection_db(
     db: Database,
     layout: &storage_layout::StorageLayout,
-    runtime_db_existed: bool,
+    projection_db_existed: bool,
     allow_degraded_projection: bool,
 ) -> Result<Database> {
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
-        if !runtime_db_existed {
+        if !projection_db_existed {
             crate::rebuild::validate_canonical_state(&state_dir).map_err(|error| {
                 projection_validation_error(error, "Runtime projection database is missing")
             })?;
@@ -121,8 +122,16 @@ fn ensure_fresh_projection_db(
 
         let report = projection_index::check(&db, &state_dir)?;
         if !report.is_fresh() {
-            if let Err(error) = crate::rebuild::validate_canonical_state(&state_dir) {
-                if allow_degraded_projection {
+            match crate::rebuild::repair_incremental(&db, &state_dir, &report) {
+                Ok(crate::rebuild::IncrementalRepair::Repaired) => {
+                    tracing::warn!(
+                        "Projection index was stale; repaired local SQLite projection incrementally from {}",
+                        state_dir.display()
+                    );
+                    return Ok(db);
+                }
+                Ok(crate::rebuild::IncrementalRepair::NeedsFullRebuild) => {}
+                Err(error) if allow_degraded_projection => {
                     tracing::warn!(
                         "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
                     );
@@ -134,20 +143,39 @@ fn ensure_fresh_projection_db(
                     tracing::warn!("Canonical diagnostic: {error:#}");
                     return Ok(db);
                 }
-                return Err(projection_validation_error(
-                    error,
-                    "Canonical tracker Markdown is invalid",
-                ));
+                Err(error) => {
+                    return Err(projection_validation_error(
+                        error,
+                        "Canonical tracker Markdown is invalid",
+                    ));
+                }
             }
             let db_path = layout.runtime_db_path();
             drop(db);
-            crate::rebuild::run(&state_dir, &db_path).with_context(|| {
+            if let Err(error) = crate::rebuild::run(&state_dir, &db_path).with_context(|| {
                 format!(
                     "Projection index is stale and automatic rebuild failed for {}\n{}",
                     state_dir.display(),
                     report.problem_messages().join("\n")
                 )
-            })?;
+            }) {
+                if allow_degraded_projection {
+                    tracing::warn!(
+                        "Tracker degraded: canonical tracker Markdown is invalid; using existing local projection for orientation only."
+                    );
+                    tracing::warn!("Recovery: 1. run `atelier lint`; 2. fix the named canonical Markdown record; 3. run `atelier doctor --fix`; 4. rerun the blocked command before closing or mutating work.");
+                    tracing::warn!(
+                        "Projection freshness: {}",
+                        report.problem_messages().join("; ")
+                    );
+                    tracing::warn!("Canonical diagnostic: {error:#}");
+                    return Database::open(&db_path).context("Failed to open database");
+                }
+                return Err(projection_validation_error(
+                    error,
+                    "Canonical tracker Markdown is invalid",
+                ));
+            }
             tracing::warn!(
                 "Projection index was stale; rebuilt local SQLite projection from {}",
                 state_dir.display()
@@ -180,8 +208,8 @@ pub fn state_and_db_paths() -> Result<(PathBuf, PathBuf)> {
     Ok(command_storage(CommandStorageAccess::CanonicalMutation)?.state_and_db_paths())
 }
 
-pub fn runtime_db() -> Result<Database> {
-    Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
+pub fn existing_projection_db() -> Result<Database> {
+    Ok(command_storage(CommandStorageAccess::ExistingProjection)?.into_db())
 }
 
 pub fn projection_query_db() -> Result<Database> {
@@ -195,7 +223,7 @@ pub fn degraded_projection_query_db() -> Result<Database> {
 pub fn lint_db() -> Result<Database> {
     let layout = storage_layout::StorageLayout::discover()?;
     if layout.runtime_db_path().exists() {
-        Ok(command_storage(CommandStorageAccess::RuntimeOnly)?.into_db())
+        Ok(command_storage(CommandStorageAccess::ExistingProjection)?.into_db())
     } else {
         projection_query_db()
     }
@@ -214,7 +242,7 @@ mod tests {
         assert!(CommandStorageAccess::ProjectionQuery.requires_fresh_projection());
         assert!(CommandStorageAccess::DegradedProjectionQuery.requires_fresh_projection());
         assert!(CommandStorageAccess::CanonicalMutation.requires_fresh_projection());
-        assert!(!CommandStorageAccess::RuntimeOnly.requires_fresh_projection());
+        assert!(!CommandStorageAccess::ExistingProjection.requires_fresh_projection());
         assert!(!CommandStorageAccess::HealthRepair.requires_fresh_projection());
         assert!(!CommandStorageAccess::ProjectionQuery.allows_degraded_projection());
         assert!(CommandStorageAccess::DegradedProjectionQuery.allows_degraded_projection());

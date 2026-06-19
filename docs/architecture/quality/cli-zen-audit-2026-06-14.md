@@ -138,7 +138,7 @@ Tracked by `atelier-j01c`.
 
 `atelier diagnostics slow` advertises stable JSON. That is reasonable for local
 telemetry and tooling, but it should not leak into normal planning or validation
-guidance. AGENTFACTORY guidance already says not to plan or validate work by
+guidance. AGENTS guidance already says not to plan or validate work by
 parsing command-result JSON. The CLI should keep that boundary clear: diagnostics
 JSON is for local performance analysis, not for ordinary work-state decisions.
 

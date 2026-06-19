@@ -47,9 +47,10 @@ model:
 - Hidden/admin projection diagnostics may verify deterministic rendered output,
   and `doctor --fix` owns explicit ignored-state repair from committed Markdown
   records after checkout, pull, merge, or clone.
-- Missions, milestone checkpoint records, issues, plans, evidence, workflow
-  validators, runs, typed links, and workflows become first-class Atelier
-  concepts instead of only inherited issue-tracker fields.
+- Missions, issues, evidence, workflow validators, runs, typed links, and
+  workflows become first-class Atelier concepts instead of only inherited
+  issue-tracker fields. Plan and checkpoint intent remains prose or referenced
+  Markdown until a future contract reintroduces first-class records.
 - Agent-facing commands keep focused human output for coordination and
   validation while durable projections provide machine-readable state.
 
@@ -86,8 +87,8 @@ them:
   `.atelier/runtime/` and `.atelier/cache/`.
 - Replacing backup-style export/import with canonical `.atelier/`
   Markdown records and rebuildable projections.
-- Adding first-class missions, plans, evidence, workflow validators, runs, typed
-  links, and workflow configuration.
+- Adding first-class missions, evidence, workflow validators, runs, typed links,
+  and workflow configuration.
 - Reworking lock sync behavior beyond what the relevant migration or design
   issue decides.
 

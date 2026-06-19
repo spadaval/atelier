@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-09T17:29:00.549237358+00:00"
 id: "atelier-001a"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "assignee:root"
 - "beads:type:epic"

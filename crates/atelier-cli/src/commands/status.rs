@@ -7,9 +7,13 @@ use std::process::Command;
 use crate::commands;
 use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
-use atelier_core::{DomainRecord, Issue};
-use atelier_records::activity::list_all_issue_activities;
-use atelier_sqlite::Database;
+use atelier_app::use_cases as app_use_cases;
+use atelier_core::Issue;
+use atelier_records::activity::{
+    list_all_issue_activities, list_derived_issue_attempts, DerivedIssueAttempt,
+    DerivedIssueAttemptState,
+};
+use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -19,6 +23,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .map(|issue| issue.id.as_str())
         .collect::<BTreeSet<_>>();
     let active_mission = commands::mission::active_mission(db)?;
+    let active_sessions = active_session_records(state_dir)?;
     let current_missions = db
         .list_records("mission", None)?
         .into_iter()
@@ -87,9 +92,23 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         None if current_missions.is_empty() => println!("Active mission: none"),
         None => println!("Active mission: none ({} current)", current_missions.len()),
     }
+    if active_sessions.is_empty() {
+        println!("Active sessions: none");
+    } else {
+        println!("Active sessions: {}", active_sessions.len());
+        for session in &active_sessions {
+            println!(
+                "  {} {} {} -> issue/{}",
+                session.id,
+                session.role,
+                session.state.as_str(),
+                session.issue_id
+            );
+        }
+    }
 
     if !export_stale.is_empty() {
-        println!("Export issues: {}", export_stale.len());
+        println!("Local state issues: {}", export_stale.len());
     }
 
     println!();
@@ -99,7 +118,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("Tracker:  {tracker_state}");
 
     println!();
-    println!("Branch Lifecycle");
+    println!("Branch Policy");
     println!("----------------");
     print_branch_lifecycle_state(db, &active_issues)?;
 
@@ -233,7 +252,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
-                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
+                    "  Start selectable active-mission work ({} selectable issue(s)): atelier issue transition {} start",
                     snapshot.selectable_issues.len(),
                     issue.id
                 );
@@ -276,18 +295,27 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
             ready.len()
         );
-        println!("  Start selected work (ready work exists): atelier start <issue-id>");
-    }
-    if export_stale.is_empty() {
-        println!("  Check runtime health (tracker records are current): atelier doctor");
-    } else {
         println!(
-            "  Repair ignored projection state ({} stale record(s)): atelier doctor --fix",
+            "  Start selected work (ready work exists): atelier issue transition <issue-id> start"
+        );
+    }
+    if !export_stale.is_empty() {
+        println!(
+            "  Repair local Atelier state ({} stale record(s)): atelier doctor --fix",
             export_stale.len()
         );
-        println!("  Check tracker records (projection is stale): atelier lint");
+        println!("  Check committed tracker records after repair: atelier lint");
     }
     Ok(())
+}
+
+fn active_session_records(state_dir: &Path) -> Result<Vec<DerivedIssueAttempt>> {
+    let mut sessions = list_derived_issue_attempts(state_dir)?
+        .into_iter()
+        .filter(|session| session.state == DerivedIssueAttemptState::Active)
+        .collect::<Vec<_>>();
+    sessions.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(sessions)
 }
 
 #[derive(Default)]
@@ -323,7 +351,7 @@ impl MissionSnapshot {
 
 fn mission_snapshot(
     db: &Database,
-    mission: &DomainRecord,
+    mission: &RecordSummary,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<MissionSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -511,7 +539,7 @@ fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
 fn print_evidence_status(
     db: &Database,
     active_issues: &[Issue],
-    active_mission: Option<&DomainRecord>,
+    active_mission: Option<&RecordSummary>,
     mission_snapshot: Option<&MissionSnapshot>,
     ready: &[Issue],
 ) -> Result<()> {
@@ -717,7 +745,10 @@ fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Resul
                 {
                     "ok".to_string()
                 } else {
-                    format!("mismatch; run `atelier start {}`", issue.id)
+                    format!(
+                        "mismatch; run `atelier issue transition {} start`",
+                        issue.id
+                    )
                 };
                 println!(
                     "  {} - owner {} {} ({}) | expected {} | {state}",
@@ -773,7 +804,7 @@ pub fn close_all_lifecycle(
     label_filter: Option<&str>,
     priority_filter: Option<&str>,
 ) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     let issues = db.list_issues(Some("todo"), label_filter, priority_filter)?;
     drop(db);
 

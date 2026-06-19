@@ -4,14 +4,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::storage_layout;
-use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_core::{Issue, RecordLink};
 use atelier_records as record_store;
 use atelier_records::{
     attachment_relationship, relates_relationship, relationship_target, CanonicalIssueRecord,
     IssueSections, Relationships, FIRST_CLASS_RECORD_KINDS,
 };
 use atelier_sqlite::projection_index;
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, RecordSummary};
 
 use crate::{Outcome, Request, ViewModel};
 
@@ -180,10 +180,11 @@ fn build_canonical_projection(db: &Database, state_dir: &Path) -> Result<Vec<Pro
         });
     }
     for spec in FIRST_CLASS_RECORD_KINDS {
+        let store = record_store::RecordStore::new(state_dir);
         for record in db.list_records(spec.kind, None)? {
             files.push(ProjectionFile {
                 path: record_store::canonical_record_path(spec, &record.id)?,
-                bytes: render_domain_record(db, &record)?.into_bytes(),
+                bytes: render_projected_record(db, &store, &record)?.into_bytes(),
             });
         }
     }
@@ -354,14 +355,16 @@ fn render_issue_record(db: &Database, issue: &Issue) -> Result<String> {
     })
 }
 
-fn render_domain_record(db: &Database, record: &DomainRecord) -> Result<String> {
+fn render_projected_record(
+    db: &Database,
+    store: &record_store::RecordStore,
+    record: &RecordSummary,
+) -> Result<String> {
+    let mut full = store.load_record_by_id(&record.kind, &record.id)?;
     let mut relationships = domain_relationships(db, record)?;
     record_store::sort_relationships(&mut relationships);
-    record_store::render_domain_record(&record_store::CanonicalDomainRecord {
-        record: record.clone(),
-        labels: domain_labels(record),
-        relationships,
-    })
+    full.header_mut().relationships = relationships;
+    record_store::render_record(&full)
 }
 
 fn issue_relationships(db: &Database, issue: &Issue) -> Result<Relationships> {
@@ -389,7 +392,7 @@ fn issue_relationships(db: &Database, issue: &Issue) -> Result<Relationships> {
     Ok(relationships)
 }
 
-fn domain_relationships(db: &Database, record: &DomainRecord) -> Result<Relationships> {
+fn domain_relationships(db: &Database, record: &RecordSummary) -> Result<Relationships> {
     let mut relationships = Relationships::default();
     for link in db.list_record_links(&record.kind, &record.id)? {
         classify_record_link_for_owner(&mut relationships, &link, &record.kind, &record.id);
@@ -428,32 +431,19 @@ fn classify_record_link_for_owner(
 }
 
 fn is_child_relation(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "advances" | "contributes_to" | "implements" | "has_checkpoint"
-    )
+    matches!(relation_type, "advances" | "contributes_to" | "implements")
 }
 
 fn is_attachment_kind(kind: &str) -> bool {
-    matches!(kind, "plan" | "evidence" | "milestone")
+    matches!(kind, "evidence")
 }
 
 fn is_attachment_role(relation_type: &str) -> bool {
-    matches!(
-        relation_type,
-        "planned_by" | "validates" | "evidenced_by" | "has_checkpoint"
-    )
+    matches!(relation_type, "validates" | "evidenced_by")
 }
 
 fn issue_record_path(id: &str) -> PathBuf {
     record_store::issue_record_path(id)
-}
-
-fn domain_labels(record: &DomainRecord) -> Vec<String> {
-    match record.kind.as_str() {
-        "mission" => vec!["mission".to_string()],
-        _ => Vec::new(),
-    }
 }
 
 fn display_state_path(relative_path: &Path) -> String {

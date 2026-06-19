@@ -1,28 +1,30 @@
-# SQLite Runtime Schema
+# SQLite Projection Schema
 
-Atelier uses one local database at `.atelier/runtime/state.db`. Canonical
-Markdown remains the source of truth; deleting or rebuilding this database must
-not lose tracked work.
+Atelier uses one ignored local database at `.atelier/runtime/state.db`.
+Canonical Markdown remains the source of truth; deleting or rebuilding this
+database must not lose tracked work.
 
 ## Ownership
 
-Projection tables are rebuildable from `.atelier/` Markdown:
+All target SQLite tables are projection tables rebuildable from `.atelier/`
+Markdown:
 
 - `issues`
 - `labels`
 - `dependencies`
 - `relations`
 - `records`
+- `record_labels`
 - `record_links`
-- `projection_index_sources`
+- `evidence`
+- `plans`
+- `milestones`
+- `projection_sources`
 
-Runtime tables hold ignored local diagnostics or cache metadata:
-
-- `runtime_metadata`
-
-The target schema does not include `sessions`, `work_associations`, hidden
-claims, or active-work source-of-truth tables. Current work is derived from
-canonical issue status and checkout context.
+The target schema does not include `runtime_metadata`, `sessions`,
+`work_associations`, hidden claims, active-work source-of-truth tables, or other
+non-Markdown tracker facts. Current work is derived from canonical issue status
+and checkout context.
 
 Old SQLite schema compatibility is out of scope for the crate rewrite. The
 supported migration path is `atelier doctor --fix` or rebuild from committed

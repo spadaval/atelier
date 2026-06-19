@@ -6,7 +6,6 @@ use std::process::Command;
 
 const GUIDANCE_FILES: &[&str] = &[
     "AGENTS.md",
-    "AGENTFACTORY.md",
     "docs/product/cli-surface.md",
     "docs/product/work-model.md",
     "docs/architecture/quality/validation.md",
@@ -23,7 +22,6 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "maintenance",
     "mission",
     "note",
-    "plan",
     "workflow",
     "worktree",
 ];
@@ -37,6 +35,7 @@ const REMOVED_ROOTS: &[&str] = &[
     "link",
     "locks",
     "milestone",
+    "plan",
     "session",
     "sync",
     "timer",

@@ -99,7 +99,7 @@ impl SmokeHarness {
     /// Attach minimal validation proof to an issue fixture.
     pub fn attach_issue_pass_evidence(&self, issue_ref: &str) -> String {
         let issue_id = self.translate_issue_ref(issue_ref);
-        let summary = format!("issue close proof for {issue_id}");
+        let summary = format!("manual check: issue close proof for {issue_id}");
         let evidence = self.run_ok(&[
             "evidence",
             "record",
@@ -118,10 +118,31 @@ impl SmokeHarness {
     pub fn close_issue_with_evidence(&self, issue_ref: &str) {
         let issue_id = self.translate_issue_ref(issue_ref);
         self.attach_issue_pass_evidence(&issue_id);
-        self.run_ok(&["issue", "update", &issue_id, "--issue-type", "spike"]);
-        self.run_ok(&["issue", "transition", &issue_id, "start"]);
-        self.run_ok(&["issue", "transition", &issue_id, "request_review"]);
-        self.run_ok(&["issue", "close", &issue_id, "--reason", "fixture complete"]);
+        self.mark_issue_done_for_fixture(&issue_id);
+    }
+
+    /// Mark an issue done for smoke tests that are not exercising workflow closeout.
+    pub fn mark_issue_done_for_fixture(&self, issue_ref: &str) {
+        let issue_id = self.translate_issue_ref(issue_ref);
+        let path = self
+            .temp_dir
+            .path()
+            .join(".atelier")
+            .join("issues")
+            .join(format!("{issue_id}.md"));
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let updated = text
+            .replacen("status: \"todo\"", "status: \"done\"", 1)
+            .replacen("status: \"in_progress\"", "status: \"done\"", 1)
+            .replacen("status: \"blocked\"", "status: \"done\"", 1);
+        assert_ne!(
+            updated, text,
+            "fixture issue {issue_id} did not contain a mutable status"
+        );
+        std::fs::write(&path, updated)
+            .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+        self.run_ok(&["rebuild"]);
     }
 
     /// Run an Atelier CLI command and assert it fails.

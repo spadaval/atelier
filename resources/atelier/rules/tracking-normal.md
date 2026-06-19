@@ -32,12 +32,12 @@ atelier issue create "Add registration endpoint" --parent 1
 atelier issue create "Add login endpoint" --parent 1
 
 # Track progress
-atelier start <id>
+atelier issue transition <id> start
 atelier issue note <id> "Found existing helper in utils/"
 
-# Close (auto-updates CHANGELOG.md)
-atelier issue close <id> --reason "completed"
-atelier issue close <id> --reason "completed"    # Skip changelog for internal work
+# Close through the configured workflow
+atelier issue transition <id> close
+atelier issue transition <id> --options
 
 # Quiet mode for scripting
 atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
@@ -46,7 +46,7 @@ atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
 ### Session Management
 Sessions auto-start. End them properly when you can:
 ```bash
-atelier start <id>              # Mark current focus
+atelier issue transition <id> start              # Mark current focus
 atelier issue note <id> "handoff: ..." --kind handoff      # Save handoff context
 ```
 

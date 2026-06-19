@@ -13,8 +13,8 @@ Primary question: "Can I add a generic note to any record?"
   be kept unless a human requests a transition window.
 - Output hierarchy: If invoked, it should reject with specific replacements.
 
-## Role Use
+## Retired Surface Assessment
 
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| hidden `atelier note add ...` | Worker | Legacy generic note entry. | Should be removed or continue to point to record-specific note commands. |
+| Form | Persona | Likely use cases | Information wanted | Likely next action | Guidance/orientation |
+| --- | --- | --- | --- | --- | --- |
+| removed/hidden `atelier note add ...` | Worker | Legacy generic note entry; attempt to add context without choosing record owner. | Replacement record-specific command. | Use `atelier issue note <id> ...` or `atelier mission note <id> ...`. | Generic notes should remain removed because they blur record ownership. |

@@ -43,7 +43,7 @@ Observed transcript: `target/debug/atelier evidence --help`.
 | Issue | Partial. Sectioned issue Markdown is readable, but issue body/description duplication remains open. | `atelier-nqp4` |
 | Mission | Pass for readable sections and no escaped mission `data:` front matter. | Closed mission-record work; `rg '^data:' .atelier/missions -g '*.md'`. |
 | Evidence | Pass for committed evidence records: typed front matter is rendered and `rg '^data:' .atelier/evidence -g '*.md'` returns no matches. | `atelier-of3h`, evidence `atelier-3b7u`. |
-| Plan | Partial. Plan command still uses `DomainRecord` generic payload plumbing internally. | `atelier-ihz0` |
+| Plan | Pass for typed command and RecordStore plumbing; plan projection summaries hydrate canonical Markdown for detail views. | `atelier-ihz0` follow-up refactor. |
 | Activity sidecars | Partial. Canonical sidecars exist, but ownership and retention contract remain open. | `atelier-k3vs` |
 | Runtime/cache | Pass after local repair: runtime database is `.atelier/runtime/state.db`; `.atelier/state.db` is ignored as rebuildable local residue. | `atelier-fyrm`; this audit also restores the ignore rule. |
 
@@ -52,7 +52,7 @@ Observed transcript: `target/debug/atelier evidence --help`.
 | Area | Classification | Owner |
 | --- | --- | --- |
 | `src/record_store.rs` | Fail/assigned. It still owns parsing, rendering, validation, migration helpers, and tests for several record kinds. | `atelier-2ehd` |
-| Generic `DomainRecord.data_json` plumbing | Fail/assigned. Evidence no longer relies on escaped canonical `data`, but generic internal plumbing remains for other records. | `atelier-ihz0` |
+| Generic payload plumbing | Pass for current typed record paths; first-class records use typed structures rather than generic internal payload shuttles. | `atelier-ihz0` follow-up refactor. |
 | Main command routing and oversized handlers | Fail/assigned. Root dispatch and some handlers remain broad. | `atelier-d7lw` |
 | Workflow policy parser/validator | Fail/assigned. Parser and validation hotspots were triaged and need split work. | `atelier-wj05` |
 | Runtime database schema/projection migration | Fail/assigned. Runtime path is correct, but schema/migration hotspots remain. | `atelier-ggls` |
@@ -65,7 +65,7 @@ Observed transcript: `target/debug/atelier evidence --help`.
 Command used:
 
 ```bash
-rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md AGENTFACTORY.md CONTEXT.md SPEC.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
+rg -n "work start|work status|workflow validate|evidence add|evidence capture|beads|chainlink|Claude|state\\.db|data:" AGENTS.md CONTEXT.md SPEC.md docs src tests .atelier -g '!runtime/**' -g '!cache/**' -g '!*.db'
 ```
 
 Classification:

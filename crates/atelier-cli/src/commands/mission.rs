@@ -5,10 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::work_order::WorkOrderRow;
-use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_app::use_cases as app_use_cases;
+use atelier_core::{Issue, MissionRecord, Record, RecordLink};
 use atelier_records as record_store;
-use atelier_records::{RecordStore, MISSION_EMPTY_DATA_JSON};
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, RecordSummary};
 
 const KIND: &str = "mission";
 const MISSION_TERMINAL_TRANSITION: &str = "close";
@@ -23,19 +23,9 @@ pub fn create(
 ) -> Result<()> {
     let sections =
         record_store::mission_sections_from_inputs(title, body, constraints, risks, validation);
-    let mission_body = record_store::render_mission_sections(&sections);
-    let store = RecordStore::new(state_dir);
-    let created = store.create_domain_record(
-        KIND,
-        title,
-        "ready",
-        Some(&mission_body),
-        MISSION_EMPTY_DATA_JSON,
-    )?;
-    refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, &created.record.id)?;
-    print_record(&record)
+    let created = app_use_cases::create_mission_record(state_dir, title, "ready", sections)?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    print_record(&created)
 }
 
 pub fn show(db: &Database, id: &str) -> Result<()> {
@@ -43,7 +33,7 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
 }
 
 pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     let mission = db.require_record(KIND, id)?;
     let current_missions = current_mission_records(&db)?;
     let active = current_missions
@@ -65,19 +55,18 @@ pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) ->
     }
     drop(db);
 
-    let store = RecordStore::new(state_dir);
     let mut changed = false;
     for record in current_missions {
-        let mut canonical = store.load_domain_record_by_id(KIND, &record.id)?;
-        let should_be_active = canonical.record.id == mission.id;
-        if set_mission_active_state(&mut canonical.record, should_be_active)? {
-            canonical.record.updated_at = Utc::now();
-            store.write_domain_record_atomic(&canonical)?;
+        let mut canonical = canonical_mission_record(&record.id)?;
+        let should_be_active = canonical.header.id == mission.id;
+        if set_mission_active_state(&mut canonical, should_be_active)? {
+            canonical.header.updated_at = Utc::now();
+            app_use_cases::write_canonical_record(state_dir, &Record::Mission(canonical))?;
             changed = true;
         }
     }
     if changed {
-        refresh_projection(state_dir, db_path)?;
+        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     }
     println!("Active mission: {} - {}", mission.id, mission.title);
     println!("Next Commands");
@@ -177,12 +166,16 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     println!("  atelier mission list");
     println!("  atelier issue list --ready");
-    println!("  atelier doctor");
     Ok(())
 }
 
 fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: bool) -> Result<()> {
-    let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
+    let mission = db.require_record(KIND, id)?;
+    let canonical_mission = canonical_mission_record(id).ok();
+    let mission_title = canonical_mission
+        .as_ref()
+        .map(|record| record.header.title.as_str())
+        .unwrap_or(mission.title.as_str());
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
     let active_work = active_work_for_mission(db, &mission.id)?;
@@ -218,7 +211,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
         "Mission Status {} [{}] - {}",
         mission.id,
         mission_focus_label(&mission),
-        mission.title
+        mission_title
     );
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
@@ -364,7 +357,7 @@ fn print_mission_branch_lifecycle(
     summary: &MissionListSummary,
     active_work: &[Issue],
 ) -> Result<()> {
-    print_mission_heading("Branch Lifecycle");
+    print_mission_heading("Branch Policy");
     let current_branch = crate::commands::workflow::current_git_branch()?;
     println!(
         "Current branch: {}",
@@ -443,7 +436,7 @@ fn print_mission_branch_lifecycle(
             (context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str()))
                 .then(|| {
                     format!(
-                        "{} expected {}; run `atelier start {}`",
+                        "{} expected {}; run `atelier issue transition {} start`",
                         issue.id, context.resolution.expected_branch, issue.id
                     )
                 })
@@ -461,7 +454,7 @@ fn print_mission_branch_lifecycle(
 }
 
 fn print_status_next_commands(
-    mission: &DomainRecord,
+    mission: &RecordSummary,
     summary: &MissionListSummary,
     terminal: &MissionTerminalStatus,
 ) {
@@ -506,7 +499,7 @@ fn print_status_next_commands(
             println!("  Resolve open blockers before assigning more implementation work");
         } else if let Some(issue) = summary.selectable_work.first() {
             println!(
-                "  Start selectable mission work ({} selectable issue(s)): atelier start {}",
+                "  Start selectable mission work ({} selectable issue(s)): atelier issue transition {} start",
                 summary.selectable_work.len(),
                 issue.id
             );
@@ -518,15 +511,13 @@ fn print_status_next_commands(
             );
         }
     }
-    println!("  Check runtime health (tracker and projection state): atelier doctor");
 }
 
 pub fn view(db: &Database, id: &str) -> Result<()> {
-    let mission = canonical_record_detail(KIND, id)?.unwrap_or(db.require_record(KIND, id)?);
+    db.require_record(KIND, id)?;
+    let mission = canonical_mission_record(id)?;
     let links = db.list_record_links(KIND, id)?;
-    let mut plans = Vec::new();
     let mut evidence = Vec::new();
-    let mut milestones = Vec::new();
     let mut mission_blockers = Vec::new();
     let mut supporting = Vec::new();
     let mut seen_records = BTreeSet::new();
@@ -544,23 +535,11 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
             continue;
         };
         match kind {
-            "plan"
-                if link.relation_type == "planned_by"
-                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
-            {
-                plans.push(record_summary(db, kind, linked_id)?)
-            }
             "evidence"
                 if link.relation_type == "validates"
                     && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
             {
                 evidence.push(record_summary(db, kind, linked_id)?)
-            }
-            "milestone"
-                if link.relation_type == "has_checkpoint"
-                    && seen_records.insert((kind.to_string(), linked_id.to_string())) =>
-            {
-                milestones.push(record_summary(db, kind, linked_id)?)
             }
             "issue" => {
                 if link.relation_type == "blocked_by" {
@@ -607,27 +586,18 @@ pub fn view(db: &Database, id: &str) -> Result<()> {
         }
     }
 
-    render_mission_show_human(
-        &mission,
-        &plans,
-        &milestones,
-        &evidence,
-        &work,
-        &mission_blockers,
-        &supporting,
-    )?;
+    render_mission_show_human(&mission, &evidence, &work, &mission_blockers, &supporting)?;
     Ok(())
 }
 
-fn canonical_record_detail(kind: &str, id: &str) -> Result<Option<DomainRecord>> {
+fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     let Some(state_dir) = find_state_dir_from_cwd()? else {
-        return Ok(None);
+        bail!("Cannot locate canonical Atelier state directory");
     };
-    let store = RecordStore::new(state_dir);
-    Ok(Some(store.load_domain_record_by_id(kind, id)?.record))
+    app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
-pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
+pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
     let active = current_mission_records(db)?
         .into_iter()
         .filter(is_active_mission)
@@ -645,17 +615,17 @@ pub fn active_mission(db: &Database) -> Result<Option<DomainRecord>> {
     Ok(active.into_iter().next())
 }
 
-fn current_mission_records(db: &Database) -> Result<Vec<DomainRecord>> {
+fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
     mission_records_for_filter(db, Some("current"))
 }
 
-fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec<DomainRecord>> {
+fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec<RecordSummary>> {
     let records = db.list_records(KIND, None)?;
     Ok(match status {
         None | Some("all") => records,
         Some("current") => records
             .into_iter()
-            .filter(|record| mission_lifecycle_status(record) != "closed")
+            .filter(|record| is_current_mission_status(&mission_lifecycle_status(record)))
             .collect(),
         Some(status) => {
             let status = normalize_mission_status(status)?;
@@ -669,16 +639,20 @@ fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec
 
 fn normalize_mission_status(status: &str) -> Result<&str> {
     match status {
-        "draft" | "ready" | "active" | "closed" => Ok(status),
+        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(status),
         _ => bail!(
-            "Invalid mission status '{}'. Must be one of: draft, ready, active, closed",
+            "Invalid mission status '{}'. Must be one of: draft, ready, active, superseded, closed",
             status
         ),
     }
 }
 
-fn mission_lifecycle_status(record: &DomainRecord) -> String {
+fn mission_lifecycle_status(record: &RecordSummary) -> String {
     record.status.clone()
+}
+
+fn is_current_mission_status(status: &str) -> bool {
+    !matches!(status, "closed" | "superseded")
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
@@ -729,61 +703,53 @@ pub fn update(
     {
         bail!("Nothing to update");
     }
-    let store = RecordStore::new(state_dir);
-    let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut sections = record_store::mission_sections_from_domain_record(&current.record)?;
+    let mut current = canonical_mission_record(id)?;
+    let mut sections = current.sections.clone();
     replace_section_list(&mut sections.constraints, constraints);
     replace_section_list(&mut sections.risks, risks);
     replace_section_list(&mut sections.validation, validation);
     if let Some(title) = title {
-        current.record.title = title.to_string();
+        current.header.title = title.to_string();
     }
     if let Some(status) = status {
         let status = normalize_mission_status(status)?;
-        if status == "closed" && current.record.status != "closed" {
+        if status == "closed" && current.header.status != "closed" {
             bail!(
                 "Mission terminal checks use `atelier mission close {id} --reason \"...\"`; `mission update --status closed` is not the ordinary terminal path."
             );
         }
-        current.record.status = status.to_string();
+        current.header.status = status.to_string();
     }
     if let Some(body) = body {
         sections.intent = body.trim().to_string();
     }
-    current.record.body = Some(record_store::render_mission_sections(&sections));
-    current.record.data_json = MISSION_EMPTY_DATA_JSON.to_string();
-    current.record.updated_at = Utc::now();
-    store.write_domain_record_atomic(&current)?;
-    refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, id)?;
-    print_record(&record)
+    current.sections = sections;
+    current.header.updated_at = Utc::now();
+    app_use_cases::write_canonical_record(state_dir, &Record::Mission(current.clone()))?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    print_record(&current)
 }
 
 pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result<()> {
     if reason.trim().is_empty() {
         bail!("mission close requires --reason \"...\"");
     }
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     enforce_mission_terminal_checks(&db, state_dir, id)?;
     drop(db);
 
-    let store = RecordStore::new(state_dir);
-    let mut current = store.load_domain_record_by_id(KIND, id)?;
-    let mut sections = record_store::mission_sections_from_domain_record(&current.record)?;
+    let mut current = canonical_mission_record(id)?;
+    let mut sections = current.sections.clone();
     sections.terminal_notes = Some(append_terminal_reason(
         sections.terminal_notes.as_deref(),
         reason.trim(),
     ));
-    current.record.status = "closed".to_string();
-    current.record.body = Some(record_store::render_mission_sections(&sections));
-    current.record.data_json = MISSION_EMPTY_DATA_JSON.to_string();
-    current.record.updated_at = Utc::now();
-    store.write_domain_record_atomic(&current)?;
-    refresh_projection(state_dir, db_path)?;
-    let db = Database::open(db_path)?;
-    let record = db.require_record(KIND, id)?;
-    print_record(&record)
+    current.header.status = "closed".to_string();
+    current.sections = sections;
+    current.header.updated_at = Utc::now();
+    app_use_cases::write_canonical_record(state_dir, &Record::Mission(current.clone()))?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    print_record(&current)
 }
 
 fn append_terminal_reason(existing: Option<&str>, reason: &str) -> String {
@@ -795,13 +761,14 @@ fn append_terminal_reason(existing: Option<&str>, reason: &str) -> String {
 }
 
 pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
-    refresh_projection(state_dir, db_path)?;
+    let inserted = app_use_cases::add_record_relationship(
+        state_dir, KIND, id, "issue", &issue.id, "advances",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted {
         println!("Added work {} to mission {}", issue.id, id);
     } else {
@@ -811,13 +778,14 @@ pub fn add_work(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> R
 }
 
 pub fn unlink(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let removed = store.remove_relates_relationship(KIND, id, "issue", &issue.id, "advances")?;
-    refresh_projection(state_dir, db_path)?;
+    let removed = app_use_cases::remove_record_relationship(
+        state_dir, KIND, id, "issue", &issue.id, "advances",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if removed {
         println!("Unlinked work {} from mission {}", issue.id, id);
     } else {
@@ -899,7 +867,7 @@ impl MissionTerminalStatus {
             println!("Work: closed");
         } else {
             println!("Work: open - {}", compact_strings(&self.open_work));
-            println!("  Next: atelier issue close <issue-id> --reason \"...\"");
+            println!("  Next: atelier issue transition <issue-id> --options");
         }
         if self.open_blockers.is_empty() {
             println!("Blockers: clear");
@@ -928,7 +896,7 @@ struct IssueSectionGapSummary {
 fn print_reliability_summary(
     db: &Database,
     state_dir: &Path,
-    mission: &DomainRecord,
+    mission: &RecordSummary,
     summary: &MissionListSummary,
     tracker: &TrackerHealth,
     terminal: &MissionTerminalStatus,
@@ -943,7 +911,7 @@ fn print_reliability_summary(
             "Projection Freshness: stale - {}",
             compact_strings(&tracker.stale_entries)
         );
-        println!("  Next: atelier doctor");
+        println!("  Next: atelier doctor --fix");
     }
 
     if let Some(result) = terminal_validator_result(terminal, "issue_sections_parseable") {
@@ -1006,7 +974,6 @@ fn print_reliability_summary(
     println!("Drill-downs:");
     println!("  atelier mission status {} --verbose", mission.id);
     println!("  atelier lint");
-    println!("  atelier doctor");
     Ok(())
 }
 
@@ -1074,10 +1041,9 @@ fn mission_issue_section_gaps(
     state_dir: &Path,
     mission_id: &str,
 ) -> Result<IssueSectionGapSummary> {
-    let store = RecordStore::new(state_dir);
     let mut gaps = IssueSectionGapSummary::default();
     for issue_id in mission_issue_ids(db, mission_id)? {
-        match store.load_issue_by_id(&issue_id) {
+        match app_use_cases::load_canonical_issue(state_dir, &issue_id) {
             Ok(record) => {
                 for state in record.sections.section_states() {
                     if !state.required || (state.present && !state.empty) {
@@ -1175,7 +1141,9 @@ fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "durable_state_current" => Some(("Tracker State", "current", "stale", "atelier doctor")),
+        "durable_state_current" => {
+            Some(("Tracker State", "current", "stale", "atelier doctor --fix"))
+        }
         "issue_sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",
@@ -1257,7 +1225,7 @@ fn validating_evidence_records(
     db: &Database,
     target_kind: &str,
     target_id: &str,
-) -> Result<Vec<DomainRecord>> {
+) -> Result<Vec<RecordSummary>> {
     let mut records = db
         .list_record_links(target_kind, target_id)?
         .into_iter()
@@ -1383,7 +1351,7 @@ fn enforce_mission_terminal_checks(
 fn mission_terminal_status(
     db: &Database,
     _state_dir: &Path,
-    mission: &DomainRecord,
+    mission: &RecordSummary,
     _summary: &MissionListSummary,
 ) -> Result<MissionTerminalStatus> {
     let has_work = !mission_issue_ids(db, &mission.id)?.is_empty();
@@ -1470,13 +1438,19 @@ fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<Str
 }
 
 pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
-    let db = Database::open(db_path)?;
+    let db = app_use_cases::open_database(db_path)?;
     db.require_record(KIND, id)?;
     let issue = db.require_issue(issue_id)?;
     drop(db);
-    let store = RecordStore::new(state_dir);
-    let inserted = store.add_relates_relationship(KIND, id, "issue", &issue.id, "blocked_by")?;
-    refresh_projection(state_dir, db_path)?;
+    let inserted = app_use_cases::add_record_relationship(
+        state_dir,
+        KIND,
+        id,
+        "issue",
+        &issue.id,
+        "blocked_by",
+    )?;
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if inserted {
         println!("Added blocker {} to mission {}", issue.id, id);
     } else {
@@ -1485,23 +1459,18 @@ pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -
     Ok(())
 }
 
-fn refresh_projection(state_dir: &Path, db_path: &Path) -> Result<()> {
-    atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)
-}
-
-fn print_record(record: &DomainRecord) -> Result<()> {
-    println!("Mission {}: {}", record.id, record.title);
-    println!("Status: {}", record.status);
-    if let Some(body) = &record.body {
-        if !body.is_empty() {
-            println!("\n{}", body);
-        }
+fn print_record(record: &MissionRecord) -> Result<()> {
+    println!("Mission {}: {}", record.header.id, record.header.title);
+    println!("Status: {}", record.header.status);
+    let body = record_store::render_mission_sections(&record.sections);
+    if !body.is_empty() {
+        println!("\n{}", body);
     }
     Ok(())
 }
 
 struct MissionListRow {
-    record: DomainRecord,
+    record: RecordSummary,
     summary: MissionListSummary,
 }
 
@@ -1688,12 +1657,18 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
             .filter(|row| mission_lifecycle_status(&row.record) == "draft"),
     );
 
+    print_mission_list_group(
+        "Superseded",
+        rows.iter()
+            .filter(|row| mission_lifecycle_status(&row.record) == "superseded"),
+    );
+
     let other_statuses = rows
         .iter()
         .filter(|row| {
             !matches!(
                 mission_lifecycle_status(&row.record).as_str(),
-                "active" | "ready" | "draft" | "closed"
+                "active" | "ready" | "draft" | "superseded" | "closed"
             )
         })
         .map(|row| mission_lifecycle_status(&row.record))
@@ -1714,7 +1689,7 @@ fn render_mission_list_human(rows: &[MissionListRow]) -> Result<()> {
 
     let first_actionable = rows
         .iter()
-        .find(|row| mission_lifecycle_status(&row.record) != "closed")
+        .find(|row| is_current_mission_status(&mission_lifecycle_status(&row.record)))
         .or_else(|| rows.first());
     print_mission_list_next_commands(first_actionable);
     Ok(())
@@ -1750,7 +1725,7 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
             mission_lifecycle_status(&row.record),
             row.record.title
         );
-        if mission_lifecycle_status(&row.record) != "closed" {
+        if is_current_mission_status(&mission_lifecycle_status(&row.record)) {
             print_mission_list_open_work(row);
         }
     }
@@ -1787,8 +1762,9 @@ fn mission_status_rank(status: &str) -> u8 {
         "active" => 0,
         "ready" => 1,
         "draft" => 2,
-        "closed" => 4,
-        _ => 3,
+        "superseded" => 3,
+        "closed" => 5,
+        _ => 4,
     }
 }
 
@@ -2047,7 +2023,7 @@ impl TrackerHealth {
 
 fn tracker_health(db: &Database, state_dir: &Path) -> TrackerHealth {
     let stale_entries = atelier_app::export::canonical_stale_entries(db, state_dir)
-        .unwrap_or_else(|error| vec![format!("tracker health check failed: {error:#}")]);
+        .unwrap_or_else(|error| vec![format!("committed-state check failed: {error:#}")]);
     TrackerHealth { stale_entries }
 }
 
@@ -2066,7 +2042,7 @@ fn mission_health(summary: &MissionListSummary) -> &'static str {
     }
 }
 
-fn mission_health_for(mission: &DomainRecord, summary: &MissionListSummary) -> &'static str {
+fn mission_health_for(mission: &RecordSummary, summary: &MissionListSummary) -> &'static str {
     if mission_lifecycle_status(mission) == "closed" {
         "closed"
     } else {
@@ -2106,20 +2082,20 @@ fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>
     Ok(issue_ids)
 }
 
-fn is_active_mission(record: &DomainRecord) -> bool {
+fn is_active_mission(record: &RecordSummary) -> bool {
     record.status == "active"
 }
 
-fn set_mission_active_state(record: &mut DomainRecord, active: bool) -> Result<bool> {
+fn set_mission_active_state(record: &mut MissionRecord, active: bool) -> Result<bool> {
     let target_status = if active { "active" } else { "ready" };
-    if is_active_mission(record) == active && record.status == target_status {
+    if record.header.status == target_status && (record.header.status == "active") == active {
         return Ok(false);
     }
-    record.status = target_status.to_string();
+    record.header.status = target_status.to_string();
     Ok(true)
 }
 
-fn mission_focus_label(record: &DomainRecord) -> String {
+fn mission_focus_label(record: &RecordSummary) -> String {
     mission_lifecycle_status(record)
 }
 
@@ -2150,22 +2126,29 @@ fn plural_noun(count: usize, noun: &str) -> String {
 }
 
 fn render_mission_show_human(
-    mission: &DomainRecord,
-    plans: &[Value],
-    milestones: &[Value],
+    mission: &MissionRecord,
     evidence: &[Value],
     work: &BTreeMap<String, Vec<Value>>,
     mission_blockers: &[Value],
     supporting: &[Value],
 ) -> Result<()> {
-    let sections = record_store::mission_sections_from_domain_record(mission)?;
-    let status = mission_lifecycle_status(mission);
-    let identity = format!("Mission {} [{}] - {}", mission.id, status, mission.title);
+    let sections = &mission.sections;
+    let status = mission.header.status.clone();
+    let identity = format!(
+        "Mission {} [{}] - {}",
+        mission.header.id, status, mission.header.title
+    );
     println!("{identity}");
     println!("{}", "=".repeat(identity.len()));
     println!("Status:   {}", status);
-    println!("Created:  {}", format_human_datetime(mission.created_at));
-    println!("Updated:  {}", format_human_datetime(mission.updated_at));
+    println!(
+        "Created:  {}",
+        format_human_datetime(mission.header.created_at)
+    );
+    println!(
+        "Updated:  {}",
+        format_human_datetime(mission.header.updated_at)
+    );
 
     print_mission_section("Intent", &sections.intent);
     print_mission_section("Constraints", &sections.constraints);
@@ -2179,12 +2162,7 @@ fn render_mission_show_human(
     }
 
     print_mission_heading("Progress");
-    println!(
-        "Records: plans={} milestones={} evidence={}",
-        plans.len(),
-        milestones.len(),
-        evidence.len()
-    );
+    println!("Records: evidence={}", evidence.len());
     println!(
         "Work: ready={} blocked={} done={} backlog={}",
         work_bucket_len(work, "ready"),
@@ -2194,8 +2172,6 @@ fn render_mission_show_human(
     );
     println!("Mission Blockers: {}", mission_blockers.len());
 
-    print_record_group("Plans", plans);
-    print_record_group("Milestones", milestones);
     print_record_group("Evidence", evidence);
     print_mission_blockers(mission_blockers);
     print_work_groups(work);
@@ -2284,17 +2260,23 @@ fn print_evidence_gaps(evidence: &[Value]) {
     }
 }
 
-fn print_mission_next_commands(mission: &DomainRecord) {
+fn print_mission_next_commands(mission: &MissionRecord) {
     print_mission_heading("Next Commands");
-    println!("  atelier mission status {}", mission.id);
-    println!("  atelier mission show {}", mission.id);
-    println!("  atelier mission note {} \"...\"", mission.id);
-    println!("  atelier history --mission {}", mission.id);
-    if mission_lifecycle_status(mission) == "closed" {
-        println!("  atelier mission update {} --status ready", mission.id);
+    println!("  atelier mission status {}", mission.header.id);
+    println!("  atelier mission show {}", mission.header.id);
+    println!("  atelier mission note {} \"...\"", mission.header.id);
+    println!("  atelier history --mission {}", mission.header.id);
+    if mission.header.status == "closed" {
+        println!(
+            "  atelier mission update {} --status ready",
+            mission.header.id
+        );
     } else {
-        println!("  atelier mission add-work {} <issue-id>", mission.id);
-        println!("  atelier mission status {}", mission.id);
+        println!(
+            "  atelier mission add-work {} <issue-id>",
+            mission.header.id
+        );
+        println!("  atelier mission status {}", mission.header.id);
     }
 }
 

@@ -82,10 +82,6 @@ Atelier should implement this storage contract:
       20260611T160930000000Z.md
   missions/
     atelier-k7mq.md
-  milestones/
-    atelier-4x9t.md
-  plans/
-    atelier-p3v6.md
   evidence/
     atelier-n8da.md
   runtime/              # ignored local runtime state
@@ -124,9 +120,9 @@ Atelier uses one canonical, human-facing ID for every durable record:
 ```
 
 For this repository, examples are `atelier-z1p8`, `atelier-k7mq`, and
-`atelier-4x9t`. Record kind is metadata, not part of identity, so issues,
-missions, milestones, plans, and evidence share the same ID shape. Titles are
-mutable text and must never be identity.
+`atelier-n8da`. Record kind is metadata, not part of identity, so issues,
+missions, evidence, and future durable record kinds share the same ID shape.
+Titles are mutable text and must never be identity.
 
 This replaces typed numeric target IDs such as `ISS-0001` or `MIS-0001` and
 separate shorthand IDs such as `#53`. The cutover should migrate existing
@@ -142,8 +138,9 @@ to be an issue.
 
 A mission is a high-level objective that may span hours or days. It is useful
 for orchestrators and Mission Control. It should contain intent, constraints,
-active milestones, linked plans, status, validation expectations, and current
-health. A mission is also the normal shared background workspace boundary: one
+current risks, status, validation expectations, linked accountable work,
+supporting evidence, and current health. A mission is also the normal shared
+background workspace boundary: one
 mission owns one shared Git worktree or equivalent background checkout where
 coordinated agents can operate on related epics without creating a new checkout
 for every implementation issue.
@@ -162,21 +159,13 @@ mapping directly to a PR-equivalent branch. Epic review and validation gates
 own the parent judgment for the grouped change; child issues contribute local
 proof rather than each carrying an independent review requirement by default.
 
-### Milestone
+### Checkpoint Semantics
 
-A milestone is a validated intermediate checkpoint state. It is not a work
-container or super-epic, and it is not merely a vague point on a roadmap. A
-milestone should define:
-
-- Desired state.
-- Scope boundaries.
-- Validation criteria.
-- Linked work.
-- Required or accepted evidence.
-- Completion state.
-
-Epics and tasks may contribute to a milestone, and evidence may validate a
-milestone's criteria. The milestone itself should remain a target-state record.
+Milestone/checkpoint records are deferred for v1. Checkpoint intent may be
+described in mission, epic, issue, or evidence bodies when it helps operators,
+but there is no active `.atelier/milestones/` canonical record table, milestone
+workflow, or milestone command surface in v1. Validation and outcome data stay
+on accountable issues, epics, missions, and evidence records.
 
 ### Issue
 
@@ -188,23 +177,22 @@ implementation issue is a local slice on its parent epic branch. It closes with
 the proof named by its `Evidence` section unless the issue itself is a review,
 validation, migration, or other explicitly risk-escalated item.
 
-### Plan
+### Plans
 
-A plan records intended execution when that intent matters beyond ephemeral
-context. Plans should be stored when they create scope, coordinate multiple
-agents, define sequencing, explain decisions, or survive across sessions. Scratch
-plans can remain ephemeral.
-
-Plans must be adaptable. The tool should make plan drift visible and allow plans
-to be revised with reasons as new facts emerge.
+Plans are ordinary Markdown artifacts or prose inside accountable work and
+evidence records in v1. They may still be durable when committed to the
+repository, but they are not `.atelier/plans/` records and they do not have a
+first-class plan command group. Reference plan Markdown by path or prose from a
+mission, epic, issue, or evidence body when the execution intent matters beyond
+ephemeral context.
 
 ### Evidence
 
 Evidence records prove that accountable work, review, validation, or migration
 happened. Evidence may point to test results, logs, screenshots, videos, API
 responses, benchmark output, review notes, or generated reports. Normal evidence
-targets issue-shaped work because issues own accountability; mission,
-milestone, and epic readiness is derived from linked implementation,
+targets issue-shaped work because issues own accountability; mission and epic
+readiness is derived from linked implementation,
 validation, and review work rather than direct parent attachments.
 
 Evidence metadata should include:
@@ -260,69 +248,109 @@ one `relationships` section with four buckets:
 
 - `blocks` for operational issue readiness blockers.
 - `children` for hierarchy, scope, and mission work.
-- `attachments` for owned supporting records such as plans and evidence.
+- `attachments` for owned supporting records such as evidence.
 - `relates` for peer semantic relationships such as related, duplicates,
   supersedes, derived_from, and implements.
 
 Domain commands own relationship mutations. For example, issue blocking,
-mission work, evidence attachment, and plan linkage should be surfaced through
-their domain command groups instead of a public generic `link` command.
+mission work, and evidence attachment should be surfaced through their domain
+command groups instead of a public generic `link` command. Plan Markdown may be
+referenced by path or prose in record bodies; it is not a relationship table in
+v1.
 
 ## Workflows
 
-Atelier should support repository-owned configurable issue workflows. Version 1
+Atelier supports repository-owned configurable issue workflows. Schema version 3
 uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
-policy path. The file defines shared statuses with explicit categories, named
-issue workflows, terminal done states, built-in issue-type mappings, transition
-rules, configured built-in validators with params, guidance templates, strict
-configuration errors, and deferred features.
+policy path. The file defines branch policy, shared statuses with explicit
+categories, named issue workflows, workflow-owned issue type applicability,
+terminal done states, transition rules, inline built-in validators with params,
+mandatory mutating transition effects, static transition descriptions, and
+strict configuration errors.
 
 Example workflow:
 
 ```yaml
-issue_types:
-  bug: standard_review_proof
-  epic: standard_review_proof
-  feature: standard_review_proof
-  spike: lightweight_spike
-  task: standard_proof
-  validation: standard_review_proof
+schema: atelier.workflow
+schema_version: 3
+
+branch_policy:
+  base_branch: master
+  merge_strategy: squash
+  branch_templates:
+    epic: epic/{{ issue.id }}
+    issue: codex/{{ issue.id }}
 
 statuses:
-  open:
-    category: todo
-  in_progress:
-    category: active
-  review:
-    category: review
-  validation:
-    category: validation
-  done:
-    category: done
+  todo: { category: todo }
+  in_progress: { category: active }
+  blocked: { category: blocked }
+  review: { category: review }
+  validation: { category: validation }
+  done: { category: done }
+  archived: { category: done }
 
 workflows:
-  standard_proof:
-    initial_status: open
-    done_statuses: [done]
+  standard:
+    applies_to: [bug, feature, task]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open]
+        from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       close:
-        from: [in_progress]
+        from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
+        description: "Closing requires attached evidence and no open blockers."
         validators:
-          - proof_attached
-          - durable_current
+          - evidence_attached: { min_count: 1 }
+          - no_open_blockers
+          - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 
-  standard_review_proof:
-    initial_status: open
-    done_statuses: [done]
+  epic_reviewed:
+    applies_to: [epic]
+    initial_status: todo
+    done_statuses: [done, archived]
     transitions:
       start:
-        from: [open]
+        from: [todo, blocked]
         to: in_progress
+        effects:
+          before: [prepare_owner_branch]
+      request_review:
+        from: [in_progress]
+        to: review
+        effects:
+          after: [open_review_artifact]
+      request_validation:
+        from: [in_progress, review]
+        to: validation
+      close:
+        from: [validation]
+        to: done
+        validators:
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - linked_pr_merged
+          - durable_state_current
+        effects:
+          after: [commit_tracker_state, integrate_owner_branch]
+
+  validation_reviewed:
+    applies_to: [validation]
+    initial_status: todo
+    done_statuses: [done, archived]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before: [prepare_owner_branch]
       request_review:
         from: [in_progress]
         to: review
@@ -332,18 +360,43 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         validators:
-          - proof_attached
-          - durable_current
+          - evidence_attached: { min_count: 1 }
+          - epic_child_proof_complete
+          - durable_state_current
+        effects:
+          after: [commit_tracker_state]
+
+  spike:
+    applies_to: [spike]
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      start:
+        from: [todo, blocked]
+        to: in_progress
+        effects:
+          before: [prepare_owner_branch]
+      close:
+        from: [review]
+        to: done
+        validators:
+          - review_complete
+          - durable_state_current
+        effects:
+          after: [commit_tracker_state]
 ```
 
 Workflows should scale with risk. Small tasks should not require heavyweight
-ceremony unless policy says so. The starter contract uses proof-first closure
-for ordinary implementation tasks, keeps review/proof workflows for epics,
-validation and other risk-bearing issue types, and keeps a lighter
-spike workflow that records an inspectable close reason without requiring
-first-class evidence.
+ceremony unless policy says so. The starter contract uses proof-first
+completion for ordinary implementation tasks, keeps review/proof workflows for
+epics, validation and other risk-bearing issue types, and keeps a lighter spike
+workflow for bounded inquiry. Issue transitions no longer require a close
+reason field. Operators should record meaningful outcome context as notes or
+evidence, while the lifecycle move itself stays under
+`atelier issue transition`. Every built-in issue type must appear exactly once
+across `workflows.*.applies_to`; missing, duplicate, or unknown issue types are
+config errors.
 
 ## Rules, Lint, And Guidance
 
@@ -357,9 +410,7 @@ Atelier should support three layers of process:
 Examples:
 
 - Required evidence before `done`.
-- Required plan before implementation for large missions.
 - Warning when a summary is too long or too vague.
-- Warning when a milestone lacks validation criteria.
 - Error when durable records or derived projections are stale.
 - Error when a workflow transition is invalid.
 - Warning when implementation starts on `main`.
@@ -375,7 +426,8 @@ Process should be:
 
 - Configurable.
 - Risk-scaled.
-- Split between start requirements and close requirements.
+- Split between transition requirements, read-only validators, and mutating
+  before/after effects.
 - Strict only where strictness protects correctness or coordination.
 
 Rules should have severities:
@@ -397,15 +449,18 @@ Desired commands:
 
 ```text
 atelier agent init <name>
-atelier start atelier-z1p8
-atelier issue close atelier-z1p8 --reason "done"
+atelier issue transition atelier-z1p8 start
+atelier issue transition atelier-z1p8 close
 ```
 
-`atelier start <id>` owns routine branch preparation. It derives the owner
-branch from the work graph, creates or checks out that branch when needed,
-refreshes local runtime/projection state, and then transitions the issue into
-the checkout's current-work set. Routine workers should not run explicit branch
-setup before issue work.
+`atelier issue transition <id> <transition>` owns normal issue lifecycle
+movement. Validators run as read-only gates before mutation. A transition may
+declare `effects.before` for mandatory mutations that must happen before the
+status changes, such as preparing the owner branch, and `effects.after` for
+mandatory mutations after the status changes, such as opening a review artifact,
+committing tracker state, or integrating the owner branch. Routine workers
+should not run explicit branch setup before issue work or use separate
+start/close commands.
 
 The default branch model should be opinionated but configurable. Branch owner
 derivation is:
@@ -433,52 +488,56 @@ issue/atelier-z1p8-short-slug
   owner branch for standalone issues or exceptional issue isolation
 ```
 
-Close-time integration is part of the workflow contract:
+Integration is part of the workflow contract when a transition declares the
+corresponding effects:
 
-- Closing a child issue commits its tracker-state change on the parent epic
+- Completing a child issue commits its tracker-state change on the parent epic
   branch and does not merge that branch to base.
-- Closing a standalone issue commits its tracker-state change on the issue
-  branch and merges that owner branch to the configured base branch.
-- Closing an epic commits its tracker-state change on the epic branch and
-  merges that owner branch to the configured base branch.
+- Completing a standalone issue commits its tracker-state change on the issue
+  branch and merges that owner branch to the configured base branch when the
+  workflow asks for integration.
+- Completing an epic commits its tracker-state change on the epic branch and
+  merges that owner branch to the configured base branch when the workflow asks
+  for integration.
 - The default merge strategy is squash merge. Configurable alternatives may
   include merge commit and fast-forward-only where repository policy allows.
 - Base branch selection is configurable by repository, mission, or epic policy,
   defaulting to the repository's integration branch when no narrower policy is
   set.
 
-Close must be atomic with respect to durable workflow state: if the tracker
-commit, integration merge, or required push fails, the item must not be left
-closed in the integration branch. The command should report the failed step and
-leave the operator on a repair path that can retry or inspect state without
-claiming a completed close.
+Mutating effects must be atomic with respect to durable workflow state: if the
+tracker commit, integration merge, review operation, or required push fails,
+the item must not be left advanced in the integration branch. The command
+should report the failed step and leave the operator on a repair path that can
+retry or inspect state without claiming a completed transition.
 
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
-- Refuse start or close when the worktree is dirty unless policy allows the
-  specific operation.
+- Refuse a transition whose effects require a clean worktree when the worktree
+  is dirty unless policy allows the specific operation.
 - Record mission workspace, owner branch, base branch, merge strategy, and
   current issue association.
-- Refuse close when durable records or derived projections are stale.
+- Refuse a transition when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
 The worktree feature is a convenience layer over Git, not a replacement sync
 system.
 
-Normal tracked work uses explicit work association rather than inherited
+Normal tracked work uses explicit workflow transitions rather than inherited
 Chainlink lock sync. The default workflow is one mission worktree when the work
-belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
-preparation through `atelier start`, lifecycle-owned close integration through
-`atelier issue close` or `atelier mission close`, and `lint`/`doctor` health
-checks. Explicit branch commands such as `atelier branch for-epic`
-are internal, diagnostic, or advanced repair surfaces; they are not the normal
-mutating-subagent default.
+belongs to a mission, one reviewable branch per epic, branch preparation and
+issue integration through workflow transition effects, mission completion
+through mission lifecycle commands, and `lint`/`doctor` health checks. Explicit
+branch commands such as `atelier branch for-epic` are internal, diagnostic, or
+advanced repair surfaces; they are not the normal mutating-subagent default.
 
 ## Validation And Workflow Validators
 
-Evidence should be a first-class condition for closing work. Workflow validators
-evaluate whether a record can advance or close.
+Evidence should be a first-class condition for completing work. Workflow
+validators evaluate whether a record can advance. Validators are read-only:
+they report pass/fail guidance, and workflow effects perform any configured
+mutation.
 
 Version 1 built-in validators include:
 
@@ -535,8 +594,6 @@ atelier mission create
 atelier mission status
 atelier mission show atelier-k7mq
 atelier mission add-work atelier-k7mq atelier-z1p8
-atelier milestone create
-atelier plan create
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier lint
@@ -576,10 +633,11 @@ machine-readable source of truth, not command-result JSON.
 
 ### Milestone 4: Domain Model Upgrade
 
-- Add first-class missions, milestone checkpoint records, plans, evidence,
-  workflow validators, and runs.
+- Add first-class missions, evidence, workflow validators, and deferred
+  session/run metadata.
 - Add canonical relationship buckets and domain-specific relationship commands.
-- Keep compatibility migration paths where reasonable.
+- Keep milestone/checkpoint records and first-class plan records deferred until
+  a later contract reintroduces them directly.
 
 ### Milestone 5: Workflows And Rules
 
@@ -591,7 +649,7 @@ machine-readable source of truth, not command-result JSON.
 ### Milestone 6: Mission Control Projection
 
 - Add JSON projections for active missions, agents, blockers, workflow
-  validator failures, evidence, branches, and plan drift.
+  validator failures, evidence, branches, and artifact-update drift.
 - Defer rich UI until projections are useful.
 
 ## Open Questions

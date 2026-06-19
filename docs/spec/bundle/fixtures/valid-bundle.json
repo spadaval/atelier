@@ -1,0 +1,104 @@
+{
+  "description": "Compact fixture for a one-shot bundle with hierarchy, dependencies, mission links, evidence links, and create-only issue resources.",
+  "metadata": {
+    "authored_by": "agent-factory.docs",
+    "parent_scope": "atelier-58n9"
+  },
+  "resources": {
+    "evidence": [
+      {
+        "artifact": null,
+        "body": "Schema docs and fixtures exist for bundle preview and apply.",
+        "client_ref": "evidence.bundle-contract",
+        "evidence_type": "test",
+        "result": "pass",
+        "title": "Bundle contract proof",
+        "validates": [
+          {
+            "client_ref": "issue.define-schema"
+          }
+        ]
+      }
+    ],
+    "issues": [
+      {
+        "blocks": [
+          {
+            "id": "atelier-z1p8"
+          }
+        ],
+        "client_ref": "issue.define-schema",
+        "depends_on": [],
+        "description": "Define the JSON shape for authored bundle files.",
+        "evidence": [
+          "Diff whitespace checks pass."
+        ],
+        "issue_type": "task",
+        "labels": [
+          "bundle",
+          "json"
+        ],
+        "notes": [
+          {
+            "author": "agent-factory.docs",
+            "body": "Preview must produce a deterministic summary before apply mutates state.",
+            "created_at": null
+          }
+        ],
+        "operation": "create",
+        "parent": {
+          "id": "atelier-k7mq"
+        },
+        "priority": "medium",
+        "title": "Define bundle JSON schema"
+      },
+      {
+        "client_ref": "issue.validate-fixtures",
+        "depends_on": [
+          {
+            "client_ref": "issue.define-schema"
+          }
+        ],
+        "description": "Prove diagnostics and preview shape with compact JSON examples.",
+        "evidence": [
+          "Validation errors include JSON paths and client refs."
+        ],
+        "issue_type": "validation",
+        "labels": [
+          "bundle",
+          "fixtures"
+        ],
+        "notes": [],
+        "outcome": [
+          "Bundle fixtures cover valid input, invalid input, and preview output."
+        ],
+        "parent": {
+          "client_ref": "issue.define-schema"
+        },
+        "priority": "low",
+        "title": "Validate bundle fixtures"
+      }
+    ],
+    "missions": [
+      {
+        "body": "Coordinate the bundle contract work with implementation and validation issues.",
+        "client_ref": "mission.bundle-contract",
+        "labels": [
+          "bundle"
+        ],
+        "title": "Bundle contract mission",
+        "work": [
+          {
+            "client_ref": "issue.define-schema"
+          },
+          {
+            "client_ref": "issue.validate-fixtures"
+          }
+        ]
+      }
+    ]
+  },
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Bundle contract fixture"
+}

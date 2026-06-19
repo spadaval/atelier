@@ -16,9 +16,20 @@ const MAX_PROBLEM_SAMPLES: usize = 5;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SourceEntry {
     pub path: String,
+    pub kind: String,
+    pub id: String,
     pub size_bytes: i64,
     pub modified_micros: Option<i64>,
     pub sha256: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct SourceStat {
+    path: String,
+    kind: String,
+    id: String,
+    size_bytes: i64,
+    modified_micros: Option<i64>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -134,15 +145,19 @@ impl Database {
     pub(crate) fn init_projection_index_schema(&self) -> Result<()> {
         self.conn.execute_batch(
             r#"
-            CREATE TABLE IF NOT EXISTS projection_index_sources (
+            CREATE TABLE IF NOT EXISTS projection_sources (
                 path TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                id TEXT NOT NULL,
                 size_bytes INTEGER NOT NULL,
                 modified_micros INTEGER,
                 sha256 TEXT NOT NULL,
                 indexed_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_projection_index_sources_hash
-                ON projection_index_sources(sha256);
+            CREATE INDEX IF NOT EXISTS idx_projection_sources_record
+                ON projection_sources(kind, id);
+            CREATE INDEX IF NOT EXISTS idx_projection_sources_hash
+                ON projection_sources(sha256);
             "#,
         )?;
         Ok(())
@@ -150,15 +165,16 @@ impl Database {
 
     pub fn replace_projection_sources(&self, entries: &[SourceEntry]) -> Result<()> {
         let indexed_at = Utc::now().to_rfc3339();
-        self.conn
-            .execute("DELETE FROM projection_index_sources", [])?;
+        self.conn.execute("DELETE FROM projection_sources", [])?;
         for entry in entries {
             self.conn.execute(
-                "INSERT INTO projection_index_sources
-                 (path, size_bytes, modified_micros, sha256, indexed_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO projection_sources
+                 (path, kind, id, size_bytes, modified_micros, sha256, indexed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     entry.path,
+                    entry.kind,
+                    entry.id,
                     entry.size_bytes,
                     entry.modified_micros,
                     entry.sha256,
@@ -169,19 +185,55 @@ impl Database {
         Ok(())
     }
 
+    pub fn upsert_projection_source(&self, entry: &SourceEntry) -> Result<()> {
+        let indexed_at = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO projection_sources
+             (path, kind, id, size_bytes, modified_micros, sha256, indexed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(path) DO UPDATE SET
+                kind = excluded.kind,
+                id = excluded.id,
+                size_bytes = excluded.size_bytes,
+                modified_micros = excluded.modified_micros,
+                sha256 = excluded.sha256,
+                indexed_at = excluded.indexed_at",
+            params![
+                entry.path,
+                entry.kind,
+                entry.id,
+                entry.size_bytes,
+                entry.modified_micros,
+                entry.sha256,
+                indexed_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_projection_source(&self, path: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM projection_sources WHERE path = ?1",
+            params![path],
+        )?;
+        Ok(())
+    }
+
     pub fn projection_sources(&self) -> Result<Vec<SourceEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT path, size_bytes, modified_micros, sha256
-             FROM projection_index_sources
+            "SELECT path, kind, id, size_bytes, modified_micros, sha256
+             FROM projection_sources
              ORDER BY path",
         )?;
         let entries = stmt
             .query_map([], |row| {
                 Ok(SourceEntry {
                     path: row.get(0)?,
-                    size_bytes: row.get(1)?,
-                    modified_micros: row.get(2)?,
-                    sha256: row.get(3)?,
+                    kind: row.get(1)?,
+                    id: row.get(2)?,
+                    size_bytes: row.get(3)?,
+                    modified_micros: row.get(4)?,
+                    sha256: row.get(5)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -194,6 +246,11 @@ pub fn refresh(db: &Database, state_dir: &Path) -> Result<()> {
     db.replace_projection_sources(&snapshot)
 }
 
+pub fn source_entry_for_path(state_dir: &Path, relative: &str) -> Result<SourceEntry> {
+    let path = state_dir.join(relative);
+    source_entry(state_dir, &path)
+}
+
 pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     if !state_dir.exists() {
         return Ok(FreshnessReport {
@@ -203,7 +260,7 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
         });
     }
 
-    let current = snapshot_sources(state_dir)?;
+    let current = snapshot_source_stats(state_dir)?;
     let stored = db.projection_sources()?;
     let current_by_path = current
         .iter()
@@ -224,10 +281,19 @@ pub fn check(db: &Database, state_dir: &Path) -> Result<FreshnessReport> {
     } else {
         for stored_entry in &stored {
             match current_by_path.get(&stored_entry.path) {
-                Some(current_entry) if current_entry.sha256 == stored_entry.sha256 => {}
-                Some(_) => problems.push(FreshnessProblem::ChangedSource {
-                    path: stored_entry.path.clone(),
-                }),
+                Some(current_entry)
+                    if current_entry.size_bytes == stored_entry.size_bytes
+                        && current_entry.modified_micros == stored_entry.modified_micros => {}
+                Some(current_entry) => {
+                    let hashed = source_entry(state_dir, &state_dir.join(&current_entry.path))?;
+                    if hashed.sha256 == stored_entry.sha256 {
+                        db.upsert_projection_source(&hashed)?;
+                    } else {
+                        problems.push(FreshnessProblem::ChangedSource {
+                            path: stored_entry.path.clone(),
+                        });
+                    }
+                }
                 None => problems.push(FreshnessProblem::MissingSource {
                     path: stored_entry.path.clone(),
                 }),
@@ -265,6 +331,22 @@ fn snapshot_sources(state_dir: &Path) -> Result<Vec<SourceEntry>> {
     Ok(entries)
 }
 
+fn snapshot_source_stats(state_dir: &Path) -> Result<Vec<SourceStat>> {
+    if !state_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = Vec::new();
+    for dir in record_store::canonical_record_dirs() {
+        let source_dir = state_dir.join(dir);
+        if source_dir.exists() {
+            collect_source_stats(state_dir, &source_dir, &mut entries)?;
+        }
+    }
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
 fn collect_source_files(root: &Path, dir: &Path, entries: &mut Vec<SourceEntry>) -> Result<()> {
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
@@ -286,6 +368,32 @@ fn collect_source_files(root: &Path, dir: &Path, entries: &mut Vec<SourceEntry>)
                 continue;
             }
             entries.push(source_entry(root, &path)?);
+        }
+    }
+    Ok(())
+}
+
+fn collect_source_stats(root: &Path, dir: &Path, entries: &mut Vec<SourceStat>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".activity"))
+            {
+                continue;
+            }
+            collect_source_stats(root, &path, entries)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)
+                .context("Failed to relativize source file")?;
+            if is_local_atelier_path(relative) {
+                continue;
+            }
+            entries.push(source_stat(root, &path)?);
         }
     }
     Ok(())
@@ -329,13 +437,32 @@ fn source_entry(root: &Path, path: &Path) -> Result<SourceEntry> {
         .strip_prefix(root)
         .with_context(|| format!("Failed to relativize {}", path.display()))?;
     let relative = canonical_relative_path(relative)?;
-    let metadata =
-        fs::metadata(path).with_context(|| format!("Failed to stat {}", path.display()))?;
+    let stat = source_stat(root, path)?;
     let bytes = fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     Ok(SourceEntry {
         path: relative,
+        kind: stat.kind,
+        id: stat.id,
+        size_bytes: stat.size_bytes,
+        modified_micros: stat.modified_micros,
+        sha256: format!("{:x}", hasher.finalize()),
+    })
+}
+
+fn source_stat(root: &Path, path: &Path) -> Result<SourceStat> {
+    let relative = path
+        .strip_prefix(root)
+        .with_context(|| format!("Failed to relativize {}", path.display()))?;
+    let relative = canonical_relative_path(relative)?;
+    let (kind, id) = source_identity(&relative)?;
+    let metadata =
+        fs::metadata(path).with_context(|| format!("Failed to stat {}", path.display()))?;
+    Ok(SourceStat {
+        path: relative,
+        kind,
+        id,
         size_bytes: metadata
             .len()
             .try_into()
@@ -349,8 +476,27 @@ fn source_entry(root: &Path, path: &Path) -> Result<SourceEntry> {
                     .saturating_mul(1_000_000)
                     .saturating_add(i64::from(duration.subsec_micros()))
             }),
-        sha256: format!("{:x}", hasher.finalize()),
     })
+}
+
+fn source_identity(relative: &str) -> Result<(String, String)> {
+    let path = Path::new(relative);
+    let dir = path
+        .components()
+        .next()
+        .and_then(|component| component.as_os_str().to_str())
+        .ok_or_else(|| anyhow!("canonical source path has no directory: {relative}"))?;
+    let kind = record_store::CANONICAL_RECORD_KINDS
+        .iter()
+        .find(|spec| spec.canonical_dir == Some(dir))
+        .map(|spec| spec.kind.to_string())
+        .ok_or_else(|| anyhow!("canonical source path has unknown directory: {relative}"))?;
+    let id = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .ok_or_else(|| anyhow!("canonical source path has no record id: {relative}"))?
+        .to_string();
+    Ok((kind, id))
 }
 
 fn canonical_relative_path(path: &Path) -> Result<String> {
@@ -425,6 +571,33 @@ mod tests {
                 path: "issues/atelier-aaaa.md".to_string()
             }]
         );
+    }
+
+    #[test]
+    fn freshness_updates_metadata_when_stat_changed_but_hash_matches() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let issues = state_dir.join("issues");
+        fs::create_dir_all(&issues).unwrap();
+        fs::write(issues.join("atelier-aaaa.md"), "one").unwrap();
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
+
+        refresh(&db, &state_dir).unwrap();
+        db.conn
+            .execute(
+                "UPDATE projection_sources
+                 SET size_bytes = size_bytes + 1
+                 WHERE path = 'issues/atelier-aaaa.md'",
+                [],
+            )
+            .unwrap();
+
+        let report = check(&db, &state_dir).unwrap();
+
+        assert!(report.is_fresh());
+        let sources = db.projection_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].size_bytes, 3);
     }
 
     #[test]

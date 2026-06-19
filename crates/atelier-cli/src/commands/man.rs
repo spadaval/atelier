@@ -2,9 +2,10 @@ use anyhow::{bail, Result};
 
 use crate::commands;
 use atelier_app::command_storage::{command_storage, CommandStorageAccess};
+use atelier_records::activity::{list_derived_issue_attempts, DerivedIssueAttemptState};
 use atelier_sqlite::Database;
 
-const ROLES: &[&str] = &["worker", "reviewer", "manager", "admin"];
+const ROLES: &[&str] = &["worker", "reviewer", "validator", "manager", "admin"];
 
 pub fn run(role: Option<String>) -> Result<()> {
     let Some(role) = role else {
@@ -15,6 +16,7 @@ pub fn run(role: Option<String>) -> Result<()> {
     match role.as_str() {
         "worker" => run_stateful(Role::Worker),
         "reviewer" => run_stateful(Role::Reviewer),
+        "validator" => run_stateful(Role::Validator),
         "manager" => run_stateful(Role::Manager),
         "admin" => run_admin(),
         _ => bail!(
@@ -28,6 +30,7 @@ pub fn run(role: Option<String>) -> Result<()> {
 enum Role {
     Worker,
     Reviewer,
+    Validator,
     Manager,
     Admin,
 }
@@ -37,6 +40,7 @@ impl Role {
         match self {
             Role::Worker => "Worker",
             Role::Reviewer => "Reviewer",
+            Role::Validator => "Validator",
             Role::Manager => "Manager",
             Role::Admin => "Admin",
         }
@@ -48,6 +52,7 @@ struct Snapshot {
     repo: String,
     active_mission: Option<String>,
     current_work: Vec<String>,
+    active_sessions: Vec<String>,
     ready_count: usize,
     stale_count: usize,
 }
@@ -55,7 +60,7 @@ struct Snapshot {
 fn run_stateful(role: Role) -> Result<()> {
     let storage = command_storage(CommandStorageAccess::ProjectionQuery).map_err(|error| {
         anyhow::anyhow!(
-            "{error:#}\nRecovery: use `atelier man admin` for setup/repair guidance, or run `atelier doctor` when this is an initialized checkout."
+            "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
         )
     })?;
     let repo = storage.repo_root().display().to_string();
@@ -86,6 +91,19 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         .into_iter()
         .map(|issue| format!("{} - {}", issue.id, issue.title))
         .collect();
+    let active_sessions = list_derived_issue_attempts(state_dir)?
+        .into_iter()
+        .filter(|session| session.state == DerivedIssueAttemptState::Active)
+        .map(|session| {
+            format!(
+                "{} {} {} -> issue/{}",
+                session.id,
+                session.role,
+                session.state.as_str(),
+                session.issue_id
+            )
+        })
+        .collect();
     let ready_count = db.list_ready_issues()?.len();
     let stale_count = atelier_app::export::canonical_stale_entries(db, state_dir)?.len();
     let tracker = if stale_count == 0 { "current" } else { "stale" }.to_string();
@@ -94,6 +112,7 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
         repo: repo.to_string(),
         active_mission,
         current_work,
+        active_sessions,
         ready_count,
         stale_count,
     })
@@ -108,13 +127,17 @@ fn print_role_index() {
     println!("-----");
     println!("  worker    Implement assigned or ready issue work.");
     println!("  reviewer  Check proof, review outputs, and validate transitions.");
-    println!("  manager   Create, organize, and coordinate missions, plans, and work.");
+    println!("  validator Run explicit validation and record validation proof.");
+    println!(
+        "  manager   Create, organize, and coordinate missions, planning artifacts, and work."
+    );
     println!("  admin     Set up, repair, migrate, and maintain Atelier state.");
     println!();
     println!("Commands");
     println!("--------");
     println!("  atelier man worker");
     println!("  atelier man reviewer");
+    println!("  atelier man validator");
     println!("  atelier man manager");
     println!("  atelier man admin");
 }
@@ -156,6 +179,20 @@ fn print_current_state(snapshot: Option<&Snapshot>, state_error: Option<&str>) {
                     );
                 }
             }
+            if snapshot.active_sessions.is_empty() {
+                println!("  Active sessions: none");
+            } else {
+                println!("  Active sessions: {}", snapshot.active_sessions.len());
+                for session in snapshot.active_sessions.iter().take(3) {
+                    println!("    {session}");
+                }
+                if snapshot.active_sessions.len() > 3 {
+                    println!(
+                        "    ... and {} more session(s)",
+                        snapshot.active_sessions.len() - 3
+                    );
+                }
+            }
             println!("  Ready work:     {}", snapshot.ready_count);
         }
         None => {
@@ -177,30 +214,39 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                 .unwrap_or(false)
             {
                 println!("  1. atelier status - Review the checkout's current-work set.");
-                println!("  2. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
-                println!("  3. atelier issue transition <id> --options - Inspect allowed next workflow steps.");
+                println!("  2. atelier session list --active - Review active session context.");
+                println!("  3. atelier evidence record --target issue/<id> --kind test -- <command> - Attach proof.");
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier start <id> - Move the issue into the current-work set.");
+                println!("  3. atelier issue transition <id> start - Move the issue into the current-work set.");
             }
         }
         Role::Reviewer => {
             println!("  1. atelier issue transition <id> --options - Inspect workflow gates.");
             println!("  2. atelier evidence show <evidence-id> - Inspect attached proof.");
-            println!("  3. atelier lint <id> - Validate focused tracker state.");
+            println!("  3. atelier review comments --issue <id> - Inspect review discussion.");
+        }
+        Role::Validator => {
+            println!(
+                "  1. atelier issue show <id> - Read the validation target and proof contract."
+            );
+            println!("  2. atelier evidence record --target issue/<id> --kind validation -- <command> - Attach validation proof.");
+            println!("  3. atelier review approve --issue <id> --role validator --body \"...\" - Record review validation judgment.");
         }
         Role::Manager => {
             if snapshot.and_then(|s| s.active_mission.as_ref()).is_some() {
                 println!(
                     "  1. atelier mission status - Review active mission readiness and blockers."
                 );
-                println!("  2. atelier issue create \"...\" - Create an actionable work item.");
-                println!("  3. atelier mission add-work <mission-id> <issue-id> - Link work to mission scope.");
+                println!("  2. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
+                println!(
+                    "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
+                );
             } else {
                 println!("  1. atelier mission list - Choose mission focus.");
                 println!("  2. atelier mission start <id> --switch - Set active mission focus.");
-                println!("  3. atelier graph tree --compact - Inspect work hierarchy.");
+                println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
             }
         }
         Role::Admin => {
@@ -217,23 +263,42 @@ fn print_normal_loop(role: Role) {
     match role {
         Role::Worker => {
             println!("  atelier status");
+            println!("  atelier session list --active");
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
-            println!("  atelier start <id>");
+            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue transition <id> start");
+            println!("  atelier review comment --issue <id> --role worker --body \"...\"");
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
-            println!("  atelier issue close <id> --reason \"...\"");
         }
         Role::Reviewer => {
             println!("  atelier mission status");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
+            println!("  atelier review comments --issue <id>");
+            println!("  atelier review comment --issue <id> --role reviewer --body \"...\"");
+            println!(
+                "  atelier review request-changes --issue <id> --role reviewer --body \"...\""
+            );
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
             println!("  atelier history --issue <id>");
         }
+        Role::Validator => {
+            println!("  atelier issue show <id>");
+            println!("  atelier issue transition <id> --options");
+            println!("  atelier evidence show <evidence-id>");
+            println!(
+                "  atelier evidence record --target issue/<id> --kind validation -- <command>"
+            );
+            println!("  atelier review comments --issue <id>");
+            println!("  atelier review approve --issue <id> --role validator --body \"...\"");
+        }
         Role::Manager => {
             println!("  atelier mission status");
+            println!("  atelier bundle preview <file>");
+            println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
             println!("  atelier mission add-work <mission-id> <issue-id>");
             println!("  atelier issue block <blocked-id> <blocker-id>");
@@ -254,16 +319,17 @@ fn print_not_usually(role: Role) {
     println!("-------------------------");
     match role {
         Role::Worker => {
-            println!(
-                "  maintenance, diagnostics, raw workflow checks, bulk plan apply, branch merge"
-            );
+            println!("  maintenance, diagnostics, raw workflow checks, bundle apply, branch merge");
         }
         Role::Reviewer => {
             println!("  init, maintenance delete, issue creation, mission scope mutation");
         }
+        Role::Validator => {
+            println!("  issue creation, mission scope mutation, merge decisions outside assigned validation");
+        }
         Role::Manager => {
             println!(
-                "  diagnostics slow, rebuild, maintenance delete except during explicit repair"
+                "  diagnostics slow, rebuild, maintenance delete except during explicit repair; shell loops for bulk graph creation"
             );
         }
         Role::Admin => {

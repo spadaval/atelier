@@ -28,6 +28,7 @@ fn print_started_work(
     db: &Database,
     id: &str,
     resolution: &atelier_app::workflow_policy::BranchLifecycleResolution,
+    session_id: Option<&str>,
 ) -> Result<()> {
     let issue = db.require_issue(id)?;
     let branch = current_branch().ok();
@@ -45,6 +46,9 @@ fn print_started_work(
     if let Some(branch) = branch {
         println!("Branch: {branch}");
     }
+    if let Some(session_id) = session_id {
+        println!("Session: {session_id}");
+    }
     println!("Worktree: {path}");
     println!();
     println!("Next Commands");
@@ -58,16 +62,58 @@ fn print_started_work(
     Ok(())
 }
 
-pub fn start_lifecycle(state_dir: &Path, db_path: &Path, id: &str) -> Result<()> {
+#[derive(Clone, Copy)]
+pub struct StartSessionOptions<'a> {
+    pub no_session: bool,
+    pub reuse_session: Option<&'a str>,
+}
+
+pub fn start_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<()> {
     let db = Database::open(db_path)?;
     db.require_issue(id)?;
     print_active_mission_context(&db, id)?;
+    validate_start_session_options(state_dir, id, session)?;
     let resolution = prepare_start_branch(&db, id)?;
     crate::commands::workflow::transition_issue(&db, state_dir, db_path, id, "start", None)?;
     drop(db);
 
+    let session_id = start_session_after_transition(state_dir, db_path, id, session)?;
     let db = Database::open(db_path)?;
-    print_started_work(&db, id, &resolution)
+    print_started_work(&db, id, &resolution, session_id.as_deref())
+}
+
+fn validate_start_session_options(
+    _state_dir: &Path,
+    _id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<()> {
+    if session.no_session && session.reuse_session.is_some() {
+        bail!("Use either --no-session or --reuse-session, not both");
+    }
+    if session.no_session {
+        return Ok(());
+    }
+    if let Some(reuse_id) = session.reuse_session {
+        bail!(
+            "Session reuse is no longer workflow state ({reuse_id}). Start derives current work from issue status; omit --reuse-session."
+        );
+    }
+    Ok(())
+}
+
+fn start_session_after_transition(
+    state_dir: &Path,
+    db_path: &Path,
+    id: &str,
+    session: StartSessionOptions<'_>,
+) -> Result<Option<String>> {
+    let _ = (state_dir, db_path, id, session);
+    Ok(None)
 }
 
 fn prepare_start_branch(
@@ -77,7 +123,7 @@ fn prepare_start_branch(
     ensure_clean_worktree()?;
     let root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&root)?;
-    let resolution = policy.resolve_branch_lifecycle(db, id).with_context(|| {
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, id).with_context(|| {
         format!(
             "Branch lifecycle resolution failed before workflow transition. Inspect parent links with `atelier issue show {id}`."
         )
@@ -266,14 +312,13 @@ fn epic_branch_name(epic: &Issue) -> Result<String> {
 pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let issue = db.require_issue(id)?;
     print_active_mission_context(db, id)?;
-    ensure_issue_active_for_worktree(db, id)?;
     let root = repo_root()?;
     let branch = issue_branch_name(&root, &issue)?;
     let worktree_path = path
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.join(".atelier-worktrees").join(id));
-    let worktree_path_string = worktree_path.to_string_lossy().to_string();
-    if !worktree_path.exists() {
+    let created_worktree = !worktree_path.exists();
+    if created_worktree {
         let output = Command::new("git")
             .current_dir(&root)
             .args(["worktree", "add", "-B", &branch])
@@ -294,7 +339,6 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
     let layout = atelier_app::storage_layout::StorageLayout::new(&worktree_path);
     let state_dir = layout.canonical_dir();
     if state_dir.is_dir() {
-        activate_worktree_issue(&worktree_path, id)?;
         std::fs::create_dir_all(layout.target_runtime_dir())
             .context("worktree setup failed while creating runtime directory")?;
         let exe = env::current_exe().context("failed to locate current atelier executable")?;
@@ -304,69 +348,32 @@ pub fn worktree_for(db: &Database, id: &str, path: Option<&str>) -> Result<()> {
             .status()
             .context("worktree setup failed while rebuilding runtime projection")?;
         if !status.success() {
+            if created_worktree {
+                let _ = Command::new("git")
+                    .current_dir(&root)
+                    .args(["worktree", "remove", "--force"])
+                    .arg(&worktree_path)
+                    .status();
+            }
             bail!("worktree setup failed while rebuilding runtime projection");
         }
     } else {
+        if created_worktree {
+            let _ = Command::new("git")
+                .current_dir(&root)
+                .args(["worktree", "remove", "--force"])
+                .arg(&worktree_path)
+                .status();
+        }
         bail!(
             "worktree setup failed because {} does not contain .atelier",
             worktree_path.display()
         );
     }
     validate_worktree_projection(&layout, id)?;
-    crate::commands::activity_log::record_work_started(
-        id,
-        Some(&branch),
-        Some(&worktree_path_string),
-    )?;
     let _ = issue;
     println!("{}", worktree_path.display());
     Ok(())
-}
-
-fn activate_worktree_issue(worktree_path: &Path, id: &str) -> Result<()> {
-    let exe = env::current_exe().context("failed to locate current atelier executable")?;
-    let output = Command::new(exe)
-        .current_dir(worktree_path)
-        .args(["issue", "transition", id, "start"])
-        .output()
-        .context("worktree setup failed while activating issue in worktree")?;
-    if output.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("Unknown transition 'start'")
-        || stderr.contains("available from 'in_progress'")
-    {
-        return Ok(());
-    }
-    bail!(
-        "worktree setup failed while activating issue in worktree: {}",
-        stderr.trim()
-    );
-}
-
-fn ensure_issue_active_for_worktree(db: &Database, id: &str) -> Result<()> {
-    let issue = db.require_issue(id)?;
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    if crate::commands::issue_workflow::issue_status_category(
-        workflow_policy.as_ref(),
-        &issue.status,
-    )
-    .as_deref()
-        == Some("active")
-    {
-        return Ok(());
-    }
-    let root = repo_root()?;
-    let layout = atelier_app::storage_layout::StorageLayout::new(&root);
-    crate::commands::workflow::transition_issue(
-        db,
-        &layout.canonical_dir(),
-        &layout.runtime_db_path(),
-        id,
-        "start",
-        None,
-    )
 }
 
 pub fn worktree_for_mission(db: &Database, mission_id: &str, path: Option<&str>) -> Result<()> {
@@ -687,8 +694,7 @@ fn status_derived_work_for_branch(db: &Database, branch: Option<&str>) -> Result
         {
             continue;
         }
-        if branch_policy
-            .resolve_branch_lifecycle(db, &issue.id)?
+        if atelier_app::workflow_policy::resolve_branch_lifecycle(&branch_policy, db, &issue.id)?
             .expected_branch
             == branch
         {

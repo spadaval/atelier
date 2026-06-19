@@ -42,11 +42,12 @@ Add labels to control CHANGELOG.md section:
 
 ### Task Breakdown Rules
 ```bash
-# Single task - create, label, and start work in one step
-atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
+# Single task - create, label, then start through the workflow
+atelier issue create "Fix login validation error on empty email" -p medium --label bug
+atelier issue transition <id> start
 
 # Or use create with flags
-atelier issue create "Fix login validation error on empty email" -p medium --label bug --work
+atelier issue create "Fix login validation error on empty email" -p medium --label bug
 
 # Multi-part feature → Epic with subissues
 atelier issue create "Add user authentication system" -p high --label feature
@@ -55,16 +56,16 @@ atelier issue create "Add login endpoint with JWT tokens" --parent 1
 atelier issue create "Add session middleware for protected routes" --parent 1
 
 # Mark what you're working on
-atelier start 1
+atelier issue transition 1 start
 
 # Add context as you discover things
 atelier issue note 1 "Found existing auth helper in utils/auth.ts"
 
-# Close when done — auto-updates CHANGELOG.md
-atelier issue close 1 --reason "completed"
+# Close when done through the workflow
+atelier issue transition 1 close
 
-# Skip changelog for internal/refactor work
-atelier issue close 1 --reason "completed"
+# Inspect allowed workflow transitions
+atelier issue transition 1 --options
 
 # Quiet mode for scripting
 atelier -q issue create "Fix bug" -p high  # Outputs just the ID number
@@ -104,7 +105,7 @@ Before using unfamiliar libraries/APIs:
 
 These rules keep work organized and enable context handoff between sessions.
 
-Use the repository's `AGENTS.md` and `AGENTFACTORY.md` guidance for the active
+Use the repository's `AGENTS.md` guidance and tracker help for the active
 tracking workflow.
 
 ---

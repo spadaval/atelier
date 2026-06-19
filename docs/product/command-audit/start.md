@@ -1,23 +1,18 @@
-# `atelier start`
+# Removed `atelier start`
 
-Primary role: Worker.
+Primary historical role: Worker.
 
-Primary question: "How do I make this issue part of the current work in this
+Historical question: "How do I make this issue part of the current work in this
 checkout?"
 
-## Assessment
+`atelier start` is removed from the normal command surface. The workflow
+definition now owns issue lifecycle movement, so beginning work is the `start`
+transition:
 
-- Name: Correct. A root lifecycle verb is clearer than a role-prefixed command.
-- Documentation: Correct when paired with `status`, `issue show`, and
-  `issue transition`.
-- Design: Correct if it moves the issue to canonical `in_progress` state in the
-  current checkout's tracked `.atelier/` copy and does not create a separate
-  durable active pointer outside the workflow.
-- Output hierarchy: Issue ID, resulting workflow status, workspace/branch
-  context, next commands.
+```text
+atelier issue transition <issue-id> --options
+atelier issue transition <issue-id> start
+```
 
-## Role Use
-
-| Form | Primary role | Operator purpose | Fit |
-| --- | --- | --- | --- |
-| `atelier start <issue-id>` | Worker | Begin implementation or validation work on a slice by adding it to the checkout's canonical current-work set. | Good. |
+Branch preparation, tracker commits, and other mutating lifecycle behavior are
+declared as transition effects in `.atelier/workflow.yaml`.

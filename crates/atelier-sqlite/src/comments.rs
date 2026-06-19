@@ -6,7 +6,12 @@ use atelier_core::Comment;
 use atelier_records::activity::{create_issue_activity, list_issue_activities, ActivityEventType};
 
 impl Database {
-    pub fn add_comment(&self, issue_id: impl ToString, content: &str, kind: &str) -> Result<i64> {
+    pub fn record_legacy_import_comment(
+        &self,
+        issue_id: impl ToString,
+        content: &str,
+        kind: &str,
+    ) -> Result<i64> {
         let issue_id = issue_id.to_string();
         if content.len() > MAX_COMMENT_LEN {
             anyhow::bail!(
@@ -19,7 +24,7 @@ impl Database {
         Ok(now.timestamp_micros())
     }
 
-    pub fn add_comment_at(
+    pub fn record_legacy_import_comment_at(
         &self,
         issue_id: impl ToString,
         content: &str,
@@ -40,7 +45,7 @@ impl Database {
         Ok(created_at.timestamp_micros())
     }
 
-    pub fn get_comments(&self, issue_id: impl ToString) -> Result<Vec<Comment>> {
+    pub fn list_legacy_import_comments(&self, issue_id: impl ToString) -> Result<Vec<Comment>> {
         let issue_id = issue_id.to_string();
         let Some((state_dir, require_issue_file)) = self.current_runtime_state_dir()? else {
             return Ok(Vec::new());

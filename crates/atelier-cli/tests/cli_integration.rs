@@ -21,14 +21,146 @@ fn workspace_root() -> PathBuf {
 
 /// Helper to run atelier commands in a temp directory
 fn run_atelier(dir: &Path, args: &[&str]) -> (bool, String, String) {
+    ensure_git_for_workflow_fixture(dir, args);
+
+    if let Some((translated, description_title)) = translate_removed_issue_description_args(args) {
+        if args.get(0) == Some(&"issue") && args.get(1) == Some(&"subissue") {
+            if let Some(parent_ref) = args.get(2) {
+                let parent_id = resolve_test_issue_ref(dir, parent_ref);
+                if canonical_issue_path(dir, &parent_id).exists() {
+                    set_issue_type(dir, &parent_id, "epic");
+                    let rebuild = run_atelier_raw(dir, &["rebuild"]);
+                    assert!(
+                        rebuild.0,
+                        "test fixture projection rebuild failed after parent issue type edit: {}",
+                        rebuild.2
+                    );
+                }
+            }
+        }
+        let translated_refs = translate_issue_refs_owned(
+            dir,
+            &translated.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        let result = run_atelier_raw(
+            dir,
+            &translated_refs
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        );
+        if result.0 {
+            if let Some((title, description)) = description_title {
+                let issue_id = issue_id_by_title(dir, &title);
+                set_issue_description(dir, &issue_id, &description);
+                let rebuild = run_atelier_raw(dir, &["rebuild"]);
+                assert!(
+                    rebuild.0,
+                    "test fixture projection rebuild failed after description edit: {}",
+                    rebuild.2
+                );
+                register_issue_id(dir, issue_id);
+            }
+        }
+        return result;
+    }
+
     let translated_args = translate_issue_refs_owned(dir, args);
-    run_atelier_raw(
+    let result = run_atelier_raw(
         dir,
         &translated_args
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>(),
-    )
+    );
+    result
+}
+
+fn translate_removed_issue_description_args(
+    args: &[&str],
+) -> Option<(Vec<String>, Option<(String, String)>)> {
+    if args.get(0) != Some(&"issue") {
+        return None;
+    }
+
+    if args.get(1) == Some(&"subissue") {
+        let parent = args.get(2)?;
+        let title = args.get(3)?;
+        let mut translated = vec![
+            "issue".to_string(),
+            "create".to_string(),
+            (*title).to_string(),
+            "--parent".to_string(),
+            (*parent).to_string(),
+        ];
+        let mut description = None;
+        let mut index = 4;
+        while index < args.len() {
+            match args[index] {
+                "--description" | "-d" => {
+                    if let Some(value) = args.get(index + 1) {
+                        description = Some((*value).to_string());
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
+                }
+                value => {
+                    translated.push(value.to_string());
+                    index += 1;
+                }
+            }
+        }
+        return Some((
+            translated,
+            Some(((*title).to_string(), description.unwrap_or_default())),
+        ));
+    }
+
+    if args.get(1) != Some(&"create") {
+        return None;
+    }
+
+    let mut translated = Vec::with_capacity(args.len());
+    let mut description = None;
+    let mut changed = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index] {
+            "--description" | "-d" => {
+                changed = true;
+                if let Some(value) = args.get(index + 1) {
+                    description = Some((*value).to_string());
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+            }
+            value => {
+                translated.push(value.to_string());
+                index += 1;
+            }
+        }
+    }
+    if !changed {
+        return None;
+    }
+
+    let title = issue_create_title(&translated);
+    Some((translated, title.zip(description)))
+}
+
+fn issue_create_title(args: &[String]) -> Option<String> {
+    let mut index = 2;
+    while index < args.len() {
+        match args[index].as_str() {
+            "-p" | "--priority" | "-t" | "--template" | "-l" | "--label" | "--issue-type"
+            | "--parent" => index += 2,
+            value if value.starts_with('-') => index += 1,
+            value => return Some(value.to_string()),
+        }
+    }
+    None
 }
 
 fn run_atelier_raw(dir: &Path, args: &[&str]) -> (bool, String, String) {
@@ -98,12 +230,14 @@ fn migrate_default_issue_workflow(dir: &Path) {
 }
 
 fn init_git_repo(dir: &Path) {
-    let status = Command::new("git")
-        .current_dir(dir)
-        .args(["init", "-q"])
-        .status()
-        .unwrap();
-    assert!(status.success(), "git init failed");
+    if !dir.join(".git").exists() {
+        let status = Command::new("git")
+            .current_dir(dir)
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
+        assert!(status.success(), "git init failed");
+    }
     let status = Command::new("git")
         .current_dir(dir)
         .args(["branch", "-M", "main"])
@@ -121,6 +255,84 @@ fn init_git_repo(dir: &Path) {
             .unwrap();
         assert!(status.success(), "git config failed");
     }
+    ensure_initial_git_commit(dir);
+}
+
+fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
+    let needs_git = matches!(
+        args,
+        ["issue", "transition", ..]
+            | ["issue", "close", ..]
+            | ["start", ..]
+            | ["abandon", ..]
+            | ["worktree", ..]
+    );
+    if needs_git && !dir.join(".git").exists() {
+        init_git_repo(dir);
+        commit_if_dirty(dir, "test fixture state before workflow command");
+    }
+    if matches!(args, ["issue", "transition", _, "--options"]) && dir.join(".git").exists() {
+        commit_if_dirty(dir, "test fixture state before workflow options");
+    }
+    if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
+        commit_if_dirty(dir, "test fixture state before issue close");
+    }
+}
+
+fn ensure_initial_git_commit(dir: &Path) {
+    if git_has_commit(dir) {
+        return;
+    }
+    if git_has_changes(dir) {
+        commit_all(dir, "initial tracker state");
+    } else {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args([
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "initial tracker state",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git empty commit failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+fn git_has_commit(dir: &Path) -> bool {
+    Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", "--verify", "HEAD"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn commit_if_dirty(dir: &Path, message: &str) {
+    if !git_has_changes(dir) && git_has_commit(dir) {
+        return;
+    }
+    commit_all(dir, message);
+}
+
+fn git_has_changes(dir: &Path) -> bool {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git status --porcelain failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    !output.stdout.is_empty()
 }
 
 fn commit_all(dir: &Path, message: &str) {
@@ -130,6 +342,14 @@ fn commit_all(dir: &Path, message: &str) {
         .status()
         .unwrap();
     assert!(status.success(), "git add failed");
+    let status = Command::new("git")
+        .current_dir(dir)
+        .args(["diff", "--cached", "--quiet"])
+        .status()
+        .unwrap();
+    if status.success() {
+        return;
+    }
     let output = Command::new("git")
         .current_dir(dir)
         .args(["commit", "-q", "-m", message])
@@ -298,6 +518,66 @@ fn edit_canonical_issue(dir: &Path, issue_id: &str, edit: impl FnOnce(String) ->
     edit_canonical_record(dir, "issues", issue_id, edit);
 }
 
+fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
+    if description.trim().is_empty() {
+        return;
+    }
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        if description.contains("## Description") {
+            replace_markdown_body(&markdown, description)
+        } else {
+            replace_issue_section(&markdown, "Description", description)
+        }
+    });
+}
+
+fn set_issue_type(dir: &Path, issue_id: &str, issue_type: &str) {
+    edit_canonical_issue(dir, issue_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "issue_type", issue_type)
+    });
+}
+
+fn replace_front_matter_scalar(markdown: &str, key: &str, value: &str) -> String {
+    let needle = format!("{key}: ");
+    markdown
+        .lines()
+        .map(|line| {
+            if line.starts_with(&needle) {
+                format!("{key}: {value:?}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+fn replace_markdown_body(markdown: &str, body: &str) -> String {
+    let (_, _) = markdown
+        .split_once("\n---\n")
+        .expect("canonical record front matter terminator missing");
+    let body_start = markdown.find("\n---\n").unwrap() + "\n---\n".len();
+    format!("{}{}\n", &markdown[..body_start], body.trim())
+}
+
+fn replace_issue_section(markdown: &str, heading: &str, replacement: &str) -> String {
+    let marker = format!("## {heading}\n");
+    let start = markdown.find(&marker).expect("section heading missing");
+    let body_start = start + marker.len();
+    let rest = &markdown[body_start..];
+    let end = rest
+        .find("\n## ")
+        .map(|offset| body_start + offset)
+        .unwrap_or(markdown.len());
+    format!(
+        "{}{}\n{}",
+        &markdown[..body_start],
+        format!("\n{}\n", replacement.trim()),
+        &markdown[end..]
+    )
+}
+
 fn write_ignored_canonical_artifacts(dir: &Path, issue_id: &str) {
     let runtime_dir = dir.join(".atelier/runtime");
     std::fs::create_dir_all(&runtime_dir).unwrap();
@@ -366,7 +646,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier init`
 - `atelier man`
 - `atelier status`
-- `atelier start`
+- `atelier issue transition`
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
@@ -374,17 +654,20 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission note`
 - `atelier mission create/show/list/status/update`
 - `atelier mission add-work/unlink/add-blocker`
-- `atelier plan create/show/list/revise/link/apply`
+- `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
+- `atelier review open/status/show/comments/comment/approve/request-changes`
+- `atelier forgejo roles check`
+- `atelier session`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
 - `atelier maintenance delete`
 - `atelier lint`
-- `atelier doctor`
 
 ## Advanced Repair
 
 - `atelier branch for-epic/status/merge`
+- `atelier doctor`
 "#
 }
 
@@ -398,12 +681,7 @@ fn write_valid_command_guidance(dir: &Path) {
     write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.join("AGENTFACTORY.md"),
-        "# Agent Factory Binding\n\n- `atelier status`\n- `atelier mission status [<id>]`\n- `atelier mission status <id> --verbose`\n- `atelier issue show <id>`\n",
+        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier lint`\n",
     )
     .unwrap();
 }
@@ -452,7 +730,7 @@ fn attach_evidence(
     dir: &Path,
     target_kind: &str,
     target_id: &str,
-    _result: &str,
+    result: &str,
     summary: &str,
 ) -> String {
     if target_kind == "issue" {
@@ -475,7 +753,40 @@ fn attach_evidence(
         evidence_out.contains("[evidence] recorded"),
         "{evidence_out}"
     );
-    record_id_by_title(dir, "evidence", summary)
+    let evidence_id = record_id_by_title(dir, "evidence", summary);
+    let success = result == "pass";
+    edit_canonical_record(dir, "evidence", &evidence_id, |markdown| {
+        let markdown = replace_front_matter_scalar(&markdown, "status", result);
+        if markdown.contains("\nsuccess:") {
+            markdown
+                .lines()
+                .map(|line| {
+                    if line.starts_with("success:") {
+                        format!("success: {}", if success { "true" } else { "false" })
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        } else {
+            markdown.replace(
+                "schema_version: 1\n",
+                &format!(
+                    "schema_version: 1\nsuccess: {}\n",
+                    if success { "true" } else { "false" }
+                ),
+            )
+        }
+    });
+    let rebuild = run_atelier_raw(dir, &["rebuild"]);
+    assert!(
+        rebuild.0,
+        "test fixture projection rebuild failed after evidence result edit: {}",
+        rebuild.2
+    );
+    evidence_id
 }
 
 fn attach_pass_evidence(dir: &Path, target_kind: &str, target_id: &str, summary: &str) -> String {
@@ -552,12 +863,25 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
             run_atelier(dir, &["issue", "transition", &issue_id, transition]);
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
+            if transition == "request_review" {
+                let (approved, _, approve_stderr) = run_atelier(
+                    dir,
+                    &[
+                        "review", "approve", "--issue", &issue_id, "--role", "reviewer", "--body",
+                        "approved",
+                    ],
+                );
+                assert!(
+                    approved,
+                    "review approve failed for {issue_id}: {approve_stderr}"
+                );
+            }
         }
     }
     issue_id
 }
 
-fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
+fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, _reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     move_issue_to_validation(dir, &issue_id);
     ensure_all_issue_completion_sections(dir);
@@ -565,11 +889,8 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));
     }
-    let mut args = vec!["issue", "close", issue_ref_value];
-    args.push("--reason");
-    args.push(reason.unwrap_or("done"));
-    let (success, _, stderr) = run_atelier(dir, &args);
-    assert!(success, "issue close failed: {stderr}");
+    let (success, _, stderr) = run_atelier(dir, &["issue", "transition", &issue_id, "close"]);
+    assert!(success, "issue transition close failed: {stderr}");
     issue_id
 }
 
@@ -852,6 +1173,8 @@ mod legacy_surfaces;
 mod mission_projection_worktree;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
+#[path = "cli_integration/sessions.rs"]
+mod sessions;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]

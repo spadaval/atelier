@@ -5,14 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::commands::issue_workflow::{
-    format_status_with_category, issue_blocks_work, issue_start_readiness, issue_status_category,
-    issue_status_label, load_issue_workflow_policy, open_blocker_ids_with_policy,
-    IssueStartReadiness,
+    format_status_with_category, issue_blocks_work, issue_status_category, issue_status_label,
+    load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
-use atelier_core::{Comment, DomainRecord, Issue};
+use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
 use atelier_sqlite::{validate_issue_type, Database};
@@ -240,7 +239,6 @@ pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
 fn show_command_for_kind(kind: &str, id: &str) -> String {
     match kind {
         "mission" => format!("atelier mission show {id}"),
-        "plan" => format!("atelier plan show {id}"),
         "evidence" => format!("atelier evidence show {id}"),
         _ => format!("atelier {kind} show {id}"),
     }
@@ -382,7 +380,7 @@ fn issue_object_from_parts(
         None => None,
     };
 
-    let raw_comments = db.get_comments(&issue.id)?;
+    let raw_comments = db.list_legacy_import_comments(&issue.id)?;
     let imported_owner = comment_metadata_value(&raw_comments, "owner");
     let imported_assignee = comment_metadata_value(&raw_comments, "assignee");
     let close_reason = comment_metadata_value(&raw_comments, "Close reason")
@@ -563,7 +561,7 @@ fn render_issue_evidence_status(
 }
 
 fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<()> {
-    println!("\nBranch Lifecycle");
+    println!("\nBranch Policy");
     println!("----------------");
     match crate::commands::workflow::branch_lifecycle_context(db, canonical_id) {
         Ok(context) => {
@@ -588,8 +586,7 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
                 "State:    {}",
                 crate::commands::workflow::branch_lifecycle_state_line(&context)
             );
-            println!("Next:     atelier start {canonical_id}");
-            println!("Close:    atelier issue close {canonical_id} --reason \"...\"");
+            println!("Next:     atelier issue transition {canonical_id} --options");
         }
         Err(error) => {
             println!("State:    unavailable - {error}");
@@ -642,7 +639,7 @@ fn render_transition_readiness(
     Ok(())
 }
 
-fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<DomainRecord>> {
+fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<EvidenceRecord>> {
     let mut evidence = Vec::new();
     for link in db.list_record_links("issue", issue_id)? {
         if link.relation_type != "validates" {
@@ -656,11 +653,14 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Domai
             None
         };
         if let Some(evidence_id) = evidence_id {
-            evidence.push(db.require_record("evidence", &evidence_id)?);
+            db.require_record("evidence", &evidence_id)?;
+            if let Some(record) = canonical_evidence_record(&evidence_id)? {
+                evidence.push(record);
+            }
         }
     }
-    evidence.sort_by(|a, b| a.id.cmp(&b.id));
-    evidence.dedup_by(|a, b| a.id == b.id);
+    evidence.sort_by(|a, b| a.header.id.cmp(&b.header.id));
+    evidence.dedup_by(|a, b| a.header.id == b.header.id);
     Ok(evidence)
 }
 
@@ -684,7 +684,7 @@ pub(crate) fn issue_evidence_gate_status(
 fn issue_evidence_gate_status_from_records(
     issue: &Issue,
     sections: Option<&IssueSections>,
-    evidence: &[DomainRecord],
+    evidence: &[EvidenceRecord],
 ) -> EvidenceGateStatus {
     if evidence.is_empty() {
         return evidence_gate(false, "no validating evidence link found");
@@ -692,7 +692,27 @@ fn issue_evidence_gate_status_from_records(
 
     let _ = issue;
     let _ = sections;
-    evidence_gate(true, "validating evidence is linked")
+    let passing = evidence.iter().any(|record| {
+        record.data.success.unwrap_or_else(|| {
+            !matches!(record.header.status.as_str(), "blocked" | "fail" | "failed")
+        })
+    });
+    if passing {
+        evidence_gate(true, "passing validating evidence is linked")
+    } else {
+        evidence_gate(false, "expected at least 1 passing evidence record")
+    }
+}
+
+fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
+    let Some(state_dir) = atelier_app::storage_layout::find_canonical_dir_from_cwd()? else {
+        return Ok(None);
+    };
+    let store = RecordStore::new(state_dir);
+    Ok(match store.load_record_by_id("evidence", id) {
+        Ok(Record::Evidence(record)) => Some(record),
+        Ok(_) | Err(_) => None,
+    })
 }
 
 fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {
@@ -870,13 +890,9 @@ fn status_rank(status: &str) -> u8 {
 }
 
 fn priority_rank(priority: &str) -> u8 {
-    match priority {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
+    IssuePriority::from_label(priority)
+        .map(|priority| priority.sort_rank())
+        .unwrap_or(4)
 }
 
 fn render_recent_activity_section(canonical_id: &str, object: &IssueObject) -> Result<()> {
@@ -1166,15 +1182,11 @@ fn filter_ready_rows(
             if has_descendants(&children, &row.id) {
                 let external =
                     external_blockers_for_subtree(db, workflow_policy, &children, &row.id)?;
-                let readiness =
-                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
-                let is_ready = external.is_empty() && readiness == IssueStartReadiness::Ready;
+                let is_ready = external.is_empty() && queue_row_is_todo(workflow_policy, &row);
                 Ok((row, is_ready))
             } else {
-                let readiness =
-                    issue_start_readiness(db, workflow_policy, &db.require_issue(&row.id)?)?;
                 let is_ready =
-                    row.open_blockers.is_empty() && readiness == IssueStartReadiness::Ready;
+                    row.open_blockers.is_empty() && queue_row_is_todo(workflow_policy, &row);
                 Ok((row, is_ready))
             }
         })
@@ -1184,6 +1196,13 @@ fn filter_ready_rows(
             Err(err) => Some(Err(err)),
         })
         .collect()
+}
+
+fn queue_row_is_todo(workflow_policy: Option<&WorkflowPolicy>, row: &QueueRow) -> bool {
+    match workflow_policy {
+        Some(_) => row.status_category.as_deref() == Some("todo"),
+        None => row.status == "todo",
+    }
 }
 
 fn queue_groups(db: &Database, rows: Vec<QueueRow>) -> Result<Vec<QueueGroup>> {
@@ -1485,6 +1504,7 @@ pub fn create_lifecycle(
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
+            fields: Default::default(),
             parent_id: None,
             created_at: now,
             updated_at: now,
@@ -1519,7 +1539,10 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
-        println!("  Start tracked work: atelier start {}", object.id);
+        println!(
+            "  Start tracked work: atelier issue transition {} start",
+            object.id
+        );
     } else {
         println!("Created issue {} - {}", object.id, object.title);
         println!("Type:     {}", object.issue_type);
@@ -1531,7 +1554,10 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
-        println!("  Start tracked work: atelier start {}", object.id);
+        println!(
+            "  Start tracked work: atelier issue transition {} start",
+            object.id
+        );
     }
     Ok(())
 }
@@ -1869,7 +1895,7 @@ pub fn doctor(
     repo_root: &Path,
     state_dir: &Path,
     db_path: &Path,
-    runtime_db_existed: bool,
+    projection_db_existed: bool,
     fix: bool,
 ) -> Result<()> {
     let outcome = atelier_app::health::doctor(atelier_app::Request {
@@ -1878,7 +1904,7 @@ pub fn doctor(
             repo_root: repo_root.to_path_buf(),
             state_dir: state_dir.to_path_buf(),
             db_path: db_path.to_path_buf(),
-            runtime_db_existed,
+            projection_db_existed,
             fix,
             diagnostics_enabled: crate::telemetry::diagnostics_enabled(),
         },
@@ -1932,25 +1958,24 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         "  projection_metadata: {}",
         if view.projection_fresh { "ok" } else { "stale" }
     );
-    println!("Runtime state:");
+    println!("Review backend:");
+    println!("  mode: {}", view.review_backend.mode);
     println!(
-        "  directory: {}",
-        if view.runtime_dir_ok { "ok" } else { "not ok" }
+        "  provider: {}",
+        view.review_backend.provider.as_deref().unwrap_or("(none)")
     );
+    println!("  status: {}", view.review_backend.status);
+    if let Some(token_env) = &view.review_backend.token_env {
+        println!("  token_env: {}", token_env);
+    }
+    println!("  detail: {}", view.review_backend.detail);
+    println!("Projection database:");
     println!(
         "  database: {}",
         if view.runtime_db_available {
             "ok"
         } else {
-            "missing (runtime projection artifact)"
-        }
-    );
-    println!(
-        "  local_tables: {}",
-        if view.runtime_tables_available {
-            "ok"
-        } else {
-            "not ok"
+            "missing"
         }
     );
     println!("  diagnostics: {}", view.diagnostics);
@@ -1992,7 +2017,6 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         println!("Next Commands");
         println!("-------------");
         println!("  atelier lint");
-        println!("  atelier doctor");
         Ok(())
     }
 }
@@ -2011,15 +2035,9 @@ pub fn rebuild(state_dir: &Path, db_path: &Path) -> Result<()> {
 }
 
 pub fn validate_priority(priority: &str) -> Result<()> {
-    if atelier_sqlite::VALID_PRIORITIES.contains(&priority) {
-        Ok(())
-    } else {
-        bail!(
-            "Invalid priority '{}'. Valid values: {}",
-            priority,
-            atelier_sqlite::VALID_PRIORITIES.join(", ")
-        )
-    }
+    IssuePriority::from_cli_input(priority)
+        .map(|_| ())
+        .map_err(Into::into)
 }
 
 #[cfg(test)]

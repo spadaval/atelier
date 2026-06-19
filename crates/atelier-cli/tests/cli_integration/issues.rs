@@ -54,7 +54,7 @@ fn test_create_issue_with_description_is_rejected() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier_raw(
         dir.path(),
         &[
             "issue",
@@ -450,7 +450,7 @@ fn test_issue_show_surfaces_evidence_status() {
         "transition options without evidence failed: {stderr}"
     );
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("fail  proof_attached"));
+    assert!(transitions.contains("fail  evidence_attached"));
     assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
 
     let (success, _, stderr) = run_atelier(
@@ -471,12 +471,12 @@ fn test_issue_show_surfaces_evidence_status() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show with evidence failed: {stderr}");
     assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: attached - validating evidence is linked"));
+    assert!(stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options with evidence failed: {stderr}");
-    assert!(transitions.contains("pass  proof_attached"));
+    assert!(transitions.contains("pass  evidence_attached"));
 }
 
 #[test]
@@ -539,23 +539,22 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
 }
 
 #[test]
-fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
+fn test_bundle_apply_accepts_partial_issue_key_refs() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Existing issue target"]);
     let issue_id = issue_id_by_title(dir.path(), "Existing issue target");
     let issue_key = issue_key(&issue_id);
-    let bulk_path = dir.path().join("partial-key-plan.json");
+    let bundle_path = dir.path().join("partial-key-bundle.json");
     std::fs::write(
-        &bulk_path,
+        &bundle_path,
         format!(
             r#"{{
-  "schema": "atelier.bulk-plan",
+  "schema": "atelier.bundle",
   "schema_version": 1,
-  "title": "Partial key bulk apply",
-  "apply": {{ "export": "auto" }},
-  "records": {{
+  "title": "Partial key bundle apply",
+  "resources": {{
     "issues": [
       {{
         "client_ref": "issue.partial",
@@ -571,15 +570,197 @@ fn test_bulk_plan_apply_accepts_partial_issue_key_refs() {
     )
     .unwrap();
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["plan", "apply", bulk_path.to_str().unwrap()]);
-    assert!(success, "bulk apply by partial issue key failed: {stderr}");
-    assert!(stdout.contains("Bulk plan applied."));
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(
+        success,
+        "bundle apply by partial issue key failed: {stderr}"
+    );
+    assert!(stdout.contains("Bundle applied."));
 
     let dependent_id = issue_id_by_title(dir.path(), "Partial key dependent");
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &dependent_id]);
     assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&issue_id));
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &dependent_id]);
+    assert!(success, "issue show failed: {stderr}");
+    assert!(stdout.contains("Status:   todo"), "{stdout}");
+}
+
+#[test]
+fn test_plan_apply_command_is_removed() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["plan", "apply", "bundle.json"]);
+
+    assert!(!success, "plan apply should be removed");
+    assert!(
+        stderr.contains("unrecognized subcommand") || stderr.contains("unexpected argument"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_plan_and_milestone_resources() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("invalid-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid bundle",
+  "resources": {
+    "issues": [],
+    "plans": [{ "client_ref": "plan.invalid", "title": "No plan resources" }],
+    "milestones": [{ "client_ref": "milestone.invalid", "title": "No milestones" }]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject v1 plan/milestone resources"
+    );
+    assert!(
+        stderr.contains("unknown field `plans`") || stderr.contains("unknown field `milestones`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_duplicate_client_refs() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("duplicate-client-ref-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Duplicate client ref bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.duplicate",
+        "title": "Duplicate one",
+        "issue_type": "task",
+        "priority": "high"
+      },
+      {
+        "client_ref": "issue.duplicate",
+        "title": "Duplicate two",
+        "issue_type": "task",
+        "priority": "high"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject duplicate client_ref"
+    );
+    assert!(
+        stderr.contains("Duplicate client_ref 'issue.duplicate'"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_missing_client_ref() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("missing-client-ref-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Missing client ref bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.ref-user",
+        "title": "Missing reference user",
+        "issue_type": "task",
+        "priority": "high",
+        "depends_on": [{ "client_ref": "issue.missing" }]
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "bundle preview should reject missing client_ref");
+    assert!(
+        stderr.contains("Reference 'issue.missing' for issue.ref-user does not resolve"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_preview_rejects_status_outside_workflow_policy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("invalid-status-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid status bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.invalid-status",
+        "title": "Invalid status",
+        "issue_type": "task",
+        "priority": "high",
+        "status": "not_real"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(
+        !success,
+        "bundle preview should reject unknown workflow status"
+    );
+    assert!(
+        stderr.contains("status is not defined in .atelier/workflow.yaml"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -616,7 +797,7 @@ fn test_show_issue_rich_human_output() {
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Target issue"));
     assert!(stdout.contains("Status:   todo"));
-    assert!(stdout.contains("Type:     task"));
+    assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     let target_id = issue_id_by_title(dir.path(), "Target issue");
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
@@ -752,19 +933,6 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "plan",
-            "create",
-            "Canonical plan",
-            "--body",
-            "Canonical plan body",
-        ],
-    );
-    assert!(success, "plan create failed: {stderr}");
-    let plan_id = record_id_by_title(dir.path(), "plans", "Canonical plan");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
             "evidence",
             "record",
             "--kind",
@@ -777,27 +945,13 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
 
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     conn.execute(
-        "UPDATE records SET body = 'SQLite mission body', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"constraints":["SQLite constraint"],"risks":[],"validation":[],"milestones":[],"plans":[],"evidence":[],"work":[]}"#,
-            mission_id.as_str(),
-        ],
+        "UPDATE records SET title = 'SQLite mission title', status = 'sqlite_status' WHERE id = ?1",
+        [mission_id.as_str()],
     )
     .unwrap();
     conn.execute(
-        "UPDATE records SET body = 'SQLite plan body', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"revision":99,"revisions":[{"revision":99,"reason":"sqlite","body":"SQLite plan body"}]}"#,
-            plan_id.as_str(),
-        ],
-    )
-    .unwrap();
-    conn.execute(
-        "UPDATE records SET body = 'SQLite evidence summary', data_json = ?1 WHERE id = ?2",
-        [
-            r#"{"kind":"sqlite","result":"fail","path":null,"uri":null,"producer":null,"captured_at":"2000-01-01T00:00:00Z"}"#,
-            evidence_id.as_str(),
-        ],
+        "UPDATE records SET title = 'SQLite evidence title', status = 'sqlite_status' WHERE id = ?1",
+        [evidence_id.as_str()],
     )
     .unwrap();
 
@@ -805,24 +959,42 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("Canonical mission body"));
     assert!(mission_out.contains("Canonical constraint"));
-    assert!(!mission_out.contains("SQLite mission body"));
-    assert!(!mission_out.contains("SQLite constraint"));
-
-    let (success, plan_out, stderr) = run_atelier(dir.path(), &["plan", "show", &plan_id]);
-    assert!(success, "plan show failed: {stderr}");
-    assert!(plan_out.contains("Canonical plan body"));
-    assert!(plan_out.contains("Revision: 1"));
-    assert!(!plan_out.contains("SQLite plan body"));
-    assert!(!plan_out.contains("Revision: 99"));
+    assert!(!mission_out.contains("SQLite mission title"));
+    assert!(!mission_out.contains("sqlite_status"));
 
     let (success, evidence_out, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
     assert!(evidence_out.contains("Canonical evidence summary"));
-    assert!(evidence_out.contains("Result:      pass"));
+    assert!(evidence_out.contains("Status:      recorded"));
     assert!(evidence_out.contains("Kind:        test"));
     assert!(!evidence_out.contains("SQLite evidence summary"));
     assert!(!evidence_out.contains("Kind:        sqlite"));
+
+    for args in [
+        vec![
+            "plan",
+            "create",
+            "Canonical plan",
+            "--body",
+            "Canonical plan body",
+        ],
+        vec!["plan", "show", "atelier-plnn"],
+        vec!["plan", "list"],
+        vec!["plan", "revise", "atelier-plnn", "body"],
+        vec!["plan", "link", "atelier-plnn", "mission", &mission_id],
+    ] {
+        let (success, _stdout, stderr) = run_atelier(dir.path(), &args);
+        assert!(
+            !success,
+            "removed plan command unexpectedly succeeded: {args:?}"
+        );
+        assert!(
+            stderr.contains("unrecognized subcommand 'plan'"),
+            "removed plan command should be rejected by clap: {stderr}"
+        );
+    }
+    assert!(!dir.path().join(".atelier/plans").exists());
 }
 
 #[test]
@@ -874,7 +1046,7 @@ fn test_issue_search_reads_payloads_from_record_store_and_activity() {
 }
 
 #[test]
-fn test_show_closed_issue_includes_close_reason() {
+fn test_show_closed_issue_omits_legacy_close_reason() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -886,8 +1058,8 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains("Closed issue"));
     assert!(stdout.contains("Closed:"));
-    assert!(stdout.contains("Close Reason"));
-    assert!(stdout.contains("Done enough"));
+    assert!(!stdout.contains("Close Reason"), "{stdout}");
+    assert!(!stdout.contains("Done enough"), "{stdout}");
 }
 
 #[test]
@@ -1377,7 +1549,7 @@ fn test_import_beads_jsonl_fixture_round_trip() {
     assert!(show_out.contains("atelier-0002"));
     assert!(show_out.contains("(open blocker)"));
     assert!(show_out.contains("Outcome"));
-    assert!(show_out.contains("AGENTFACTORY.md declares Atelier as the tracker"));
+    assert!(show_out.contains("AGENTS.md declares Atelier as the tracker"));
     assert!(show_out.contains("Evidence"));
     assert!(show_out.contains("atelier import-beads <path>"));
     assert!(!show_out.contains("Acceptance Criteria"));
@@ -1563,11 +1735,9 @@ fn test_issue_mutations_create_activity_sidecars() {
 
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Close reason body"],
-    );
-    assert!(success, "issue close reason failed: {stderr}");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
+    assert!(success, "issue transition close failed: {stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(&activities, "comment", &["Plain comment body"]);
@@ -1599,7 +1769,13 @@ fn test_issue_mutations_create_activity_sidecars() {
         "transition_applied",
         &["transition: \"close\"", "to: \"done\""],
     );
-    assert_activity_contains(&activities, "close_reason", &["Close reason body"]);
+    assert!(
+        activities
+            .iter()
+            .all(|activity| !activity.contains("event_type: \"close_reason\"")),
+        "issue transition close should not record a legacy close_reason activity:\n{}",
+        activities.join("\n--- activity ---\n")
+    );
 }
 
 #[test]
@@ -1632,10 +1808,8 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     assert!(success, "issue note failed: {stderr}");
     move_issue_to_validation(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Canonical close"],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(success, "close failed: {stderr}");
 
     std::fs::remove_file(dir.path().join(".atelier/runtime/state.db")).unwrap();
@@ -1645,8 +1819,8 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Canonical handoff"));
-    assert!(stdout.contains("Close Reason"));
-    assert!(stdout.contains("Canonical close"));
+    assert!(!stdout.contains("Close Reason"), "{stdout}");
+    assert!(!stdout.contains("Canonical close"), "{stdout}");
 }
 
 #[test]
@@ -1925,6 +2099,40 @@ fn test_issue_list_ready_treats_internal_epic_blockers_as_ready() {
     assert!(stdout.contains("Parent epic"));
     assert!(stdout.contains("Ready child"));
     assert!(!stdout.contains("Sequenced child"));
+}
+
+#[test]
+fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Ready child"]);
+    run_atelier(dir.path(), &["issue", "subissue", "1", "Sequenced child"]);
+    run_atelier(dir.path(), &["issue", "block", "3", "2"]);
+    run_atelier(dir.path(), &["issue", "create", "Active item"]);
+    let active_id = issue_ref(dir.path(), 4);
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &active_id, "start"]);
+    assert!(success, "start active issue failed: {stderr}");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
+    assert!(success, "status failed: {stderr}");
+    assert!(
+        status_out.contains("Ready work:    2"),
+        "status should still count the parent epic and ready child:\n{status_out}"
+    );
+
+    let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
+    assert!(success, "ready list failed: {stderr}");
+    assert!(ready_out.contains("Parent epic"), "{ready_out}");
+    assert!(ready_out.contains("Ready child"), "{ready_out}");
+    assert!(!ready_out.contains("Sequenced child"), "{ready_out}");
+    assert!(!ready_out.contains("Active item"), "{ready_out}");
 }
 
 #[test]

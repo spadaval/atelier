@@ -1,94 +1,57 @@
-# Milestone Records
+# Deferred Checkpoint Semantics
 
-Milestone records are first-class checkpoint records. They describe a target
-state that can be validated, not a work container, roadmap label, or super-epic.
-Issues and epics do the work; evidence and workflow validators prove whether the
-checkpoint can be accepted.
+Milestone/checkpoint semantics are deferred for v1. Atelier does not currently
+have a first-class `.atelier/milestones/` record table, milestone lifecycle, or
+public milestone command group.
 
-## Record Contract
+Checkpoint intent is still useful product language. When an operator needs to
+name an intermediate target state, write it in the accountable mission, epic,
+issue, or evidence body. That prose may describe desired state, scope
+boundaries, validation criteria, accepted evidence, and remaining risk, but it
+does not create a separate durable milestone record.
 
-A first-class milestone record must model these fields:
+## V1 Validation Destination
 
-| Field | Meaning |
+Validation and outcome data stays on v1 accountable records:
+
+| Data | V1 home |
 | --- | --- |
-| `desired_state` | The observable repository, product, or workflow state that should be true at the checkpoint. |
-| `scope` | Explicit boundaries for what is included, excluded, and deferred. |
-| `validation_criteria` | Ordered criteria that define what must be proven before the checkpoint is accepted. |
-| `accepted_evidence` | Evidence requirements or accepted evidence IDs that prove one or more validation criteria. |
-| `completion_state` | The checkpoint's acceptance state, independent of whether contributing work items are open or closed. |
-| `missions` | One or more mission IDs that the checkpoint belongs to or advances. |
-| `contributing_work` | Linked epics, issues, reviews, or validation items that contribute to the checkpoint. |
+| Mission-level objective and validation expectations | Mission Markdown sections |
+| Epic review and grouped-branch completion judgment | Epic issue record and evidence |
+| Implementation, migration, review, or validation accountability | Issue records |
+| Command transcripts, reviews, audits, screenshots, and proof summaries | Evidence records |
+| Checkpoint notes or plan references | Mission, epic, issue, or evidence prose |
 
-The canonical record shape follows the storage contract in
-[Canonical Record And Rebuild Layout](../spec/storage/export/rebuild/canonical-layout.md):
-milestone records live under `.atelier/milestones/<record-id>.md`, IDs
-use the project-scoped random record ID format, ID arrays are sorted lexically,
-and text arrays preserve author order.
+Workflow validators belong to `.atelier/workflow.yaml` and issue transition
+evaluation. They do not attach to milestone records because milestone records
+are not active v1 storage.
 
-## Relationships
+## Referencing Checkpoint Prose
 
-Milestones sit between mission intent and work execution:
+Use explicit prose or paths instead of a milestone ID:
 
 ```text
-mission has_checkpoint milestone
-epic contributes_to milestone
-issue contributes_to milestone
-evidence validates milestone.validation_criteria[N]
-workflow transition uses validator
+See docs/plans/storage-cleanup.md#checkpoint-2 for the current checkpoint
+criteria.
 ```
 
-`missions` and `contributing_work` are links, not hierarchy that turns a
-milestone into a parent work queue. A mission may have multiple checkpoint
-records, and the same milestone may advance more than one mission when the
-checkpoint is genuinely shared.
-
-Contributing work links should point to accountable records that can be claimed,
-reviewed, validated, and closed. A milestone is accepted because its
-`validation_criteria` have sufficient evidence and the relevant workflow
-transition validators pass, not because every possible related item has been
-nested under it.
-
+```markdown
 ## Validation
 
-Milestones own validation criteria. Workflow policy owns transition checks.
+- Checkpoint: bundle apply can preview, validate, and apply issue, mission, and
+  evidence records without first-class plan or milestone resources.
+- Proof: evidence/atelier-x14g records the command transcripts and focused
+  tests.
+```
 
-The milestone record defines what must be true. Evidence records prove what was
-observed. Workflow validators decide whether a transition is allowed under the
-repository's configured workflow policy. This keeps checkpoint meaning durable
-and reviewable while keeping process enforcement configurable.
+This keeps checkpoint meaning reviewable without adding a parallel completion
+state or validation-data destination.
 
-A workflow may require validators such as `evidence_attached`,
-`validation_criteria_satisfied`, `no_open_blockers`, or `no_blocking_lints`
-before a milestone acceptance or terminal transition can complete. Those
-validators belong in the configured workflow policy or the workflow
-implementation contract, not as milestone-attached transition checks.
+## Future Contract
 
-Milestone verification should therefore answer three questions:
-
-1. Which `validation_criteria` does each evidence record validate?
-2. Do the accepted evidence records prove the desired checkpoint state within
-   the stated scope boundaries?
-3. Did the configured workflow validators allow the acceptance or terminal
-   transition?
-
-## Completion State
-
-`completion_state` is checkpoint state, not an aggregate issue status. It should
-communicate whether the milestone is proposed, active, accepted, superseded, or
-abandoned according to the configured workflow vocabulary. The exact state names
-may be repository-configured, but the state must describe the checkpoint record
-itself.
-
-Open contributing work does not automatically make a milestone incomplete if
-the remaining work is out of scope, deferred, or linked to a later checkpoint.
-Closed contributing work does not automatically complete a milestone without
-accepted evidence for the validation criteria and successful workflow
-validation.
-
-## Command Surface
-
-Milestones are first-class checkpoint records, not an inherited issue lifecycle
-subsystem. They are created today through `atelier plan apply` bulk-plan input
-and rendered under `.atelier/milestones/`. A future dedicated checkpoint command
-must target this record contract directly rather than restoring the deleted
-legacy `milestone` command group.
+A future checkpoint feature must introduce a fresh product and storage contract
+directly. It must not restore the deleted legacy `milestone` command group,
+reuse stale `.atelier/milestones/` assumptions, or smuggle checkpoint state into
+bundle v1 resources. Until that contract exists, milestone/checkpoint references
+in historical tracker records are archival context or explicitly deferred
+planning notes.

@@ -125,7 +125,7 @@ the writer must replace values for these argument classes with stable labels:
 - tokens, API keys, passwords, cookies, and authorization headers;
 - URLs containing credentials or query strings;
 - file paths outside the workspace root;
-- issue descriptions, comments, notes, close reasons, and plan bodies;
+- issue descriptions, comments, notes, close reasons, and planning artifact bodies;
 - environment variable values;
 - arbitrary positional arguments not recognized as safe enums, IDs, or numeric
   thresholds.

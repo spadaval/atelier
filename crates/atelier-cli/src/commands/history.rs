@@ -3,17 +3,17 @@ use chrono::{DateTime, Duration, Local, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use atelier_core::{DomainRecord, Issue, RecordLink};
+use atelier_core::{Issue, RecordLink};
 use atelier_records::activity::{
     list_all_issue_activities, list_all_mission_activities, list_issue_activities,
     list_mission_activities, IssueActivity,
 };
-use atelier_sqlite::Database;
+use atelier_sqlite::{Database, RecordSummary};
 
 pub const DEFAULT_LIMIT: usize = 20;
 
 const SOURCE_BOUNDARY: &str =
-    "canonical .atelier issue activity, records, evidence, and record links; local runtime diagnostics excluded";
+    "canonical .atelier issue activity, records, evidence, derived session views, and record links; local runtime diagnostics excluded";
 
 #[derive(Debug, Clone)]
 pub struct HistoryOptions {
@@ -51,7 +51,7 @@ struct HistoryRow {
 #[derive(Debug)]
 struct Lookup {
     issues: BTreeMap<String, Issue>,
-    records: BTreeMap<(String, String), DomainRecord>,
+    records: BTreeMap<(String, String), RecordSummary>,
 }
 
 pub fn run(db: &Database, state_dir: &Path, options: HistoryOptions) -> Result<()> {
@@ -320,7 +320,7 @@ impl Lookup {
             .map(|issue| (issue.id.clone(), issue))
             .collect();
         let mut records = BTreeMap::new();
-        for kind in ["mission", "milestone", "plan", "evidence"] {
+        for kind in ["mission", "evidence"] {
             for record in db.list_records(kind, None)? {
                 records.insert((record.kind.clone(), record.id.clone()), record);
             }
