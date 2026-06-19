@@ -37,7 +37,7 @@ Missions and planning:
 Records:
   evidence      Capture validation evidence
   session       Inspect derived issue attempts
-  pr            Manage PR-equivalent review artifacts
+  review        Manage configured review artifacts
   forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
@@ -206,10 +206,10 @@ enum Commands {
         action: SessionCommands,
     },
 
-    /// PR-equivalent review artifacts
-    Pr {
+    /// Configured review artifacts
+    Review {
         #[command(subcommand)]
-        action: PrCommands,
+        action: ReviewCommands,
     },
 
     /// Configure and verify Forgejo integration
@@ -615,7 +615,7 @@ enum SessionCommands {
 }
 
 #[derive(Subcommand)]
-enum PrCommands {
+enum ReviewCommands {
     /// Open or confirm the active review artifact for an issue owner
     Open {
         #[arg(long)]
@@ -637,12 +637,12 @@ enum PrCommands {
         issue: Option<String>,
         pull_request: String,
     },
-    /// Show concise linked PR status
+    /// Show concise linked review status
     Status {
         #[arg(long)]
         issue: Option<String>,
     },
-    /// Show linked PR details
+    /// Show linked review details
     Show {
         #[arg(long)]
         issue: Option<String>,
@@ -654,7 +654,7 @@ enum PrCommands {
         #[arg(long)]
         role: String,
     },
-    /// List live PR comments and review comments
+    /// List live review comments
     Comments {
         #[arg(long)]
         issue: Option<String>,
@@ -669,16 +669,29 @@ enum PrCommands {
         role: String,
         body: String,
     },
-    /// Submit a review artifact review
-    Review {
+    /// Approve a review artifact
+    Approve {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         role: String,
-        #[arg(long)]
-        event: String,
         #[arg(long, default_value = "")]
         body: String,
+    },
+    /// Request changes on a review artifact
+    RequestChanges {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long, default_value = "")]
+        body: String,
+    },
+    /// Resolve a native room finding
+    Resolve {
+        #[arg(long)]
+        issue: Option<String>,
+        finding: String,
     },
 }
 
@@ -1453,10 +1466,10 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Pr { action } => {
+        Commands::Review { action } => {
             let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
             match action {
-                PrCommands::Open {
+                ReviewCommands::Open {
                     issue,
                     role,
                     title,
@@ -1475,7 +1488,7 @@ fn run() -> Result<()> {
                     &source_branch,
                     &target_branch,
                 ),
-                PrCommands::Link {
+                ReviewCommands::Link {
                     issue,
                     pull_request,
                 } => commands::pr::link(
@@ -1486,19 +1499,19 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     &pull_request,
                 ),
-                PrCommands::Status { issue } => commands::pr::status(
+                ReviewCommands::Status { issue } => commands::pr::status(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                 ),
-                PrCommands::Show { issue } => commands::pr::show(
+                ReviewCommands::Show { issue } => commands::pr::show(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                 ),
-                PrCommands::Merge { issue, role } => commands::pr::merge(
+                ReviewCommands::Merge { issue, role } => commands::pr::merge(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
@@ -1506,14 +1519,14 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     &role,
                 ),
-                PrCommands::Comments { issue, unresolved } => commands::pr::comments(
+                ReviewCommands::Comments { issue, unresolved } => commands::pr::comments(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                     unresolved,
                 ),
-                PrCommands::Comment { issue, role, body } => commands::pr::comment(
+                ReviewCommands::Comment { issue, role, body } => commands::pr::comment(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
@@ -1521,20 +1534,27 @@ fn run() -> Result<()> {
                     &role,
                     &body,
                 ),
-                PrCommands::Review {
-                    issue,
-                    role,
-                    event,
-                    body,
-                } => commands::pr::review(
+                ReviewCommands::Approve { issue, role, body } => commands::pr::review(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                     &role,
-                    &event,
+                    "approve",
                     &body,
                 ),
+                ReviewCommands::RequestChanges { issue, role, body } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    issue.as_deref(),
+                    &role,
+                    "request-changes",
+                    &body,
+                ),
+                ReviewCommands::Resolve { .. } => {
+                    bail!("review_mode_invalid: resolve is only available for native review rooms")
+                }
             }
         }
 
@@ -1762,15 +1782,17 @@ fn command_identity(command: &Commands) -> &'static str {
             SessionCommands::Show { .. } => "session show",
             SessionCommands::List { .. } => "session list",
         },
-        Commands::Pr { action } => match action {
-            PrCommands::Open { .. } => "pr open",
-            PrCommands::Link { .. } => "pr link",
-            PrCommands::Status { .. } => "pr status",
-            PrCommands::Show { .. } => "pr show",
-            PrCommands::Merge { .. } => "pr merge",
-            PrCommands::Comments { .. } => "pr comments",
-            PrCommands::Comment { .. } => "pr comment",
-            PrCommands::Review { .. } => "pr review",
+        Commands::Review { action } => match action {
+            ReviewCommands::Open { .. } => "review open",
+            ReviewCommands::Link { .. } => "review link",
+            ReviewCommands::Status { .. } => "review status",
+            ReviewCommands::Show { .. } => "review show",
+            ReviewCommands::Merge { .. } => "review merge",
+            ReviewCommands::Comments { .. } => "review comments",
+            ReviewCommands::Comment { .. } => "review comment",
+            ReviewCommands::Approve { .. } => "review approve",
+            ReviewCommands::RequestChanges { .. } => "review request-changes",
+            ReviewCommands::Resolve { .. } => "review resolve",
         },
         Commands::Forgejo { action } => match action {
             ForgejoCommands::Roles { action } => match action {

@@ -1457,7 +1457,7 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
     if field.is_none() {
         return Ok((
             false,
-            format!("no linked pull_request field; run `atelier pr open --issue {target_id}`"),
+            format!("no linked review field; run `atelier review open --issue {target_id}`"),
         ));
     }
     let repo_root = repo_root()?;
@@ -1470,7 +1470,7 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
             return Ok((
                 false,
                 format!(
-                    "{}; configure Forgejo, then run `atelier pr open --issue {}` or `atelier pr status --issue {}`",
+                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
                     error,
                     target_id,
                     target_id
@@ -1484,7 +1484,7 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
             return Ok((
                 false,
                 format!(
-                    "forgejo_config_missing_token: environment variable {} is required for PR validators; run `atelier pr status --issue {}` after configuring it",
+                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
                     forgejo.admin_token_env,
                     target_id
                 ),
@@ -1508,12 +1508,21 @@ fn linked_pr_merged_with_client<T: ForgejoTransport>(
     let Some(field) = field else {
         return Ok((
             false,
-            format!("no linked pull_request field; run `atelier pr open --issue {issue_id}`"),
+            format!("no linked review field; run `atelier review open --issue {issue_id}`"),
         ));
     };
-    let number = field.as_u64().filter(|number| *number > 0).ok_or_else(|| {
-        anyhow!("pull_request_invalid: field pull_request must be a positive integer")
-    })?;
+    let number = field
+        .as_object()
+        .filter(|object| {
+            object.get("kind").and_then(Value::as_str) == Some("pull_request")
+                && object.get("provider").and_then(Value::as_str) == Some("forgejo")
+        })
+        .and_then(|object| object.get("number"))
+        .and_then(Value::as_u64)
+        .filter(|number| *number > 0)
+        .ok_or_else(|| {
+            anyhow!("pull_request_invalid: field review must be a provider pull_request object")
+        })?;
     let pull = client.show_pull(number)?;
     let policy = atelier_app::workflow_policy::load(repo_root)?;
     let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
@@ -1523,7 +1532,7 @@ fn linked_pr_merged_with_client<T: ForgejoTransport>(
         return Ok((
             false,
             format!(
-                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier pr status --issue {}`",
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
                 pull.source_branch,
                 pull.target_branch,
                 resolution.owner_id,
@@ -1539,7 +1548,7 @@ fn linked_pr_merged_with_client<T: ForgejoTransport>(
         Ok((
             false,
             format!(
-                "linked PR {} is {} and not merged; run `atelier pr status --issue {}`",
+                "linked PR {} is {} and not merged; run `atelier review status --issue {}`",
                 pull.number, pull.state, issue_id
             ),
         ))
@@ -2299,7 +2308,7 @@ mod tests {
     }
 
     fn pull_request_field() -> Value {
-        json!(42)
+        json!({"kind": "pull_request", "provider": "forgejo", "number": 42})
     }
 
     fn setup_pr_validator_repo() -> (TempDir, Database) {
@@ -2396,7 +2405,7 @@ mod tests {
             linked_pr_merged_with_client(&db, dir.path(), None, &merged_client, "atelier-hw9t")
                 .unwrap();
         assert!(!passed);
-        assert!(reason.contains("atelier pr open --issue atelier-hw9t"));
+        assert!(reason.contains("atelier review open --issue atelier-hw9t"));
 
         let open_client = ForgejoClient::new(
             forgejo.clone(),
@@ -2417,7 +2426,7 @@ mod tests {
         .unwrap();
         assert!(!passed);
         assert!(reason.contains("not merged"));
-        assert!(reason.contains("atelier pr status --issue atelier-hw9t"));
+        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
 
         let closed_client = ForgejoClient::new(
             forgejo.clone(),
@@ -2452,7 +2461,7 @@ mod tests {
     }
 
     #[test]
-    fn linked_pr_merged_is_configured_only_for_epic_close() {
+    fn linked_pr_merged_is_not_in_starter_close_policy() {
         let (dir, db) = setup_pr_validator_repo();
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
         let epic_workflow = policy.workflow_by_issue_type.get("epic").unwrap();
@@ -2463,7 +2472,7 @@ mod tests {
             .filter(|validator| validator.builtin == "linked_pr_merged")
             .cloned()
             .collect::<Vec<_>>();
-        assert_eq!(linked_pr_validators.len(), 1);
+        assert!(linked_pr_validators.is_empty());
 
         let results = evaluate_policy_transition(
             &db,
@@ -2474,11 +2483,7 @@ mod tests {
             &linked_pr_validators,
         )
         .unwrap();
-        assert_eq!(results.len(), 1);
-        assert!(!results[0].passed);
-        assert!(results[0]
-            .reason
-            .contains("atelier pr open --issue atelier-hw9t"));
+        assert!(results.is_empty());
 
         let validation_workflow = policy.workflow_by_issue_type.get("validation").unwrap();
         let validation_close = &policy.workflows[validation_workflow].transitions["close"];
@@ -2511,6 +2516,6 @@ mod tests {
         .unwrap();
         assert!(!passed);
         assert!(reason.contains("linked PR branches"));
-        assert!(reason.contains("atelier pr status --issue atelier-hw9t"));
+        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
     }
 }

@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:47:10.465868168+00:00"
+status: "done"
 title: "Remove pr command surface and legacy guidance"
-updated_at: "2026-06-19T03:58:54.854990625+00:00"
+updated_at: "2026-06-19T04:47:10.465868168+00:00"
 ---
 
 ## Description

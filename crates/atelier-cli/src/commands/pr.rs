@@ -23,7 +23,7 @@ pub fn open(
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr open`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review open`",
             forgejo.admin_token_env
         )
     })?;
@@ -47,7 +47,7 @@ pub fn open(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
     println!("State:   {}", outcome.pull.state);
@@ -65,7 +65,7 @@ pub fn link(
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr link`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review link`",
             forgejo.admin_token_env
         )
     })?;
@@ -85,7 +85,7 @@ pub fn link(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Number:  {}", outcome.pull.number);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
@@ -106,8 +106,8 @@ pub fn status(
             issue_ref,
         },
     )?;
-    println!("PR Status");
-    println!("=========");
+    println!("Review Status");
+    println!("=============");
     println!("Issue:  {}", outcome.issue_id);
     println!("URL:    {}", outcome.url);
     println!("Number: {}", outcome.number);
@@ -124,7 +124,7 @@ pub fn show(
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr show`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review show`",
             forgejo.admin_token_env
         )
     })?;
@@ -141,7 +141,7 @@ pub fn show(
         },
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Number:  {}", outcome.pull.number);
     println!("State:   {}", outcome.pull.state);
@@ -160,7 +160,7 @@ pub fn merge(
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr merge`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review merge`",
             forgejo.admin_token_env
         )
     })?;
@@ -180,7 +180,7 @@ pub fn merge(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
     println!("State:   {}", outcome.pull.state);
@@ -202,7 +202,7 @@ pub fn comments(
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr comments`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review comments`",
             forgejo.admin_token_env
         )
     })?;
@@ -210,8 +210,8 @@ pub fn comments(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    println!("PR Comments");
-    println!("===========");
+    println!("Review Comments");
+    println!("===============");
     let outcome = app_pr::comments_with_client(
         db,
         app_pr::PrCommentsRequest {
@@ -264,7 +264,10 @@ pub fn comment(
     )?;
     println!("Comment: {}", outcome.comment.id);
     println!("Issue:   {}", outcome.issue_id);
-    println!("Next:    atelier pr comments --issue {}", outcome.issue_id);
+    println!(
+        "Next:    atelier review comments --issue {}",
+        outcome.issue_id
+    );
     Ok(())
 }
 

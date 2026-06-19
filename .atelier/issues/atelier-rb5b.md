@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:47:00.520522680+00:00"
+status: "done"
 title: "Preserve Forgejo provider behavior through review commands"
-updated_at: "2026-06-19T03:58:52.184811180+00:00"
+updated_at: "2026-06-19T04:47:00.520522680+00:00"
 ---
 
 ## Description
