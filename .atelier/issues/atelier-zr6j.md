@@ -23,9 +23,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Workflow schema and transition planner"
-updated_at: "2026-06-19T20:14:22.364148269+00:00"
+updated_at: "2026-06-19T21:02:48.229908271+00:00"
 ---
 
 ## Description
