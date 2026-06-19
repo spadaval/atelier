@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-19T21:11:53.526596047+00:00"
+status: "done"
 title: "Add explicit review-open transition effect"
-updated_at: "2026-06-19T21:11:19.893531292+00:00"
+updated_at: "2026-06-19T21:11:53.526596047+00:00"
 ---
 
 ## Description
