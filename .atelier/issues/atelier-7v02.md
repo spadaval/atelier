@@ -45,9 +45,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:27:32.744292788+00:00"
+status: "done"
 title: "Epic: Configure mutually exclusive review modes"
-updated_at: "2026-06-19T03:58:38.909182457+00:00"
+updated_at: "2026-06-19T04:27:32.744292788+00:00"
 ---
 
 ## Description
