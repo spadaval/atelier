@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T05:12:51.309832081+00:00"
+status: "done"
 title: "Run review mission closeout checks"
-updated_at: "2026-06-19T03:59:03.088244618+00:00"
+updated_at: "2026-06-19T05:12:51.309832081+00:00"
 ---
 
 ## Description

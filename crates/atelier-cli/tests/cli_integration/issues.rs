@@ -450,7 +450,7 @@ fn test_issue_show_surfaces_evidence_status() {
         "transition options without evidence failed: {stderr}"
     );
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("fail  proof_attached"));
+    assert!(transitions.contains("fail  evidence_attached"));
     assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
 
     let (success, _, stderr) = run_atelier(
@@ -476,7 +476,7 @@ fn test_issue_show_surfaces_evidence_status() {
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options with evidence failed: {stderr}");
-    assert!(transitions.contains("pass  proof_attached"));
+    assert!(transitions.contains("pass  evidence_attached"));
 }
 
 #[test]

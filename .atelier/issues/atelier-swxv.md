@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T05:12:30.443612593+00:00"
+status: "done"
 title: "Validate provider mode parity and wrong-mode rejection"
-updated_at: "2026-06-19T03:59:00.565873153+00:00"
+updated_at: "2026-06-19T05:12:30.443612593+00:00"
 ---
 
 ## Description
