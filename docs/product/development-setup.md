@@ -58,6 +58,8 @@ secrets out of committed files.
 
 Diagnostics storage and retention details are defined in
 [Local Command Diagnostics](../architecture/local-command-diagnostics.md).
+Use `atelier prune` to inspect expired diagnostics logs and
+`atelier prune --apply` to remove them explicitly.
 
 `cargo udeps` is not part of required setup. It remains an advisory
 nightly-toolchain cross-check for deeper dependency review when a reviewer asks

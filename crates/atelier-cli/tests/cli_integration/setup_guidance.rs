@@ -547,6 +547,137 @@ fn test_diagnostics_slow_summarizes_fixture_events() {
 }
 
 #[test]
+fn test_prune_dry_run_reports_diagnostics_without_removing_logs() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let old = chrono::Utc::now()
+        .date_naive()
+        .checked_sub_days(chrono::Days::new(45))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &old,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "old",
+            "command": "status",
+            "started_at": format!("{old}T01:00:00.000Z"),
+            "finished_at": format!("{old}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &recent,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "recent",
+            "command": "status",
+            "started_at": format!("{recent}T01:00:00.000Z"),
+            "finished_at": format!("{recent}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+
+    let old_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{old}.ndjson"));
+    let recent_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{recent}.ndjson"));
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["prune", "--retention-days", "30"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Mode: dry-run"), "{stdout}");
+    assert!(stdout.contains("Diagnostics Logs"), "{stdout}");
+    assert!(stdout.contains("eligible diagnostics-log"), "{stdout}");
+    assert!(stdout.contains(&old), "{stdout}");
+    assert!(stdout.contains("Deferred Cleanup Classes"), "{stdout}");
+    assert!(stdout.contains("Next: atelier prune --apply"), "{stdout}");
+    assert!(old_path.exists(), "dry-run removed old diagnostics log");
+    assert!(
+        recent_path.exists(),
+        "dry-run removed recent diagnostics log"
+    );
+}
+
+#[test]
+fn test_prune_apply_removes_only_expired_diagnostics_logs() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let old = chrono::Utc::now()
+        .date_naive()
+        .checked_sub_days(chrono::Days::new(45))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &old,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "old",
+            "command": "status",
+            "started_at": format!("{old}T01:00:00.000Z"),
+            "finished_at": format!("{old}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &recent,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "recent",
+            "command": "status",
+            "started_at": format!("{recent}T01:00:00.000Z"),
+            "finished_at": format!("{recent}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+
+    let old_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{old}.ndjson"));
+    let recent_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{recent}.ndjson"));
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["prune", "--apply", "--retention-days", "30"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("Mode: apply"), "{stdout}");
+    assert!(stdout.contains("removed diagnostics-log"), "{stdout}");
+    assert!(stdout.contains(&old), "{stdout}");
+    assert!(
+        !old_path.exists(),
+        "apply left expired diagnostics log in place"
+    );
+    assert!(recent_path.exists(), "apply removed recent diagnostics log");
+}
+
+#[test]
 fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
     let dir = tempdir().unwrap();
 

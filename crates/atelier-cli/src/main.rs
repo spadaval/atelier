@@ -46,6 +46,7 @@ Advanced work:
   branch        Inspect and repair epic review branches
 
 Maintenance:
+  prune         Prune accumulated local artifacts safely
   maintenance   Run explicit destructive maintenance commands
   lint          Validate tracker records
   doctor        Check runtime and derived-state health; use --fix for local repair
@@ -78,6 +79,8 @@ Common commands:
   atelier start <issue-id>
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
+  atelier prune
+  atelier prune --apply
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -276,6 +279,16 @@ enum Commands {
     Maintenance {
         #[command(subcommand)]
         action: MaintenanceCommands,
+    },
+
+    /// Prune accumulated local artifacts safely
+    Prune {
+        /// Apply eligible cleanup; without this flag the command only reports candidates
+        #[arg(long)]
+        apply: bool,
+        /// Retain diagnostics logs for this many UTC days
+        #[arg(long)]
+        retention_days: Option<u64>,
     },
 
     /// Validate tracker records
@@ -1703,6 +1716,11 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Prune {
+            apply,
+            retention_days,
+        } => commands::prune::run(apply, retention_days),
+
         Commands::Lint { id } => {
             let db = lint_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
@@ -1845,6 +1863,13 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Maintenance { action } => match action {
             MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
+        Commands::Prune { apply, .. } => {
+            if *apply {
+                "prune --apply"
+            } else {
+                "prune"
+            }
+        }
         Commands::Lint { .. } => "lint",
         Commands::Doctor { .. } => "doctor",
     }

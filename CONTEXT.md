@@ -64,6 +64,14 @@
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
+- Transition effect: configured work run by an explicit issue transition after
+  required fields and validators pass. Effects are part of the transition's
+  success boundary; they do not run as background hooks and do not let review
+  commands transition issue workflow.
+- Review artifact effect: the v1 transition effect that opens or links the
+  configured review artifact for the branch-owning issue or epic and writes the
+  canonical `review` field. It follows the active review mode and must not
+  merge, approve, comment on, or close review or issue workflow by itself.
 - Mission: a high-level objective that may span multiple epics, issues,
   evidence records, agents, derived session views, and deferred run metadata.
   It is also the shared background workspace boundary: one mission normally
@@ -184,6 +192,11 @@
   operate on native rooms or provider-backed review artifacts and record their
   issue or epic linkage, while workflow validators such as `linked_pr_merged`
   only read review state to decide whether an Atelier transition is allowed.
+- Review artifact transition effects are also distinct from review commands.
+  A workflow transition may open or link the configured review artifact after
+  validators pass, but the explicit issue transition remains the workflow
+  authority and review commands still do not start, close, block, or otherwise
+  move Atelier issues.
 - Review links and evidence attachments are distinct. The `review` field stores
   the active review artifact for a branch-owning issue or epic; evidence
   attachments prove claims with command transcripts, review summaries, or

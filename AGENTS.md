@@ -7,6 +7,11 @@
   copy lives at `.agents/skills/agent-factory/SKILL.md`.
 - Use Atelier (`atelier`) for durable task tracking. Do not replace it with private
   chat notes or ad hoc TODO files.
+- Treat Atelier command output as the source of process guidance. Use
+  `atelier status`, `atelier issue show`, `atelier issue transition --options`,
+  and `atelier mission status` to decide the next lifecycle action; do not infer
+  review, branch, provider, merge, or completion steps from general agent habits,
+  available remotes, or installed tools.
 - Orchestrators assign exactly one agent-factory subskill to each subagent.
 - Do not use interactive tracker commands; use explicit `atelier issue`
   commands instead.

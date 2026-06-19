@@ -25,10 +25,13 @@ Each guide should include:
 
 - The role's default first command.
 - A short set of commands that matter most for the role.
-- The role's common loop.
+- The role's common orientation loop.
 - The commands that are intentionally not part of normal work.
 - Recovery guidance when the first command reports stale, invalid, blocked, or
   missing-proof state.
+- A reminder that workflow/status/transition output owns the next process step.
+  Role guides should not decide whether to open review artifacts, which review
+  provider to use, or which branch/merge action completes work.
 
 ## Worker Guide
 
@@ -36,20 +39,21 @@ Primary job: implement assigned or ready work.
 
 Default first command: `atelier status`.
 
-Core loop:
+Orientation loop:
 
 ```text
 atelier man worker
 atelier status
 atelier issue list --ready
 atelier issue show <id>
-atelier start <id>
-atelier review comment --issue <id> --role worker --body "..."
 atelier issue note <id> "..."
 atelier evidence record --target issue/<id> --kind test -- <command>
 atelier issue transition <id> --options
-atelier issue close <id> --reason "..."
 ```
+
+After that, the worker follows the transition command and recovery guidance
+Atelier prints for the current issue. Review, branch, provider, and completion
+steps are not chosen from the role guide.
 
 Worker guide should hide or de-emphasize setup, maintenance, raw diagnostics,
 bundle apply, branch merge, and destructive record deletion.
@@ -60,14 +64,11 @@ Primary job: check proof, review outputs, and validate transitions.
 
 Default first command: `atelier mission status`.
 
-Core loop:
+Orientation loop:
 
 ```text
 atelier issue show <id>
 atelier issue transition <id> --options
-atelier review comments --issue <id>
-atelier review comment --issue <id> --role reviewer --body "..."
-atelier review request-changes --issue <id> --role reviewer --body "..."
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
@@ -77,7 +78,8 @@ atelier mission status <id> --verbose
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
 normal readiness inspection uses `issue transition --options`, `lint`, and
-`mission status`.
+`mission status`. Any review-artifact action should come from Atelier's current
+workflow or recovery guidance, not from static reviewer policy.
 
 ## Validator Guide
 
@@ -85,20 +87,18 @@ Primary job: run explicit validation work and record validation proof.
 
 Default first command: `atelier issue show <id>`.
 
-Core loop:
+Orientation loop:
 
 ```text
 atelier issue show <id>
 atelier issue transition <id> --options
 atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
-atelier review comments --issue <id>
-atelier review approve --issue <id> --role validator --body "..."
 ```
 
-Validator guide should make PR validation visible as process guidance. It
-should not imply that validation issues require a merged PR; the starter
-workflow reserves the `linked_pr_merged` close gate for epics.
+Validator guide should not encode review-provider or review-artifact policy.
+Validation follows the issue, mission, and transition guidance Atelier prints
+for the current work item.
 
 ## Manager Guide
 
@@ -129,8 +129,8 @@ Manager guidance should make `bundle preview <file>` and
 mission with many epics, issues, blockers, mission links, or evidence links.
 Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
-branch commands belong in advanced repair and diagnostic guidance; normal branch
-preparation belongs to `atelier start <id>`.
+branch commands belong in advanced repair and diagnostic guidance when Atelier
+routes the operator there.
 
 ## Admin Guide
 
