@@ -59,6 +59,11 @@
   status in durable state or transition checks.
 - Transition: a named workflow action that moves a record from one workflow
   status to another after required fields, evidence, and validators succeed.
+- Transition effect: configured work run by an explicit issue transition after
+  required fields and validators succeed. Effects may write canonical tracker
+  records, local branch commits, review artifact links, or provider requests,
+  but they are scoped to the transition that declares them and are not hidden
+  automation hooks.
 - Validator: a machine-readable workflow transition check that controls whether
   a transition can proceed and returns an actionable failure reason.
 - Transition description: static workflow text rendered near an action, status,
@@ -184,6 +189,11 @@
   operate on native rooms or provider-backed review artifacts and record their
   issue or epic linkage, while workflow validators such as `linked_pr_merged`
   only read review state to decide whether an Atelier transition is allowed.
+- Review artifact effects and review commands are distinct. A workflow
+  transition may declare an effect that opens or links the branch owner's review
+  artifact after validators pass, but approval, comments, request-changes,
+  finding resolution, merge, and workflow status changes remain owned by
+  explicit review and issue commands.
 - Review links and evidence attachments are distinct. The `review` field stores
   the active review artifact for a branch-owning issue or epic; evidence
   attachments prove claims with command transcripts, review summaries, or
