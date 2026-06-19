@@ -25,9 +25,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Workflow transition effects and explicit review integration"
-updated_at: "2026-06-19T18:26:32.482477065+00:00"
+updated_at: "2026-06-19T21:42:11.757201411+00:00"
 ---
 
 ## Intent
@@ -80,3 +80,7 @@ merge, approval, comments, and status remain review-artifact operations.
 - Final validation evidence records focused tests, `atelier lint`,
   `git diff --check`, and docs/help parity for the new transition-effect
   surface.
+
+## Terminal Notes
+
+- Close reason: All linked epics and terminal validation work are complete with passing validation evidence.
