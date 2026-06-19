@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:39:21.607700807+00:00"
+status: "done"
 title: "Migrate legacy pull_request fields and reject old shape"
-updated_at: "2026-06-19T03:58:30.973607248+00:00"
+updated_at: "2026-06-19T04:39:21.607700807+00:00"
 ---
 
 ## Description
