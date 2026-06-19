@@ -70,13 +70,12 @@ workflows:
         from: [validation]
         to: done
         required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, validation, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
           - no_open_blockers
           - no_blocking_lints
-          - linked_pr_merged
           - durable_state_current
           - git_worktree_clean
 

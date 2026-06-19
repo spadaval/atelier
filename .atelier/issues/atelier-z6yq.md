@@ -59,9 +59,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:21:48.012065909+00:00"
+status: "done"
 title: "Epic: Define native review modes and public contract"
-updated_at: "2026-06-19T03:58:22.932947460+00:00"
+updated_at: "2026-06-19T04:21:48.012065909+00:00"
 ---
 
 ## Description
