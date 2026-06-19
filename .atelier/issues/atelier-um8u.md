@@ -24,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Transition effect execution engine"
-updated_at: "2026-06-19T21:26:56.989379349+00:00"
+updated_at: "2026-06-19T21:27:06.225816108+00:00"
 ---
 
 ## Description
