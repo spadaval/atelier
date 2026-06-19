@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T23:34:28.492167958+00:00"
+status: "done"
 title: "Document workflow actions and branching decision"
-updated_at: "2026-06-19T22:42:56.451148542+00:00"
+updated_at: "2026-06-19T23:34:28.492167958+00:00"
 ---
 
 ## Description
