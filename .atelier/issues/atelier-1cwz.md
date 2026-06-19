@@ -43,9 +43,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:40:04.741281634+00:00"
+status: "done"
 title: "Epic: Add review field and room record schema"
-updated_at: "2026-06-19T03:58:30.974421169+00:00"
+updated_at: "2026-06-19T04:40:04.741281634+00:00"
 ---
 
 ## Description
