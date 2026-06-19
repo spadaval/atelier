@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T21:15:15.903673537+00:00"
+status: "done"
 title: "Render transition effect plans in CLI output"
-updated_at: "2026-06-19T20:14:30.439012825+00:00"
+updated_at: "2026-06-19T21:15:15.903673537+00:00"
 ---
 
 ## Description

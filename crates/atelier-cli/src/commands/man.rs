@@ -219,20 +219,24 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier start <id> - Move the issue into the current-work set.");
+                println!("  3. atelier issue transition <id> --options - Follow current lifecycle guidance.");
             }
         }
         Role::Reviewer => {
             println!("  1. atelier issue transition <id> --options - Inspect workflow gates.");
             println!("  2. atelier evidence show <evidence-id> - Inspect attached proof.");
-            println!("  3. atelier review comments --issue <id> - Inspect review discussion.");
+            println!(
+                "  3. atelier history --issue <id> - Inspect recorded proof and review activity."
+            );
         }
         Role::Validator => {
             println!(
                 "  1. atelier issue show <id> - Read the validation target and proof contract."
             );
             println!("  2. atelier evidence record --target issue/<id> --kind validation -- <command> - Attach validation proof.");
-            println!("  3. atelier review approve --issue <id> --role validator --body \"...\" - Record review validation judgment.");
+            println!(
+                "  3. atelier issue transition <id> --options - Follow current workflow guidance."
+            );
         }
         Role::Manager => {
             if snapshot.and_then(|s| s.active_mission.as_ref()).is_some() {
@@ -266,20 +270,14 @@ fn print_normal_loop(role: Role) {
             println!("  atelier session list --active");
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
-            println!("  atelier start <id>");
-            println!("  atelier review comment --issue <id> --role worker --body \"...\"");
+            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue note <id> \"...\"");
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
-            println!("  atelier issue close <id> --reason \"...\"");
         }
         Role::Reviewer => {
             println!("  atelier mission status");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
-            println!("  atelier review comments --issue <id>");
-            println!("  atelier review comment --issue <id> --role reviewer --body \"...\"");
-            println!(
-                "  atelier review request-changes --issue <id> --role reviewer --body \"...\""
-            );
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
@@ -292,8 +290,6 @@ fn print_normal_loop(role: Role) {
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
-            println!("  atelier review comments --issue <id>");
-            println!("  atelier review approve --issue <id> --role validator --body \"...\"");
         }
         Role::Manager => {
             println!("  atelier mission status");
