@@ -30,6 +30,7 @@ issue or mission:
 - `atelier init`
 - `atelier man [worker|reviewer|validator|manager|admin]`
 - `atelier status`
+- `atelier start <issue-id>`
 - `atelier issue ...`
 - `atelier search <query>`
 - `atelier graph impact/tree`
@@ -38,6 +39,7 @@ issue or mission:
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier review open/link/status/show/merge/comments/comment/approve/request-changes/resolve`
+- `atelier forgejo roles check/provision`
 - `atelier session`
 - `atelier session show/list`
 - `atelier history`

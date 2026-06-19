@@ -385,42 +385,6 @@ workflow that records an inspectable close reason. Every built-in issue type
 must appear exactly once across `workflows.*.applies_to`; missing, duplicate, or
 unknown issue types are config errors.
 
-Transition effects are configured work performed by an explicit issue
-transition after required fields and validators pass. A transition is not
-successful until its required effects and final canonical status write
-succeed. Effects are not background hooks, provider webhooks, hidden issue
-closes, or review-command shortcuts; the operator still invokes the Atelier
-workflow transition that owns the status change.
-
-The v1 transition effect set is deliberately narrow:
-
-- `review_artifact` with `action: open` creates or locates the configured
-  review artifact for the branch-owning issue or epic and writes the canonical
-  `review` link.
-- `review_artifact` with `action: link` accepts an existing configured-provider
-  review artifact identifier or URL and writes the canonical `review` link
-  when policy allows linking instead of opening.
-
-The review artifact effect follows ADR 0011 review modes. In room mode it
-creates or locates a native `.atelier/reviews/<id>.yaml` room. In provider
-mode it opens or links the configured provider review artifact and stores the
-normalized structured `review` field. It must not merge review artifacts,
-approve review, request changes, post comments, close issues, preserve old
-`pr` aliases, or expose a broad automation hook system.
-
-Effect failures are part of the transition contract. Effect preflight failure
-must leave canonical issue status and review links unchanged. Local write
-failure must report the failed canonical write and avoid claiming transition
-success. External provider failure must leave the issue transition incomplete
-and report provider recovery text. Retry is idempotent: an existing matching
-review link or review artifact is reused, and ambiguous provider state is
-reported with a recovery path that links the intended artifact explicitly.
-
-This contract blocks schema and transition-planner work until it is in place,
-specifically `atelier-68sm` for workflow schema effects and `atelier-wxj5` for
-review/transition documentation alignment. Execution-engine work should depend
-on the schema issue rather than inventing a separate effect vocabulary.
-
 ## Rules, Lint, And Guidance
 
 Atelier should support three layers of process:
