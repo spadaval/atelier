@@ -7,6 +7,7 @@ pub struct RecordKindSpec {
     pub schema: &'static str,
     pub schema_version: i64,
     pub canonical_dir: Option<&'static str>,
+    pub extension: &'static str,
 }
 
 pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
@@ -14,6 +15,7 @@ pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
     schema: "atelier.issue",
     schema_version: 1,
     canonical_dir: Some("issues"),
+    extension: "md",
 };
 
 pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
@@ -22,18 +24,28 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
         schema: "atelier.mission",
         schema_version: 1,
         canonical_dir: Some("missions"),
+        extension: "md",
     },
     RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
         schema_version: 1,
         canonical_dir: Some("evidence"),
+        extension: "md",
     },
     RecordKindSpec {
         kind: "session",
         schema: "atelier.session",
         schema_version: 1,
         canonical_dir: Some("sessions"),
+        extension: "md",
+    },
+    RecordKindSpec {
+        kind: "review",
+        schema: "atelier.review",
+        schema_version: 1,
+        canonical_dir: Some("reviews"),
+        extension: "yaml",
     },
 ];
 
@@ -44,18 +56,28 @@ pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
         schema: "atelier.mission",
         schema_version: 1,
         canonical_dir: Some("missions"),
+        extension: "md",
     },
     RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
         schema_version: 1,
         canonical_dir: Some("evidence"),
+        extension: "md",
     },
     RecordKindSpec {
         kind: "session",
         schema: "atelier.session",
         schema_version: 1,
         canonical_dir: Some("sessions"),
+        extension: "md",
+    },
+    RecordKindSpec {
+        kind: "review",
+        schema: "atelier.review",
+        schema_version: 1,
+        canonical_dir: Some("reviews"),
+        extension: "yaml",
     },
 ];
 
@@ -64,6 +86,7 @@ pub const NON_CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[RecordKindSpec {
     schema: "atelier.workflow_validator",
     schema_version: 1,
     canonical_dir: None,
+    extension: "md",
 }];
 
 pub fn record_kind(kind: &str) -> Option<&'static RecordKindSpec> {
@@ -106,7 +129,7 @@ pub fn canonical_record_path(spec: &RecordKindSpec, id: &str) -> Result<PathBuf>
     let Some(dir) = spec.canonical_dir else {
         bail!("Record kind '{}' has no canonical directory", spec.kind);
     };
-    Ok(PathBuf::from(dir).join(format!("{id}.md")))
+    Ok(PathBuf::from(dir).join(format!("{id}.{}", spec.extension)))
 }
 
 pub fn issue_record_path(id: &str) -> PathBuf {

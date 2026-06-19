@@ -89,7 +89,6 @@ workflows:
           - epic_child_proof_complete
           - no_open_blockers
           - no_blocking_lints
-          - linked_pr_merged
           - durable_state_current
           - git_worktree_clean
 
@@ -1475,14 +1474,28 @@ fn validate_issue_fields_against_policy(
     policy_path: &Path,
 ) -> Result<()> {
     for (field_name, value) in &issue.fields {
-        if field_name == "pull_request" {
-            validate_pull_request_field(value, issue, policy_path)?;
+        if field_name == "review" {
+            validate_review_field(value, issue, policy_path)?;
+        } else if field_name == "pull_request" {
+            return Err(WorkflowPolicyError {
+                code: "workflow_issue_field_legacy",
+                path: policy_path.display().to_string(),
+                message: format!(
+                    "issue {} defines legacy field 'pull_request'; migrate to structured 'review'",
+                    issue.id
+                ),
+                field: Some("pull_request".to_string()),
+                reference: Some(issue.id.clone()),
+                line: None,
+                column: None,
+            }
+            .into());
         } else {
             return Err(WorkflowPolicyError {
                 code: "workflow_issue_field_unknown",
                 path: policy_path.display().to_string(),
                 message: format!(
-                    "issue {} defines field '{}' but schema_version 3 only supports built-in field 'pull_request'",
+                    "issue {} defines field '{}' but schema_version 3 only supports built-in field 'review'",
                     issue.id, field_name
                 ),
                 field: Some(field_name.to_string()),
@@ -1496,29 +1509,66 @@ fn validate_issue_fields_against_policy(
     Ok(())
 }
 
-fn validate_pull_request_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
-    let valid = value
-        .as_u64()
-        .filter(|number| *number > 0)
-        .or_else(|| value.as_i64().and_then(|number| u64::try_from(number).ok()))
-        .is_some_and(|number| number > 0);
-    if valid {
-        Ok(())
-    } else {
-        Err(WorkflowPolicyError {
-            code: "workflow_issue_field_invalid",
-            path: policy_path.display().to_string(),
-            message: format!(
-                "issue {} field 'pull_request' must be a positive integer PR number",
-                issue.id
-            ),
-            field: Some("pull_request".to_string()),
-            reference: Some(issue.id.clone()),
-            line: None,
-            column: None,
+fn validate_review_field(value: &JsonValue, issue: &Issue, policy_path: &Path) -> Result<()> {
+    let Some(object) = value.as_object() else {
+        return invalid_review_field(issue, policy_path, "field 'review' must be an object");
+    };
+    let kind = object.get("kind").and_then(JsonValue::as_str).unwrap_or("");
+    match kind {
+        "room" => {
+            let valid = object
+                .get("id")
+                .and_then(JsonValue::as_str)
+                .is_some_and(|id| id.starts_with("atelier-"));
+            if valid {
+                Ok(())
+            } else {
+                invalid_review_field(
+                    issue,
+                    policy_path,
+                    "room review must include id: <review-id>",
+                )
+            }
         }
-        .into())
+        "pull_request" => {
+            let provider_ok = object.get("provider").and_then(JsonValue::as_str) == Some("forgejo");
+            let number_ok = object
+                .get("number")
+                .and_then(|number| {
+                    number
+                        .as_u64()
+                        .or_else(|| number.as_i64().and_then(|n| u64::try_from(n).ok()))
+                })
+                .is_some_and(|number| number > 0);
+            if provider_ok && number_ok {
+                Ok(())
+            } else {
+                invalid_review_field(
+                    issue,
+                    policy_path,
+                    "provider review must include provider: forgejo and positive number",
+                )
+            }
+        }
+        _ => invalid_review_field(
+            issue,
+            policy_path,
+            "field 'review.kind' must be 'room' or 'pull_request'",
+        ),
     }
+}
+
+fn invalid_review_field(issue: &Issue, policy_path: &Path, reason: &str) -> Result<()> {
+    Err(WorkflowPolicyError {
+        code: "workflow_issue_field_invalid",
+        path: policy_path.display().to_string(),
+        message: format!("issue {} field 'review' is invalid: {}", issue.id, reason),
+        field: Some("review".to_string()),
+        reference: Some(issue.id.clone()),
+        line: None,
+        column: None,
+    }
+    .into())
 }
 
 fn workflow_statuses(workflow: &WorkflowDefinition) -> BTreeSet<String> {
@@ -1861,7 +1911,7 @@ mod tests {
     }
 
     #[test]
-    fn starter_policy_requires_merged_pr_only_for_epic_close() {
+    fn starter_policy_does_not_require_legacy_pr_merge_gate() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
 
         for issue_type in BUILTIN_ISSUE_TYPES {
@@ -1880,29 +1930,32 @@ mod tests {
             let has_linked_pr_merged = close_validators.contains(&"linked_pr_merged");
             assert_eq!(
                 has_linked_pr_merged,
-                *issue_type == "epic",
-                "unexpected linked_pr_merged close validator for {issue_type}: {close_validators:?}"
+                false,
+                "unexpected legacy linked_pr_merged close validator for {issue_type}: {close_validators:?}"
             );
         }
     }
 
     #[test]
-    fn validates_pull_request_field_shape() {
+    fn validates_review_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
-        fields.insert("pull_request".to_string(), serde_json::json!(42));
+        fields.insert(
+            "review".to_string(),
+            serde_json::json!({"kind": "pull_request", "provider": "forgejo", "number": 42}),
+        );
         let issue = issue_with_fields(fields);
 
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
     }
 
     #[test]
-    fn rejects_mismatched_pull_request_field_shape() {
+    fn rejects_mismatched_review_field_shape() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut fields = std::collections::BTreeMap::new();
         fields.insert(
-            "pull_request".to_string(),
-            serde_json::json!("https://example.test/pulls/42"),
+            "review".to_string(),
+            serde_json::json!({"kind": "pull_request", "provider": "forgejo"}),
         );
         let issue = issue_with_fields(fields);
 
@@ -1911,8 +1964,23 @@ mod tests {
             .to_string();
 
         assert!(error.contains("workflow_issue_field_invalid"));
+        assert!(error.contains("review"));
+        assert!(error.contains("positive number"));
+    }
+
+    #[test]
+    fn rejects_legacy_pull_request_field_shape() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let mut fields = std::collections::BTreeMap::new();
+        fields.insert("pull_request".to_string(), serde_json::json!(42));
+        let issue = issue_with_fields(fields);
+
+        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_issue_field_legacy"));
         assert!(error.contains("pull_request"));
-        assert!(error.contains("positive integer"));
     }
 
     #[test]

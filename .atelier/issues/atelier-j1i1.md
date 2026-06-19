@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T04:39:07.781830049+00:00"
+status: "done"
 title: "Add canonical review room YAML records and projections"
-updated_at: "2026-06-19T03:58:28.228799532+00:00"
+updated_at: "2026-06-19T04:39:07.781830049+00:00"
 ---
 
 ## Description
