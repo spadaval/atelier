@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T20:41:00.927811792+00:00"
+status: "done"
 title: "Define transition effects and review boundary contract"
-updated_at: "2026-06-19T20:14:16.728481801+00:00"
+updated_at: "2026-06-19T20:41:00.927811792+00:00"
 ---
 
 ## Description
