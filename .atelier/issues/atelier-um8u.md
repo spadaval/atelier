@@ -6,6 +6,10 @@ labels:
 - "implementation"
 - "review"
 - "workflow"
+review:
+  kind: pull_request
+  number: 5
+  provider: forgejo
 priority: "P2"
 relationships:
   blocks:
@@ -20,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Transition effect execution engine"
-updated_at: "2026-06-19T21:26:09.443508436+00:00"
+updated_at: "2026-06-19T21:26:56.989379349+00:00"
 ---
 
 ## Description
