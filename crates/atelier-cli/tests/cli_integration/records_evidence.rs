@@ -1768,7 +1768,7 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
     );
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("pass  proof_attached"));
+    assert!(transitions.contains("pass  evidence_attached"));
     assert!(!transitions.contains("contract-audit"));
 
     let (success, stdout, stderr) = run_atelier(

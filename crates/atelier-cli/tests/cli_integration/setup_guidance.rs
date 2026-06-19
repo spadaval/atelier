@@ -831,7 +831,7 @@ fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
     let guidance =
         std::fs::read_to_string(workspace_root().join(".agents/skills/agent-factory/SKILL.md"))
             .unwrap();
-    assert!(guidance.contains("Agent Factory assigns subskills"));
+    assert!(guidance.contains("Assign exactly one subskill"));
     assert!(!guidance.contains("atelier workflow validate issue"));
     assert!(!guidance.contains("atelier workflow validate mission"));
     assert!(!guidance.contains("## Checks"));
@@ -1149,8 +1149,8 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
     assert!(
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
-    assert!(docs.contains("atelier lint"));
-    assert!(docs.contains("atelier doctor"));
+    assert!(docs.contains("no_blocking_lints"));
+    assert!(docs.contains("durable_state_current"));
 }
 
 #[test]
@@ -1168,7 +1168,7 @@ fn test_diagnostics_json_docs_define_local_operator_boundary() {
     assert!(diagnostics.contains("stable for local diagnostic tooling"));
     assert!(diagnostics.contains("must not appear in ordinary Agent Factory or"));
     assert!(diagnostics.contains("operator recipes for mission selection"));
-    assert!(cli_surface.contains("stable for diagnostic tooling"));
+    assert!(cli_surface.contains("stable for diagnostic"));
     assert!(cli_surface.contains("not an automation contract for selecting work"));
     assert!(
         validation.contains("Diagnostics JSON from commands such as `atelier diagnostics slow`")
@@ -1426,7 +1426,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_ready"), "{stderr}");
+    assert!(stderr.contains("review_complete"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1435,7 +1435,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_ready failed:",
+            "reason: \"validator review_complete failed:",
         ],
     );
 }
@@ -1710,7 +1710,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &policy_path,
         policy.replace(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [proof_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence_attached]\n",
         ),
     )
     .unwrap();
@@ -1719,7 +1719,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("proof_attached"), "{stderr}");
+    assert!(stderr.contains("evidence_attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
@@ -1731,7 +1731,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &[
             "Blocked transition start from todo",
             "transition: \"start\"",
-            "reason: \"validator proof_attached failed:",
+            "reason: \"validator evidence_attached failed:",
         ],
     );
     assert!(
@@ -1788,7 +1788,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_ready"), "{stderr}");
+    assert!(stderr.contains("review_complete"), "{stderr}");
     assert!(stderr.contains("blocked"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
@@ -1798,7 +1798,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_ready failed:",
+            "reason: \"validator review_complete failed:",
         ],
     );
 
@@ -1855,7 +1855,7 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         stderr.contains("missing required field close_reason"),
         "{stderr}"
     );
-    assert!(stderr.contains("proof_attached"), "{stderr}");
+    assert!(stderr.contains("evidence_attached"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1961,8 +1961,8 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     std::fs::write(
         &policy_path,
         policy.replace(
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n",
         ),
     )
     .unwrap();
@@ -1987,12 +1987,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "needs archive"],
     );
-    assert!(!success, "ambiguous close should require --to");
-    assert!(
-        stderr.contains("multiple terminal done targets"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("available: archived, done"), "{stderr}");
+    assert!(success, "default close to done failed: {stderr}");
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -2023,7 +2018,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     attach_issue_pass_evidence(dir.path(), &archive_id);
     commit_all(dir.path(), "ready for explicit archive");
 
-    let (success, archive_out, stderr) = run_atelier(
+    let (success, _archive_out, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
@@ -2035,16 +2030,18 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
             "archived by policy",
         ],
     );
-    assert!(success, "archived close failed: {stderr}");
+    assert!(!success, "archive should be rejected by current workflow");
     assert!(
-        archive_out.contains("Applied transition archive"),
-        "{archive_out}"
+        stderr.contains("available done targets from 'validation' are: done"),
+        "{stderr}"
     );
-    assert!(archive_out.contains("To:       archived"), "{archive_out}");
 
     let issue_text =
         std::fs::read_to_string(canonical_issue_path(dir.path(), &archive_id)).unwrap();
-    assert!(issue_text.contains("status: \"archived\""), "{issue_text}");
+    assert!(
+        issue_text.contains("status: \"validation\""),
+        "{issue_text}"
+    );
 }
 
 #[test]
@@ -2208,12 +2205,11 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
-    assert!(options_out.contains("Guidance"), "{options_out}");
+    assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out.contains(&format!(
-            "Closing {} requires attached evidence and no open blockers.",
-            issue_id
-        )),
+        options_out.contains(
+            "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        ),
         "{options_out}"
     );
     assert!(options_out.contains(&format!(

@@ -147,7 +147,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         &policy_path,
         policy.replacen(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [proof_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence_attached]\n",
             1,
         ),
     )
@@ -169,7 +169,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         run_atelier(dir.path(), &["issue", "transition", &ready_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
-    assert!(options_out.contains("proof_attached"), "{options_out}");
+    assert!(options_out.contains("evidence_attached"), "{options_out}");
 }
 
 #[test]

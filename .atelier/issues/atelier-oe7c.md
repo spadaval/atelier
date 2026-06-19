@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Validate review rooms and command migration"
-updated_at: "2026-06-19T03:59:03.089054143+00:00"
+updated_at: "2026-06-19T05:04:14.510766693+00:00"
 ---
 
 ## Description
