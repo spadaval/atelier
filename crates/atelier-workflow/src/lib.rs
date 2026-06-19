@@ -74,6 +74,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -82,8 +84,7 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -106,6 +107,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -114,7 +117,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -144,8 +146,7 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record the spike outcome before closing."
+        description: "Closing requires a complete review."
         validators:
           - review_complete
           - durable_state_current
@@ -166,6 +167,13 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "no_open_blockers",
     "no_blocking_lints",
     "git_worktree_clean",
+];
+const BUILTIN_EFFECTS: &[&str] = &[
+    "issue_status_write",
+    "owner_branch_commit",
+    "owner_branch_integrate",
+    "review_artifact_open",
+    "review_artifact_link",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -288,6 +296,11 @@ pub struct ValidatorDefinition {
     pub params: Option<ValidatorParams>,
 }
 
+#[derive(Debug, Clone)]
+pub struct EffectDefinition {
+    pub builtin: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidatorParams {
     EvidenceAttached {
@@ -316,6 +329,7 @@ pub struct TransitionDefinition {
     pub required_fields: Vec<String>,
     pub description: Option<String>,
     pub validators: Vec<ValidatorDefinition>,
+    pub effects: Vec<EffectDefinition>,
 }
 
 impl WorkflowPolicy {
@@ -462,6 +476,8 @@ struct TransitionDefinitionRaw {
     description: Option<String>,
     #[serde(default)]
     validators: Vec<Value>,
+    #[serde(default)]
+    effects: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1115,6 +1131,13 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
+    let effects = parse_transition_effects(
+        workflow_name,
+        transition_name,
+        &raw.effects,
+        &raw.to,
+        display_path,
+    )?;
 
     Ok(TransitionDefinition {
         from,
@@ -1122,7 +1145,79 @@ fn parse_transition_definition(
         required_fields: raw.required_fields,
         description: raw.description,
         validators,
+        effects,
     })
+}
+
+fn parse_transition_effects(
+    workflow_name: &str,
+    transition_name: &str,
+    raw: &[Value],
+    to_status: &str,
+    display_path: &str,
+) -> Result<Vec<EffectDefinition>> {
+    let mut effects = Vec::new();
+    let mut seen = BTreeSet::new();
+    for value in raw {
+        let name = value.as_str().ok_or_else(|| {
+            policy_error(
+                "workflow_config_invalid_effect",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.effects must contain built-in effect strings",
+                    workflow_name, transition_name
+                ),
+            )
+        })?;
+        validate_builtin_effect_name(workflow_name, transition_name, name, display_path)?;
+        if !seen.insert(name.to_string()) {
+            return Err(policy_error(
+                "workflow_config_invalid_effect",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.effects contains duplicate effect '{}'",
+                    workflow_name, transition_name, name
+                ),
+            ));
+        }
+        if matches!(name, "review_artifact_open" | "review_artifact_link") && to_status != "review"
+        {
+            return Err(policy_error(
+                "workflow_config_invalid_effect",
+                display_path,
+                format!(
+                    "workflows.{}.transitions.{}.effects declares '{}' but review artifact effects are only supported on transitions to review",
+                    workflow_name, transition_name, name
+                ),
+            ));
+        }
+        effects.push(EffectDefinition {
+            builtin: name.to_string(),
+        });
+    }
+    Ok(effects)
+}
+
+fn validate_builtin_effect_name(
+    workflow_name: &str,
+    transition_name: &str,
+    effect_name: &str,
+    display_path: &str,
+) -> Result<()> {
+    if BUILTIN_EFFECTS.contains(&effect_name) {
+        return Ok(());
+    }
+    Err(policy_error(
+        "workflow_config_invalid_effect",
+        display_path,
+        format!(
+            "workflows.{}.transitions.{}.effects has unsupported built-in effect '{}'; expected {}",
+            workflow_name,
+            transition_name,
+            effect_name,
+            BUILTIN_EFFECTS.join(", ")
+        ),
+    ))
 }
 
 fn parse_transition_validators(
@@ -1899,6 +1994,7 @@ mod tests {
             Some("done")
         );
         let close = &policy.workflows["standard"].transitions["close"];
+        assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             close.validators[0].params.as_ref(),
             Some(&ValidatorParams::EvidenceAttached {
@@ -1906,8 +2002,56 @@ mod tests {
                 kind: None,
             })
         );
+        assert_eq!(
+            effect_names(&policy.workflows["epic_reviewed"].transitions["request_review"].effects),
+            vec!["review_artifact_open"]
+        );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
+    }
+
+    fn effect_names(effects: &[EffectDefinition]) -> Vec<&str> {
+        effects
+            .iter()
+            .map(|effect| effect.builtin.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn rejects_unknown_transition_effect() {
+        let policy =
+            valid_policy().replace("          - review_artifact_open", "          - nope_run");
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("nope_run"));
+    }
+
+    #[test]
+    fn rejects_duplicate_transition_effect() {
+        let policy = valid_policy().replace(
+            "          - review_artifact_open",
+            "          - review_artifact_open\n          - review_artifact_open",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("duplicate effect"));
+    }
+
+    #[test]
+    fn rejects_review_effect_on_non_review_transition() {
+        let policy = valid_policy().replace(
+            "      close:\n        from: [in_progress, validation]",
+            "      close:\n        from: [in_progress, validation]\n        effects: [review_artifact_open]",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("transitions to review"));
     }
 
     #[test]

@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T21:36:56.155565443+00:00"
+status: "done"
 title: "Validate transition effects and review integration end to end"
-updated_at: "2026-06-19T20:14:36.021958006+00:00"
+updated_at: "2026-06-19T21:36:56.155565443+00:00"
 ---
 
 ## Description

@@ -1353,7 +1353,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
     assert!(stdout.contains("atelier issue list --ready"));
-    assert!(stdout.contains("atelier start <id>"));
+    assert!(stdout.contains("atelier issue transition <id> --options"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
     assert!(!stdout.contains("etc."));
@@ -1982,11 +1982,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked without reason and proof");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(
-        stderr.contains("missing required field close_reason"),
-        "{stderr}"
-    );
     assert!(stderr.contains("evidence_attached"), "{stderr}");
+    assert!(stderr.contains("git_worktree_clean"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1995,7 +1992,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         &[
             "Blocked transition close from validation",
             "transition: \"close\"",
-            "reason: \"missing required field close_reason;",
+            "reason: \"validator evidence_attached failed:",
+            "validator git_worktree_clean failed:",
         ],
     );
 }
@@ -2339,13 +2337,11 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
         options_out.contains(
-            "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+            "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         ),
         "{options_out}"
     );
-    assert!(options_out.contains(&format!(
-        "atelier issue transition {issue_id} close --reason \"...\""
-    )));
+    assert!(options_out.contains(&format!("atelier issue close {issue_id} --reason \"...\"")));
 }
 
 #[test]

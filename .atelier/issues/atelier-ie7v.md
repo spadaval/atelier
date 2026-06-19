@@ -20,9 +20,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T20:49:57.054202265+00:00"
+status: "done"
 title: "Epic: Product contract and ADR for workflow transition effects"
-updated_at: "2026-06-19T20:14:16.729306028+00:00"
+updated_at: "2026-06-19T20:49:57.054202265+00:00"
 ---
 
 ## Description

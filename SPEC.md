@@ -265,7 +265,7 @@ uses a fixed tracked `.atelier/workflow.yaml` file rather than a config-selected
 policy path. The file defines branch policy, shared statuses with explicit
 categories, named issue workflows, workflow-owned issue type applicability,
 terminal done states, transition rules, inline built-in validators with params,
-static transition descriptions, configured transition effects, and strict
+configured transition effects, static transition descriptions, and strict
 configuration errors.
 
 Example workflow:
@@ -321,8 +321,7 @@ workflows:
         from: [in_progress]
         to: review
         effects:
-          - review_artifact:
-              action: open
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -348,8 +347,7 @@ workflows:
         from: [in_progress]
         to: review
         effects:
-          - review_artifact:
-              action: open
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -442,6 +440,61 @@ Examples:
 
 Fuzzy guidance should live close to the action it affects. Agents should receive
 the relevant rule at the point of use, not a wall of generic process text.
+
+## Transition Effects
+
+A transition effect is configured work run by an explicit issue transition
+after required fields and validators pass. Effects are part of workflow policy:
+they are declared on a transition, run in declaration order, and report
+actionable recovery text when they cannot complete. They are not background
+automation hooks, aliases for review commands, or authority to skip issue
+workflow.
+
+Version 1 built-in effects include:
+
+- `issue_status_write`: write the canonical issue status and corresponding
+  transition activity entry.
+- `owner_branch_commit`: commit the transition's canonical tracker changes on
+  the workflow-derived owner branch.
+- `owner_branch_integrate`: integrate the owner branch to the configured base
+  branch using the configured merge strategy.
+- `review_artifact_open`: open or reuse the branch owner's configured review
+  artifact and write the canonical `review` link.
+- `review_artifact_link`: normalize and write an existing configured provider
+  review artifact link.
+
+The review artifact effects are intentionally narrow. They may create or link
+the artifact that an epic, standalone issue, or exceptional branch-owning child
+issue will use for review. They do not approve, comment on, request changes,
+resolve findings, merge review artifacts, hide issue close, or replace
+`atelier issue transition`. PR aliases and broad automation hooks are non-goals
+for v1.
+
+Failure semantics are explicit:
+
+- Preflight failure: missing required fields, invalid source status, failed
+  validators, invalid review mode, or invalid effect configuration stops before
+  any effect mutates durable state.
+- Local write failure: if canonical Markdown, activity, branch checkout, or
+  commit fails, the command reports the failed local step and leaves the issue
+  transition unapplied unless the write already completed and can be retried
+  idempotently.
+- External provider failure: if a provider review open/link request fails, the
+  command preserves any already-written local state only when it can be safely
+  retried or explicitly repaired; otherwise it reports the provider step that
+  failed and the next inspection command.
+- Idempotent retry: effects must detect an already-created review artifact,
+  already-written review link, already-applied activity entry, or already-made
+  branch commit and continue without duplicating records.
+- Recovery text: blocked or failed transitions name the failed effect,
+  preserved state, and next commands such as `atelier issue show <id>`,
+  `atelier issue transition <id> --options`, `atelier review status <id>`, or
+  `atelier lint <id>`.
+
+This contract blocks implementation work that adds workflow schema support,
+transition execution, review-open/link integration, or docs/help parity until
+those slices implement only the declared effect semantics and keep review merge
+separate from issue workflow authority.
 
 ## Avoiding Red Tape
 

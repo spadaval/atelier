@@ -85,6 +85,8 @@ mod tests {
         assert!(config.contains("state_root = \".atelier\""));
         assert!(config.contains("runtime_dir = \".atelier/runtime\""));
         assert!(config.contains("runtime_database = \".atelier/runtime/state.db\""));
+        assert!(config.contains("[review]"));
+        assert!(config.contains("mode = \"room\""));
 
         let workflow = fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
         assert!(workflow.contains("schema: atelier.workflow"));

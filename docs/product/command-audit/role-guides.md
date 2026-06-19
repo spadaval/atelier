@@ -29,9 +29,9 @@ Each guide should include:
 - The commands that are intentionally not part of normal work.
 - Recovery guidance when the first command reports stale, invalid, blocked, or
   missing-proof state.
-- A reminder that workflow/status/transition output owns the next process step.
-  Role guides should not decide whether to open review artifacts, which review
-  provider to use, or which branch/merge action completes work.
+- A reminder that workflow/status/transition output owns the next lifecycle
+  step. Role guides should not decide whether to open review artifacts, which
+  review provider to use, or which branch/merge action completes work.
 
 ## Worker Guide
 

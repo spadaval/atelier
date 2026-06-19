@@ -27,6 +27,10 @@ separate issue hierarchy.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
+- Transition effect: configured work run by an explicit issue transition after
+  required fields and validators pass. Effects may write issue status, activity,
+  owner branch commits, integration results, or review artifact links, but they
+  do not replace explicit review or issue commands.
 - Evidence: durable proof that accountable work, review, validation, or completion
   happened. Normal evidence attaches to issue-shaped work because issues own
   accountability. Parent completion is derived from linked implementation,
@@ -225,6 +229,13 @@ not the default for every mutating subagent or every ordinary child issue.
 Independent review moves to the epic by default. Ordinary implementation issues
 close with their own proof, while epic completion maps child issue proof to the
 parent outcome and records the review or validation judgment for the branch.
+
+Workflow transitions may prepare review state through declared effects. For
+example, an epic `request_review` transition can open or link the configured
+review artifact after validators pass, then write the artifact link to the
+branch-owning issue. That effect prepares the review workspace only. Review
+comments, approvals, change requests, finding resolution, and merge stay on
+`atelier review`; issue status changes stay on `atelier issue transition`.
 
 ## Relationships
 

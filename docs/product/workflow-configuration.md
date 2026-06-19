@@ -24,10 +24,12 @@ atelier issue transition <id> --options
 
 `atelier issue transition <id> --options` renders transitions available from
 the issue's current status. Each option reports whether the transition is
-currently allowed, configured validator results, static transition descriptions,
-branch context, and the next command to run. A blocked attempt records a
-`transition_blocked` issue activity entry. A successful attempt records a
-`transition_applied` activity entry and updates the canonical issue `status`.
+currently allowed, configured read-only validator results, configured
+transition effects, static transition descriptions, branch context, and the
+next command to run. A blocked attempt records a `transition_blocked` issue
+activity entry without running effects. A successful attempt runs declared
+effects in order, records a `transition_applied` activity entry, and updates
+the canonical issue `status`.
 
 ## Scope
 
@@ -39,7 +41,8 @@ Workflow policy applies to issues. The contract defines:
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
-- inline built-in validators and validator params;
+- inline read-only built-in validators and validator params;
+- inline built-in transition effects;
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
@@ -85,7 +88,6 @@ workflows:
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -107,6 +109,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -114,7 +118,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -139,6 +142,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -146,7 +151,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -176,8 +180,7 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record a concise close reason that captures the spike outcome."
+        description: "Closing requires complete review and current durable state."
         validators:
           - review_complete
           - durable_state_current
@@ -197,9 +200,10 @@ tracker graph rather than duplicated in command handlers:
 - child issues under an epic use the nearest parent epic as branch owner;
 - standalone issues own their issue branch;
 - epics own their epic branch;
-- child issue close commits tracker state on the epic branch and does not merge
-  to base; and
-- standalone issue and epic close integrate their owner branch to base.
+- child issue completion effects commit tracker state on the epic branch and do
+  not merge to base; and
+- standalone issue and epic completion effects integrate their owner branch to
+  base when the workflow declares that effect.
 
 | Field | Rule |
 | --- | --- |
@@ -258,11 +262,52 @@ Each workflow defines named transitions:
 | `from` | Required non-empty list of source statuses. Each status must exist and must not be terminal for the workflow. |
 | `to` | Required destination status. It must exist. |
 | `required_fields` | Optional list of required command inputs. Currently `close_reason` is supported. |
-| `validators` | Optional list of inline built-in validators. |
+| `validators` | Optional list of inline read-only built-in validators. |
+| `effects` | Optional ordered list of inline built-in transition effects. |
 | `description` | Optional static text rendered near transition options and blocked transition output. |
 
 `description` is static text. There is no template registry and no template
 variable expansion.
+
+## Transition Effects
+
+Transition effects are configured work run by explicit issue transitions after
+required fields and validators pass. They are declared on a transition, planned
+in declaration order, and rendered separately from validators so operators can
+see what readiness checked and what the command intends to mutate.
+
+Built-in effects are:
+
+| Effect | Purpose |
+| --- | --- |
+| `issue_status_write` | Write the canonical issue status and transition activity entry. This is the default status effect for successful issue transitions. |
+| `owner_branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
+| `owner_branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
+| `review_artifact_open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
+| `review_artifact_link` | Normalize an existing configured provider review artifact and write the canonical `review` link. |
+
+Review artifact effects use the configured review mode from `.atelier/config.toml`.
+In room mode they create or reuse a native review room. In provider mode they
+create, fetch, or link the configured provider artifact. They do not approve,
+comment, request changes, resolve findings, merge review artifacts, close
+issues, add `pr` aliases, or replace explicit `atelier issue transition`.
+
+Failure behavior is part of the effect contract:
+
+- Preflight failures stop before effects mutate state. This includes invalid
+  source status, missing required fields, failed validators, invalid review mode,
+  and invalid effect configuration.
+- Local write failures name the failed Markdown, activity, branch, commit, or
+  integration step and leave recovery commands that can inspect the preserved
+  state.
+- Provider failures name the failed provider step and preserve local state only
+  when retry is idempotent or the command can provide an explicit repair path.
+- Idempotent retry must tolerate an already-created review artifact,
+  already-written review link, already-applied activity entry, or already-made
+  owner-branch commit.
+- Recovery text must name the failed effect, what state was preserved, and next
+  commands such as `atelier issue show <id>`, `atelier issue transition <id>
+  --options`, `atelier review status --issue <id>`, or `atelier lint <id>`.
 
 ## Validators
 
@@ -283,6 +328,10 @@ validators:
 
 There is no top-level validator alias registry. Unknown validators and invalid
 params are hard config errors.
+Validators must be read-only. They may inspect canonical records, projection
+freshness, worktree state, evidence, blockers, and review artifacts, but they
+must not write records, create commits, change branches, open reviews, or merge
+anything. Mutating behavior belongs in transition effects.
 
 Supported built-ins include:
 
@@ -297,6 +346,11 @@ Supported built-ins include:
 | `no_blocking_lints` | Blocking lint checks pass. |
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
 | `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
+
+Effects are not validators. They may mutate Git state, canonical review
+records, provider review artifacts, and committed tracker state. Unknown
+effects or effect params unsupported by the built-in effect
+are hard config errors.
 
 ## Review Field
 

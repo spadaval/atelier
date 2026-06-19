@@ -6,6 +6,10 @@ labels:
 - "migration"
 - "validation"
 - "workflow"
+review:
+  kind: pull_request
+  number: 6
+  provider: forgejo
 priority: "P2"
 relationships:
   blocks: []
@@ -16,9 +20,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-19T21:39:13.463876106+00:00"
+status: "done"
 title: "Epic: Validation and workflow migration for transition effects"
-updated_at: "2026-06-19T20:14:36.022769773+00:00"
+updated_at: "2026-06-19T21:39:13.463876106+00:00"
 ---
 
 ## Description
