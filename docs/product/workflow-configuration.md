@@ -24,11 +24,12 @@ atelier issue transition <id> --options
 
 `atelier issue transition <id> --options` renders transitions available from
 the issue's current status. Each option reports whether the transition is
-currently allowed, configured validator results, configured transition effects,
-static transition descriptions, branch context, and the next command to run. A
-blocked attempt records a `transition_blocked` issue activity entry. A
-successful attempt runs declared effects in order, records a
-`transition_applied` activity entry, and updates the canonical issue `status`.
+currently allowed, configured read-only validator results, configured
+transition effects, static transition descriptions, branch context, and the
+next command to run. A blocked attempt records a `transition_blocked` issue
+activity entry without running effects. A successful attempt runs declared
+effects in order, records a `transition_applied` activity entry, and updates
+the canonical issue `status`.
 
 ## Scope
 
@@ -40,8 +41,8 @@ Workflow policy applies to issues. The contract defines:
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
-- inline built-in validators and validator params;
-- inline built-in transition effects and effect params;
+- inline read-only built-in validators and validator params;
+- inline built-in transition effects;
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
@@ -87,7 +88,6 @@ workflows:
       close:
         from: [in_progress, validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -118,7 +118,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -152,7 +151,6 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
@@ -182,8 +180,7 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record a concise close reason that captures the spike outcome."
+        description: "Closing requires complete review and current durable state."
         validators:
           - review_complete
           - durable_state_current
@@ -203,9 +200,10 @@ tracker graph rather than duplicated in command handlers:
 - child issues under an epic use the nearest parent epic as branch owner;
 - standalone issues own their issue branch;
 - epics own their epic branch;
-- child issue close commits tracker state on the epic branch and does not merge
-  to base; and
-- standalone issue and epic close integrate their owner branch to base.
+- child issue completion effects commit tracker state on the epic branch and do
+  not merge to base; and
+- standalone issue and epic completion effects integrate their owner branch to
+  base when the workflow declares that effect.
 
 | Field | Rule |
 | --- | --- |
@@ -264,8 +262,8 @@ Each workflow defines named transitions:
 | `from` | Required non-empty list of source statuses. Each status must exist and must not be terminal for the workflow. |
 | `to` | Required destination status. It must exist. |
 | `required_fields` | Optional list of required command inputs. Currently `close_reason` is supported. |
-| `validators` | Optional list of inline built-in validators. |
-| `effects` | Optional list of inline built-in transition effects. |
+| `validators` | Optional list of inline read-only built-in validators. |
+| `effects` | Optional ordered list of inline built-in transition effects. |
 | `description` | Optional static text rendered near transition options and blocked transition output. |
 
 `description` is static text. There is no template registry and no template
@@ -330,6 +328,10 @@ validators:
 
 There is no top-level validator alias registry. Unknown validators and invalid
 params are hard config errors.
+Validators must be read-only. They may inspect canonical records, projection
+freshness, worktree state, evidence, blockers, and review artifacts, but they
+must not write records, create commits, change branches, open reviews, or merge
+anything. Mutating behavior belongs in transition effects.
 
 Supported built-ins include:
 
@@ -344,6 +346,11 @@ Supported built-ins include:
 | `no_blocking_lints` | Blocking lint checks pass. |
 | `git_worktree_clean` | Worktree cleanliness gate passes. |
 | `linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
+
+Effects are not validators. They may mutate Git state, canonical review
+records, provider review artifacts, and committed tracker state. Unknown
+effects or effect params unsupported by the built-in effect
+are hard config errors.
 
 ## Review Field
 

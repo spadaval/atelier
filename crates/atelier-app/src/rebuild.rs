@@ -1644,6 +1644,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -1651,8 +1653,7 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, validation, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -1675,6 +1676,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        effects:
+          - review_artifact_open
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -1682,8 +1685,7 @@ workflows:
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
           - evidence_attached: { min_count: 1 }
           - epic_child_proof_complete
@@ -1712,8 +1714,7 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record a concise close reason that captures what changed."
+        description: "Closing requires review completion and durable tracker state."
         validators:
           - review_complete
           - durable_state_current
