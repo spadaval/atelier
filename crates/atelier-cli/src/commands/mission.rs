@@ -436,7 +436,7 @@ fn print_mission_branch_lifecycle(
             (context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str()))
                 .then(|| {
                     format!(
-                        "{} expected {}; run `atelier start {}`",
+                        "{} expected {}; inspect `atelier issue transition {} --options` and `atelier worktree status`",
                         issue.id, context.resolution.expected_branch, issue.id
                     )
                 })
@@ -499,7 +499,7 @@ fn print_status_next_commands(
             println!("  Resolve open blockers before assigning more implementation work");
         } else if let Some(issue) = summary.selectable_work.first() {
             println!(
-                "  Start selectable mission work ({} selectable issue(s)): atelier start {}",
+                "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
                 summary.selectable_work.len(),
                 issue.id
             );
@@ -867,7 +867,7 @@ impl MissionTerminalStatus {
             println!("Work: closed");
         } else {
             println!("Work: open - {}", compact_strings(&self.open_work));
-            println!("  Next: atelier issue close <issue-id> --reason \"...\"");
+            println!("  Next: atelier issue transition <issue-id> close --reason \"...\"");
         }
         if self.open_blockers.is_empty() {
             println!("Blockers: clear");

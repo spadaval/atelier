@@ -326,15 +326,12 @@ fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
             "  subskill: validate",
         ],
     );
-    assert_activity_contains(
-        &activity,
-        "evidence_attached",
-        &[
-            "attempt:\n",
-            "  role: validator",
-            "  serial: 1",
-            "  lifecycle: updated",
-        ],
+    assert_activity_contains(&activity, "evidence_attached", &["evidence_id:", "result:"]);
+    assert!(
+        !activity
+            .iter()
+            .any(|entry| entry.contains("evidence_attached") && entry.contains("attempt:\n")),
+        "evidence attachment activity must not create validator attempt metadata: {activity:?}"
     );
 
     let (success, list_out, stderr) = run_atelier(dir.path(), &["session", "list"]);
@@ -348,11 +345,18 @@ fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
         "{list_out}"
     );
     assert!(
-        list_out.contains(&format!("{issue_id}/validator/1")),
+        !list_out.contains(&format!("{issue_id}/validator/1")),
         "{list_out}"
     );
     assert!(list_out.contains("finished"), "{list_out}");
-    assert!(list_out.contains("active"), "{list_out}");
+    assert!(!list_out.contains("active"), "{list_out}");
+
+    let (success, active_out, stderr) = run_atelier(dir.path(), &["session", "list", "--active"]);
+    assert!(success, "active session list failed: {stderr}");
+    assert!(
+        !active_out.contains(&format!("{issue_id}/validator/1")),
+        "{active_out}"
+    );
 
     assert!(
         session_record_files(dir.path()).is_empty(),

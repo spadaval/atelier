@@ -793,9 +793,16 @@ fn test_wrong_kind_record_ids_report_actual_kind_and_correct_command() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", mission_id, "--reason", "wrong kind"],
+        &[
+            "issue",
+            "transition",
+            mission_id,
+            "close",
+            "--reason",
+            "wrong kind",
+        ],
     );
-    assert!(!success, "mission ID should not close as an issue");
+    assert!(!success, "mission ID should not transition as an issue");
     assert!(
         stderr.contains(&format!(
             "{mission_id} is a mission record, not an issue record"
@@ -1660,7 +1667,14 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     move_issue_to_validation(dir.path(), target_id);
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", target_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            target_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(
         !success,
@@ -1681,7 +1695,14 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
     assert!(success, "target evidence attach failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", target_id, "--reason", "target proof"],
+        &[
+            "issue",
+            "transition",
+            target_id,
+            "close",
+            "--reason",
+            "target proof",
+        ],
     );
     assert!(
         success,
@@ -1824,7 +1845,14 @@ fn test_issue_closeout_requires_passing_evidence_records() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "still blocked"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "still blocked",
+        ],
     );
     assert!(
         !success,
@@ -2066,9 +2094,19 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
     commit_all(dir.path(), "mission approval ready");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", approval_id, "--reason", "approved"],
+        &[
+            "issue",
+            "transition",
+            approval_id,
+            "close",
+            "--reason",
+            "approved",
+        ],
     );
-    assert!(success, "validation issue close failed: {stderr}");
+    assert!(
+        success,
+        "validation issue transition close failed: {stderr}"
+    );
 
     let (success, ready_out, stderr) =
         run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);

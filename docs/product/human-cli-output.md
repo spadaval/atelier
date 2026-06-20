@@ -106,7 +106,7 @@ Blockers
 Next Commands
 -------------
   atelier issue note atelier-1234 "..."
-  atelier issue close atelier-1234 --reason "..."
+  atelier issue transition atelier-1234 close --reason "..."
 ```
 
 ## Setup And Health Views

@@ -98,6 +98,11 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch.push
+          - review.merge
+          - base.sync
 
   validation_delivery:
     applies_to: [validation]
@@ -142,6 +147,11 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch.push
+          - review.merge
+          - base.sync
 
   spike_review:
     applies_to: [spike]

@@ -4,12 +4,11 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
 use atelier_app::project_config::{
-    ForgejoConfig, ForgejoRoleAuthors, ProjectConfig, FORGEJO_ROLES,
+    load_forgejo_with_workflow_role_authors, ForgejoConfig, FORGEJO_ROLES,
 };
-use atelier_app::workflow_policy::{ActionParams, WorkflowForgejoRoleAuthors};
 
 const ROLE_PERMISSION: &str = "write";
 
@@ -69,52 +68,6 @@ pub fn roles_provision(repo_root: &Path, write_config: bool) -> Result<()> {
     println!();
     println!("Config:  role authors sourced from .atelier/workflow.yaml actions");
     Ok(())
-}
-
-fn load_forgejo_with_workflow_role_authors(repo_root: &Path) -> Result<ForgejoConfig> {
-    let config_path = repo_root.join(".atelier/config.toml");
-    let config = ProjectConfig::load(repo_root)?;
-    let mut forgejo = config.require_forgejo(&config_path)?.clone();
-    forgejo.role_authors = Some(workflow_forgejo_role_authors(repo_root)?);
-    Ok(forgejo)
-}
-
-fn workflow_forgejo_role_authors(repo_root: &Path) -> Result<ForgejoRoleAuthors> {
-    let policy = atelier_app::workflow_policy::load(repo_root)?;
-    let mut found: Option<WorkflowForgejoRoleAuthors> = None;
-    for workflow in policy.workflows.values() {
-        for transition in workflow.transitions.values() {
-            for action in &transition.actions {
-                let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {
-                    continue;
-                };
-                if params.provider.as_deref() != Some("forgejo") {
-                    continue;
-                }
-                let role_authors = params.role_authors.clone().ok_or_else(|| {
-                    anyhow!(
-                        "workflow_config_invalid_action: Forgejo review action '{}' is missing role_authors",
-                        action.builtin
-                    )
-                })?;
-                if let Some(existing) = &found {
-                    if existing != &role_authors {
-                        bail!(
-                            "workflow_config_invalid_action: Forgejo review actions define conflicting role_authors"
-                        );
-                    }
-                } else {
-                    found = Some(role_authors);
-                }
-            }
-        }
-    }
-    let role_authors = found.ok_or_else(|| {
-        anyhow!(
-            "workflow_config_missing_role_authors: no Forgejo review action role_authors found in .atelier/workflow.yaml"
-        )
-    })?;
-    Ok(workflow_role_authors_to_project(&role_authors))
 }
 
 #[derive(Debug)]
@@ -233,17 +186,6 @@ fn ensure_report_passes(report: &RoleReport) -> Result<()> {
     }
 }
 
-fn workflow_role_authors_to_project(
-    role_authors: &WorkflowForgejoRoleAuthors,
-) -> ForgejoRoleAuthors {
-    ForgejoRoleAuthors {
-        worker: role_authors.worker.clone(),
-        reviewer: role_authors.reviewer.clone(),
-        validator: role_authors.validator.clone(),
-        manager: role_authors.manager.clone(),
-    }
-}
-
 fn role_full_name(role: &str) -> String {
     format!("Atelier {}", role_name(role))
 }
@@ -269,6 +211,7 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
+    use atelier_app::project_config::ForgejoRoleAuthors;
     use std::cell::RefCell;
 
     #[derive(Debug)]
@@ -369,20 +312,5 @@ mod tests {
 
         assert!(report.collapsed.is_empty());
         ensure_report_passes(&report).unwrap();
-    }
-
-    #[test]
-    fn workflow_role_authors_are_mapped_to_forgejo_config() {
-        let authors = WorkflowForgejoRoleAuthors {
-            worker: "forge-worker".to_string(),
-            reviewer: "forge-reviewer".to_string(),
-            validator: "forge-validator".to_string(),
-            manager: "forge-manager".to_string(),
-        };
-
-        let mapped = workflow_role_authors_to_project(&authors);
-
-        assert_eq!(mapped.worker, "forge-worker");
-        assert_eq!(mapped.validator, "forge-validator");
     }
 }

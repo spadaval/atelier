@@ -480,6 +480,9 @@ pub fn derive_issue_attempts(
         let Some(attempt) = activity.attempt.clone() else {
             continue;
         };
+        if attempt.role == ActivityAttemptRole::Validator {
+            continue;
+        }
         let key = (activity.subject_id.clone(), attempt.role, attempt.serial);
         let id = derived_attempt_id(&activity.subject_id, attempt.role, attempt.serial);
         let entry = attempts.entry(key).or_insert_with(|| DerivedIssueAttempt {
@@ -986,11 +989,26 @@ mod tests {
             }),
             ..first_started.clone()
         };
+        let validator_started = IssueActivity {
+            id: "20260610T181924123456Z".to_string(),
+            created_at: at() + chrono::Duration::seconds(4),
+            actor: "validator-a".to_string(),
+            summary: "Started validation".to_string(),
+            attempt: Some(ActivityAttemptMetadata {
+                role: ActivityAttemptRole::Validator,
+                serial: 1,
+                lifecycle: ActivityAttemptLifecycle::Started,
+                agent: None,
+                subskill: Some("validate".to_string()),
+            }),
+            ..first_started.clone()
+        };
 
         let attempts = derive_issue_attempts([
             reviewer_started,
             first_finished,
             second_worker_started,
+            validator_started,
             first_started,
         ])
         .unwrap();
@@ -1003,6 +1021,9 @@ mod tests {
         assert_eq!(attempts[1].state, DerivedIssueAttemptState::Active);
         assert_eq!(attempts[2].id, "atelier-one/reviewer/1");
         assert_eq!(attempts[2].state, DerivedIssueAttemptState::Active);
+        assert!(attempts
+            .iter()
+            .all(|attempt| attempt.role != ActivityAttemptRole::Validator));
     }
 
     #[test]

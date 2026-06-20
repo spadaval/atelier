@@ -275,7 +275,7 @@ fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
         commit_if_dirty(dir, "test fixture state before workflow options");
     }
     if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
-        commit_if_dirty(dir, "test fixture state before issue close");
+        commit_if_dirty(dir, "test fixture state before transition close");
     }
 }
 
@@ -833,7 +833,7 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
         dir,
         "issue",
         issue_id,
-        &format!("issue close proof for {issue_id}"),
+        &format!("transition close proof for {issue_id}"),
     )
 }
 
@@ -882,8 +882,11 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
         if !option_present {
             continue;
         }
-        let (success, _, stderr) =
-            run_atelier(dir, &["issue", "transition", &issue_id, transition]);
+        let (success, _, stderr) = if transition == "start" && dir.join(".git").exists() {
+            run_atelier(dir, &["start", &issue_id, "--no-session"])
+        } else {
+            run_atelier(dir, &["issue", "transition", &issue_id, transition])
+        };
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
             if transition == "request_review" {
@@ -902,11 +905,11 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));
     }
-    let mut args = vec!["issue", "close", issue_ref_value];
+    let mut args = vec!["issue", "transition", issue_ref_value, "close"];
     args.push("--reason");
     args.push(reason.unwrap_or("done"));
     let (success, _, stderr) = run_atelier(dir, &args);
-    assert!(success, "issue close failed: {stderr}");
+    assert!(success, "issue transition close failed: {stderr}");
     issue_id
 }
 
@@ -955,11 +958,11 @@ fn write_branch_action_workflow(dir: &Path) {
     );
     workflow = workflow.replace(
         "          - tracker.current\n\n  epic_delivery:",
-        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_delivery:",
+        "          - tracker.current\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",
     );
     workflow = workflow.replace(
-        "          - git.worktree_clean\n\n  validation_delivery:",
-        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_delivery:",
+        "          - tracker.commit\n          - branch.push\n          - review.merge\n          - base.sync",
+        "          - tracker.commit\n          - branch_integrate",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

@@ -144,16 +144,10 @@ pub fn record_evidence_attached(
     evidence_id: &str,
     result: Option<&str>,
 ) -> Result<()> {
-    record_with_attempt(
+    record(
         issue_id,
         ActivityEventType::EvidenceAttached,
         &format!("Attached evidence {evidence_id}"),
-        Some(attempt_for_role(
-            issue_id,
-            ActivityAttemptRole::Validator,
-            active_update_lifecycle(issue_id, ActivityAttemptRole::Validator)?,
-            SerialMode::ActiveOrNext,
-        )?),
         &format!(
             "evidence_id: {}\nresult: {}",
             scalar(evidence_id),
@@ -326,17 +320,6 @@ fn attempt_for_role(
         agent: current_agent(),
         subskill: current_subskill(),
     })
-}
-
-fn active_update_lifecycle(
-    issue_id: &str,
-    role: ActivityAttemptRole,
-) -> Result<ActivityAttemptLifecycle> {
-    if active_serial(issue_id, role)?.is_some() {
-        Ok(ActivityAttemptLifecycle::Updated)
-    } else {
-        Ok(ActivityAttemptLifecycle::Started)
-    }
 }
 
 fn active_serial(issue_id: &str, role: ActivityAttemptRole) -> Result<Option<u32>> {

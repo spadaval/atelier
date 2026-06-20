@@ -252,7 +252,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
-                    "  Start selectable active-mission work ({} selectable issue(s)): atelier start {}",
+                    "  Inspect selectable active-mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
                     snapshot.selectable_issues.len(),
                     issue.id
                 );
@@ -295,7 +295,9 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
             "  Choose ready work ({} ready issue(s) available): atelier issue list --ready",
             ready.len()
         );
-        println!("  Start selected work (ready work exists): atelier start <issue-id>");
+        println!(
+            "  Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
+        );
     }
     if !export_stale.is_empty() {
         println!(
@@ -743,7 +745,10 @@ fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Resul
                 {
                     "ok".to_string()
                 } else {
-                    format!("mismatch; run `atelier start {}`", issue.id)
+                    format!(
+                        "mismatch; inspect `atelier issue transition {} --options` and `atelier worktree status`",
+                        issue.id
+                    )
                 };
                 println!(
                     "  {} - owner {} {} ({}) | expected {} | {state}",
@@ -810,12 +815,24 @@ pub fn close_all_lifecycle(
 
     let mut closed_count = 0;
     for issue in &issues {
-        match commands::agent_factory::close_lifecycle(
+        let db = match app_use_cases::open_database(db_path) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to open tracker for {}: {}",
+                    format_issue_id(&issue.id),
+                    e
+                );
+                continue;
+            }
+        };
+        match commands::workflow::transition_issue(
+            &db,
             state_dir,
             db_path,
             &issue.id,
-            "bulk close",
-            None,
+            "close",
+            Some("bulk close"),
         ) {
             Ok(()) => closed_count += 1,
             Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),

@@ -327,11 +327,11 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             "current branch matches expected branch".to_string()
         }
         Some(current) => format!(
-            "mismatch - current branch {current}; run `atelier start {}` before continuing work",
+            "mismatch - current branch {current}; inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
             context.resolution.issue_id
         ),
         None => format!(
-            "detached or unknown - run `atelier start {}` before continuing work",
+            "detached or unknown - inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
             context.resolution.issue_id
         ),
     }
@@ -379,7 +379,7 @@ fn branch_context_blockers(
     }
     if is_close && context.resolution.merge_owned && !context.base_branch_exists {
         blockers.push(format!(
-            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue close {} --reason \"...\"`",
+            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} close --reason \"...\"`",
             context.resolution.base_branch, issue.id
         ));
     }
@@ -421,7 +421,7 @@ fn branch_context_guidance(
     }
     if is_close {
         guidance.push(format!(
-            "Close lifecycle command: atelier issue close {} --reason \"...\"",
+            "Close lifecycle command: atelier issue transition {} close --reason \"...\"",
             issue.id
         ));
     }
@@ -487,7 +487,14 @@ pub fn transition_issue(
     record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    match execute_post_transition_actions(&repo_root, &before, transition_name, &planned_actions) {
+    match execute_post_transition_actions(
+        &repo_root,
+        state_dir,
+        db_path,
+        &before,
+        transition_name,
+        &planned_actions,
+    ) {
         Ok(mut results) => action_results.append(&mut results),
         Err(error) => {
             if let Some(rollback) = git_rollback {
@@ -640,7 +647,9 @@ fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]
         .filter_map(|action| {
             match action.name.as_str() {
                 "branch_prepare" => branch_prepare_preflight(repo_root, action),
-                "branch_commit" | "branch_integrate" => branch_post_action_preflight(repo_root, action),
+                "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate" => {
+                    branch_post_action_preflight(repo_root, action)
+                }
                 "review.open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
                     "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
@@ -693,6 +702,18 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
             dirty.join("\n")
         )),
         Err(error) => Some(format!("action {} failed preflight: {error:#}", action.name)),
+        _ if provider_action_names(action.name.as_str()) && !review_config_is_provider(repo_root) => {
+            Some(format!(
+                "action {} failed preflight: provider terminal action requires review.mode = \"provider\"",
+                action.name
+            ))
+        }
+        _ if action.name == "branch_integrate" && review_config_is_provider(repo_root) => {
+            Some(
+                "action branch_integrate failed preflight: local branch integration is only valid for room review workflows"
+                    .to_string(),
+            )
+        }
         _ if action.name == "branch_integrate"
             && action.merge_owned
             && !branch_exists_at(repo_root, &action.base_branch).unwrap_or(false) =>
@@ -704,6 +725,24 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
         }
         _ => None,
     }
+}
+
+fn provider_action_names(name: &str) -> bool {
+    matches!(name, "branch.push" | "review.merge" | "base.sync")
+}
+
+fn transition_git_action_names(name: &str) -> bool {
+    matches!(
+        name,
+        "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+    )
+}
+
+fn review_config_is_provider(repo_root: &Path) -> bool {
+    matches!(
+        ProjectConfig::load(repo_root).map(|config| config.review),
+        Ok(ReviewConfig::Provider(_))
+    )
 }
 
 fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<(), String> {
@@ -792,7 +831,8 @@ fn execute_pre_transition_actions(
                     detail,
                 });
             }
-            "branch_commit" | "branch_integrate" => {}
+            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
+            | "branch_integrate" => {}
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -818,6 +858,8 @@ fn execute_pre_transition_actions(
 
 fn execute_post_transition_actions(
     repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
     issue: &Issue,
     transition_name: &str,
     planned_actions: &[PlannedAction],
@@ -825,8 +867,29 @@ fn execute_post_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
-            "branch_commit" => {
+            "tracker.commit" => {
                 let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "branch.push" => {
+                let detail = push_branch_action(repo_root, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "review.merge" => {
+                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "base.sync" => {
+                let detail = sync_base_action(repo_root, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
                     detail,
@@ -1033,6 +1096,70 @@ fn integrate_branch_action(
             Ok(format!("fast-forward to {}", sha.trim()))
         }
     }
+}
+
+fn push_branch_action(repo_root: &Path, issue: &Issue, action: &PlannedAction) -> Result<String> {
+    ensure_expected_branch_checked_out(repo_root, issue, action)?;
+    git_checked(
+        repo_root,
+        &["push", "origin", &action.expected_branch],
+        "push action branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while pushing branch '{}'.\nRecovery: inspect `git status --short --branch`, provider remote configuration, and retry the transition for {}.",
+            action.name, action.expected_branch, issue.id
+        )
+    })?;
+    Ok(format!("pushed {}", action.expected_branch))
+}
+
+fn merge_review_action(
+    repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
+    issue: &Issue,
+    _action: &PlannedAction,
+) -> Result<String> {
+    let db = app_use_cases::open_database(db_path)?;
+    crate::commands::pr::merge(
+        &db,
+        repo_root,
+        &state_dir,
+        &db_path,
+        Some(&issue.id),
+        "manager",
+    )?;
+    Ok("provider review merged".to_string())
+}
+
+fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
+    git_checked(repo_root, &["fetch", "origin", &action.base_branch], "fetch base branch")
+        .with_context(|| {
+            format!(
+                "action {} failed while fetching base branch '{}'.\nRecovery: inspect the configured provider remote and retry the transition.",
+                action.name, action.base_branch
+            )
+        })?;
+    git_checked(repo_root, &["switch", &action.base_branch], "checkout base branch")
+        .with_context(|| {
+            format!(
+                "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                action.name, action.base_branch
+            )
+        })?;
+    git_checked(
+        repo_root,
+        &["merge", "--ff-only", &format!("origin/{}", action.base_branch)],
+        "fast-forward base branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while syncing base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
+            action.name, action.base_branch
+        )
+    })?;
+    Ok(format!("synced {}", action.base_branch))
 }
 
 fn ensure_expected_branch_checked_out(
@@ -1309,7 +1436,7 @@ pub fn close_issue(
             .collect::<BTreeSet<_>>();
         if destinations.len() > 1 {
             bail!(
-                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue close {} --to <status> --reason \"...\"` (available: {})",
+                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue transition {} <transition> --reason \"...\"` (available done statuses: {})",
                 issue.id,
                 issue.status,
                 issue.id,
@@ -1364,7 +1491,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "branch_commit" | "branch_integrate"
+            "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
         )
     })
 }
@@ -1396,7 +1523,7 @@ impl TransitionGitRollback {
     ) -> Result<Option<Self>> {
         if !planned_actions
             .iter()
-            .any(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+            .any(|action| transition_git_action_names(action.name.as_str()))
         {
             return Ok(None);
         }
@@ -1405,7 +1532,7 @@ impl TransitionGitRollback {
         }
         let Some(action) = planned_actions
             .iter()
-            .find(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+            .find(|action| transition_git_action_names(action.name.as_str()))
         else {
             return Ok(None);
         };
@@ -1509,7 +1636,7 @@ impl CloseGitIntegration {
         if resolution.merge_owned {
             ensure_branch_exists(&repo_root, &resolution.base_branch).with_context(|| {
                 format!(
-                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue transition {} close --reason \"...\"`.",
                     resolution.base_branch, issue.id
                 )
             })?;
@@ -1523,7 +1650,7 @@ impl CloseGitIntegration {
             )
             .with_context(|| {
                 format!(
-                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                     resolution.expected_branch, issue.id
                 )
             })?;
@@ -1576,7 +1703,7 @@ impl CloseGitIntegration {
             println!("Merge result:   deferred to epic close");
         }
         println!(
-            "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
+            "Recovery:      rerun `atelier issue transition {} close --reason \"...\"` only if a later step reports failure",
             self.issue_id
         );
         let _ = app_use_cases::open_database(db_path)?;
@@ -1605,7 +1732,7 @@ impl CloseGitIntegration {
         })
         .with_context(|| {
             format!(
-                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                 self.issue_id, self.issue_id
             )
         })?;
@@ -1638,7 +1765,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1653,7 +1780,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1676,7 +1803,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1695,7 +1822,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1779,7 +1906,7 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
     )
     .with_context(|| {
         format!(
-            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue close {} --reason \"...\"`.",
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue transition {} close --reason \"...\"`.",
             resolution.expected_branch, resolution.issue_id, resolution.issue_id
         )
     })
@@ -1797,7 +1924,7 @@ fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
     let dirty = non_tracker_dirty_entries(root)?;
     if !dirty.is_empty() {
         bail!(
-            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
+            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue transition <issue-id> close --reason \"...\"`.",
             dirty.join("\n")
         );
     }
@@ -3518,6 +3645,39 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
+    fn provider_terminal_actions_plan_without_local_branch_integrate() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let actions = vec![
+            action("tracker.commit"),
+            action("branch.push"),
+            action("review.merge"),
+            action("base.sync"),
+        ];
+
+        let plan = plan_actions_for_resolution(&issue, &resolution, &actions);
+
+        assert_eq!(
+            plan.iter()
+                .map(|action| action.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+        );
+        assert!(plan.iter().all(|action| !action.confirmation_required));
+        assert!(plan.iter().all(|action| action.name != "branch_integrate"));
+    }
+
+    #[test]
     fn action_preflight_checks_git_actions_before_execution() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
@@ -3626,6 +3786,57 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         )
         .unwrap();
         assert!(second_detail.contains("reused room"));
+    }
+
+    #[test]
+    fn transition_status_write_preserves_review_field_from_pre_action_reload() {
+        let dir = tempdir().unwrap();
+        write_room_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let issue = test_issue("atelier-epic1");
+        insert_canonical_issue(&db, &state_dir, issue.clone());
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let transition = resolve_issue_transition(&policy, &issue, "request_review").unwrap();
+        let stale_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let action = plan_actions_for_resolution(&issue, &resolution, &[review_action()]).remove(0);
+
+        open_review_artifact_action(
+            &db,
+            &state_dir,
+            &db_path,
+            dir.path(),
+            &issue,
+            "request_review",
+            &action,
+        )
+        .unwrap();
+        assert!(!stale_record.issue.fields.contains_key("review"));
+
+        let mut reloaded_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        apply_transition_record(&policy, &state_dir, &mut reloaded_record, transition, None)
+            .unwrap();
+
+        let final_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        assert_eq!(final_record.issue.status, "review");
+        let review = final_record.issue.fields.get("review").unwrap();
+        assert_eq!(review["kind"], "room");
+        assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
     }
 
     #[test]

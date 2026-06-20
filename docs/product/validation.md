@@ -69,8 +69,9 @@ validation rather than duplicating every child proof record.
 
 Proof requirements must be visible before completion.
 
-Agents should not discover required proof only after `atelier issue close` or
-`atelier mission close` fails. The normal workflow surfaces should show the
+Agents should not discover required proof only after `atelier issue transition
+<id> close --reason "..."` or `atelier mission close` fails. The normal
+workflow surfaces should show the
 expected proof early, summarize whether it is satisfied, and provide the next
 command that moves the work forward.
 

@@ -812,7 +812,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier history --issue <id>",
         "atelier start <issue-id>",
         "atelier issue transition <issue-id> --options",
-        "atelier issue close <issue-id> --reason",
+        "atelier issue transition <issue-id> close --reason",
     ] {
         assert!(
             stdout.contains(common),
@@ -1072,7 +1072,10 @@ fn test_root_status_summarizes_checkout_orientation() {
     );
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
-    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
+    assert!(stdout.contains(
+        "Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
+    ));
+    assert!(!stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
     assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
@@ -1182,8 +1185,9 @@ fn test_root_status_reports_active_mission_contract_fields() {
         "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Start selectable active-mission work (2 selectable issue(s)): atelier start {blocker_id}"
+        "Inspect selectable active-mission work transitions (2 selectable issue(s)): atelier issue transition {blocker_id} --options"
     )));
+    assert!(!stdout.contains("Start selectable active-mission work"));
     assert!(
         !stdout.contains("workflow validate"),
         "normal status next actions must not route to raw workflow validators:\n{stdout}"
@@ -1323,7 +1327,7 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(!spec.contains("atelier work finish"));
     assert!(!spec.contains("atelier workflow validate"));
     assert!(spec.contains("atelier start atelier-z1p8"));
-    assert!(spec.contains("atelier issue close atelier-z1p8 --reason \"done\""));
+    assert!(spec.contains("atelier issue transition atelier-z1p8 close --reason \"done\""));
     assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(spec.contains("atelier status"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 --options"));
@@ -2056,9 +2060,16 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
-    assert!(success, "issue close failed: {stderr}");
+    assert!(success, "issue transition close failed: {stderr}");
     assert!(
         close_out.contains("Applied transition close"),
         "{close_out}"
@@ -2085,112 +2096,36 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
 }
 
 #[test]
-fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() {
+fn test_removed_issue_close_command_rejects_to_and_reason_flags() {
     let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
     init_atelier(dir.path());
 
-    let (success, issue_out, stderr) = run_atelier(
+    let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "issue",
-            "create",
-            "Archivable workflow item",
-            "--issue-type",
-            "epic",
-        ],
+        &["issue", "create", "Removed close command item"],
     );
     assert!(success, "issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let issue_id = issue_id_by_title(dir.path(), "Archivable workflow item");
-    migrate_default_issue_workflow(dir.path());
-    let policy_path = dir.path().join(".atelier").join("workflow.yaml");
-    let policy = std::fs::read_to_string(&policy_path).unwrap();
-    std::fs::write(
-        &policy_path,
-        policy.replace(
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
-        ),
-    )
-    .unwrap();
-    commit_all(dir.path(), "archivable workflow policy");
+    let issue_id = issue_id_by_title(dir.path(), "Removed close command item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
-    assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
-    complete_room_review(dir.path(), &issue_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_validation"],
-    );
-    assert!(success, "request_validation failed: {stderr}");
-    attach_issue_pass_evidence(dir.path(), &issue_id);
-    commit_all(dir.path(), "ready for archive");
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "close", &issue_id, "--reason", "needs archive"],
-    );
-    assert!(success, "default close to done failed: {stderr}");
-
-    let (success, issue_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Explicit archive workflow item",
-            "--issue-type",
-            "epic",
-        ],
-    );
-    assert!(success, "archive issue create failed: {stderr}");
-    assert!(issue_out.contains("Created issue atelier-"));
-    let archive_id = issue_id_by_title(dir.path(), "Explicit archive workflow item");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &archive_id, "--no-session"]);
-    assert!(success, "archive start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &archive_id, "request_review"],
-    );
-    assert!(success, "archive request_review failed: {stderr}");
-    complete_room_review(dir.path(), &archive_id);
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &archive_id, "request_validation"],
-    );
-    assert!(success, "archive request_validation failed: {stderr}");
-    attach_issue_pass_evidence(dir.path(), &archive_id);
-    commit_all(dir.path(), "ready for explicit archive");
-
-    let (success, _archive_out, stderr) = run_atelier(
+    let (success, _stdout, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
             "close",
-            &archive_id,
+            &issue_id,
             "--to",
             "archived",
             "--reason",
             "archived by policy",
         ],
     );
-    assert!(!success, "archive should be rejected by current workflow");
     assert!(
-        stderr.contains("available done targets from 'validation' are: done"),
-        "{stderr}"
+        !success,
+        "removed issue close command should reject --to usage"
     );
-
-    let issue_text =
-        std::fs::read_to_string(canonical_issue_path(dir.path(), &archive_id)).unwrap();
     assert!(
-        issue_text.contains("status: \"validation\""),
-        "{issue_text}"
+        stderr.contains("unrecognized subcommand 'close'"),
+        "{stderr}"
     );
 }
 
@@ -2365,7 +2300,9 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
         ),
         "{options_out}"
     );
-    assert!(options_out.contains(&format!("atelier issue close {issue_id} --reason \"...\"")));
+    assert!(options_out.contains(&format!(
+        "atelier issue transition {issue_id} close --reason \"...\""
+    )));
 }
 
 #[test]
@@ -2381,7 +2318,6 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
         "show",
         "transition",
         "update",
-        "close",
         "block",
         "unblock",
         "blocked",
@@ -2399,6 +2335,7 @@ fn test_issue_help_uses_reduced_lifecycle_surface() {
         "reopen",
         "label",
         "unlabel",
+        "close",
         "close-all",
         "delete",
         "next",
@@ -2592,6 +2529,7 @@ fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
         vec!["issue", "tested"],
         vec!["issue", "delete", "1", "--force"],
         vec!["issue", "close-all"],
+        vec!["issue", "close", "1", "--reason", "done"],
     ] {
         let (success, _, stderr) = run_atelier(dir.path(), &args);
         assert!(!success, "{args:?} unexpectedly succeeded");

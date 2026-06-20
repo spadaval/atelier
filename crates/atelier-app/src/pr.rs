@@ -16,7 +16,7 @@ use crate::forgejo::{
     ForgejoClient, ForgejoComment, ForgejoPullRequest, ForgejoReview, ForgejoReviewComment,
     ForgejoTransport, ReviewEvent,
 };
-use crate::project_config::{ForgejoConfig, ProjectConfig};
+use crate::project_config::{load_forgejo_with_workflow_role_authors, ForgejoConfig};
 use crate::workflow_policy::{self, REVIEW_FIELD};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -345,10 +345,7 @@ pub fn merge_with_client<T: ForgejoTransport>(
 }
 
 pub fn load_forgejo(repo_root: &Path) -> Result<ForgejoConfig> {
-    let config_path = repo_root.join(".atelier/config.toml");
-    ProjectConfig::load(repo_root)?
-        .require_forgejo(&config_path)
-        .cloned()
+    load_forgejo_with_workflow_role_authors(repo_root)
 }
 
 pub fn parse_pull_request_reference(input: &str, forgejo: &ForgejoConfig) -> Result<u64> {

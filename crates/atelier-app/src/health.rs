@@ -5,9 +5,12 @@ use anyhow::{Context, Result};
 use atelier_sqlite::Database;
 use std::env;
 
-use crate::forgejo::{ForgejoRequest, ForgejoResponse, ForgejoTransport, UreqForgejoTransport};
+use crate::forgejo::{
+    ForgejoClient, ForgejoRequest, ForgejoResponse, ForgejoTransport, UreqForgejoTransport,
+};
 use crate::project_config::{
-    ForgejoConfig, ProjectConfig, ReviewConfig, ReviewProviderConfig, ReviewProviderKind,
+    workflow_forgejo_role_authors, ForgejoConfig, ProjectConfig, ReviewConfig,
+    ReviewProviderConfig, ReviewProviderKind,
 };
 
 pub struct DoctorRequest<'a> {
@@ -122,7 +125,7 @@ pub fn doctor(
 }
 
 fn review_backend_health(repo_root: &Path) -> ReviewBackendView {
-    let config = match ProjectConfig::load(repo_root) {
+    let mut config = match ProjectConfig::load(repo_root) {
         Ok(config) => config,
         Err(error) => {
             return ReviewBackendView {
@@ -134,11 +137,36 @@ fn review_backend_health(repo_root: &Path) -> ReviewBackendView {
             };
         }
     };
+    if let ReviewConfig::Provider(ReviewProviderConfig {
+        provider: ReviewProviderKind::Forgejo(forgejo),
+    }) = &mut config.review
+    {
+        match workflow_forgejo_role_authors(repo_root) {
+            Ok(role_authors) => forgejo.role_authors = Some(role_authors),
+            Err(error) => {
+                return ReviewBackendView {
+                    mode: "provider".to_string(),
+                    provider: Some("forgejo".to_string()),
+                    status: "not ok",
+                    token_env: Some(forgejo.admin_token_env.clone()),
+                    detail: format!(
+                        "{error:#}; define role_authors on Forgejo review.open actions in .atelier/workflow.yaml, then run `atelier workflow check`"
+                    ),
+                };
+            }
+        }
+    }
     review_backend_health_from_config(
         &config,
         |name| env::var(name).ok(),
-        |forgejo, token| probe_forgejo_repo(forgejo, token),
+        |forgejo, token| probe_forgejo_readiness(forgejo, token),
     )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ForgejoReadiness {
+    repo: ForgejoResponse,
+    role_failures: Vec<String>,
 }
 
 fn review_backend_health_from_config<TokenLookup, Probe>(
@@ -148,7 +176,7 @@ fn review_backend_health_from_config<TokenLookup, Probe>(
 ) -> ReviewBackendView
 where
     TokenLookup: FnOnce(&str) -> Option<String>,
-    Probe: FnOnce(&ForgejoConfig, &str) -> Result<ForgejoResponse>,
+    Probe: FnOnce(&ForgejoConfig, &str) -> Result<ForgejoReadiness>,
 {
     match &config.review {
         ReviewConfig::Room => ReviewBackendView {
@@ -162,6 +190,15 @@ where
             provider: ReviewProviderKind::Forgejo(forgejo),
         }) => {
             let token_env = forgejo.admin_token_env.clone();
+            if forgejo.role_authors.is_none() {
+                return ReviewBackendView {
+                    mode: "provider".to_string(),
+                    provider: Some("forgejo".to_string()),
+                    status: "not ok",
+                    token_env: Some(token_env.clone()),
+                    detail: "missing Forgejo role author configuration; define role_authors on Forgejo review.open actions in .atelier/workflow.yaml, then run `atelier workflow check`".to_string(),
+                };
+            }
             let Some(token) = token_lookup(&token_env).filter(|value| !value.trim().is_empty())
             else {
                 return ReviewBackendView {
@@ -176,22 +213,37 @@ where
                 };
             };
             match probe(forgejo, &token) {
-                Ok(response) if (200..300).contains(&response.status) => ReviewBackendView {
+                Ok(readiness)
+                    if (200..300).contains(&readiness.repo.status)
+                        && readiness.role_failures.is_empty() =>
+                {
+                    ReviewBackendView {
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "ok",
                     token_env: Some(token_env),
                     detail: format!(
-                        "Forgejo repository {}/{} is reachable and role mappings are configured",
+                        "Forgejo repository {}/{} is reachable and role authors have write access plus sudo verification",
                         forgejo.owner, forgejo.repo
                     ),
-                },
-                Ok(response) => ReviewBackendView {
+                    }
+                }
+                Ok(readiness) if (200..300).contains(&readiness.repo.status) => ReviewBackendView {
                     mode: "provider".to_string(),
                     provider: Some("forgejo".to_string()),
                     status: "not ok",
                     token_env: Some(token_env),
-                    detail: forgejo_status_detail(response.status, &response.body),
+                    detail: format!(
+                        "Forgejo role author readiness failed: {}; run `atelier forgejo roles check` or `atelier forgejo roles provision`",
+                        readiness.role_failures.join("; ")
+                    ),
+                },
+                Ok(readiness) => ReviewBackendView {
+                    mode: "provider".to_string(),
+                    provider: Some("forgejo".to_string()),
+                    status: "not ok",
+                    token_env: Some(token_env),
+                    detail: forgejo_status_detail(readiness.repo.status, &readiness.repo.body),
                 },
                 Err(error) => ReviewBackendView {
                     mode: "provider".to_string(),
@@ -205,15 +257,53 @@ where
     }
 }
 
-fn probe_forgejo_repo(forgejo: &ForgejoConfig, token: &str) -> Result<ForgejoResponse> {
+fn probe_forgejo_readiness(forgejo: &ForgejoConfig, token: &str) -> Result<ForgejoReadiness> {
     let transport = UreqForgejoTransport::new(&forgejo.host, token);
-    transport.send(ForgejoRequest {
+    let repo = transport.send(ForgejoRequest {
         method: "GET",
         path: format!("/api/v1/repos/{}/{}", forgejo.owner, forgejo.repo),
         query: Vec::new(),
         headers: BTreeMap::new(),
         body: None,
+    })?;
+    if !(200..300).contains(&repo.status) {
+        return Ok(ForgejoReadiness {
+            repo,
+            role_failures: Vec::new(),
+        });
+    }
+    let client = ForgejoClient::new(forgejo.clone(), transport);
+    Ok(ForgejoReadiness {
+        repo,
+        role_failures: forgejo_role_failures(&client, forgejo)?,
     })
+}
+
+fn forgejo_role_failures<T: ForgejoTransport>(
+    client: &ForgejoClient<T>,
+    forgejo: &ForgejoConfig,
+) -> Result<Vec<String>> {
+    let mut failures = Vec::new();
+    for role in crate::project_config::FORGEJO_ROLES {
+        let username = forgejo.role_author_for_role(role)?;
+        let user_exists = client.user_exists(username)?;
+        if !user_exists {
+            failures.push(format!("{role} user {username} does not exist"));
+            continue;
+        }
+        if !matches!(
+            client.collaborator_permission(username)?.as_deref(),
+            Some("write" | "admin")
+        ) {
+            failures.push(format!(
+                "{role} user {username} does not have write permission"
+            ));
+        }
+        if !client.verify_sudo_user(username)? {
+            failures.push(format!("{role} user {username} failed sudo verification"));
+        }
+    }
+    Ok(failures)
 }
 
 fn forgejo_status_detail(status: u16, body: &str) -> String {
@@ -318,9 +408,12 @@ mod tests {
             |forgejo, token| {
                 assert_eq!(forgejo.repo, "atelier");
                 assert_eq!(token, "secret-token");
-                Ok(ForgejoResponse {
-                    status: 200,
-                    body: "{}".to_string(),
+                Ok(ForgejoReadiness {
+                    repo: ForgejoResponse {
+                        status: 200,
+                        body: "{}".to_string(),
+                    },
+                    role_failures: Vec::new(),
                 })
             },
         );
@@ -334,9 +427,12 @@ mod tests {
             &provider_config(),
             |_| Some("secret-token".to_string()),
             |_, _| {
-                Ok(ForgejoResponse {
-                    status: 401,
-                    body: "bad token".to_string(),
+                Ok(ForgejoReadiness {
+                    repo: ForgejoResponse {
+                        status: 401,
+                        body: "bad token".to_string(),
+                    },
+                    role_failures: Vec::new(),
                 })
             },
         );
@@ -348,9 +444,12 @@ mod tests {
             &provider_config(),
             |_| Some("secret-token".to_string()),
             |_, _| {
-                Ok(ForgejoResponse {
-                    status: 404,
-                    body: String::new(),
+                Ok(ForgejoReadiness {
+                    repo: ForgejoResponse {
+                        status: 404,
+                        body: String::new(),
+                    },
+                    role_failures: Vec::new(),
                 })
             },
         );
@@ -367,6 +466,51 @@ mod tests {
         );
         assert_eq!(view.status, "not ok");
         assert!(view.detail.contains("unreachable"));
+        assert!(!view.detail.contains("secret-token"));
+    }
+
+    #[test]
+    fn review_backend_health_reports_missing_role_authors_before_token_lookup() {
+        let mut config = provider_config();
+        let ReviewConfig::Provider(ReviewProviderConfig {
+            provider: ReviewProviderKind::Forgejo(forgejo),
+        }) = &mut config.review
+        else {
+            unreachable!();
+        };
+        forgejo.role_authors = None;
+
+        let view = review_backend_health_from_config(
+            &config,
+            |_| panic!("role author failures should not require a token"),
+            |_, _| unreachable!("role author failures must not probe providers"),
+        );
+
+        assert_eq!(view.status, "not ok");
+        assert!(view.detail.contains("role author configuration"));
+    }
+
+    #[test]
+    fn review_backend_health_reports_role_author_readiness_failures() {
+        let view = review_backend_health_from_config(
+            &provider_config(),
+            |_| Some("secret-token".to_string()),
+            |_, _| {
+                Ok(ForgejoReadiness {
+                    repo: ForgejoResponse {
+                        status: 200,
+                        body: "{}".to_string(),
+                    },
+                    role_failures: vec![
+                        "worker user atelier-worker does not have write permission".to_string(),
+                    ],
+                })
+            },
+        );
+
+        assert_eq!(view.status, "not ok");
+        assert!(view.detail.contains("worker user atelier-worker"));
+        assert!(view.detail.contains("forgejo roles check"));
         assert!(!view.detail.contains("secret-token"));
     }
 }

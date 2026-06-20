@@ -586,8 +586,8 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
                 "State:    {}",
                 crate::commands::workflow::branch_lifecycle_state_line(&context)
             );
-            println!("Next:     atelier start {canonical_id}");
-            println!("Close:    atelier issue close {canonical_id} --reason \"...\"");
+            println!("Options:  atelier issue transition {canonical_id} --options");
+            println!("Worktree: atelier worktree status");
         }
         Err(error) => {
             println!("State:    unavailable - {error}");
@@ -1540,7 +1540,10 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
-        println!("  Start tracked work: atelier start {}", object.id);
+        println!(
+            "  Inspect tracked work transitions: atelier issue transition {} --options",
+            object.id
+        );
     } else {
         println!("Created issue {} - {}", object.id, object.title);
         println!("Type:     {}", object.issue_type);
@@ -1552,7 +1555,10 @@ pub fn create_lifecycle(
         println!("  Edit issue Markdown: {}", file_path.display());
         println!("  Validate this issue: atelier lint {}", object.id);
         println!("  Inspect this issue: atelier issue show {}", object.id);
-        println!("  Start tracked work: atelier start {}", object.id);
+        println!(
+            "  Inspect tracked work transitions: atelier issue transition {} --options",
+            object.id
+        );
     }
     Ok(())
 }
@@ -1735,17 +1741,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     println!("-------------");
     println!("  atelier issue show {}", object.id);
     Ok(())
-}
-
-pub fn close_lifecycle(
-    state_dir: &Path,
-    db_path: &Path,
-    issue_ref: &str,
-    reason: &str,
-    to_status: Option<&str>,
-) -> Result<()> {
-    let db = Database::open(db_path)?;
-    crate::commands::workflow::close_issue(&db, state_dir, db_path, issue_ref, to_status, reason)
 }
 
 pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<String> {

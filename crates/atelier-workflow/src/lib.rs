@@ -67,6 +67,9 @@ workflows:
           - blockers.none_open
           - lint.none_blocking
           - tracker.current
+        actions:
+          - tracker.commit
+          - branch_integrate
 
   epic_delivery:
     applies_to: [epic]
@@ -104,6 +107,9 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch_integrate
 
   validation_delivery:
     applies_to: [validation]
@@ -141,6 +147,9 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch_integrate
 
   spike_review:
     applies_to: [spike]
@@ -192,7 +201,10 @@ const BUILTIN_VALIDATORS: &[&str] = &[
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
     "branch_prepare",
-    "branch_commit",
+    "tracker.commit",
+    "branch.push",
+    "review.merge",
+    "base.sync",
     "branch_integrate",
     "review.open",
 ];
@@ -2430,8 +2442,8 @@ mod tests {
     #[test]
     fn rejects_review_action_on_non_review_transition() {
         let policy = valid_policy().replace(
-            "      close:\n        from: [in_progress, validation]",
-            "      close:\n        from: [in_progress, validation]\n        actions:\n          - review.open: { role: worker }",
+            "        validators:\n          - review.complete",
+            "        actions:\n          - review.open: { role: worker }\n        validators:\n          - review.complete",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
