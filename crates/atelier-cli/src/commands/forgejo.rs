@@ -30,12 +30,7 @@ pub fn roles_check(repo_root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn roles_provision(repo_root: &Path, write_config: bool) -> Result<()> {
-    if write_config {
-        bail!(
-            "forgejo_role_authors_config_removed: role authors are workflow action parameters; remove --write-config and update .atelier/workflow.yaml instead"
-        );
-    }
+pub fn roles_provision(repo_root: &Path) -> Result<()> {
     let forgejo = load_forgejo_with_workflow_role_authors(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
