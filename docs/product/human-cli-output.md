@@ -290,12 +290,12 @@ The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
 stabilization mission: `status`, `mission status`, `mission show`,
 `mission list`, `issue show`, `issue list --ready`, `evidence record`,
 `evidence show/list`, dependency and link list output, `graph impact`,
-`worktree status`, `lint`, and admin repair commands when local state is
+`lint`, and admin repair commands when local state is
 degraded.
 
 Classification:
 
-- Healthy orientation, mission, issue, evidence, relationship, worktree, and
+- Healthy orientation, mission, issue, evidence, relationship, checkout, and
   health-check views have concise default answers and explicit drill-down
   commands in existing focused tests.
 - Degraded orientation and mission status output keeps ordinary reads usable

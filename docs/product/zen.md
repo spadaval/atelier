@@ -1,85 +1,45 @@
 # Zen Of Atelier
 
-Atelier exists to make long-running semi-autonomous work trustworthy.
+Atelier facilitates long-running mostly-autonomous multi-agent workflows to
+reliably complete ambitious work.
 
 ## Principles
 
-Reliable outcomes over plausible output: agent work is cheap to generate, but
-trust comes from structure, proof, and durable context.
+The repository is the source of truth.
+Work, policy, and history must be reviewable from committed state.
+No hidden state, no magic.
 
-Purpose over task lists: missions give work a durable reason to exist, while
-issues define accountable steps toward that reason.
+Proof must stand on its own.
+Someone who did not do the work should be able to inspect the record,
+check the claim, and continue.
 
-Distinct concepts over generic containers: purpose, checkpoints, work,
-workflow, and proof should not collapse into one generic issue tree.
+Value and outcomes first.
+Missions exist for a reason.
+Issues are accountable steps toward that reason.
 
-Continuity over private context: a future operator should understand the work
-from the repository, not from memory, chat history, or whoever happened to be
-present.
+Model the domain, don't flatten it.
+Missions, epics, issues, and evidence are different shapes because they
+answer different questions.
 
-The repository is the shared memory: durable work state should be reviewable,
-mergeable, and recoverable from the repo.
+Coordination must be visible.
+Blockers, ownership, and agreements live in records and policy, not in
+someone's head or chat history.
 
-Explicit policy over hidden machinery: the repo should own the workflow. 
-Atelier executes. No magic, no surprises. 
+Agents make mistakes. The system must detect errors and guide recovery.
+Workflow catches what agents forget.
+Status surfaces make uncertainty visible and explain how to move forward.
 
-Information hierarchy matters: default views should emphasize what is current,
-mission-relevant, and actionable without making the full record the default
-view.
+Workflow enforces the minimum. Agents handle the rest.
+Add checks only where agents skip evidence or close too early.
+Give agents freedom for everything else.
 
-Less is more, and curation is a virtue: every feature has a cost and must
-justify itself through clearer decisions, safer coordination, or more
-trustworthy work.
+Every feature must justify its cost.
+Less is more. Curation is a virtue.
 
-Guidance at friction points: when work is blocked, invalid, stale, or missing
-proof, Atelier should explain what is missing, why it matters, and how to move
-forward.
+Resilience over perfection.
+Keep useful paths open.
+Make uncertainty visible.
+Treat blocked or failed outcomes as information, not dirt to sweep away.
 
-Coordination must be visible: agreements about ownership, blockers, state, and
-proof can live in records, docs, or workflow policy, but not only in someone's
-head, branch name, or chat transcript.
-
-Bounded roles over blended responsibility: planning, coordination,
-implementation, review, validation, documentation, audit, and readiness ask
-different questions and should not collapse into one undifferentiated task.
-
-Delegation is stewardship: a coordinator remains responsible for scope, handoff
-quality, integration, and recovery even when other agents perform the work.
-
-Proof must stand on its own: autonomous work is trustworthy only when someone
-who did not do the work can inspect the record, check the claim, and continue.
-
-Verification methods are not interchangeable: tests, review, validation, and
-terminal checks can support one another, but each answers a different question.
-
-Resilience over perfection: records may be incomplete, stale, or wrong; Atelier
-should keep useful paths open while making uncertainty visible.
-
-Product concepts over implementation mechanics: operators should reason about
-work, risk, and decisions; implementation details should appear only when they
-change what the operator can do.
-
-Human judgment for irreversible choices: agents can move quickly when
-consequences are reversible; irreversible choices need explicit human ownership.
-
-Guidance and gates have different jobs: Agent Factory helps agents choose,
-coordinate, and adapt; Atelier workflows stop transitions when required proof,
-blocker resolution, or human judgment is missing.
-
-Process should target agent failure modes: add enforcement where agents are
-likely to skip evidence, miss blockers, or close too early; keep routine work
-light.
-
-Failures should become durable signals: a blocked, failed, deferred, or
-not-applicable result is useful when it is named, classified, and carried
-forward with an owner or next step.
-
-Parent completion should synthesize accountable child proof: missions and epics
-protect coordination, coverage, and review boundaries without forcing a second
-copy of proof that already belongs on closed child work.
-
-History should record work: large work should leave enough record to show
-what changed, why it changed, and what remains uncertain.
-
-Compatibility should be temporary: legacy aliases and patterns add pain and
-confusion once the replacement is clearer.
+Delete the old path once the new one is clear.
+Do not preserve obsolete commands, aliases, or fallback behavior.

@@ -587,7 +587,7 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
                 crate::commands::workflow::branch_lifecycle_state_line(&context)
             );
             println!("Options:  atelier issue transition {canonical_id} --options");
-            println!("Worktree: atelier worktree status");
+            println!("Checkout: atelier status");
         }
         Err(error) => {
             println!("State:    unavailable - {error}");

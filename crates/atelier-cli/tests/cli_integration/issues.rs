@@ -1974,9 +1974,12 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Canonical handoff"));
     assert!(stdout.contains("Close Reason"));
     assert!(stdout.contains("Canonical close"));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["history", "--issue", &issue_id]);
+    assert!(success, "history failed: {stderr}");
+    assert!(stdout.contains("Canonical handoff"));
 }
 
 #[test]
@@ -2272,7 +2275,8 @@ fn test_issue_list_ready_still_shows_ready_children_when_another_issue_is_active
     run_atelier(dir.path(), &["issue", "create", "Active item"]);
     let active_id = issue_ref(dir.path(), 4);
 
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &active_id, "start"]);
     assert!(success, "start active issue failed: {stderr}");
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);

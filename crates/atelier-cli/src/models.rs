@@ -1,6 +1,6 @@
 pub use atelier_core::{
     Comment, EvidenceOutputSummary, EvidenceRecordData, EvidenceStreamSummary, EvidenceTarget,
-    Issue, IssueId, RecordLink, Relation, Session, WorkAssociation,
+    Issue, IssueId, RecordLink, Relation, WorkAssociation,
 };
 
 #[cfg(test)]
@@ -145,48 +145,6 @@ mod tests {
         assert_eq!(deserialized.content, "");
     }
 
-    // ==================== Session Tests ====================
-
-    #[test]
-    fn test_session_serialization() {
-        let session = Session {
-            id: 1,
-            started_at: Utc::now(),
-            ended_at: None,
-            active_issue_id: Some("atelier-0005".to_string()),
-            handoff_notes: Some("Notes here".to_string()),
-            last_action: None,
-            agent_id: None,
-        };
-
-        let json = serde_json::to_string(&session).unwrap();
-        let deserialized: Session = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(session.id, deserialized.id);
-        assert_eq!(session.active_issue_id, deserialized.active_issue_id);
-        assert_eq!(session.handoff_notes, deserialized.handoff_notes);
-    }
-
-    #[test]
-    fn test_session_ended() {
-        let now = Utc::now();
-        let session = Session {
-            id: 1,
-            started_at: now,
-            ended_at: Some(now),
-            active_issue_id: None,
-            handoff_notes: Some("Final notes".to_string()),
-            last_action: None,
-            agent_id: None,
-        };
-
-        let json = serde_json::to_string(&session).unwrap();
-        let deserialized: Session = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(deserialized.ended_at, Some(now));
-        assert_eq!(deserialized.handoff_notes, Some("Final notes".to_string()));
-    }
-
     // ==================== Property-Based Tests ====================
 
     proptest! {
@@ -240,33 +198,6 @@ mod tests {
             prop_assert_eq!(deserialized.id, id);
             prop_assert_eq!(deserialized.issue_id, format!("atelier-{issue_id:04}"));
             prop_assert_eq!(deserialized.content, content);
-        }
-
-        #[test]
-        fn prop_session_json_roundtrip(
-            id in 1i64..10000,
-            active_issue_id in prop::option::of(1i64..10000),
-            handoff_notes in prop::option::of("[a-zA-Z0-9 ]{0,200}")
-        ) {
-            let session = Session {
-                id,
-                started_at: Utc::now(),
-                ended_at: None,
-                active_issue_id: active_issue_id.map(|id| format!("atelier-{id:04}")),
-                handoff_notes: handoff_notes.clone(),
-                last_action: None,
-                agent_id: None,
-            };
-
-            let json = serde_json::to_string(&session).unwrap();
-            let deserialized: Session = serde_json::from_str(&json).unwrap();
-
-            prop_assert_eq!(deserialized.id, id);
-            prop_assert_eq!(
-                deserialized.active_issue_id,
-                active_issue_id.map(|id| format!("atelier-{id:04}"))
-            );
-            prop_assert_eq!(deserialized.handoff_notes, handoff_notes);
         }
 
         #[test]

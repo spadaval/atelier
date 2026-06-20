@@ -23,7 +23,6 @@ use std::time::Instant;
 Orientation:
   man           Show role-specific operating guidance
   status        Show checkout, mission, work, and tracker signposts
-  start         Start tracked work on an issue
 
 Issues:
   issue         Create, list, show, update, close, and manage blockers
@@ -36,13 +35,11 @@ Missions and planning:
 
 Records:
   evidence      Capture validation evidence
-  session       Inspect derived issue attempts
   review        Manage configured review artifacts
   forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
 Advanced work:
-  worktree      Create, inspect, merge, and remove mission or issue worktrees
   branch        Inspect and repair epic review branches
 
 Maintenance:
@@ -72,12 +69,11 @@ Common commands:
   atelier mission close <id> --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
-  atelier session list --active
   atelier forgejo roles check
   atelier history --mission <id>
   atelier history --issue <id>
-  atelier start <issue-id>
   atelier issue transition <issue-id> --options
+  atelier issue transition <issue-id> start
   atelier issue transition <issue-id> close --reason \"...\"
   atelier prune
   atelier prune --apply
@@ -126,17 +122,6 @@ enum Commands {
 
     /// Show checkout, mission, work, and tracker signposts
     Status,
-
-    /// Start tracked work on an issue
-    Start {
-        id: String,
-        /// Do not emit legacy session output for this start
-        #[arg(long, hide = true)]
-        no_session: bool,
-        /// Legacy option retained only to reject stale scripts with a direct error
-        #[arg(long, hide = true)]
-        reuse_session: Option<String>,
-    },
 
     /// Issue lifecycle commands (create, show, list, transition, ...)
     Issue {
@@ -203,12 +188,6 @@ enum Commands {
         action: EvidenceCommands,
     },
 
-    /// Inspect derived issue-scoped worker, reviewer, and validator attempts
-    Session {
-        #[command(subcommand)]
-        action: SessionCommands,
-    },
-
     /// Configured review artifacts
     Review {
         #[command(subcommand)]
@@ -254,12 +233,6 @@ enum Commands {
     Workflow {
         #[command(subcommand)]
         action: WorkflowCommands,
-    },
-
-    /// Git worktree helpers for tracked work
-    Worktree {
-        #[command(subcommand)]
-        action: WorktreeCommands,
     },
 
     /// Git branch helpers for epic review branches
@@ -604,25 +577,13 @@ another target.")]
 }
 
 #[derive(Subcommand)]
-enum SessionCommands {
-    /// Show a derived issue attempt
-    Show { id: String },
-    /// List derived issue attempts
-    List {
-        /// Show only active attempts
-        #[arg(long)]
-        active: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum ReviewCommands {
     /// Open or confirm the active review artifact for an issue owner
     Open {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
-        role: String,
+        role: Option<String>,
         #[arg(long)]
         title: String,
         #[arg(long, default_value = "")]
@@ -653,7 +614,7 @@ enum ReviewCommands {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
-        role: String,
+        role: Option<String>,
     },
     /// List live review comments
     Comments {
@@ -667,7 +628,7 @@ enum ReviewCommands {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
-        role: String,
+        role: Option<String>,
         /// Record this room comment as a finding instead of a plain timeline comment
         #[arg(long)]
         finding: bool,
@@ -681,7 +642,7 @@ enum ReviewCommands {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
-        role: String,
+        role: Option<String>,
         #[arg(long, default_value = "")]
         body: String,
     },
@@ -690,7 +651,7 @@ enum ReviewCommands {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
-        role: String,
+        role: Option<String>,
         #[arg(long, default_value = "")]
         body: String,
     },
@@ -727,34 +688,6 @@ enum ForgejoRolesCommands {
 enum WorkflowCommands {
     /// Run raw workflow-policy diagnostics; normal operator checks use lint and status surfaces
     Check,
-}
-
-#[derive(Subcommand)]
-enum WorktreeCommands {
-    /// Create or locate a worktree for a mission
-    ForMission {
-        id: String,
-        #[arg(long)]
-        path: Option<String>,
-    },
-    /// Create or locate a worktree for an issue
-    For {
-        id: String,
-        #[arg(long)]
-        path: Option<String>,
-    },
-    /// Show scan-friendly worktree status
-    Status,
-    /// Merge the associated work branch into the current branch
-    Merge { id: String },
-    /// Remove the associated worktree
-    Remove {
-        id: String,
-        #[arg(long)]
-        force: bool,
-    },
-    /// Clear a stale local worktree association after interrupted setup/removal
-    Repair { id: String },
 }
 
 #[derive(Subcommand)]
@@ -1128,25 +1061,6 @@ fn run() -> Result<()> {
             commands::status::run(storage.db(), &storage.state_dir(), quiet)
         }
 
-        Commands::Start {
-            id,
-            no_session,
-            reuse_session,
-        } => {
-            let db = projection_query_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            let (state_dir, db_path) = state_and_db_paths()?;
-            commands::work::start_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                commands::work::StartSessionOptions {
-                    no_session,
-                    reuse_session: reuse_session.as_deref(),
-                },
-            )
-        }
-
         Commands::Issue { action } => dispatch_issue(action, quiet),
 
         Commands::Search { query } => {
@@ -1450,17 +1364,6 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Session { action } => match action {
-            SessionCommands::Show { id } => {
-                let storage = use_cases::mission_query_storage()?;
-                commands::session::show(&storage.state_dir(), &id)
-            }
-            SessionCommands::List { active } => {
-                let storage = use_cases::mission_query_storage()?;
-                commands::session::list(&storage.state_dir(), active)
-            }
-        },
-
         Commands::Review { action } => {
             let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
             match action {
@@ -1477,7 +1380,7 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     &storage.db_path(),
                     issue.as_deref(),
-                    &role,
+                    role.as_deref(),
                     &title,
                     &body,
                     &source_branch,
@@ -1512,7 +1415,7 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     &storage.db_path(),
                     issue.as_deref(),
-                    &role,
+                    role.as_deref(),
                 ),
                 ReviewCommands::Comments { issue, unresolved } => commands::pr::comments(
                     storage.db(),
@@ -1533,7 +1436,7 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     &storage.db_path(),
                     issue.as_deref(),
-                    &role,
+                    role.as_deref(),
                     &body,
                     finding,
                     finding.then_some(severity.as_str()),
@@ -1544,7 +1447,7 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     &storage.db_path(),
                     issue.as_deref(),
-                    &role,
+                    role.as_deref(),
                     "approve",
                     &body,
                 ),
@@ -1554,7 +1457,7 @@ fn run() -> Result<()> {
                     &storage.state_dir(),
                     &storage.db_path(),
                     issue.as_deref(),
-                    &role,
+                    role.as_deref(),
                     "request-changes",
                     &body,
                 ),
@@ -1627,32 +1530,6 @@ fn run() -> Result<()> {
                 commands::workflow::check(&db)
             }
         },
-
-        Commands::Worktree { action } => {
-            let db = existing_projection_db()?;
-            match action {
-                WorktreeCommands::ForMission { id, path } => {
-                    commands::work::worktree_for_mission(&db, &id, path.as_deref())
-                }
-                WorktreeCommands::For { id, path } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::worktree_for(&db, &id, path.as_deref())
-                }
-                WorktreeCommands::Status => commands::work::worktree_status(&db),
-                WorktreeCommands::Merge { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::worktree_merge(&db, &id)
-                }
-                WorktreeCommands::Remove { id, force } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::worktree_remove(&db, &id, force)
-                }
-                WorktreeCommands::Repair { id } => {
-                    let id = resolve_issue_arg(&db, &id)?;
-                    commands::work::worktree_repair(&db, &id)
-                }
-            }
-        }
 
         Commands::Branch { action } => {
             let db = existing_projection_db()?;
@@ -1744,7 +1621,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Init { .. } => "init",
         Commands::Man { .. } => "man",
         Commands::Status => "status",
-        Commands::Start { .. } => "start",
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
@@ -1793,10 +1669,6 @@ fn command_identity(command: &Commands) -> &'static str {
             EvidenceCommands::Attach { .. } => "evidence attach",
             EvidenceCommands::List { .. } => "evidence list",
         },
-        Commands::Session { action } => match action {
-            SessionCommands::Show { .. } => "session show",
-            SessionCommands::List { .. } => "session list",
-        },
         Commands::Review { action } => match action {
             ReviewCommands::Open { .. } => "review open",
             ReviewCommands::Link { .. } => "review link",
@@ -1818,14 +1690,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::History { .. } => "history",
         Commands::Workflow { action } => match action {
             WorkflowCommands::Check => "workflow check",
-        },
-        Commands::Worktree { action } => match action {
-            WorktreeCommands::ForMission { .. } => "worktree for-mission",
-            WorktreeCommands::For { .. } => "worktree for",
-            WorktreeCommands::Status => "worktree status",
-            WorktreeCommands::Merge { .. } => "worktree merge",
-            WorktreeCommands::Remove { .. } => "worktree remove",
-            WorktreeCommands::Repair { .. } => "worktree repair",
         },
         Commands::Branch { action } => match action {
             BranchCommands::ForEpic { .. } => "branch for-epic",

@@ -8,6 +8,11 @@ renames the public command surface to `atelier review`, introduces native room
 mode, and migrates issue links from `pull_request` to the structured `review`
 field.
 
+Session and attempt modeling in this ADR is superseded by
+[ADR 0014](0014-status-role-attribution-replaces-sessions.md). Current work and
+review role attribution now come from issue status and configured status roles,
+not derived session views.
+
 ## Context
 
 Atelier is using derived session views, provider-backed pull request

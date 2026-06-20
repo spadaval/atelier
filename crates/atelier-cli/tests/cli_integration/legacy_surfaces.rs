@@ -295,7 +295,7 @@ fn test_timer_start() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
-    let (success, stdout, _) = run_atelier(dir.path(), &["start", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "transition", "1", "start"]);
 
     assert!(success);
     assert!(stdout.contains("Started") || stdout.contains("timer") || stdout.contains("#1"));
@@ -308,7 +308,7 @@ fn test_timer_stop() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
-    run_atelier(dir.path(), &["start", "1"]);
+    run_atelier(dir.path(), &["issue", "transition", "1", "start"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["stop"]);
 
     assert!(success);
@@ -322,7 +322,7 @@ fn test_timer_status() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue to time"]);
-    run_atelier(dir.path(), &["start", "1"]);
+    run_atelier(dir.path(), &["issue", "transition", "1", "start"]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["timer"]);
 
@@ -1339,7 +1339,6 @@ fn test_full_issue_lifecycle() {
     assert!(stdout.contains("Lifecycle test"));
     assert!(stdout.contains("critical"));
     assert!(stdout.contains("feature"));
-    assert!(stdout.contains("Working on this"));
     assert!(stdout.contains("done"));
 }
 

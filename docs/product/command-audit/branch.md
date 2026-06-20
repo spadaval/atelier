@@ -10,9 +10,10 @@ start or close lifecycle commands cannot complete automatically?"
 - Name: Correct.
 - Documentation: Correct in source help. It belongs in advanced recovery
   guidance, not routine worker loops.
-- Design: Advanced. Routine worker and manager loops should use `atelier start`
-  for branch preparation and close lifecycle commands for integration; branch
-  commands remain explicit recovery and diagnostic surfaces.
+- Design: Advanced. Routine worker and manager loops should use
+  `atelier issue transition <id> start` for branch preparation and close
+  lifecycle commands for integration; branch commands remain explicit recovery
+  and diagnostic surfaces.
 - Output hierarchy: Epic ID, branch name, mission workspace, review/merge state,
   next status or merge command.
 

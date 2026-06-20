@@ -13,7 +13,7 @@ use atelier_sqlite::{Database, RecordSummary};
 pub const DEFAULT_LIMIT: usize = 20;
 
 const SOURCE_BOUNDARY: &str =
-    "canonical .atelier issue activity, records, evidence, derived session views, and record links; local runtime diagnostics excluded";
+    "canonical .atelier issue activity, records, evidence, status roles, review artifacts, and record links; local runtime diagnostics excluded";
 
 #[derive(Debug, Clone)]
 pub struct HistoryOptions {

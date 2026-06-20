@@ -10,9 +10,9 @@ separate issue hierarchy.
   health, active epics, risks, validation expectations, and evidence. It is also
   the default shared background workspace boundary: one mission normally owns
   one shared worktree or equivalent checkout.
-- Session: a derived issue-scoped worker/reviewer/validator attempt rebuilt
-  from canonical issue activity. Session views are inspection-only and help
-  explain handoff context without replacing issue workflow state.
+- Status role: optional workflow policy on an active status that names the role
+  currently responsible for that work state. Status roles are displayed by
+  status/man surfaces and used as the default role for review attribution.
 - Checkpoint semantics: deferred v1 product language for intermediate target
   states. Checkpoint prose may live in missions, epics, issues, or evidence, but
   there is no active first-class milestone record table.
@@ -38,9 +38,9 @@ separate issue hierarchy.
   review, validation, and completion evidence rather than from direct proof pasted
   onto the parent objective.
 
-Session views remain derived from issue activity; they are not a separate work
-queue, and they do not become the source of truth for current work or
-completion.
+Sessions and attempts are not separate work queues or workflow records. Current
+work, role ownership, and completion remain derived from canonical issue status,
+configured status roles, workflow transitions, and evidence.
 
 ## Evidence Records
 
@@ -217,15 +217,16 @@ completion state harder to scan.
 
 The default operating model separates three concerns:
 
-- Mission: one shared worktree or background checkout for coordinated work.
+- Mission: one ordinary checkout or background checkout for coordinated work.
 - Epic: one reviewable branch or PR-equivalent changeset under that mission.
 - Issue: one implementation, documentation, review, validation, migration, or
   artifact-update slice with local proof.
 
-Per-issue worktrees and per-issue branches are exceptional isolation tools. Use
-them for dirty or high-risk experiments, cross-epic conflicts, destructive
-migration trials, or an explicitly assigned validation/review context. They are
-not the default for every mutating subagent or every ordinary child issue.
+Per-issue branches are exceptional isolation tools. Use separate Git checkouts
+outside Atelier for dirty or high-risk experiments, cross-epic conflicts,
+destructive migration trials, or an explicitly assigned validation/review
+context. Atelier-managed workspace isolation is deferred pending redesign and
+is not the default for every mutating subagent or every ordinary child issue.
 
 Independent review moves to the epic by default. Ordinary implementation issues
 close with their own proof, while epic completion maps child issue proof to the
@@ -427,31 +428,21 @@ to the next canonical workflow status instead of clearing hidden runtime state.
 The former root abandon and repair cleanup flows have therefore been removed
 rather than kept as target-state workflow guidance.
 
-Different Git worktrees may legitimately show different current-work sets
-because each worktree carries its own tracked `.atelier/` record copy on its
+Different Git checkouts may legitimately show different current-work sets
+because each checkout carries its own tracked `.atelier/` record copy on its
 branch. Reconciliation happens through normal Git review and merge of the
 canonical Markdown records, not by sharing runtime work-association rows across
 checkouts. When more than one issue is `in_progress` in the same checkout,
 `atelier status` and `atelier mission status` should render that set directly
-rather than nominate one hidden active issue. Separate issue worktrees remain
-exceptional containment for conflicting, dirty, high-risk, or explicitly
-isolated slices.
+rather than nominate one hidden active issue.
 
-`atelier worktree for-mission <mission-id>` creates or locates a mission
-worktree using the configured path policy, rebuilds local SQLite state from
-tracked `.atelier/` records, and reports the mission workspace association.
-Explicit branch helpers such as `atelier branch for-epic <epic-id>` create or
-locate reviewable branches for diagnostics, advanced repair, or manual
-recovery. Routine worker guidance should come from `atelier status`, issue
-detail, transition options, and any recovery text they print. Workflow-defined
-general hooks are deferred in v1; transition actions are the narrow configured
+The visible `atelier worktree` surface is removed pending redesign. Explicit
+branch helpers such as `atelier branch for-epic <epic-id>` create or locate
+reviewable branches for diagnostics, advanced repair, or manual recovery.
+Routine worker guidance should come from `atelier status`, issue detail,
+transition options, and any recovery text they print. Workflow-defined general
+hooks are deferred in v1; transition actions are the narrow configured
 integration points described by workflow policy.
-`atelier worktree status` reports path, branch, dirty paths, ahead/behind when
-an upstream exists, unpushed commit count, associated mission/epic/issue work,
-and operator-facing health when available. `atelier worktree merge <id>`,
-`atelier branch merge <id>`, and `atelier worktree remove <id>` are thin Git
-wrappers for merging an associated branch and cleaning up the associated mission
-worktree after branch review and cleanup are complete.
 
 ## Deferred Checkpoints And Validators
 

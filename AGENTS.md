@@ -36,6 +36,7 @@
 - Agent Factory skill source: `.agents/skills/agent-factory/SKILL.md`
 - Product intent: `SPEC.md`
 - Domain language: `CONTEXT.md`
+- Product principles: `docs/product/zen.md`
 - Documentation map: `docs/index.md`
 - Product behavior: `docs/product/index.md`
 - Architecture: `docs/architecture/index.md`

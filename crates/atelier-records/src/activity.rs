@@ -1,7 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, SecondsFormat, Timelike, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -20,118 +19,19 @@ pub struct IssueActivity {
     pub actor: String,
     pub created_at: DateTime<Utc>,
     pub summary: String,
-    pub attempt: Option<ActivityAttemptMetadata>,
     pub pr_attribution: Option<ActivityPrAttribution>,
     pub body: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ActivityAttemptMetadata {
-    pub role: ActivityAttemptRole,
-    pub serial: u32,
-    pub lifecycle: ActivityAttemptLifecycle,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subskill: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ActivityAttemptRole {
-    Worker,
-    Reviewer,
-    Validator,
-}
-
-impl ActivityAttemptRole {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Worker => "worker",
-            Self::Reviewer => "reviewer",
-            Self::Validator => "validator",
-        }
-    }
-}
-
-impl fmt::Display for ActivityAttemptRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ActivityAttemptLifecycle {
-    Started,
-    Updated,
-    Finished,
-    Abandoned,
-}
-
-impl ActivityAttemptLifecycle {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Started => "started",
-            Self::Updated => "updated",
-            Self::Finished => "finished",
-            Self::Abandoned => "abandoned",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ActivityPrAttribution {
     pub action: String,
+    pub role: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_author: Option<String>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct DerivedIssueAttempt {
-    pub id: String,
-    pub issue_id: String,
-    pub role: ActivityAttemptRole,
-    pub serial: u32,
-    pub state: DerivedIssueAttemptState,
-    pub started_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-    pub actor: String,
-    pub agent: Option<String>,
-    pub subskill: Option<String>,
-    pub activity_ids: Vec<String>,
-    pub activities: Vec<DerivedIssueAttemptActivity>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct DerivedIssueAttemptActivity {
-    pub id: String,
-    pub event_type: ActivityEventType,
-    pub lifecycle: ActivityAttemptLifecycle,
-    pub created_at: DateTime<Utc>,
-    pub summary: String,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum DerivedIssueAttemptState {
-    Active,
-    Finished,
-    Abandoned,
-}
-
-impl DerivedIssueAttemptState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Active => "active",
-            Self::Finished => "finished",
-            Self::Abandoned => "abandoned",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -212,8 +112,6 @@ struct ActivityFrontMatter {
     actor: String,
     created_at: DateTime<Utc>,
     summary: String,
-    #[serde(default)]
-    attempt: Option<ActivityAttemptMetadata>,
     #[serde(default)]
     pr_attribution: Option<ActivityPrAttribution>,
 }
@@ -368,7 +266,7 @@ pub fn create_issue_activity(
     body: &str,
 ) -> Result<IssueActivity> {
     create_issue_activity_with_metadata(
-        state_dir, subject_id, event_type, actor, created_at, summary, None, None, body,
+        state_dir, subject_id, event_type, actor, created_at, summary, None, body,
     )
 }
 
@@ -380,7 +278,6 @@ pub fn create_issue_activity_with_metadata(
     actor: &str,
     created_at: DateTime<Utc>,
     summary: &str,
-    attempt: Option<ActivityAttemptMetadata>,
     pr_attribution: Option<ActivityPrAttribution>,
     body: &str,
 ) -> Result<IssueActivity> {
@@ -392,7 +289,6 @@ pub fn create_issue_activity_with_metadata(
         actor,
         created_at,
         summary,
-        attempt,
         pr_attribution,
         body,
     )
@@ -408,7 +304,7 @@ pub fn create_mission_activity(
     body: &str,
 ) -> Result<IssueActivity> {
     create_record_activity_with_metadata(
-        state_dir, "mission", subject_id, event_type, actor, created_at, summary, None, None, body,
+        state_dir, "mission", subject_id, event_type, actor, created_at, summary, None, body,
     )
 }
 
@@ -431,7 +327,6 @@ pub fn create_record_activity(
         created_at,
         summary,
         None,
-        None,
         body,
     )
 }
@@ -445,7 +340,6 @@ pub fn create_record_activity_with_metadata(
     actor: &str,
     created_at: DateTime<Utc>,
     summary: &str,
-    attempt: Option<ActivityAttemptMetadata>,
     pr_attribution: Option<ActivityPrAttribution>,
     body: &str,
 ) -> Result<IssueActivity> {
@@ -458,86 +352,11 @@ pub fn create_record_activity_with_metadata(
         actor: actor.to_string(),
         created_at,
         summary: summary.to_string(),
-        attempt,
         pr_attribution,
         body: normalize_body(body),
     };
     write_record_activity(state_dir, &activity)?;
     Ok(activity)
-}
-
-pub fn list_derived_issue_attempts(state_dir: &Path) -> Result<Vec<DerivedIssueAttempt>> {
-    derive_issue_attempts(list_all_issue_activities(state_dir)?)
-}
-
-pub fn derive_issue_attempts(
-    activities: impl IntoIterator<Item = IssueActivity>,
-) -> Result<Vec<DerivedIssueAttempt>> {
-    let mut activities = activities.into_iter().collect::<Vec<_>>();
-    activities.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
-    let mut attempts = BTreeMap::<(String, ActivityAttemptRole, u32), DerivedIssueAttempt>::new();
-    for activity in activities {
-        let Some(attempt) = activity.attempt.clone() else {
-            continue;
-        };
-        if attempt.role == ActivityAttemptRole::Validator {
-            continue;
-        }
-        let key = (activity.subject_id.clone(), attempt.role, attempt.serial);
-        let id = derived_attempt_id(&activity.subject_id, attempt.role, attempt.serial);
-        let entry = attempts.entry(key).or_insert_with(|| DerivedIssueAttempt {
-            id,
-            issue_id: activity.subject_id.clone(),
-            role: attempt.role,
-            serial: attempt.serial,
-            state: DerivedIssueAttemptState::Active,
-            started_at: activity.created_at,
-            updated_at: activity.created_at,
-            ended_at: None,
-            actor: activity.actor.clone(),
-            agent: attempt.agent.clone(),
-            subskill: attempt.subskill.clone(),
-            activity_ids: Vec::new(),
-            activities: Vec::new(),
-        });
-        if activity.created_at < entry.started_at {
-            entry.started_at = activity.created_at;
-        }
-        if activity.created_at >= entry.updated_at {
-            entry.updated_at = activity.created_at;
-            if entry.agent.is_none() {
-                entry.agent = attempt.agent.clone();
-            }
-            if entry.subskill.is_none() {
-                entry.subskill = attempt.subskill.clone();
-            }
-        }
-        let lifecycle = attempt.lifecycle;
-        match lifecycle {
-            ActivityAttemptLifecycle::Started | ActivityAttemptLifecycle::Updated => {}
-            ActivityAttemptLifecycle::Finished => {
-                entry.state = DerivedIssueAttemptState::Finished;
-                entry.ended_at = Some(activity.created_at);
-            }
-            ActivityAttemptLifecycle::Abandoned => {
-                entry.state = DerivedIssueAttemptState::Abandoned;
-                entry.ended_at = Some(activity.created_at);
-            }
-        }
-        entry.activity_ids.push(activity.id.clone());
-        entry.activities.push(DerivedIssueAttemptActivity {
-            id: activity.id,
-            event_type: activity.event_type,
-            lifecycle,
-            created_at: activity.created_at,
-            summary: activity.summary,
-        });
-    }
-    Ok(attempts.into_values().collect())
-}
-
-pub fn derived_attempt_id(issue_id: &str, role: ActivityAttemptRole, serial: u32) -> String {
-    format!("{issue_id}/{role}/{serial}")
 }
 
 impl IssueActivity {
@@ -594,7 +413,6 @@ impl IssueActivity {
             actor: front.actor,
             created_at: front.created_at,
             summary: front.summary,
-            attempt: front.attempt,
             pr_attribution: front.pr_attribution,
             body: body.to_string(),
         })
@@ -629,7 +447,6 @@ impl IssueActivity {
             &self.created_at.to_rfc3339_opts(SecondsFormat::Micros, true),
         )?;
         write_yaml_scalar(&mut output, "summary", &self.summary)?;
-        write_yaml_struct_if_some(&mut output, "attempt", self.attempt.as_ref())?;
         write_yaml_struct_if_some(&mut output, "pr_attribution", self.pr_attribution.as_ref())?;
         output.push_str("---\n\n");
         output.push_str(&normalize_body(&self.body));
@@ -735,7 +552,6 @@ mod tests {
             actor: "agent@example.com".to_string(),
             created_at: at(),
             summary: "Implemented activity sidecars".to_string(),
-            attempt: None,
             pr_attribution: None,
             body: "Line one\n\nLine two".to_string(),
         }
@@ -899,30 +715,22 @@ mod tests {
     }
 
     #[test]
-    fn attempt_and_pr_metadata_round_trip() {
+    fn pr_metadata_round_trip() {
         let mut activity = activity();
         activity.event_type = ActivityEventType::WorkStarted;
-        activity.attempt = Some(ActivityAttemptMetadata {
-            role: ActivityAttemptRole::Worker,
-            serial: 1,
-            lifecycle: ActivityAttemptLifecycle::Started,
-            agent: Some("codex".to_string()),
-            subskill: Some("implement".to_string()),
-        });
         activity.pr_attribution = Some(ActivityPrAttribution {
             action: "comment".to_string(),
+            role: "reviewer".to_string(),
             pull_request: Some("forgejo/example#42".to_string()),
             remote_author: Some("reviewer-user".to_string()),
         });
 
         let rendered = activity.to_markdown().unwrap();
 
-        assert!(rendered.contains("attempt:\n"));
-        assert!(rendered.contains("  role: worker"));
-        assert!(rendered.contains("  serial: 1"));
-        assert!(rendered.contains("  lifecycle: started"));
+        assert!(!rendered.contains("attempt:\n"));
         assert!(rendered.contains("pr_attribution:\n"));
         assert!(rendered.contains("  action: comment"));
+        assert!(rendered.contains("  role: reviewer"));
 
         let parsed = IssueActivity::from_markdown(
             &rendered,
@@ -930,100 +738,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(parsed, activity);
-    }
-
-    #[test]
-    fn issue_attempts_are_derived_by_issue_role_and_serial() {
-        let first_started = IssueActivity {
-            id: "20260610T181920123456Z".to_string(),
-            subject_kind: "issue".to_string(),
-            subject_id: "atelier-one".to_string(),
-            event_type: ActivityEventType::WorkStarted,
-            actor: "worker-a".to_string(),
-            created_at: at(),
-            summary: "Started work".to_string(),
-            attempt: Some(ActivityAttemptMetadata {
-                role: ActivityAttemptRole::Worker,
-                serial: 1,
-                lifecycle: ActivityAttemptLifecycle::Started,
-                agent: Some("codex".to_string()),
-                subskill: Some("implement".to_string()),
-            }),
-            pr_attribution: None,
-            body: String::new(),
-        };
-        let first_finished = IssueActivity {
-            id: "20260610T181921123456Z".to_string(),
-            created_at: at() + chrono::Duration::seconds(1),
-            summary: "Finished work".to_string(),
-            attempt: Some(ActivityAttemptMetadata {
-                lifecycle: ActivityAttemptLifecycle::Finished,
-                ..first_started.attempt.clone().unwrap()
-            }),
-            ..first_started.clone()
-        };
-        let reviewer_started = IssueActivity {
-            id: "20260610T181922123456Z".to_string(),
-            created_at: at() + chrono::Duration::seconds(2),
-            actor: "reviewer-a".to_string(),
-            summary: "Started review".to_string(),
-            attempt: Some(ActivityAttemptMetadata {
-                role: ActivityAttemptRole::Reviewer,
-                serial: 1,
-                lifecycle: ActivityAttemptLifecycle::Started,
-                agent: None,
-                subskill: Some("review".to_string()),
-            }),
-            ..first_started.clone()
-        };
-        let second_worker_started = IssueActivity {
-            id: "20260610T181923123456Z".to_string(),
-            created_at: at() + chrono::Duration::seconds(3),
-            summary: "Started follow-up work".to_string(),
-            attempt: Some(ActivityAttemptMetadata {
-                role: ActivityAttemptRole::Worker,
-                serial: 2,
-                lifecycle: ActivityAttemptLifecycle::Started,
-                agent: None,
-                subskill: Some("implement".to_string()),
-            }),
-            ..first_started.clone()
-        };
-        let validator_started = IssueActivity {
-            id: "20260610T181924123456Z".to_string(),
-            created_at: at() + chrono::Duration::seconds(4),
-            actor: "validator-a".to_string(),
-            summary: "Started validation".to_string(),
-            attempt: Some(ActivityAttemptMetadata {
-                role: ActivityAttemptRole::Validator,
-                serial: 1,
-                lifecycle: ActivityAttemptLifecycle::Started,
-                agent: None,
-                subskill: Some("validate".to_string()),
-            }),
-            ..first_started.clone()
-        };
-
-        let attempts = derive_issue_attempts([
-            reviewer_started,
-            first_finished,
-            second_worker_started,
-            validator_started,
-            first_started,
-        ])
-        .unwrap();
-
-        assert_eq!(attempts.len(), 3);
-        assert_eq!(attempts[0].id, "atelier-one/worker/1");
-        assert_eq!(attempts[0].state, DerivedIssueAttemptState::Finished);
-        assert_eq!(attempts[0].activity_ids.len(), 2);
-        assert_eq!(attempts[1].id, "atelier-one/worker/2");
-        assert_eq!(attempts[1].state, DerivedIssueAttemptState::Active);
-        assert_eq!(attempts[2].id, "atelier-one/reviewer/1");
-        assert_eq!(attempts[2].state, DerivedIssueAttemptState::Active);
-        assert!(attempts
-            .iter()
-            .all(|attempt| attempt.role != ActivityAttemptRole::Validator));
     }
 
     #[test]

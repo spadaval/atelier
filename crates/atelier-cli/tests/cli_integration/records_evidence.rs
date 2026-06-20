@@ -1741,8 +1741,9 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
         dir.path(),
         &[
             "issue",
-            "close",
+            "transition",
             &issue_id,
+            "close",
             "--reason",
             "workflow proof attached",
         ],
@@ -1796,8 +1797,9 @@ fn test_validation_issue_closeout_uses_workflow_approval_not_contract_audit_term
         dir.path(),
         &[
             "issue",
-            "close",
+            "transition",
             &validation_id,
+            "close",
             "--reason",
             "independent approval attached",
         ],
@@ -2255,7 +2257,8 @@ fn test_issue_create_after_workflow_init_uses_configured_initial_status() {
     assert!(options.contains("start [allowed]"), "{options}");
 
     commit_all(dir.path(), "workflow-ready issue");
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "root start failed: {stderr}");
     assert!(
         start_out.contains("Applied transition start"),

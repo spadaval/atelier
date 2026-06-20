@@ -52,6 +52,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries](../adr/0010-session-aware-pr-coordination-boundaries.md)
 - [ADR 0011: Native Review Modes And Room Authority](../adr/0011-native-review-modes-and-room-authority.md)
 - [ADR 0013: Workflow Transition Actions And Branching](../adr/0013-workflow-transition-actions-and-branching.md)
+- [ADR 0014: Status Role Attribution Replaces Sessions](../adr/0014-status-role-attribution-replaces-sessions.md)
 
 ## Target Architecture
 
@@ -76,8 +77,8 @@ Accepted ADRs record cross-cutting product choices:
 - `doctor --fix` repairs ignored local projection/cache state from committed
   Markdown records when it is safe to do so.
 - First-class concepts include missions, issues, evidence, typed links,
-  workflows, workflow validators, derived session views, and deferred run
-  metadata; their user-visible behavior is defined in [Product](../product/index.md).
+  workflows, workflow validators, status roles, review artifacts, and deferred
+  run metadata; their user-visible behavior is defined in [Product](../product/index.md).
 - Repository-owned issue workflow policy lives at the fixed
   `.atelier/workflow.yaml` path. Loading, schema validation, status categories,
   transition lookup, validator evaluation, guidance rendering, and branch

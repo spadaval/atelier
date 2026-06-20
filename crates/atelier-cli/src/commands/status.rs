@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
 
@@ -9,10 +9,7 @@ use crate::commands::work_order::WorkOrderRow;
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
-use atelier_records::activity::{
-    list_all_issue_activities, list_derived_issue_attempts, DerivedIssueAttempt,
-    DerivedIssueAttemptState,
-};
+use atelier_records::activity::list_all_issue_activities;
 use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -23,7 +20,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .map(|issue| issue.id.as_str())
         .collect::<BTreeSet<_>>();
     let active_mission = commands::mission::active_mission(db)?;
-    let active_sessions = active_session_records(state_dir)?;
+    let active_role_counts = active_role_counts(&active_issues, workflow_policy.as_ref());
     let current_missions = db
         .list_records("mission", None)?
         .into_iter()
@@ -83,7 +80,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("Current work:  {} issue(s)", active_issues.len());
         for issue in &active_issues {
             let state = status_issue_state(db, workflow_policy.as_ref(), issue)?;
-            println!("  {state} {} - {}", issue.id, issue.title);
+            println!(
+                "  {state} {} - {} [{}]",
+                issue.id,
+                issue.title,
+                issue_status_role(issue, workflow_policy.as_ref()).unwrap_or("role:unconfigured")
+            );
         }
     }
 
@@ -92,19 +94,13 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         None if current_missions.is_empty() => println!("Active mission: none"),
         None => println!("Active mission: none ({} current)", current_missions.len()),
     }
-    if active_sessions.is_empty() {
-        println!("Active sessions: none");
+    if active_role_counts.is_empty() {
+        println!("Active roles:   none");
     } else {
-        println!("Active sessions: {}", active_sessions.len());
-        for session in &active_sessions {
-            println!(
-                "  {} {} {} -> issue/{}",
-                session.id,
-                session.role,
-                session.state.as_str(),
-                session.issue_id
-            );
-        }
+        println!(
+            "Active roles:   {}",
+            render_role_counts(&active_role_counts)
+        );
     }
 
     if !export_stale.is_empty() {
@@ -247,9 +243,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                         snapshot.active_issues.len() - 3
                     );
                 }
-                println!(
-                    "  Inspect worktree context if checkout state is unclear: atelier worktree status"
-                );
+                println!("  Inspect checkout context if state is unclear: atelier status");
             } else if let Some(issue) = snapshot.selectable_issues.first() {
                 println!(
                     "  Inspect selectable active-mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
@@ -307,15 +301,6 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Check committed tracker records after repair: atelier lint");
     }
     Ok(())
-}
-
-fn active_session_records(state_dir: &Path) -> Result<Vec<DerivedIssueAttempt>> {
-    let mut sessions = list_derived_issue_attempts(state_dir)?
-        .into_iter()
-        .filter(|session| session.state == DerivedIssueAttemptState::Active)
-        .collect::<Vec<_>>();
-    sessions.sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(sessions)
 }
 
 #[derive(Default)]
@@ -454,6 +439,35 @@ pub(crate) fn current_work_issues(
         })
         .collect::<Vec<_>>();
     order_issues_by_work(db, workflow_policy, issues)
+}
+
+pub(crate) fn issue_status_role<'a>(
+    issue: &'a Issue,
+    workflow_policy: Option<&'a atelier_app::workflow_policy::WorkflowPolicy>,
+) -> Option<&'a str> {
+    workflow_policy.and_then(|policy| policy.status_role(&issue.status))
+}
+
+fn active_role_counts(
+    issues: &[Issue],
+    workflow_policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for issue in issues {
+        let role = issue_status_role(issue, workflow_policy)
+            .unwrap_or("unconfigured")
+            .to_string();
+        *counts.entry(role).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
+    counts
+        .iter()
+        .map(|(role, count)| format!("{role}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn order_issues_by_work(
@@ -698,15 +712,15 @@ fn print_git_state() {
                 println!("Branch:   {branch}");
             }
             if state.dirty_entries.is_empty() {
-                println!("Worktree: clean");
+                println!("Checkout: clean");
             } else {
-                println!("Worktree: dirty ({} entries)", state.dirty_entries.len());
+                println!("Checkout: dirty ({} entries)", state.dirty_entries.len());
                 for entry in state.dirty_entries.iter().take(3) {
                     println!("  {entry}");
                 }
             }
         }
-        Err(error) => println!("Worktree: unavailable - {error}"),
+        Err(error) => println!("Checkout: unavailable - {error}"),
     }
 }
 
@@ -746,7 +760,7 @@ fn print_branch_lifecycle_state(db: &Database, active_issues: &[Issue]) -> Resul
                     "ok".to_string()
                 } else {
                     format!(
-                        "mismatch; inspect `atelier issue transition {} --options` and `atelier worktree status`",
+                        "mismatch; inspect `atelier issue transition {} --options` and `atelier status`",
                         issue.id
                     )
                 };

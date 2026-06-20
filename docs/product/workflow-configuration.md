@@ -21,7 +21,7 @@ one surface unless a later ADR explicitly changes that ownership.
 | Surface | Owns | Must not own |
 | --- | --- | --- |
 | `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
 The boundary is intentionally split for review integration. `.atelier/config.toml`
@@ -62,7 +62,8 @@ Workflow policy applies to issues. The contract defines:
 - a required branch policy for owner branch names, base branch, and merge
   strategy;
 - a repository-defined issue type registry;
-- a shared status catalog with explicit status categories;
+- a shared status catalog with explicit status categories and optional active
+  status roles;
 - named issue workflows and their allowed transitions;
 - terminal done states for each workflow;
 - workflow-owned issue type applicability;
@@ -73,6 +74,11 @@ Workflow policy applies to issues. The contract defines:
 
 Mission, evidence, activity, and future durable record lifecycles stay outside
 `.atelier/workflow.yaml`.
+
+Status `role` is allowed only when `category: active`. Valid role values are
+`worker`, `reviewer`, `validator`, and `manager`. Mutating review commands use
+explicit `--role` first; when omitted, they infer the role from the linked owner
+issue's current status role and fail if that status has none.
 
 ## Fixed V3 Shape
 
@@ -99,10 +105,10 @@ issue_types:
 
 statuses:
   todo: { category: todo }
-  in_progress: { category: active }
+  in_progress: { category: active, role: worker }
   blocked: { category: blocked }
-  review: { category: active }
-  validation: { category: active }
+  review: { category: active, role: reviewer }
+  validation: { category: active, role: validator }
   done: { category: done }
 
 workflows:
@@ -249,7 +255,7 @@ such as `effects` are rejected for the target contract.
 ## Branch Policy
 
 `branch_policy` is the shared branch policy used by workflow commands, status
-surfaces, PR validation, and branch/worktree helpers. It is derived from the
+surfaces, PR validation, and branch helpers. It is derived from the
 tracker graph rather than duplicated in command handlers:
 
 - child issues under an epic use the nearest parent epic as branch owner;
@@ -265,7 +271,7 @@ tracker graph rather than duplicated in command handlers:
 | `base_branch` | Required non-empty Git branch name. |
 | `merge_strategy` | Required. One of `squash`, `merge_commit`, or `fast_forward_only`. |
 | `branch_templates.epic` | Required branch template for epic owners. |
-| `branch_templates.issue` | Required branch template for standalone issue owners and exceptional issue worktrees. |
+| `branch_templates.issue` | Required branch template for standalone issue owners. |
 
 Branch templates support only `{{ issue.id }}` and `{{ issue.type }}`. In this
 context, `issue` means the branch owner, not necessarily the child issue being

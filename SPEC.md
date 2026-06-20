@@ -526,20 +526,22 @@ Rules should have severities:
 Version 1 deliberately avoids workflow waivers. If a future product slice adds
 waivers, they need an explicit contract and visibility model.
 
-## Branches And Worktrees
+## Branches And Checkouts
 
-Atelier should preserve Braid's agent worktree ergonomics while moving the
-default isolation boundary from issue to mission.
+Atelier should preserve enough Git ergonomics for agent work while avoiding a
+first-class workspace-management surface until that feature has a clearer
+contract. The current default isolation boundary is the checkout plus the
+workflow-derived owner branch.
 
 Desired commands:
 
 ```text
 atelier agent init <name>
-atelier start atelier-z1p8
+atelier issue transition atelier-z1p8 start
 atelier issue transition atelier-z1p8 close --reason "done"
 ```
 
-`atelier start <id>` owns routine branch preparation. It derives the owner
+`atelier issue transition <id> start` owns routine branch preparation. It derives the owner
 branch from the work graph, creates or checks out that branch when needed,
 refreshes local runtime/projection state, and then transitions the issue into
 the checkout's current-work set. Routine workers should not run explicit branch
@@ -552,17 +554,12 @@ derivation is:
 - Standalone issue: an issue branch.
 - Epic: an epic branch.
 
-Mission worktrees remain the default shared workspace boundary when a mission
-exists, but the branch owner is still derived from the issue or epic being
-started. Branch names come from configurable templates, with defaults shaped
-like:
+The branch owner is derived from the issue or epic being started. Branch names
+come from configurable templates, with defaults shaped like:
 
 ```text
 main
   default integration branch unless configured otherwise
-
-mission/atelier-k7mq-short-slug
-  normal shared mission worktree path/branch context when mission workspaces are enabled
 
 epic/atelier-4p7q-short-slug
   normal reviewable owner branch for epics and their child issues
@@ -594,20 +591,20 @@ claiming a completed close.
 Useful enforcement:
 
 - Warn or fail when implementation starts on `main`.
-- Refuse start or close when the worktree is dirty unless policy allows the
+- Refuse start or close when the checkout is dirty unless policy allows the
   specific operation.
-- Record mission workspace, owner branch, base branch, merge strategy, and
-  current issue association.
+- Record owner branch, base branch, merge strategy, and current issue
+  association.
 - Refuse close when durable records or derived projections are stale.
 - Allow multi-issue slices with explicit intent.
 
-The worktree feature is a convenience layer over Git, not a replacement sync
-system.
+Atelier-managed workspace isolation is deferred pending redesign. It should be
+a convenience layer over Git, not a replacement sync system.
 
 Normal tracked work uses explicit work association rather than inherited
-Chainlink lock sync. The default workflow is one mission worktree when the work
-belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
-preparation through `atelier start`, lifecycle-owned close integration through
+Chainlink lock sync. The default workflow is one checkout, one reviewable branch
+per epic, lifecycle-owned branch
+preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
 `atelier issue transition <id> close --reason "..."` or `atelier mission close`,
 and `lint`/`doctor` health
 checks. Explicit branch commands such as `atelier branch for-epic`

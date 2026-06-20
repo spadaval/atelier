@@ -34,13 +34,6 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
         extension: "md",
     },
     RecordKindSpec {
-        kind: "session",
-        schema: "atelier.session",
-        schema_version: 1,
-        canonical_dir: Some("sessions"),
-        extension: "md",
-    },
-    RecordKindSpec {
         kind: "review",
         schema: "atelier.review",
         schema_version: 1,
@@ -63,13 +56,6 @@ pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
         schema: "atelier.evidence",
         schema_version: 1,
         canonical_dir: Some("evidence"),
-        extension: "md",
-    },
-    RecordKindSpec {
-        kind: "session",
-        schema: "atelier.session",
-        schema_version: 1,
-        canonical_dir: Some("sessions"),
         extension: "md",
     },
     RecordKindSpec {

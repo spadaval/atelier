@@ -9,6 +9,7 @@ use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig};
 use atelier_app::review_room;
 use atelier_sqlite::Database;
+use atelier_workflow as workflow_policy;
 
 pub fn open(
     db: &Database,
@@ -16,12 +17,13 @@ pub fn open(
     state_dir: &Path,
     db_path: &Path,
     issue_ref: Option<&str>,
-    role: &str,
+    role: Option<&str>,
     title: &str,
     body: &str,
     source_branch: &str,
     target_branch: &str,
 ) -> Result<()> {
+    let role = resolve_review_role(db, repo_root, issue_ref, role)?;
     if review_mode(repo_root)? == ReviewMode::Room {
         let outcome = review_room::open(
             db,
@@ -30,7 +32,7 @@ pub fn open(
                 state_dir,
                 db_path,
                 issue_ref,
-                role,
+                role: role.role.as_str(),
                 title,
                 body,
                 source_branch,
@@ -40,6 +42,7 @@ pub fn open(
         println!("Review: {}", outcome.review_id);
         println!("Issue:   {}", outcome.issue_id);
         println!("Owner:   {}", outcome.owner_id);
+        println!("Role:    {} ({})", role.role, role.source);
         println!("State:   {}", outcome.status);
         return Ok(());
     }
@@ -61,7 +64,7 @@ pub fn open(
             state_dir,
             db_path,
             issue_ref,
-            role,
+            role: role.role.as_str(),
             title,
             body,
             source_branch,
@@ -73,6 +76,7 @@ pub fn open(
     println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
+    println!("Role:    {} ({})", role.role, role.source);
     println!("State:   {}", outcome.pull.state);
     Ok(())
 }
@@ -228,8 +232,9 @@ pub fn merge(
     state_dir: &Path,
     db_path: &Path,
     issue_ref: Option<&str>,
-    role: &str,
+    role: Option<&str>,
 ) -> Result<()> {
+    let role = resolve_review_role(db, repo_root, issue_ref, role)?;
     if review_mode(repo_root)? == ReviewMode::Room {
         let outcome = review_room::merge(
             db,
@@ -238,11 +243,12 @@ pub fn merge(
                 state_dir,
                 db_path,
                 issue_ref,
-                role,
+                role: role.role.as_str(),
             },
         )?;
         println!("Review: {}", outcome.review_id);
         println!("Issue:   {}", outcome.issue_id);
+        println!("Role:    {} ({})", role.role, role.source);
         println!("State:   {}", outcome.status);
         println!(
             "Next:    atelier issue transition {} --options",
@@ -268,7 +274,7 @@ pub fn merge(
             state_dir,
             db_path,
             issue_ref,
-            role,
+            role: role.role.as_str(),
         },
         &forgejo,
         &client,
@@ -276,6 +282,7 @@ pub fn merge(
     println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
+    println!("Role:    {} ({})", role.role, role.source);
     println!("State:   {}", outcome.pull.state);
     println!("Merged:  {}", outcome.pull.merged);
     println!(
@@ -360,11 +367,12 @@ pub fn comment(
     state_dir: &Path,
     db_path: &Path,
     issue_ref: Option<&str>,
-    role: &str,
+    role: Option<&str>,
     body: &str,
     finding: bool,
     severity: Option<&str>,
 ) -> Result<()> {
+    let role = resolve_review_role(db, repo_root, issue_ref, role)?;
     if review_mode(repo_root)? == ReviewMode::Room {
         let outcome = review_room::comment(
             db,
@@ -373,7 +381,7 @@ pub fn comment(
                 state_dir,
                 db_path,
                 issue_ref,
-                role,
+                role: role.role.as_str(),
                 body,
                 finding,
                 severity,
@@ -382,6 +390,7 @@ pub fn comment(
         println!("Comment: {}", outcome.event_id);
         println!("Issue:   {}", outcome.issue_id);
         println!("Review:  {}", outcome.review_id);
+        println!("Role:    {} ({})", role.role, role.source);
         println!(
             "Next:    atelier review comments --issue {}",
             outcome.issue_id
@@ -403,7 +412,7 @@ pub fn comment(
             repo_root,
             state_dir,
             issue_ref,
-            role,
+            role: role.role.as_str(),
             body,
         },
         &forgejo,
@@ -411,6 +420,7 @@ pub fn comment(
     )?;
     println!("Comment: {}", outcome.comment.id);
     println!("Issue:   {}", outcome.issue_id);
+    println!("Role:    {} ({})", role.role, role.source);
     println!(
         "Next:    atelier review comments --issue {}",
         outcome.issue_id
@@ -424,10 +434,11 @@ pub fn review(
     state_dir: &Path,
     db_path: &Path,
     issue_ref: Option<&str>,
-    role: &str,
+    role: Option<&str>,
     event: &str,
     body: &str,
 ) -> Result<()> {
+    let role = resolve_review_role(db, repo_root, issue_ref, role)?;
     if review_mode(repo_root)? == ReviewMode::Room {
         let outcome = match event {
             "approve" => review_room::approve(
@@ -437,7 +448,7 @@ pub fn review(
                     state_dir,
                     db_path,
                     issue_ref,
-                    role,
+                    role: role.role.as_str(),
                     body,
                 },
             )?,
@@ -448,7 +459,7 @@ pub fn review(
                     state_dir,
                     db_path,
                     issue_ref,
-                    role,
+                    role: role.role.as_str(),
                     body,
                 },
             )?,
@@ -460,6 +471,7 @@ pub fn review(
         println!("Review: {}", outcome.event_id);
         println!("State:  {}", outcome.status);
         println!("Issue:  {}", outcome.issue_id);
+        println!("Role:   {} ({})", role.role, role.source);
         return Ok(());
     }
     let forgejo = app_pr::load_forgejo(repo_root)?;
@@ -475,7 +487,7 @@ pub fn review(
             repo_root,
             state_dir,
             issue_ref,
-            role,
+            role: role.role.as_str(),
             event,
             body,
         },
@@ -485,6 +497,7 @@ pub fn review(
     println!("Review: {}", outcome.review.id);
     println!("State:  {}", outcome.review.state);
     println!("Issue:  {}", outcome.issue_id);
+    println!("Role:   {} ({})", role.role, role.source);
     Ok(())
 }
 
@@ -523,6 +536,57 @@ fn review_mode(repo_root: &Path) -> Result<ReviewMode> {
     match ProjectConfig::load(repo_root)?.review {
         ReviewConfig::Room => Ok(ReviewMode::Room),
         ReviewConfig::Provider(_) => Ok(ReviewMode::Provider),
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct ResolvedReviewRole {
+    role: String,
+    source: String,
+}
+
+fn resolve_review_role(
+    db: &Database,
+    repo_root: &Path,
+    issue_ref: Option<&str>,
+    explicit_role: Option<&str>,
+) -> Result<ResolvedReviewRole> {
+    if let Some(role) = explicit_role {
+        validate_review_role(role)?;
+        return Ok(ResolvedReviewRole {
+            role: role.to_string(),
+            source: "explicit --role".to_string(),
+        });
+    }
+
+    let issue_id = app_pr::infer_review_issue_id(db, repo_root, issue_ref)?;
+    let owner_id = app_pr::review_owner_id(db, repo_root, &issue_id)?;
+    let owner = db
+        .get_issue(&owner_id)?
+        .ok_or_else(|| anyhow::anyhow!("Issue {} was not found", owner_id))?;
+    let policy = workflow_policy::load(repo_root)?;
+    let Some(role) = policy.status_role(&owner.status) else {
+        bail!(
+            "review_role_missing: issue {} is in status '{}' and that status has no role; pass --role <worker|reviewer|validator|manager> or configure statuses.{}.role",
+            owner.id,
+            owner.status,
+            owner.status
+        );
+    };
+    Ok(ResolvedReviewRole {
+        role: role.to_string(),
+        source: format!("status {} ({})", owner.status, owner.id),
+    })
+}
+
+fn validate_review_role(role: &str) -> Result<()> {
+    if matches!(role, "worker" | "reviewer" | "validator" | "manager") {
+        Ok(())
+    } else {
+        bail!(
+            "review_role_invalid: role must be worker, reviewer, validator, or manager, got '{}'",
+            role
+        )
     }
 }
 
@@ -602,6 +666,74 @@ fn single_line_body(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use atelier_core::Issue;
+    use atelier_sqlite::Database;
+    use chrono::Utc;
+    use std::collections::BTreeMap;
+    use tempfile::tempdir;
+
+    fn setup_role_repo(status: &str) -> (tempfile::TempDir, Database) {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            state_dir.join("workflow.yaml"),
+            atelier_workflow::STARTER_POLICY_YAML
+                .replace("base_branch: main", "base_branch: master"),
+        )
+        .unwrap();
+        let db = Database::open(&db_path).unwrap();
+        let now = Utc::now();
+        db.insert_issue_rebuild(&Issue {
+            id: "atelier-role".to_string(),
+            title: "role issue".to_string(),
+            description: None,
+            status: status.to_string(),
+            issue_type: "task".to_string(),
+            priority: "medium".to_string(),
+            fields: BTreeMap::new(),
+            parent_id: None,
+            created_at: now,
+            updated_at: now,
+            closed_at: None,
+        })
+        .unwrap();
+        (dir, db)
+    }
+
+    #[test]
+    fn explicit_review_role_wins() {
+        let (dir, db) = setup_role_repo("review");
+
+        let role =
+            resolve_review_role(&db, dir.path(), Some("atelier-role"), Some("manager")).unwrap();
+
+        assert_eq!(role.role, "manager");
+        assert_eq!(role.source, "explicit --role");
+    }
+
+    #[test]
+    fn review_role_infers_from_owner_status() {
+        let (dir, db) = setup_role_repo("review");
+
+        let role = resolve_review_role(&db, dir.path(), Some("atelier-role"), None).unwrap();
+
+        assert_eq!(role.role, "reviewer");
+        assert_eq!(role.source, "status review (atelier-role)");
+    }
+
+    #[test]
+    fn review_role_requires_status_role_when_not_explicit() {
+        let (dir, db) = setup_role_repo("todo");
+
+        let error = resolve_review_role(&db, dir.path(), Some("atelier-role"), None)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("review_role_missing"));
+        assert!(error.contains("statuses.todo.role"));
+    }
 
     #[test]
     fn render_comment_lines_filters_resolved_comments() {

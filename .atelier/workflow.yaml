@@ -21,12 +21,15 @@ statuses:
     category: todo
   in_progress:
     category: active
+    role: worker
   blocked:
     category: blocked
   review:
     category: active
+    role: reviewer
   validation:
     category: active
+    role: validator
   done:
     category: done
 

@@ -34,12 +34,15 @@ statuses:
     category: todo
   in_progress:
     category: active
+    role: worker
   blocked:
     category: blocked
   review:
     category: active
+    role: reviewer
   validation:
     category: active
+    role: validator
   done:
     category: done
 
@@ -309,6 +312,7 @@ pub struct BranchLifecycleResolution {
 #[derive(Debug, Clone)]
 pub struct StatusDefinition {
     pub category: String,
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -427,6 +431,12 @@ impl WorkflowPolicy {
             .map(|status| status.category.as_str())
     }
 
+    pub fn status_role(&self, status: &str) -> Option<&str> {
+        self.statuses
+            .get(status)
+            .and_then(|status| status.role.as_deref())
+    }
+
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
         Ok(workflow_statuses(self.workflow_for_issue_type(issue_type)?).contains(status))
     }
@@ -515,6 +525,7 @@ impl std::error::Error for WorkflowPolicyError {}
 #[serde(deny_unknown_fields)]
 struct StatusDefinitionRaw {
     category: String,
+    role: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1010,10 +1021,27 @@ fn parse_statuses(
                 ),
             ));
         }
+        if let Some(role) = raw.role.as_deref() {
+            validate_workflow_role(
+                role,
+                display_path,
+                &format!("statuses.{}.role", name),
+                "workflow_config_invalid_status",
+            )?;
+            if raw.category != "active" {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_status",
+                    display_path,
+                    format!("statuses.{}.role", name),
+                    "status roles are only valid for statuses with category active",
+                ));
+            }
+        }
         statuses.insert(
             name.to_string(),
             StatusDefinition {
                 category: raw.category,
+                role: raw.role,
             },
         );
     }
@@ -1429,7 +1457,12 @@ fn parse_transition_action_params(
                 format!("built-in action '{}' requires role", name),
             )
         })?;
-        validate_workflow_role(&role, display_path, &format!("{field}.role"))?;
+        validate_workflow_role(
+            &role,
+            display_path,
+            &format!("{field}.role"),
+            "workflow_config_invalid_action",
+        )?;
         let role_authors = parse_workflow_forgejo_role_authors(
             raw.role_authors,
             raw.provider.as_deref(),
@@ -1484,12 +1517,17 @@ fn parse_transition_action_params(
     })
 }
 
-fn validate_workflow_role(role: &str, display_path: &str, field: &str) -> Result<()> {
+fn validate_workflow_role(
+    role: &str,
+    display_path: &str,
+    field: &str,
+    error_code: &'static str,
+) -> Result<()> {
     if ["worker", "reviewer", "validator", "manager"].contains(&role) {
         return Ok(());
     }
     Err(policy_error_with_field(
-        "workflow_config_invalid_action",
+        error_code,
         display_path,
         field,
         format!(
@@ -2374,6 +2412,10 @@ mod tests {
                 .map(|status| status.category.as_str()),
             Some("done")
         );
+        assert_eq!(policy.status_role("in_progress"), Some("worker"));
+        assert_eq!(policy.status_role("review"), Some("reviewer"));
+        assert_eq!(policy.status_role("validation"), Some("validator"));
+        assert_eq!(policy.status_role("todo"), None);
         let close = &policy.workflows["task_delivery"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
@@ -2396,6 +2438,33 @@ mod tests {
             .iter()
             .map(|action| action.builtin.as_str())
             .collect()
+    }
+
+    #[test]
+    fn rejects_unknown_status_role() {
+        let policy = valid_policy().replace("role: worker", "role: operator");
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_config_invalid_status"));
+        assert!(error.contains("statuses.in_progress.role"));
+        assert!(error.contains("worker, reviewer, validator, or manager"));
+    }
+
+    #[test]
+    fn rejects_role_on_non_active_status() {
+        let policy = valid_policy().replace(
+            "  todo:\n    category: todo",
+            "  todo:\n    category: todo\n    role: worker",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_config_invalid_status"));
+        assert!(error.contains("statuses.todo.role"));
+        assert!(error.contains("category active"));
     }
 
     fn review_action_line() -> &'static str {

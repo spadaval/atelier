@@ -4,8 +4,7 @@ use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
 use atelier_records::activity::{
-    create_issue_activity_with_metadata, list_issue_activities, ActivityAttemptLifecycle,
-    ActivityAttemptMetadata, ActivityAttemptRole, ActivityEventType, ActivityPrAttribution,
+    create_issue_activity_with_metadata, ActivityEventType, ActivityPrAttribution,
 };
 use atelier_records::{issue_record_path, RecordStore};
 use atelier_sqlite::Database;
@@ -403,6 +402,18 @@ pub fn parse_review_event(value: &str) -> Result<ReviewEvent> {
     }
 }
 
+pub fn infer_review_issue_id(
+    db: &Database,
+    repo_root: &Path,
+    issue_ref: Option<&str>,
+) -> Result<String> {
+    infer_issue_id(db, repo_root, issue_ref)
+}
+
+pub fn review_owner_id(db: &Database, repo_root: &Path, issue_id: &str) -> Result<String> {
+    branch_owner_id(db, repo_root, issue_id)
+}
+
 pub fn persist_pull_request(
     db: &Database,
     state_dir: &Path,
@@ -699,11 +710,8 @@ fn record_pr_action(
     forgejo: &ForgejoConfig,
     number: u64,
 ) -> Result<()> {
-    let Some(role) = attempt_role_from_role_arg(role) else {
-        return Ok(());
-    };
     let owner_id = branch_owner_id(db, repo_root, issue_id)?;
-    let remote_author = forgejo.role_author_for_role(role.as_str()).ok();
+    let remote_author = forgejo.role_author_for_role(role).ok();
     let pull_request = format!("forgejo/{}/{}#{}", forgejo.owner, forgejo.repo, number);
     record_pr_action_in_state_dir(
         state_dir,
@@ -718,12 +726,11 @@ fn record_pr_action(
 fn record_pr_action_in_state_dir(
     state_dir: &Path,
     issue_id: &str,
-    role: ActivityAttemptRole,
+    role: &str,
     action: &str,
     pull_request: &str,
     remote_author: Option<&str>,
 ) -> Result<()> {
-    let serial = current_attempt_serial_in_state_dir(state_dir, issue_id, role)?.unwrap_or(1);
     create_issue_activity_with_metadata(
         state_dir,
         issue_id,
@@ -731,15 +738,9 @@ fn record_pr_action_in_state_dir(
         &current_actor(),
         Utc::now(),
         &format!("Recorded PR {action}"),
-        Some(ActivityAttemptMetadata {
-            role,
-            serial,
-            lifecycle: ActivityAttemptLifecycle::Updated,
-            agent: current_agent(),
-            subskill: current_subskill(),
-        }),
         Some(ActivityPrAttribution {
             action: action.to_string(),
+            role: role.to_string(),
             pull_request: Some(pull_request.to_string()),
             remote_author: remote_author.map(str::to_string),
         }),
@@ -748,57 +749,21 @@ fn record_pr_action_in_state_dir(
     Ok(())
 }
 
-fn attempt_role_from_role_arg(role: &str) -> Option<ActivityAttemptRole> {
-    match role {
-        "worker" => Some(ActivityAttemptRole::Worker),
-        "reviewer" => Some(ActivityAttemptRole::Reviewer),
-        "validator" => Some(ActivityAttemptRole::Validator),
-        _ => None,
-    }
-}
-
-fn current_attempt_serial_in_state_dir(
-    state_dir: &Path,
-    issue_id: &str,
-    role: ActivityAttemptRole,
-) -> Result<Option<u32>> {
-    Ok(list_issue_activities(state_dir, issue_id)?
-        .into_iter()
-        .filter_map(|activity| activity.attempt)
-        .filter(|attempt| attempt.role == role)
-        .map(|attempt| attempt.serial)
-        .max())
-}
-
 fn current_actor() -> String {
     std::env::var("ATELIER_AGENT")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "agent".to_string())
 }
 
-fn current_agent() -> Option<String> {
-    std::env::var("ATELIER_AGENT_ID")
-        .or_else(|_| std::env::var("ATELIER_AGENT"))
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-}
-
-fn current_subskill() -> Option<String> {
-    std::env::var("ATELIER_SUBSKILL")
-        .or_else(|_| std::env::var("ATELIER_AGENT_SUBSKILL"))
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-}
-
 fn pr_action_body(
-    role: ActivityAttemptRole,
+    role: &str,
     action: &str,
     pull_request: &str,
     remote_author: Option<&str>,
 ) -> String {
     format!(
         "role: {}\naction: {}\npull_request: {}\nremote_author: {}",
-        scalar(role.as_str()),
+        scalar(role),
         scalar(action),
         scalar(pull_request),
         option_scalar(remote_author)
@@ -819,7 +784,7 @@ mod tests {
     use crate::forgejo::{ForgejoRequest, ForgejoResponse};
     use crate::project_config::ForgejoRoleAuthors;
     use atelier_core::Issue;
-    use atelier_records::activity::ActivityAttemptRole;
+    use atelier_records::activity::list_issue_activities;
     use chrono::Utc;
     use std::cell::RefCell;
     use std::collections::BTreeMap;
@@ -871,7 +836,11 @@ mod tests {
 
     fn write_workflow(repo_root: &Path) {
         let workflow = crate::workflow_policy::STARTER_POLICY_YAML
-            .replace("base_branch: main", "base_branch: master");
+            .replace("base_branch: main", "base_branch: master")
+            .replace(
+                "          - review.open: { role: worker }",
+                "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: worker\n                reviewer: reviewer\n                validator: validator\n                manager: manager",
+            );
         std::fs::create_dir_all(repo_root.join(".atelier")).unwrap();
         std::fs::write(repo_root.join(".atelier/workflow.yaml"), workflow).unwrap();
     }
@@ -972,28 +941,6 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
         )
     }
 
-    fn session_record(state_dir: &Path, target_id: &str) {
-        let session_dir = state_dir.join("sessions");
-        std::fs::create_dir_all(&session_dir).unwrap();
-        std::fs::write(
-            session_dir.join("atelier-session.md"),
-            format!(
-                r#"---
-id: session-test
-type: session
-status: active
-created_at: "2026-06-18T00:00:00Z"
-updated_at: "2026-06-18T00:00:00Z"
-target:
-  kind: issue
-  id: {target_id}
----
-"#
-            ),
-        )
-        .unwrap();
-    }
-
     #[test]
     fn infer_issue_id_uses_owner_branch_before_active_work() {
         let dir = setup_repo_on_branch("epic/atelier-epic");
@@ -1062,33 +1009,6 @@ target:
 
         assert!(error.contains("pr_target_missing"));
         assert!(error.contains("pass --issue <id>"));
-    }
-
-    #[test]
-    fn infer_issue_id_does_not_use_active_session_target() {
-        let dir = setup_repo_on_branch("master");
-        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
-        insert_issue(
-            &db,
-            "atelier-session",
-            "feature",
-            "todo",
-            None,
-            BTreeMap::new(),
-        );
-        insert_issue(
-            &db,
-            "atelier-active",
-            "feature",
-            "in_progress",
-            None,
-            BTreeMap::new(),
-        );
-        session_record(&dir.path().join(".atelier"), "atelier-session");
-
-        let issue_id = infer_issue_id(&db, dir.path(), None).unwrap();
-
-        assert_eq!(issue_id, "atelier-active");
     }
 
     #[test]
@@ -1263,8 +1183,8 @@ target:
         let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
-            activities[0].attempt.as_ref().unwrap().role,
-            ActivityAttemptRole::Worker
+            activities[0].pr_attribution.as_ref().unwrap().role,
+            "worker"
         );
         assert_eq!(
             activities[0].pr_attribution.as_ref().unwrap().action,
@@ -1373,8 +1293,8 @@ target:
         let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
-            activities[0].attempt.as_ref().unwrap().role,
-            ActivityAttemptRole::Reviewer
+            activities[0].pr_attribution.as_ref().unwrap().role,
+            "reviewer"
         );
         assert_eq!(
             activities[0].pr_attribution.as_ref().unwrap().action,
@@ -1434,8 +1354,8 @@ target:
         let activities = list_issue_activities(&state_dir, "atelier-issue").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
-            activities[0].attempt.as_ref().unwrap().role,
-            ActivityAttemptRole::Reviewer
+            activities[0].pr_attribution.as_ref().unwrap().role,
+            "reviewer"
         );
         assert_eq!(
             activities[0].pr_attribution.as_ref().unwrap().action,
@@ -1523,8 +1443,8 @@ target:
         let activities = list_issue_activities(&state_dir, "atelier-epic").unwrap();
         assert_eq!(activities.len(), 1);
         assert_eq!(
-            activities[0].attempt.as_ref().unwrap().role,
-            ActivityAttemptRole::Validator
+            activities[0].pr_attribution.as_ref().unwrap().role,
+            "validator"
         );
         assert_eq!(
             activities[0].pr_attribution.as_ref().unwrap().action,
@@ -1696,10 +1616,7 @@ target:
         assert!(child_activities.is_empty());
         assert_eq!(owner_activities.len(), 1);
         let activity = &owner_activities[0];
-        assert_eq!(
-            activity.attempt.as_ref().unwrap().role,
-            ActivityAttemptRole::Reviewer
-        );
+        assert_eq!(activity.pr_attribution.as_ref().unwrap().role, "reviewer");
         assert_eq!(activity.pr_attribution.as_ref().unwrap().action, "review");
         assert_eq!(
             activity

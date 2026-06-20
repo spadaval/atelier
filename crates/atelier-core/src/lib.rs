@@ -149,18 +149,6 @@ fn default_comment_kind() -> String {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct Session {
-    pub id: i64,
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-    pub active_issue_id: Option<IssueId>,
-    pub handoff_notes: Option<String>,
-    pub last_action: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Relation {
     pub issue_id_1: IssueId,
     pub issue_id_2: IssueId,
@@ -213,7 +201,6 @@ pub enum Record {
     Issue(IssueRecord),
     Mission(MissionRecord),
     Evidence(EvidenceRecord),
-    Session(SessionRecord),
     Review(ReviewRecord),
 }
 
@@ -223,7 +210,6 @@ impl Record {
             Record::Issue(record) => &record.header,
             Record::Mission(record) => &record.header,
             Record::Evidence(record) => &record.header,
-            Record::Session(record) => &record.header,
             Record::Review(record) => &record.header,
         }
     }
@@ -233,7 +219,6 @@ impl Record {
             Record::Issue(record) => &mut record.header,
             Record::Mission(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
-            Record::Session(record) => &mut record.header,
             Record::Review(record) => &mut record.header,
         }
     }
@@ -279,29 +264,6 @@ pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
     pub summary: String,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SessionRecord {
-    pub header: RecordHeader,
-    pub data: SessionRecordData,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SessionRecordData {
-    pub agent_identity: Option<String>,
-    pub role: String,
-    pub subskill: Option<String>,
-    pub target: Option<SessionTarget>,
-    pub session_kind: String,
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SessionTarget {
-    pub kind: String,
-    pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

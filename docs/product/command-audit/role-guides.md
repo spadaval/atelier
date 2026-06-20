@@ -120,17 +120,19 @@ atelier bundle apply <file> --yes
 atelier issue create "..."
 atelier mission add-work <mission-id> <issue-id>
 atelier issue block <blocked-id> <blocker-id>
-atelier graph tree --compact
-atelier worktree for-mission <mission-id>
+atelier mission show <mission-id>
+atelier status
 ```
 
 Manager guidance should make `bundle preview <file>` and
-`bundle apply <file> --yes` the expected path for bulk graph creation, such as a
+`bundle apply <file> --yes` the expected path for bulk record creation, such as a
 mission with many epics, issues, blockers, mission links, or evidence links.
 Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
 branch commands belong in advanced repair and diagnostic guidance when Atelier
 routes the operator there.
+The manager guide should not teach `graph tree` as a routine path; mission and
+issue views should own hierarchy and impact context.
 
 ## Admin Guide
 
@@ -145,6 +147,8 @@ atelier init
 atelier lint
 atelier doctor
 atelier doctor --fix
+atelier prune
+atelier forgejo roles check
 atelier maintenance delete <kind> <id> --force
 ```
 

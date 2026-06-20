@@ -16,10 +16,13 @@ issue-state operations.
 - Documentation: Needs role-aware examples. Generic `issue --help` is accurate
   but does not tell a worker which subset matters.
 - Design: Mostly correct. The family is broad, but cohesion is still issue
-  state and issue relationships.
-- Output hierarchy: For reads, current state and blockers before metadata. For
-  mutations, changed fields or transition result first, then canonical path and
-  next commands.
+  state and issue relationships. This is where issue-sourced relationship and
+  blast-radius context should live; a separate `graph impact` command is a sign
+  that `issue show` is not yet powerful enough.
+- Output hierarchy: For reads, current state and blockers before metadata, then
+  parent/children, mission links, evidence, relationship context, and affected
+  records that may need review. For mutations, changed fields or transition
+  result first, then canonical path and next commands.
 
 ## Subcommands
 
@@ -27,9 +30,9 @@ issue-state operations.
 | --- | --- | --- | --- |
 | `issue create` | Manager/orchestrator | Create actionable issue-shaped work. | Good. Keep `--issue-type` and template behavior explicit. |
 | `issue list` | Worker | Find candidate or assigned work. | Good, but role guides should prefer `--ready`, `--blocked`, and exact status/category examples. |
-| `issue show` | Worker | Understand the work slice and proof expectations. | Good. |
+| `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Needs strengthening. It should absorb issue-scoped `graph impact` value before a separate impact command is kept. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `--options` should be the reviewer entry point. |
-| `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Hidden `--claim` should be removed; current work is derived from canonical issue status plus checkout context, not from a hidden claim system. |
+| `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
 | `issue note` | Worker | Add durable progress, handoff, or observation context. | Good. |
 | `issue transition <id> close --reason` | Worker | Complete accountable work after proof exists. | Good. Should continue to require a reason through configured workflow transitions. |
 | `issue block` | Manager/orchestrator | Record that one issue prevents another. | Good. |

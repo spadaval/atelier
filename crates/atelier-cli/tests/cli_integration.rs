@@ -261,11 +261,7 @@ fn init_git_repo(dir: &Path) {
 fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
     let needs_git = matches!(
         args,
-        ["issue", "transition", ..]
-            | ["issue", "close", ..]
-            | ["start", ..]
-            | ["abandon", ..]
-            | ["worktree", ..]
+        ["issue", "transition", ..] | ["issue", "close", ..] | ["abandon", ..]
     );
     if needs_git && !dir.join(".git").exists() {
         init_git_repo(dir);
@@ -668,8 +664,8 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier init`
 - `atelier man`
 - `atelier status`
-- `atelier start`
 - `atelier issue ...`
+- `atelier issue transition <issue-id> start`
 - `atelier search <query>`
 - `atelier graph impact/tree`
 - `atelier issue note`
@@ -680,9 +676,7 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier evidence record/show/list/attach`
 - `atelier review open/status/show/comments/comment/approve/request-changes`
 - `atelier forgejo roles check`
-- `atelier session`
 - `atelier history`
-- `atelier worktree for/status/merge/repair/remove`
 - `atelier prune`
 - `atelier maintenance delete`
 - `atelier lint`
@@ -883,7 +877,7 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
             continue;
         }
         let (success, _, stderr) = if transition == "start" && dir.join(".git").exists() {
-            run_atelier(dir, &["start", &issue_id, "--no-session"])
+            run_atelier(dir, &["issue", "transition", &issue_id, "start"])
         } else {
             run_atelier(dir, &["issue", "transition", &issue_id, transition])
         };
@@ -905,7 +899,7 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));
     }
-    let mut args = vec!["issue", "transition", issue_ref_value, "close"];
+    let mut args = vec!["issue", "transition", &issue_id, "close"];
     args.push("--reason");
     args.push(reason.unwrap_or("done"));
     let (success, _, stderr) = run_atelier(dir, &args);
@@ -1316,8 +1310,6 @@ mod legacy_surfaces;
 mod mission_projection_worktree;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
-#[path = "cli_integration/sessions.rs"]
-mod sessions;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]

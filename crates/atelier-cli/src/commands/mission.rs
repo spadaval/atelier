@@ -436,7 +436,7 @@ fn print_mission_branch_lifecycle(
             (context.current_branch.as_deref() != Some(context.resolution.expected_branch.as_str()))
                 .then(|| {
                     format!(
-                        "{} expected {}; inspect `atelier issue transition {} --options` and `atelier worktree status`",
+                        "{} expected {}; inspect `atelier issue transition {} --options` and `atelier status`",
                         issue.id, context.resolution.expected_branch, issue.id
                     )
                 })
@@ -1103,7 +1103,7 @@ fn terminal_validator_status_line(
     let (label, pass_text, fail_text, next) = terminal_validator_user_text(&result.validator)?;
     if result.passed {
         let summary = if result.validator == "git.worktree_clean"
-            && result.reason != "git worktree is clean"
+            && result.reason != "git checkout is clean"
         {
             format!("{label}: {pass_text} - {}", result.reason)
         } else {
@@ -1168,10 +1168,10 @@ fn terminal_validator_user_text(
             "atelier mission status {mission} --verbose",
         )),
         "git.worktree_clean" => Some((
-            "Worktree",
+            "Checkout",
             "clean",
             "dirty",
-            "commit or remove untracked worktree changes",
+            "commit or remove untracked checkout changes",
         )),
         "no_open_work" | "blockers.none_open" | "evidence.attached" => None,
         _ => Some((

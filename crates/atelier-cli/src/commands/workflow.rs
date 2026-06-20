@@ -136,7 +136,7 @@ pub fn issue_transition_options(
         );
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
-        let planned_actions = plan_transition_actions(db, &issue, transition)?;
+        let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
         blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
         options.push(IssueTransitionOption {
             name: name.to_string(),
@@ -165,23 +165,36 @@ pub fn issue_transition_options(
 fn plan_transition_actions(
     db: &Database,
     issue: &Issue,
+    transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<Vec<PlannedAction>> {
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-    Ok(plan_actions_for_resolution(
+    let mut actions = Vec::new();
+    if transition_name == "start"
+        && !transition
+            .actions
+            .iter()
+            .any(|action| action.builtin == "branch_prepare")
+    {
+        actions.push(branch_prepare_plan(issue, &resolution, 1));
+    }
+    actions.extend(plan_actions_for_resolution(
         issue,
         &resolution,
         &transition.actions,
-    ))
+        actions.len() + 1,
+    ));
+    Ok(actions)
 }
 
 fn plan_actions_for_resolution(
     issue: &Issue,
     resolution: &BranchLifecycleResolution,
     actions: &[atelier_app::workflow_policy::ActionDefinition],
+    start_order: usize,
 ) -> Vec<PlannedAction> {
     actions
         .iter()
@@ -189,7 +202,7 @@ fn plan_actions_for_resolution(
         .map(|(index, action)| {
             let review_artifact = review_artifact_action_plan(action, resolution);
             PlannedAction {
-                order: index + 1,
+                order: start_order + index,
                 name: action.builtin.clone(),
                 target_issue_id: issue.id.clone(),
                 branch_owner_id: resolution.owner_id.clone(),
@@ -211,6 +224,30 @@ fn plan_actions_for_resolution(
             }
         })
         .collect()
+}
+
+fn branch_prepare_plan(
+    issue: &Issue,
+    resolution: &BranchLifecycleResolution,
+    order: usize,
+) -> PlannedAction {
+    PlannedAction {
+        order,
+        name: "branch_prepare".to_string(),
+        target_issue_id: issue.id.clone(),
+        branch_owner_id: resolution.owner_id.clone(),
+        expected_branch: resolution.expected_branch.clone(),
+        base_branch: resolution.base_branch.clone(),
+        merge_strategy: resolution.merge_strategy,
+        merge_owned: resolution.merge_owned,
+        review_artifact_target: None,
+        review_artifact_provider: None,
+        review_artifact_role: None,
+        forgejo_role_authors: None,
+        confirmation_required: false,
+        skip_reason: None,
+        block_reason: None,
+    }
 }
 
 struct ReviewArtifactActionPlan {
@@ -327,11 +364,11 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             "current branch matches expected branch".to_string()
         }
         Some(current) => format!(
-            "mismatch - current branch {current}; inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
+            "mismatch - current branch {current}; inspect `atelier issue transition {} --options` and `atelier status` before continuing work",
             context.resolution.issue_id
         ),
         None => format!(
-            "detached or unknown - inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
+            "detached or unknown - inspect `atelier issue transition {} --options` and `atelier status` before continuing work",
             context.resolution.issue_id
         ),
     }
@@ -363,7 +400,7 @@ fn branch_context_blockers(
     if is_start {
         if !context.dirty_entries.is_empty() {
             blockers.push(format!(
-                "branch context: worktree has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier start {}`",
+                "branch context: checkout has uncommitted changes; inspect `git status --short --branch`, then rerun `atelier issue transition {} start`",
                 issue.id
             ));
         }
@@ -372,7 +409,7 @@ fn branch_context_blockers(
             && !context.base_branch_exists
         {
             blockers.push(format!(
-                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier start {}`",
+                "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} start`",
                 context.resolution.base_branch, issue.id
             ));
         }
@@ -415,7 +452,7 @@ fn branch_context_guidance(
     guidance.push(branch_lifecycle_state_line(&context));
     if is_start {
         guidance.push(format!(
-            "Corrective lifecycle command: atelier start {}",
+            "Corrective lifecycle command: atelier issue transition {} start",
             issue.id
         ));
     }
@@ -453,7 +490,7 @@ pub fn transition_issue(
         transition,
         close_reason,
     )?;
-    let planned_actions = plan_transition_actions(db, &before, transition)?;
+    let planned_actions = plan_transition_actions(db, &before, transition_name, transition)?;
     blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
     if !blockers.is_empty() {
         report_blocked_transition(
@@ -505,6 +542,9 @@ pub fn transition_issue(
     }
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
+    if transition_name == "start" {
+        print_start_context_and_record(&refreshed, &issue)?;
+    }
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
     println!("To:       {}", issue.status);
@@ -512,9 +552,76 @@ pub fn transition_issue(
         println!("Action:   {} {}", result.name, result.detail);
     }
     print_heading("Next Commands");
-    println!("  atelier issue show {}", issue.id);
-    println!("  atelier issue transition {} --options", issue.id);
+    if transition_name == "start" {
+        println!("  Inspect checkout status: atelier status");
+        if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
+            println!(
+                "  Inspect mission selection and blockers: atelier mission status {mission_id}"
+            );
+        }
+        println!(
+            "  Inspect work transitions: atelier issue transition {} --options",
+            issue.id
+        );
+        println!(
+            "  Record proof: atelier evidence record --target issue/{} --kind test \"...\"",
+            issue.id
+        );
+    } else {
+        println!("  atelier issue show {}", issue.id);
+        println!("  atelier issue transition {} --options", issue.id);
+    }
     Ok(())
+}
+
+fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
+    print_active_mission_context(db, &issue.id)?;
+    let branch = git_current_branch(&repo_root()?).ok();
+    let path = env::current_dir()?.to_string_lossy().to_string();
+    crate::commands::activity_log::record_work_started(&issue.id, branch.as_deref(), Some(&path))?;
+    println!("Started work on {} {}", issue.id, issue.title);
+    if let Ok(context) = branch_lifecycle_context(db, &issue.id) {
+        println!(
+            "Branch owner: {} {} ({})",
+            branch_owner_label(&context.resolution.owner_kind),
+            context.resolution.owner_id,
+            context.resolution.owner_issue_type
+        );
+        println!("Effective branch: {}", context.resolution.expected_branch);
+        println!("Base branch: {}", context.resolution.base_branch);
+    }
+    if let Some(branch) = branch {
+        println!("Branch: {branch}");
+    }
+    println!("Checkout: {path}");
+    Ok(())
+}
+
+fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
+    let Some(mission) = crate::commands::mission::active_mission(db)? else {
+        return Ok(());
+    };
+    if crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)? {
+        println!("Mission: {} (active)", mission.id);
+    } else {
+        println!(
+            "Warning: {issue_id} is outside active mission {}; non-mission work remains allowed.",
+            mission.id
+        );
+    }
+    Ok(())
+}
+
+fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
+    for mission in db.list_records("mission", None)? {
+        if mission.status == "closed" {
+            continue;
+        }
+        if crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)? {
+            return Ok(Some(mission.id));
+        }
+    }
+    Ok(None)
 }
 
 fn resolve_issue_transition<'a>(
@@ -666,7 +773,7 @@ fn branch_prepare_preflight(repo_root: &Path, action: &PlannedAction) -> Option<
     match non_tracker_dirty_entries(repo_root) {
         Ok(dirty) if !dirty.is_empty() => {
             return Some(format!(
-                "action {} failed preflight: worktree has uncommitted non-tracker changes:\n{}",
+                "action {} failed preflight: checkout has uncommitted non-tracker changes:\n{}",
                 action.name,
                 dirty.join("\n")
             ));
@@ -697,7 +804,7 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
     }
     match non_tracker_dirty_entries(repo_root) {
         Ok(dirty) if !dirty.is_empty() => Some(format!(
-            "action {} failed preflight: worktree has uncommitted non-tracker changes:\n{}",
+            "action {} failed preflight: checkout has uncommitted non-tracker changes:\n{}",
             action.name,
             dirty.join("\n")
         )),
@@ -1122,13 +1229,22 @@ fn merge_review_action(
     _action: &PlannedAction,
 ) -> Result<String> {
     let db = app_use_cases::open_database(db_path)?;
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let role = policy.status_role(&issue.status).ok_or_else(|| {
+        anyhow::anyhow!(
+            "review_role_missing: issue {} is in status '{}' and that status has no role; configure statuses.{}.role before using review.merge as a transition action",
+            issue.id,
+            issue.status,
+            issue.status
+        )
+    })?;
     crate::commands::pr::merge(
         &db,
         repo_root,
         &state_dir,
         &db_path,
         Some(&issue.id),
-        "manager",
+        Some(role),
     )?;
     Ok("provider review merged".to_string())
 }
@@ -1906,7 +2022,7 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
     )
     .with_context(|| {
         format!(
-            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue transition {} close --reason \"...\"`.",
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier issue transition {} start` to prepare the branch, then retry `atelier issue transition {} close --reason \"...\"`.",
             resolution.expected_branch, resolution.issue_id, resolution.issue_id
         )
     })
@@ -1940,7 +2056,7 @@ fn ensure_non_tracker_clean_for_action(
     let dirty = non_tracker_dirty_entries(root)?;
     if !dirty.is_empty() {
         bail!(
-            "action {} failed {phase}: worktree has uncommitted non-tracker changes:\n{}\nRecovery: commit or stash these paths, then retry the transition for {}.",
+            "action {} failed {phase}: checkout has uncommitted non-tracker changes:\n{}\nRecovery: commit or stash these paths, then retry the transition for {}.",
             action.name,
             dirty.join("\n"),
             issue.id
@@ -1953,7 +2069,7 @@ fn non_tracker_dirty_entries(root: &Path) -> Result<Vec<String>> {
     let status = git_stdout(
         root,
         &["status", "--porcelain"],
-        "inspect worktree dirtiness",
+        "inspect checkout dirtiness",
     )?;
     Ok(status
         .lines()
@@ -2998,7 +3114,7 @@ fn git_worktree_clean() -> Result<(bool, String)> {
         if stderr.contains("not a git repository") {
             return Ok((
                 true,
-                "not a git repository; git worktree check skipped".to_string(),
+                "not a git repository; git checkout check skipped".to_string(),
             ));
         }
         let message = if stderr.is_empty() {
@@ -3014,12 +3130,12 @@ fn git_worktree_clean() -> Result<(bool, String)> {
         .filter_map(parse_git_dirty_entry)
         .collect::<Vec<_>>();
     if dirty.is_empty() {
-        Ok((true, "git worktree is clean".to_string()))
+        Ok((true, "git checkout is clean".to_string()))
     } else {
         let classified = classify_git_dirty_entries(&root, &dirty)?;
         if classified.blocking_entries.is_empty() {
             if classified.tracker_generated_entries.is_empty() {
-                return Ok((true, "git worktree is clean".to_string()));
+                return Ok((true, "git checkout is clean".to_string()));
             }
             return Ok((
                 true,
@@ -3044,7 +3160,7 @@ fn git_worktree_clean() -> Result<(bool, String)> {
         Ok((
             false,
             format!(
-                "git worktree has {} dirty {}: {sample}{suffix}",
+                "git checkout has {} dirty {}: {sample}{suffix}",
                 classified.blocking_entries.len(),
                 if classified.blocking_entries.len() == 1 {
                     "entry"

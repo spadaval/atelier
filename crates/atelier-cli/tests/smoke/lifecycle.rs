@@ -12,7 +12,7 @@ fn test_timer_roundtrip() {
     h.run_ok(&["issue", "create", "Timer roundtrip issue"]);
 
     // Start the timer (top-level `start` command).
-    let start = h.run_ok(&["start", "1"]);
+    let start = h.run_ok(&["issue", "transition", "1", "start"]);
     assert!(
         start.stdout_contains("Started")
             || start.stdout_contains("timer")
@@ -66,9 +66,9 @@ fn test_timer_start_already_running() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Double-start issue"]);
 
-    h.run_ok(&["start", "1"]);
+    h.run_ok(&["issue", "transition", "1", "start"]);
 
-    let result = h.run(&["start", "1"]);
+    let result = h.run(&["issue", "transition", "1", "start"]);
     let combined = format!("{}{}", result.stdout, result.stderr);
     assert!(
         result.success
@@ -95,108 +95,6 @@ fn test_timer_stop_not_running() {
             || combined.contains("not running")
             || combined.contains("No timer"),
         "stop with no running timer should handle gracefully.\nstdout: {}\nstderr: {}",
-        result.stdout,
-        result.stderr,
-    );
-}
-
-// ===========================================================================
-// Session lifecycle
-// ===========================================================================
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_session_full_lifecycle() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "Session lifecycle issue"]);
-
-    // Start session.
-    let start = h.run_ok(&["session", "start"]);
-    assert!(
-        start.stdout_contains("started")
-            || start.stdout_contains("Started")
-            || start.stdout_contains("Session"),
-        "session start should confirm.\nstdout: {}",
-        start.stdout,
-    );
-
-    // Set the active work item.
-    let work = h.run_ok(&["session", "work", "1"]);
-    assert!(
-        work.stdout_contains("working on")
-            || work.stdout_contains("Working on")
-            || work.stdout_contains("#1")
-            || work.success,
-        "session work should confirm the work item.\nstdout: {}",
-        work.stdout,
-    );
-
-    // Verify session is active.
-    let status = h.run_ok(&["session", "status"]);
-    assert!(
-        status.stdout_contains("active")
-            || status.stdout_contains("Active")
-            || status.stdout_contains("Session")
-            || status.stdout_contains("Working"),
-        "session should be active.\nstdout: {}",
-        status.stdout,
-    );
-
-    // End session with handoff notes.
-    let handoff_note = "Done: lifecycle test complete, all assertions passed";
-    let end = h.run_ok(&["session", "end", "--notes", handoff_note]);
-    assert!(
-        end.stdout_contains("ended")
-            || end.stdout_contains("Ended")
-            || end.stdout_contains("Session")
-            || end.success,
-        "session end should confirm.\nstdout: {}",
-        end.stdout,
-    );
-
-    // Start a new session and verify handoff is shown.
-    let start2 = h.run_ok(&["session", "start"]);
-    assert!(
-        start2.stdout_contains("lifecycle test complete")
-            || start2.stdout_contains("Done:")
-            || start2.stdout_contains("Handoff")
-            || start2.stdout_contains("handoff")
-            || start2.stdout_contains("Previous session"),
-        "new session start should show previous handoff notes.\nstdout: {}",
-        start2.stdout,
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_session_status_no_session() {
-    let h = SmokeHarness::new();
-
-    let result = h.run(&["session", "status"]);
-    let combined = format!("{}{}", result.stdout, result.stderr);
-    assert!(
-        combined.contains("No active")
-            || combined.contains("no active")
-            || combined.contains("No session")
-            || combined.contains("not started")
-            || result.success,
-        "session status with no session should handle gracefully.\nstdout: {}\nstderr: {}",
-        result.stdout,
-        result.stderr,
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_session_end_without_start() {
-    let h = SmokeHarness::new();
-
-    let result = h.run(&["session", "end"]);
-    let combined = format!("{}{}", result.stdout, result.stderr);
-    assert!(
-        !result.success || combined.contains("No active") || combined.contains("no active"),
-        "session end without start should handle gracefully.\nstdout: {}\nstderr: {}",
         result.stdout,
         result.stderr,
     );
@@ -277,8 +175,9 @@ fn test_issue_tree_status_filter() {
     ]);
     h.run_ok(&[
         "issue",
-        "close",
+        "transition",
         &done_child_id,
+        "close",
         "--reason",
         "fixture complete",
     ]);

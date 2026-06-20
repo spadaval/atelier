@@ -11,7 +11,7 @@ current chat?"
 - Documentation: Plans are ordinary Markdown artifacts or prose referenced from
   accountable work or evidence.
 - Design: First-class `.atelier/plans/` records and `atelier plan` CRUD are not
-  active v1 behavior. One-shot reviewed graph creation belongs to `bundle`.
+  active v1 behavior. One-shot reviewed batch creation belongs to `bundle`.
 - Output hierarchy: No v1 plan command output contract. Plan paths or prose are
   inspected through the record that references them.
 

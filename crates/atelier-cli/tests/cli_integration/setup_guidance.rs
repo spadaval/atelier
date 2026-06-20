@@ -734,7 +734,7 @@ fn test_top_level_help_only_shows_core_commands() {
 
     for command in [
         "init", "man", "status", "start", "issue", "mission", "bundle", "evidence", "history",
-        "worktree", "lint", "doctor",
+        "lint", "doctor",
     ] {
         assert!(stdout.contains(command), "missing core command {command}");
     }
@@ -807,10 +807,9 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier mission show <id>",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
-        "atelier session list --active",
         "atelier history --mission <id>",
         "atelier history --issue <id>",
-        "atelier start <issue-id>",
+        "atelier issue transition <issue-id> start",
         "atelier issue transition <issue-id> --options",
         "atelier issue transition <issue-id> close --reason",
     ] {
@@ -1075,12 +1074,14 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains(
         "Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
     ));
-    assert!(!stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
+    assert!(!stdout.contains(
+        "Start selected work (ready work exists): atelier issue transition <issue-id> start"
+    ));
     assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
-    assert!(stdout.contains("Active sessions: none"));
-    assert!(!stdout.contains("session start"));
+    assert!(stdout.contains("Active roles:   none"));
+    assert!(!stdout.contains("atelier session"));
 
     let (success, quiet, stderr) = run_atelier(dir.path(), &["--quiet", "status"]);
     assert!(success, "quiet status failed: {stderr}");
@@ -1138,7 +1139,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
     assert!(stdout.contains("Local State"));
-    assert!(stdout.contains("Worktree: dirty"));
+    assert!(stdout.contains("Checkout: dirty"));
     assert!(stdout.contains("status-dirty.txt"));
     assert!(stdout.contains("Branch:"));
     assert!(stdout.contains("Evidence Status"));
@@ -1195,7 +1196,7 @@ fn test_root_status_reports_active_mission_contract_fields() {
 }
 
 #[test]
-fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
+fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
@@ -1220,7 +1221,8 @@ fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "active status baseline");
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
     assert!(start_out.contains("Next Commands"));
     assert!(start_out.contains("Inspect checkout status: atelier status"));
@@ -1250,12 +1252,10 @@ fn test_root_status_guides_current_work_to_transition_and_worktree_status() {
     assert!(stdout.contains(&format!(
         "Inspect current work transitions ({issue_id}): atelier issue transition {issue_id} --options"
     )));
-    assert!(stdout.contains(
-        "Inspect worktree context if checkout state is unclear: atelier worktree status"
-    ));
+    assert!(stdout.contains("Inspect checkout context if state is unclear: atelier status"));
     assert!(!stdout.contains("atelier abandon"));
     assert!(!stdout.contains("Start ready active-mission work"));
-    assert!(!stdout.contains(&format!("atelier start {issue_id}")));
+    assert!(!stdout.contains(&format!("atelier issue transition {issue_id} start")));
     assert!(
         !stdout.contains("workflow validate"),
         "normal status next actions must not route to raw workflow validators:\n{stdout}"
@@ -1326,7 +1326,7 @@ fn test_spec_representative_commands_match_signpost_surfaces() {
     assert!(!spec.contains("atelier work start"));
     assert!(!spec.contains("atelier work finish"));
     assert!(!spec.contains("atelier workflow validate"));
-    assert!(spec.contains("atelier start atelier-z1p8"));
+    assert!(spec.contains("atelier issue transition atelier-z1p8 start"));
     assert!(spec.contains("atelier issue transition atelier-z1p8 close --reason \"done\""));
     assert!(!spec.contains("atelier abandon atelier-z1p8 --reason \"handoff\""));
     assert!(spec.contains("atelier status"));
@@ -1405,7 +1405,7 @@ fn test_man_worker_names_current_work() {
     let issue_id = issue_id.as_str();
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "man work setup");
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "transition", issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "worker"]);
@@ -1604,7 +1604,8 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready start item");
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "root start failed: {stderr}");
     assert!(
         start_out.contains("Applied transition start"),
@@ -1684,12 +1685,14 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "two startable items");
 
-    let (success, active_out, stderr) = run_atelier(dir.path(), &["start", &active_id]);
+    let (success, active_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &active_id, "start"]);
     assert!(success, "initial start failed: {stderr}");
     assert!(!active_out.contains("Session:"), "{active_out}");
     commit_all(dir.path(), "active item started");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &next_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &next_id, "start"]);
     assert!(success, "second current work issue should start: {stderr}");
     assert!(
         stdout.contains(&format!("Started work on {next_id}")),
@@ -1723,10 +1726,11 @@ fn test_root_start_same_issue_reports_already_started_work() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "restartable item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id, "--no-session"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "first start failed: {stderr}");
     let (success, restart_out, stderr) =
-        run_atelier(dir.path(), &["start", &issue_id, "--no-session"]);
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "second start should be guarded:\n{restart_out}");
     assert!(
         stderr.contains("Transition 'start' is not available from status 'in_progress'"),
@@ -1749,7 +1753,8 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "switchable items");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id, "--no-session"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &first_id, "start"]);
     assert!(success, "first start failed: {stderr}");
     let (success, abandon_out, stderr) =
         run_atelier(dir.path(), &["abandon", &first_id, "--reason", "switching"]);
@@ -1760,7 +1765,7 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     );
 
     let (success, second_out, stderr) =
-        run_atelier(dir.path(), &["start", &second_id, "--no-session"]);
+        run_atelier(dir.path(), &["issue", "transition", &second_id, "start"]);
     assert!(success, "second start should not require abandon: {stderr}");
     assert!(
         second_out.contains(&format!("Started work on {second_id}")),
@@ -1774,72 +1779,6 @@ fn test_removed_abandon_rejects_and_starting_another_issue_is_allowed() {
     );
     assert!(status_out.contains(&format!("{first_id} - First item")));
     assert!(status_out.contains(&format!("{second_id} - Second item")));
-}
-
-#[test]
-fn test_separate_worktrees_can_have_different_active_issues() {
-    let dir = tempdir().unwrap();
-    init_git_repo(dir.path());
-    init_atelier(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Parallel focus"]);
-    assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Parallel focus");
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id.as_str()]);
-    assert!(success, "mission start failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Root work"]);
-    assert!(success, "root issue create failed: {stderr}");
-    let root_id = issue_id_by_title(dir.path(), "Root work");
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Worktree work"]);
-    assert!(success, "worktree issue create failed: {stderr}");
-    let worktree_id = issue_id_by_title(dir.path(), "Worktree work");
-    for issue_id in [&root_id, &worktree_id] {
-        let (success, _, stderr) = run_atelier(
-            dir.path(),
-            &["mission", "add-work", mission_id.as_str(), issue_id],
-        );
-        assert!(success, "mission add work failed for {issue_id}: {stderr}");
-    }
-    migrate_default_issue_workflow(dir.path());
-    commit_all(dir.path(), "parallel worktree items");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &root_id]);
-    assert!(success, "root start failed: {stderr}");
-    let worktree_path = dir.path().join(".atelier-worktrees").join(&worktree_id);
-    let worktree_arg = worktree_path.to_string_lossy().to_string();
-    let (success, worktree_out, stderr) = run_atelier(
-        dir.path(),
-        &["worktree", "for", &worktree_id, "--path", &worktree_arg],
-    );
-    assert!(success, "worktree for failed: {stderr}");
-    assert!(worktree_out.contains(&worktree_arg));
-
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
-    assert!(success, "status failed: {stderr}");
-    assert!(status_out.contains(&format!("{root_id} - Root work")));
-    assert!(status_out.contains(&format!("{worktree_id} - Worktree work")));
-
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
-    assert!(success, "mission status failed: {stderr}");
-    let active_work_section = mission_out
-        .split("Active Work")
-        .nth(1)
-        .expect("active work section missing")
-        .split("Next Commands")
-        .next()
-        .expect("next commands section missing");
-    assert!(active_work_section.contains(&root_id), "{mission_out}");
-    assert!(active_work_section.contains(&worktree_id), "{mission_out}");
-
-    let (success, worktree_status, stderr) = run_atelier(dir.path(), &["worktree", "status"]);
-    assert!(success, "worktree status failed: {stderr}");
-    assert!(worktree_status.contains(&worktree_arg), "{worktree_status}");
-    assert!(
-        worktree_status.contains(&format!("{worktree_id} [in_progress]")),
-        "{worktree_status}"
-    );
 }
 
 #[test]
@@ -1866,7 +1805,8 @@ fn test_root_start_reports_workflow_validator_failure() {
     .unwrap();
     commit_all(dir.path(), "validator-gated start policy");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
     assert!(stderr.contains("evidence.attached"), "{stderr}");
@@ -2042,7 +1982,8 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready close item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2145,7 +2086,8 @@ fn test_removed_abandon_preserves_issue_status_and_activity() {
     migrate_default_issue_workflow(dir.path());
     commit_all(dir.path(), "workflow-ready abandon item");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
 
     let (success, abandon_out, stderr) = run_atelier(
@@ -2599,6 +2541,7 @@ fn test_removed_aliases_fail_as_unknown_commands() {
         vec!["mission", "view"],
         vec!["work", "status"],
         vec!["work", "worktree"],
+        vec!["worktree"],
     ] {
         let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
         assert!(!success, "{args:?} unexpectedly succeeded");

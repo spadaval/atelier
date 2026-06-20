@@ -17,6 +17,9 @@ blocks it. It is not the implementation procedure for a named code item.
 - High-leverage product, architecture, persistence, security, migration,
   validation, or public-contract choices need durable artifact-update work.
   Block dependent implementation on those tasks.
+- When planning work, include scoped cleanup or refactoring when adjacent code
+  makes the intended change harder to understand or trust. Cleanup should be
+  purposeful and bounded, not drive-by churn.
 - Keep graph edits focused. Do not rewrite unrelated tracker areas while
   clarifying one workstream.
 

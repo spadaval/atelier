@@ -78,7 +78,7 @@
   canonical `review` field. It follows the active review mode and must not
   merge, approve, comment on, or close review or issue workflow by itself.
 - Mission: a high-level objective that may span multiple epics, issues,
-  evidence records, agents, derived session views, and deferred run metadata.
+  evidence records, agents, and deferred run metadata.
   It is also the shared background workspace boundary: one mission normally
   owns one shared worktree for coordinated agent work.
 - Epic: the normal branch and review boundary beneath a mission. One epic
@@ -95,10 +95,10 @@
 - Mission Control: the target projection or UI surface that summarizes active
   missions, checkpoint progress, blockers, agents, workflow validator failures,
   and evidence.
-- Session: a derived, issue-scoped worker/reviewer/validator attempt rebuilt
-  from canonical issue activity. A session can explain who did what and when,
-  but it does not define current work, it is inspection-only, and it is not a
-  standalone workflow record.
+- Status role: optional workflow policy on an active issue status that names
+  the role currently responsible for that work state. Status roles are declared
+  in `.atelier/workflow.yaml` and are surfaced by `atelier status`, role guides,
+  and review attribution.
 - Review mode: the repository-wide review backend selected in
   `.atelier/config.toml`. Exactly one mode is active for a project:
   `room` for native Atelier review rooms or `provider` for a hosted
@@ -133,8 +133,8 @@
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
-- Run: execution metadata for a session or slice of work, not the primary unit
-  of product planning.
+- Run: execution metadata for a slice of work, not the primary unit of product
+  planning.
 - Graph: the cross-record relationship shape among missions, issues, blockers,
   evidence, and other first-class records.
 - Current work: the set of canonical issue records in one checkout's tracked
@@ -177,26 +177,20 @@
   use `blocks` for issue-owned blockers, `children` for hierarchy and mission
   work, `attachments` for evidence, and `relates` for peer semantic
   relationships.
-- Missions, issues, evidence, workflow policy, and activity sidecars are the v1
-  first-class durable concepts. Milestone/checkpoint records, first-class plan
-  records, and runs remain deferred until a later contract reintroduces them
-  directly. Session views are derived from canonical issue activity rather than
-  stored as standalone workflow records.
+- Missions, issues, evidence, workflow policy, review artifacts, and activity
+  sidecars are the v1 first-class durable concepts. Milestone/checkpoint
+  records, first-class plan records, sessions, attempts, and runs remain
+  deferred until a later contract reintroduces them directly.
 - Validators belong to workflow policy. Checkpoint or plan prose may describe
   desired proof, but validators enforce issue transitions.
 - Durable claim/assignment and current work are easy to confuse. Current work
-  is derived from canonical `in_progress` issue status in the checkout's
-  tracked Markdown records, not from runtime work associations or a parallel
-  hidden claim system.
-- Derived session views and current work are also distinct. A session view can
-  summarize the work an agent is doing, but the source of truth for current
-  work stays the checkout's canonical `in_progress` issue set. Inspecting a
-  derived session view does not close, block, or abandon an issue; workflow
-  transitions do that.
-- Derived session views and local command diagnostics serve different purposes.
-  Sessions summarize bounded worker, reviewer, and validator attempts from
-  canonical issue activity. Local command diagnostics are ignored runtime
-  telemetry for command health and are not exported work records.
+  is derived from active-category issue status in the checkout's tracked
+  Markdown records, not from runtime work associations, sessions, attempts, or
+  a parallel hidden claim system.
+- Status roles and local command diagnostics serve different purposes. Status
+  roles are committed workflow policy for active work ownership. Local command
+  diagnostics are ignored runtime telemetry for command health and are not
+  exported work records.
 - Review artifacts and validators are distinct. `atelier review` commands
   operate on native rooms or provider-backed review artifacts and record their
   issue or epic linkage, while workflow validators such as
@@ -207,6 +201,10 @@
   artifact after validators pass, but approval, comments, request-changes,
   finding resolution, merge, and workflow status changes remain owned by
   explicit review and issue commands.
+- Review command role attribution is status-derived by default. Mutating review
+  commands use explicit `--role` when supplied; otherwise they infer the role
+  from the linked owner issue's current `status.role` and fail if that status
+  has no configured role.
 - Review links and evidence attachments are distinct. The `review` field stores
   the active review artifact for a branch-owning issue or epic; evidence
   attachments prove claims with command transcripts, review summaries, or
