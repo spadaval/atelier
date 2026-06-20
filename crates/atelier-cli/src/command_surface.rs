@@ -18,8 +18,8 @@ const COMMAND_GROUP_ROOTS: &[&str] = &[
     "evidence",
     "issue",
     "branch",
+    "bundle",
     "maintenance",
-    "mission",
     "note",
     "workflow",
     "worktree",
@@ -396,6 +396,7 @@ fn parse_root_help_commands(help: &str) -> BTreeSet<String> {
         "Orientation",
         "Issues",
         "Missions and planning",
+        "Planning",
         "Records",
         "Advanced work",
         "State management",
@@ -838,24 +839,25 @@ mod tests {
 
     #[test]
     fn expands_slash_command_references() {
-        let uses = expand_command_reference("atelier mission create/show/list/status/update");
+        let uses = expand_command_reference("atelier issue show/status/update");
         let displays = uses
             .into_iter()
             .map(|command| command.display)
             .collect::<Vec<_>>();
 
-        assert!(displays.contains(&"atelier mission create".to_string()));
-        assert!(displays.contains(&"atelier mission show".to_string()));
-        assert!(displays.contains(&"atelier mission update".to_string()));
+        assert!(displays.contains(&"atelier issue show".to_string()));
+        assert!(displays.contains(&"atelier issue status".to_string()));
+        assert!(displays.contains(&"atelier issue update".to_string()));
     }
 
     #[test]
     fn extracts_visible_roots_without_removed_or_hidden_sections() {
-        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier mission show`\n\n## Removed Behavior\n\nThere is no `atelier work status`.\nThere is no `atelier mission close`.\n";
+        let doc = "# CLI\n\n## Core\n\n- `atelier status`\n- `atelier issue show`\n\n## Removed Behavior\n\nThere is no `atelier work status`.\nThere is no `atelier mission close`.\n";
         let roots = documented_visible_roots(doc);
 
         assert!(roots.contains_key("status"));
-        assert!(roots.contains_key("mission"));
+        assert!(roots.contains_key("issue"));
+        assert!(!roots.contains_key("mission"));
         assert!(!roots.contains_key("work"));
     }
 

@@ -239,7 +239,7 @@ pub fn resolve_id(db: &Database, issue_ref: &str) -> Result<String> {
 
 fn show_command_for_kind(kind: &str, id: &str) -> String {
     match kind {
-        "mission" => format!("atelier mission show {id}"),
+        "mission" => format!("atelier issue show {id}"),
         "evidence" => format!("atelier evidence show {id}"),
         _ => format!("atelier {kind} show {id}"),
     }
@@ -1511,6 +1511,9 @@ pub struct LifecycleCreateInput<'a> {
     pub issue_type: &'a str,
     pub labels: &'a [String],
     pub parent: Option<&'a str>,
+    pub constraints: Vec<String>,
+    pub risks: Vec<String>,
+    pub validation: Vec<String>,
     pub quiet: bool,
 }
 
@@ -1521,6 +1524,9 @@ pub fn create_lifecycle(
 ) -> Result<()> {
     if input.issue_type == "mission" {
         return create_mission_lifecycle(state_dir, db_path, input);
+    }
+    if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty() {
+        bail!("mission section flags require `--issue-type mission`");
     }
     validate_priority(input.priority)?;
     validate_configured_issue_type(state_dir, input.issue_type)?;
@@ -1612,9 +1618,9 @@ fn create_mission_lifecycle(
     let sections = atelier_records::mission_sections_from_inputs(
         input.title,
         input.description,
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
+        input.constraints,
+        input.risks,
+        input.validation,
     );
     let mut record =
         app_use_cases::create_mission_record(state_dir, input.title, "ready", sections)?;

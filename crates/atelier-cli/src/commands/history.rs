@@ -107,8 +107,8 @@ impl HistoryScope {
                 issue_ids: Some(issue_ids),
                 record_ids: Some(record_ids),
                 next_commands: vec![
-                    format!("atelier mission show {}", mission.id),
-                    format!("atelier mission status {}", mission.id),
+                    format!("atelier issue show {}", mission.id),
+                    format!("atelier issue status {}", mission.id),
                     format!(
                         "atelier history --mission {} --limit {}",
                         mission.id, options.limit
@@ -180,7 +180,7 @@ impl HistoryScope {
             record_ids: None,
             next_commands: vec![
                 "atelier issue show <id>".to_string(),
-                "atelier mission show <id>".to_string(),
+                "atelier issue show <mission-id>".to_string(),
                 format!("atelier history --limit {}", options.limit),
                 "atelier history --mission <id>".to_string(),
                 "atelier history --issue <id>".to_string(),

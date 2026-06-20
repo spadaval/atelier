@@ -666,13 +666,13 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier status`
 - `atelier issue ...`
 - `atelier issue transition <issue-id> start`
+- `atelier issue create "..." --issue-type mission`
+- `atelier issue show <objective-id>`
 - `atelier issue status <objective-id>`
 - `atelier issue link <objective-id> <issue-id> --role advances`
+- `atelier issue block <objective-id> <issue-id>`
 - `atelier search <query>`
 - `atelier issue note`
-- `atelier mission note`
-- `atelier mission create/show/list/status/update`
-- `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
 - `atelier review open/status/show/comments/comment/approve/request-changes`

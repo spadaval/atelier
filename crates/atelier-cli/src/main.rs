@@ -28,8 +28,7 @@ Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
 
-Missions and planning:
-  mission       Create, list, show, status, close, and update durable missions
+Planning:
   bundle        Preview and apply one-shot graph bundle files
 
 Records:
@@ -62,10 +61,10 @@ Common commands:
   atelier issue block <blocked-id> <blocker-id>
   atelier issue unblock <blocked-id> <blocker-id>
   atelier issue blocked [<id>]
-  atelier mission list
-  atelier mission show <id>
-  atelier mission status
-  atelier mission close <id> --reason \"...\"
+  atelier issue create \"...\" --issue-type mission
+  atelier issue show <mission-id>
+  atelier issue status
+  atelier issue transition <mission-id> close --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
   atelier forgejo roles check
@@ -161,12 +160,6 @@ enum Commands {
         /// Canonical state directory to write after import
         #[arg(short, long)]
         output: Option<String>,
-    },
-
-    /// First-class mission records
-    Mission {
-        #[command(subcommand)]
-        action: MissionCommands,
     },
 
     /// One-shot graph bundle files
@@ -281,6 +274,21 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
+        /// Initial Markdown description/body text
+        #[arg(long)]
+        description: Option<String>,
+        /// Mission intent/body text; requires --issue-type mission
+        #[arg(long)]
+        body: Option<String>,
+        /// Add one mission Constraints section bullet; repeat for multiple constraints
+        #[arg(long)]
+        constraint: Vec<String>,
+        /// Add one mission Risks section bullet; repeat for multiple risks
+        #[arg(long)]
+        risk: Vec<String>,
+        /// Add one mission Validation section bullet; repeat for multiple validation criteria
+        #[arg(long)]
+        validation: Vec<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
@@ -329,7 +337,10 @@ enum IssueCommands {
     /// Show type-aware issue status for objective records
     Status {
         /// Issue ID
-        id: String,
+        id: Option<String>,
+        /// Show verbose validator detail for mission objective records
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Show issue transition options and blockers
@@ -359,6 +370,21 @@ enum IssueCommands {
         /// New issue type from .atelier/workflow.yaml issue_types
         #[arg(long)]
         issue_type: Option<String>,
+        /// New status for mission objective records
+        #[arg(long)]
+        status: Option<String>,
+        /// Mission intent/body text; requires a mission objective record
+        #[arg(long)]
+        body: Option<String>,
+        /// Add one mission Constraints section bullet; repeat for multiple constraints
+        #[arg(long)]
+        constraint: Vec<String>,
+        /// Add one mission Risks section bullet; repeat for multiple risks
+        #[arg(long)]
+        risk: Vec<String>,
+        /// Add one mission Validation section bullet; repeat for multiple validation criteria
+        #[arg(long)]
+        validation: Vec<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
@@ -391,7 +417,7 @@ enum IssueCommands {
         /// Target issue ID
         target: String,
         /// Relationship role, such as advances or blocked_by
-        #[arg(long)]
+        #[arg(long, default_value = "advances")]
         role: String,
     },
 
@@ -402,7 +428,7 @@ enum IssueCommands {
         /// Target issue ID
         target: String,
         /// Relationship role, such as advances or blocked_by
-        #[arg(long)]
+        #[arg(long, default_value = "advances")]
         role: String,
     },
 
@@ -439,78 +465,6 @@ enum MaintenanceCommands {
         #[arg(short, long)]
         force: bool,
     },
-}
-
-#[derive(Subcommand)]
-enum MissionCommands {
-    /// Create a mission with generated Intent, Constraints, Risks, and Validation sections
-    Create {
-        title: String,
-        /// Intent section text; this does not replace the full mission Markdown body
-        #[arg(short, long)]
-        body: Option<String>,
-        /// Add one Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
-        constraint: Vec<String>,
-        /// Add one Risks section bullet; repeat for multiple risks
-        #[arg(long)]
-        risk: Vec<String>,
-        /// Add one Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
-        validation: Vec<String>,
-    },
-    /// Show a mission with linked work, blockers, and evidence
-    Show { id: String },
-    /// Show mission-control status for one mission or all current missions
-    Status {
-        /// Show verbose validator detail in the status summary
-        #[arg(long)]
-        verbose: bool,
-        id: Option<String>,
-    },
-    /// Close a mission after terminal checks pass
-    Close {
-        id: String,
-        /// Mission close reason recorded in the mission terminal notes
-        #[arg(long)]
-        reason: String,
-    },
-    /// List missions
-    List {
-        /// Filter missions by status (default: current; use all to include closed/history)
-        #[arg(short, long)]
-        status: Option<String>,
-    },
-    /// Update mission fields
-    Update {
-        id: String,
-        #[arg(short, long)]
-        title: Option<String>,
-        #[arg(short, long)]
-        status: Option<String>,
-        #[arg(short, long)]
-        body: Option<String>,
-        #[arg(long)]
-        constraint: Vec<String>,
-        #[arg(long)]
-        risk: Vec<String>,
-        #[arg(long)]
-        validation: Vec<String>,
-    },
-    /// Add an activity note to a mission
-    Note {
-        id: String,
-        text: String,
-        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
-        #[arg(long, default_value = "note")]
-        kind: String,
-    },
-    /// Add issue work to a mission
-    AddWork { id: String, issue: String },
-    /// Remove issue work from a mission
-    Unlink { id: String, issue: String },
-    /// Add an issue blocker to a mission
-    AddBlocker { id: String, issue: String },
 }
 
 #[derive(Subcommand)]
@@ -716,9 +670,14 @@ enum DiagnosticsCommands {
 fn issue_create_parts(
     priority: &str,
     template: Option<&str>,
+    description: Option<&str>,
+    body: Option<&str>,
     labels: &[String],
     issue_type: Option<&str>,
 ) -> Result<(String, Option<String>, Vec<String>, String)> {
+    if description.is_some() && body.is_some() {
+        bail!("--description and --body cannot be combined");
+    }
     let mut labels = labels.to_vec();
     let (final_priority, final_description, template_issue_type) =
         if let Some(template_name) = template {
@@ -745,6 +704,10 @@ fn issue_create_parts(
         } else {
             (priority.to_string(), None, None)
         };
+    let final_description = description
+        .or(body)
+        .map(str::to_string)
+        .or(final_description);
 
     IssuePriority::from_cli_input(&final_priority)?;
     let final_issue_type = match (issue_type, template_issue_type) {
@@ -805,7 +768,7 @@ fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> Strin
 fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
         "issue" | "epic" => Some("atelier issue show"),
-        "mission" => Some("atelier mission show"),
+        "mission" => Some("atelier issue show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
@@ -842,6 +805,11 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
     match action {
         IssueCommands::Create {
             title,
+            description,
+            body,
+            constraint,
+            risk,
+            validation,
             priority,
             template,
             label,
@@ -849,11 +817,23 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
+            let inferred_issue_type = if issue_type.is_none()
+                && (body.is_some()
+                    || !constraint.is_empty()
+                    || !risk.is_empty()
+                    || !validation.is_empty())
+            {
+                Some("mission")
+            } else {
+                issue_type.as_deref()
+            };
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
                 template.as_deref(),
+                description.as_deref(),
+                body.as_deref(),
                 &label,
-                issue_type.as_deref(),
+                inferred_issue_type,
             )?;
             commands::issue::create_lifecycle(
                 &state_dir,
@@ -865,6 +845,9 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     issue_type: &issue_type,
                     labels: &labels,
                     parent: parent.as_deref(),
+                    constraints: constraint,
+                    risks: risk,
+                    validation,
                     quiet,
                 },
             )
@@ -905,13 +888,20 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             commands::issue::show(&db, &id)
         }
 
-        IssueCommands::Status { id } => {
+        IssueCommands::Status { id, verbose } => {
             let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             let db = storage.db();
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, false)
-            } else {
-                commands::issue_status::run(db, &id, quiet)
+            match id {
+                Some(id) if db.record_kind_for_id(&id)?.as_deref() == Some("mission") => {
+                    commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
+                }
+                Some(id) => {
+                    if verbose {
+                        bail!("--verbose is only available for mission objective records");
+                    }
+                    commands::issue_status::run(db, &id, quiet)
+                }
+                None => commands::mission::status(db, &storage.state_dir(), None, quiet, verbose),
             }
         }
 
@@ -936,14 +926,31 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 })?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
-                commands::workflow::transition_issue(
-                    &db,
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    &transition,
-                    close_reason.as_deref(),
-                )
+                if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                    if transition != "close" {
+                        bail!(
+                            "Mission objective {} only supports `atelier issue transition {} close --reason \"...\"`",
+                            id,
+                            id
+                        );
+                    }
+                    let reason = close_reason.as_deref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "missing required field close_reason; rerun with `atelier issue transition {} close --reason \"...\"`",
+                            id
+                        )
+                    })?;
+                    commands::mission::close(&state_dir, &db_path, &id, reason)
+                } else {
+                    commands::workflow::transition_issue(
+                        &db,
+                        &state_dir,
+                        &db_path,
+                        &id,
+                        &transition,
+                        close_reason.as_deref(),
+                    )
+                }
             }
         }
 
@@ -952,36 +959,70 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             title,
             priority,
             issue_type,
+            status,
+            body,
+            constraint,
+            risk,
+            validation,
             label,
             remove_label,
             parent,
             no_parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            commands::issue::update_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::issue::UpdateInput {
-                    issue_ref: &id,
-                    title: title.as_deref(),
-                    priority: priority.as_deref(),
-                    issue_type: issue_type.as_deref(),
-                    labels: &label,
-                    remove_labels: &remove_label,
-                    parent: if no_parent {
-                        Some(None)
-                    } else {
-                        parent.as_deref().map(Some)
+            let db = canonical_mutation_db()?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::mission::update(
+                    &state_dir,
+                    &db_path,
+                    &id,
+                    title.as_deref(),
+                    status.as_deref(),
+                    body.as_deref(),
+                    constraint,
+                    risk,
+                    validation,
+                )
+            } else {
+                if status.is_some() {
+                    bail!("issue status changes use `atelier issue transition <issue-id> <transition>`");
+                }
+                if body.is_some()
+                    || !constraint.is_empty()
+                    || !risk.is_empty()
+                    || !validation.is_empty()
+                {
+                    bail!("mission section flags require a mission objective record");
+                }
+                commands::issue::update_lifecycle(
+                    &state_dir,
+                    &db_path,
+                    commands::issue::UpdateInput {
+                        issue_ref: &id,
+                        title: title.as_deref(),
+                        priority: priority.as_deref(),
+                        issue_type: issue_type.as_deref(),
+                        labels: &label,
+                        remove_labels: &remove_label,
+                        parent: if no_parent {
+                            Some(None)
+                        } else {
+                            parent.as_deref().map(Some)
+                        },
+                        append_notes: None,
                     },
-                    append_notes: None,
-                },
-            )
+                )
+            }
         }
 
         IssueCommands::Note { id, text, kind } => {
             let db = canonical_mutation_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            commands::comment::run_issue_note(&db, &id, &text, &kind)
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::comment::run_mission_note(&db, &id, &text, &kind)
+            } else {
+                let id = resolve_issue_arg(&db, &id)?;
+                commands::comment::run_issue_note(&db, &id, &text, &kind)
+            }
         }
 
         IssueCommands::Link { id, target, role } => {
@@ -997,8 +1038,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Block { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                let blocker = resolve_issue_arg(&db, &blocker)?;
+                let store = RecordStore::new(&state_dir);
+                let changed = store.add_relates_relationship(
+                    "mission",
+                    &id,
+                    "issue",
+                    &blocker,
+                    "blocked_by",
+                )?;
+                if changed {
+                    println!("Linked {id} -> {blocker} (blocked_by)");
+                } else {
+                    println!("Link {id} -> {blocker} (blocked_by) already exists");
+                }
+            } else {
+                let store = RecordStore::new(&state_dir);
+                commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
+            }
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1006,8 +1064,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Unblock { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                let blocker = resolve_issue_arg(&db, &blocker)?;
+                let store = RecordStore::new(&state_dir);
+                let changed = store.remove_relates_relationship(
+                    "mission",
+                    &id,
+                    "issue",
+                    &blocker,
+                    "blocked_by",
+                )?;
+                if changed {
+                    println!("Unlinked {id} -> {blocker} (blocked_by)");
+                } else {
+                    println!("No link {id} -> {blocker} (blocked_by) exists");
+                }
+            } else {
+                let store = RecordStore::new(&state_dir);
+                commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            }
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1102,112 +1177,6 @@ fn run() -> Result<()> {
                 &state_dir,
             )
         }
-
-        Commands::Mission { action } => match action {
-            MissionCommands::Create {
-                title,
-                body,
-                constraint,
-                risk,
-                validation,
-            } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                commands::mission::create(
-                    &state_dir,
-                    &db_path,
-                    &title,
-                    body.as_deref(),
-                    constraint,
-                    risk,
-                    validation,
-                )
-            }
-            MissionCommands::Show { id } => {
-                let storage = use_cases::mission_query_storage()?;
-                let db = storage.db();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::show(db, &id)
-            }
-            MissionCommands::Status { id, verbose } => {
-                let storage = use_cases::mission_query_storage()?;
-                let id = use_cases::resolve_optional_record_ref(&storage, "mission", id)?;
-                commands::mission::status(
-                    storage.db(),
-                    &storage.state_dir(),
-                    id.as_deref(),
-                    quiet,
-                    verbose,
-                )
-            }
-            MissionCommands::Close { id, reason } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::close(&state_dir, &db_path, &id, &reason)
-            }
-            MissionCommands::List { status } => {
-                let storage = use_cases::mission_query_storage()?;
-                let db = storage.db();
-                commands::mission::list(&db, status.as_deref())
-            }
-            MissionCommands::Update {
-                id,
-                title,
-                status,
-                body,
-                constraint,
-                risk,
-                validation,
-            } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::update(
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    title.as_deref(),
-                    status.as_deref(),
-                    body.as_deref(),
-                    constraint,
-                    risk,
-                    validation,
-                )
-            }
-            MissionCommands::Note { id, text, kind } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::comment::run_mission_note(storage.db(), &id, &text, &kind)
-            }
-            MissionCommands::AddWork { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::add_work(&state_dir, &db_path, &id, &issue)
-            }
-            MissionCommands::Unlink { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::unlink(&state_dir, &db_path, &id, &issue)
-            }
-            MissionCommands::AddBlocker { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
-            }
-        },
 
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
@@ -1625,18 +1594,6 @@ fn command_identity(command: &Commands) -> &'static str {
         }
         Commands::Rebuild { .. } => "rebuild",
         Commands::ImportBeads { .. } => "import-beads",
-        Commands::Mission { action } => match action {
-            MissionCommands::Create { .. } => "mission create",
-            MissionCommands::Show { .. } => "mission show",
-            MissionCommands::Status { .. } => "mission status",
-            MissionCommands::Close { .. } => "mission close",
-            MissionCommands::List { .. } => "mission list",
-            MissionCommands::Update { .. } => "mission update",
-            MissionCommands::Note { .. } => "mission note",
-            MissionCommands::AddWork { .. } => "mission add-work",
-            MissionCommands::Unlink { .. } => "mission unlink",
-            MissionCommands::AddBlocker { .. } => "mission add-blocker",
-        },
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",
             BundleCommands::Apply { .. } => "bundle apply",

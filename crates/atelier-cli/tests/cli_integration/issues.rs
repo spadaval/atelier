@@ -76,7 +76,7 @@ fn test_issue_create_help_is_markdown_first() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
     assert!(success, "issue create help failed: {stderr}");
-    assert!(!stdout.contains("--description"), "{stdout}");
+    assert!(stdout.contains("--description <DESCRIPTION>"), "{stdout}");
     assert!(stdout.contains("--template"), "{stdout}");
 }
 
@@ -1142,7 +1142,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "mission",
+            "issue",
             "create",
             "Canonical mission",
             "--body",
@@ -1179,7 +1179,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     )
     .unwrap();
 
-    let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("Canonical mission body"));
     assert!(mission_out.contains("Canonical constraint"));
@@ -1402,7 +1402,16 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "History mission"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "History mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "History mission");
 
@@ -1417,12 +1426,11 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     );
     assert!(success, "child create failed: {stderr}");
     let child_id = issue_id_by_title(dir.path(), "History child");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &epic_id]);
     assert!(success, "mission add-work failed: {stderr}");
     let (success, note_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "note", &mission_id, "Mission note body"],
+        &["issue", "note", &mission_id, "Mission note body"],
     );
     assert!(success, "mission note failed: {stderr}");
     assert!(note_out.contains("Added note to mission"));
@@ -1468,7 +1476,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     assert!(stdout.contains(&format!("Scope:          mission {mission_id}")));
     assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
     assert!(stdout.contains(&child_id));
-    assert!(stdout.contains(&format!("atelier mission show {mission_id}")));
+    assert!(stdout.contains(&format!("atelier issue show {mission_id}")));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),

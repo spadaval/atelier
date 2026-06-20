@@ -159,9 +159,7 @@ pub fn transition_issue(
     if transition_name == "start" {
         println!("  Inspect checkout status: atelier status");
         if let Some(mission_id) = containing_mission(&refreshed, &issue.id)? {
-            println!(
-                "  Inspect mission selection and blockers: atelier mission status {mission_id}"
-            );
+            println!("  Inspect mission selection and blockers: atelier issue status {mission_id}");
         }
         println!(
             "  Inspect work transitions: atelier issue transition {} --options",

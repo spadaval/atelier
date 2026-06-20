@@ -231,11 +231,11 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     match active_mission.as_ref().zip(mission_snapshot.as_ref()) {
         Some((mission, snapshot)) => {
             println!(
-                "  Inspect active mission health ({}): atelier mission status {}",
+                "  Inspect active mission health ({}): atelier issue status {}",
                 mission.id, mission.id
             );
             println!(
-                "  Open active mission record ({}): atelier mission show {}",
+                "  Open active mission record ({}): atelier issue show {}",
                 mission.id, mission.id
             );
             if !snapshot.active_issues.is_empty() {
@@ -260,31 +260,29 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 );
             } else if snapshot.blocked > 0 || !snapshot.open_blockers.is_empty() {
                 println!(
-                    "  Inspect blocked active-mission work (no ready work is available): atelier mission status {}",
+                    "  Inspect blocked active-mission work (no ready work is available): atelier issue status {}",
                     mission.id
                 );
             } else {
                 println!(
-                    "  Review active mission terminal state (no ready work is available): atelier mission status {}",
+                    "  Review active mission terminal state (no ready work is available): atelier issue status {}",
                     mission.id
                 );
             }
         }
-        None => {
-            match &active_mission {
-                Some(mission) => println!(
-                    "  Inspect active mission ({} is active): atelier mission status {}",
-                    mission.id, mission.id
-                ),
-                None if current_missions.is_empty() => {
-                    println!("  Inspect mission readiness (no mission is active): atelier mission status")
-                }
-                None => println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier mission status",
+        None => match &active_mission {
+            Some(mission) => println!(
+                "  Inspect active mission ({} is active): atelier issue status {}",
+                mission.id, mission.id
+            ),
+            None if current_missions.is_empty() => {
+                println!("  Inspect mission readiness (no mission is active): atelier issue status")
+            }
+            None => println!(
+            "  Inspect mission choices ({} current mission(s), none active): atelier issue status",
             current_missions.len()
         ),
-            }
-        }
+        },
     }
     if active_mission.is_some() {
         // Active-mission scoped actions above own work selection in focused runs.

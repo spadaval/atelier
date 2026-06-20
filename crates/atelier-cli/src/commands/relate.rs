@@ -1,12 +1,17 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use std::path::Path;
 
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
-use atelier_sqlite::{validate_relation_type, Database};
+use atelier_sqlite::{validate_relation_type, validate_relationship_type, Database};
 
 const BLOCKED_BY_ROLE: &str = "blocked_by";
+
+struct LinkEndpoint {
+    kind: String,
+    id: String,
+}
 
 #[cfg(test)]
 pub fn add_typed(
@@ -75,24 +80,29 @@ pub fn link_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_relation_type(role)?;
+    validate_relationship_type(role)?;
     let db = Database::open(db_path)?;
-    let issue_id = crate::commands::issue::resolve_id(&db, issue_ref)?;
-    let target_id = crate::commands::issue::resolve_id(&db, target_ref)?;
+    let source = resolve_link_endpoint(&db, issue_ref)?;
+    let target = resolve_link_endpoint(&db, target_ref)?;
     let store = RecordStore::new(state_dir);
-    let changed = if role == BLOCKED_BY_ROLE {
-        store.add_issue_block(&issue_id, &target_id)?
+    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
+        store.add_issue_block(&source.id, &target.id)?
+    } else if source.kind == "issue" && target.kind == "issue" {
+        store.add_issue_relation(&source.id, &target.id, role)?
     } else {
-        store.add_issue_relation(&issue_id, &target_id, role)?
+        store.add_record_relationship(&source.kind, &source.id, &target.kind, &target.id, role)?
     };
     drop(db);
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
-        println!("Linked {issue_id} -> {target_id} ({role})");
+        println!("Linked {} -> {} ({role})", source.id, target.id);
     } else {
-        println!("Link {issue_id} -> {target_id} ({role}) already exists");
+        println!(
+            "Link {} -> {} ({role}) already exists",
+            source.id, target.id
+        );
     }
-    print_link_next_commands(&issue_id, &target_id);
+    print_link_next_commands(&source.id, &target.id);
     Ok(())
 }
 
@@ -161,25 +171,57 @@ pub fn unlink_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_relation_type(role)?;
+    validate_relationship_type(role)?;
     let db = Database::open(db_path)?;
-    let issue_id = crate::commands::issue::resolve_id(&db, issue_ref)?;
-    let target_id = crate::commands::issue::resolve_id(&db, target_ref)?;
+    let source = resolve_link_endpoint(&db, issue_ref)?;
+    let target = resolve_link_endpoint(&db, target_ref)?;
     let store = RecordStore::new(state_dir);
-    let changed = if role == BLOCKED_BY_ROLE {
-        store.remove_issue_block(&issue_id, &target_id)?
+    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
+        store.remove_issue_block(&source.id, &target.id)?
+    } else if source.kind == "issue" && target.kind == "issue" {
+        store.remove_issue_relation(&source.id, &target.id, role)?
+    } else if source.kind == "mission" {
+        store.remove_relates_relationship(
+            &source.kind,
+            &source.id,
+            &target.kind,
+            &target.id,
+            role,
+        )?
     } else {
-        store.remove_issue_relation(&issue_id, &target_id, role)?
+        bail!(
+            "Removing {role} links from {} records is not supported",
+            source.kind
+        );
     };
     drop(db);
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
     if changed {
-        println!("Unlinked {issue_id} -> {target_id} ({role})");
+        println!("Unlinked {} -> {} ({role})", source.id, target.id);
     } else {
-        println!("No link {issue_id} -> {target_id} ({role}) exists");
+        println!("No link {} -> {} ({role}) exists", source.id, target.id);
     }
-    print_link_next_commands(&issue_id, &target_id);
+    print_link_next_commands(&source.id, &target.id);
     Ok(())
+}
+
+fn resolve_link_endpoint(db: &Database, reference: &str) -> Result<LinkEndpoint> {
+    if let Some(issue_id) = db.resolve_issue_ref(reference)? {
+        return Ok(LinkEndpoint {
+            kind: "issue".to_string(),
+            id: issue_id,
+        });
+    }
+    if let Some(kind) = db.record_kind_for_id(reference)? {
+        if kind == "mission" {
+            return Ok(LinkEndpoint {
+                kind,
+                id: reference.to_string(),
+            });
+        }
+        bail!("{reference} is a {kind} record, not an issue or mission record");
+    }
+    Err(anyhow!("Issue or mission {reference} was not found"))
 }
 
 fn print_link_next_commands(issue_id: &str, target_id: &str) {

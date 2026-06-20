@@ -17,7 +17,7 @@ doc surfaces instead of duplicating that contract.
 
 Static docs describe the command surface and ownership boundaries. They do not
 decide the next lifecycle action for a specific work item. Operators and agents
-use `atelier status`, record detail, mission status, and transition option
+use `atelier status`, record detail, issue status <objective-id>, and transition option
 output to decide what to do next in the current checkout.
 
 The command audit may document target replacement forms before they are
@@ -35,13 +35,12 @@ issue or mission:
 - `atelier man [worker|reviewer|validator|manager|admin]`
 - `atelier status`
 - `atelier issue ...`
+- `atelier issue create "..." --issue-type mission`
+- `atelier issue show <objective-id>`
 - `atelier issue status <objective-id>`
 - `atelier issue link/unlink <objective-id> <issue-id> --role advances`
+- `atelier issue block/unblock <objective-id> <issue-id>`
 - `atelier search <query>`
-- `atelier mission create/show/list/status/close/update/note` until objective
-  issue replacements land
-- `atelier mission add-work/unlink/add-blocker` until issue link/block
-  replacements land
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/attach/list`
 - `atelier review open/link/status/show/merge/comments/comment/approve/request-changes/resolve`
@@ -59,9 +58,9 @@ may be cited as ordinary workflow proof.
 
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
-| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary committed-state health. They may appear in root help, role guides, issue next actions, mission status, and Agent Factory workflow guidance. | `status`, `issue show`, `issue transition --options`, `mission status`, `evidence record`, `lint`, plus lifecycle or review primitives when command output routes there | `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
-| Admin maintenance | Visible but specialized commands for setup, explicit local-state repair, explicit pruning, destructive record surgery, or manual owner-branch recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor`, `doctor --fix`, `prune`, `prune --apply`, `maintenance delete ... --force`, `branch status`, `branch merge` | `mission status`, hidden `workflow check`, hidden `diagnostics slow` |
-| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `mission status`, `issue transition --options` |
+| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary committed-state health. They may appear in root help, role guides, issue next actions, issue status <objective-id>, and Agent Factory workflow guidance. | `status`, `issue show`, `issue transition --options`, `issue status <objective-id>`, `evidence record`, `lint`, plus lifecycle or review primitives when command output routes there | `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
+| Admin maintenance | Visible but specialized commands for setup, explicit local-state repair, explicit pruning, destructive record surgery, or manual owner-branch recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor`, `doctor --fix`, `prune`, `prune --apply`, `maintenance delete ... --force`, `branch status`, `branch merge` | `issue status <objective-id>`, hidden `workflow check`, hidden `diagnostics slow` |
+| Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `issue status <objective-id>`, `issue transition --options` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
 
 Tracked Markdown under `.atelier/` is authoritative. Local SQLite projection
@@ -96,7 +95,7 @@ or when local state is broken.
 `atelier status` is the root checkout signpost. It summarizes the current-work
 set, any legacy active mission record, ready work count, tracker freshness, and
 the next mission/work/health drill-down commands. It does not replace
-`mission status`; it points operators to the scoped status surface that owns
+`issue status <objective-id>`; it points operators to the scoped status surface that owns
 completion status.
 
 `atelier --help` should expose the normal operator path first: orient, inspect
@@ -118,21 +117,21 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
-| `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, role-specific commands, or `man admin` when repair is needed. |
-| `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active mission, ready count, tracker freshness, and the next work or mission commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, and admin repair guidance only for degraded local state. |
+| `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `issue status <objective-id>`, `issue list --ready`, role-specific commands, or `man admin` when repair is needed. |
+| `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active mission, ready count, tracker freshness, and the next work or mission commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `issue status <objective-id>`, `issue show <id>`, `issue list --ready`, and admin repair guidance only for degraded local state. |
 | `issue` | Create, list, show, update, transition, note, inspect type-aware status, and manage issue-owned blockers and links. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, type-aware objective status owns mission-shaped health and terminal readiness, link mutations name the source, target, and role, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, relationship roles, and canonical paths. | `issue show <id>`, `issue status <objective-id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `issue status <objective-id>`, `history`. |
 | `mission` | Transitional namespace for existing mission records until objective issue replacements land. | Existing mission reads and mutations remain only long enough to migrate behavior to type-aware issue commands. The target state removes this root namespace rather than aliasing it. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `issue show <objective-id>`, `issue status <objective-id>`, `issue transition <objective-id> --options`, `history --issue <objective-id>`. |
-| `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
+| `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `issue show <objective-id> <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
-| `review` | Manage the configured review artifact for issue or epic work. | `open`, `status`, `show`, `merge`, `comments`, `comment`, `approve`, `request-changes`, and `resolve` operate on the configured review mode. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition/status output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `mission status`, configured review artifact. |
+| `review` | Manage the configured review artifact for issue or epic work. | `open`, `status`, `show`, `merge`, `comments`, `comment`, `approve`, `request-changes`, and `resolve` operate on the configured review mode. Mutating commands use explicit `--role` or infer role from the owner issue status. `merge` enforces review safety but never changes Atelier workflow status. Normal lifecycle routing comes from issue transition/status output. | Issue ID, review ID/number or URL, role source, merge/review/comment status tokens only. | `issue show <id>`, `issue transition <id> --options`, `issue status <objective-id>`, configured review artifact. |
 | `forgejo` | Configure and verify Forgejo integration when the repository configuration selects Forgejo-backed review artifacts. | Role and integration commands report configured account state, permission checks, and remediation text. They do not decide whether a workflow step needs a review artifact. | Role names, pass/fail tokens, and remediation text only. | `.atelier/config.toml`, `review`, `issue transition <id> --options`, configured provider UI. |
-| `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `mission show` for current state. |
+| `history` | Inspect canonical repo, mission, issue, or epic activity. | Newest-first bounded activity feed with scope and filter context echoed. | Event counts, scoped IDs, and timestamps only. | Broaden or narrow with `--mission`, `--issue`, `--epic`, `--event-kind`, `--actor`, or `--since`; return to `issue show` or `issue show <objective-id>` for current state. |
 ### Specialized But Visible Surfaces
 
 | Surface | Job | Default output | Quiet output | Drill-down path |
 | --- | --- | --- | --- | --- |
-| `branch` | Inspect, repair, or manually recover owner branches when workflow-owned lifecycle steps cannot complete automatically. | `status`, advanced repair, and manual branch-preparation forms name the owner record, branch, base branch, merge strategy, checkout, and recovery state. | Record IDs, branch names, paths, and branch-state tokens. | `status`, `issue show <id>`, `mission status`. |
+| `branch` | Inspect, repair, or manually recover owner branches when workflow-owned lifecycle steps cannot complete automatically. | `status`, advanced repair, and manual branch-preparation forms name the owner record, branch, base branch, merge strategy, checkout, and recovery state. | Record IDs, branch names, paths, and branch-state tokens. | `status`, `issue show <id>`, `issue status <objective-id>`. |
 | `prune` | Explicitly prune accumulated local artifacts and report cleanup classes whose retention contracts are not implemented yet. | `atelier prune` is dry-run by default; reports diagnostics log candidates, retention cutoff, protected/deferred classes, and the apply command. `atelier prune --apply` removes only eligible local diagnostics logs in the initial slice. | Candidate counts, removed paths, and failure tokens only. | `diagnostics slow`, local diagnostics directory, future retention contract issues for records, branches, and worktrees. |
 | `maintenance` | Explicit destructive record surgery only. | Clear target and consequence summary before deletion, then confirmation of the deleted record. | Deleted ID and kind only. | `history`, `lint`, and Git inspection when recovery is needed. |
 | `lint` | Validate canonical tracker records and committed workflow configuration. | Pass summary or named record, workflow config, and file errors with repair guidance. | Pass/fail token and offending IDs or paths only. | Edit the named record or workflow config and rerun `lint`; use admin repair only when local state is implicated. |
@@ -144,7 +143,7 @@ in the command audit:
 - `rebuild`: hidden debug diagnostic or admin repair primitive only if
   `doctor --fix` delegates to it; not normal workflow.
 - `workflow check`: hidden raw policy diagnostic; normal readiness uses
-  `issue transition --options`, `lint`, and `mission status`.
+  `issue transition --options`, `lint`, and `issue status <objective-id>`.
 - `diagnostics slow`: hidden local telemetry; not an automation contract.
 - `prune`: visible admin maintenance; dry-run by default and applies only
   explicitly supported cleanup classes.
@@ -167,8 +166,8 @@ The public command surface is organized around jobs an operator performs under
 time pressure:
 
 - Orient: answer what is active, ready, blocked, stale, or unsafe to change.
-  Owned by `atelier status`, `atelier issue show/list`, `atelier mission show`,
-  `atelier mission status`, `atelier history`, and `atelier search`.
+  Owned by `atelier status`, `atelier issue show/list`, `atelier issue show`,
+  `atelier issue status`, `atelier history`, and `atelier search`.
 - Select and run work: choose a clear slice, inspect workflow state, leave notes
   and proof, and follow the lifecycle or recovery command Atelier prints for
   the current item. Owned by `atelier status`, `atelier issue ...`, `atelier
@@ -224,7 +223,7 @@ mission-status alias and do not read legacy `data.active` state; committed
 mission records should be migrated directly to the lifecycle status they mean.
 Use `superseded` for a mission whose execution has been replaced by another
 mission; it is hidden from default current mission lists like `closed`, but
-remains visible with `atelier mission list --status superseded` or
+remains visible with `atelier issue status` or
 `--status all`.
 
 The target model removes the mission lifecycle namespace by migrating missions
@@ -236,10 +235,10 @@ comes from `atelier status` and canonical in-progress issues. Mission close
 reasons become transition notes on `issue transition <objective-id> close
 --reason "..."`.
 
-Mission completion uses `atelier mission close <id> --reason "..."`, which runs
+Mission completion uses `atelier issue transition <id> close --reason "..."`, which runs
 the mission completion gates before it commits the lifecycle change and records
-the reason in mission completion notes. `atelier mission update <id> --status
-closed` is not the ordinary completion path. Reopening with `atelier mission
+the reason in mission completion notes. `atelier issue update <id> --status
+closed` is not the ordinary completion path. Reopening with `atelier issue
 update <id> --status ready` does not run completion validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
@@ -276,21 +275,21 @@ graph creation. It validates authored bundle JSON from a real file path and
 prints a non-mutating deterministic preview. Use it before `atelier bundle
 apply <file> --yes` when creating a mission plus many epics, issues,
 relationships, or evidence links; do not script repeated `issue create`,
-`mission add-work`, and `issue block` loops for that shape of work. `atelier
+`issue link`, and `issue block` loops for that shape of work. `atelier
 bundle apply` applies create-only v1 bundle resources from a file path after
 the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
 canonical relationship buckets, refreshes projection state after successful
 canonical writes, and reports recovery detail if an unexpected apply failure leaves any
-created IDs. `atelier mission show` is the rich mission detail read:
+created IDs. `atelier issue show` is the rich mission detail read:
 it summarizes evidence, prose planning/checkpoint references, and work grouped
-by ready, blocked, done, and backlog state. `atelier mission status [<id>]` is the
+by ready, blocked, done, and backlog state. `atelier issue status [<id>]` is the
 mission-control CLI surface for active mission health, mission proof gaps,
 blockers, record health, docs/help drift, ignored-test review, dirty worktree
 state, completion status, and next actions before any separate projection or UI
 is required.
 
-`atelier mission status` without an ID defaults to the active mission when one
+`atelier issue status` without an ID defaults to the active mission when one
 exists; otherwise it reports the available ready missions and the command to
 select one. With an ID, the command is scoped to that mission regardless of the
 active runtime association. Default output is compact and answers: mission
@@ -305,9 +304,9 @@ health details enough for a handoff transcript.
 State-specific next actions are part of the command contract:
 
 - `draft`: show missing readiness fields and point to record editing,
-  `atelier lint <mission-id>`, or `atelier mission update <id> --status ready`.
+  `atelier lint <mission-id>`, or `atelier issue update <id> --status ready`.
 - `ready`: show ready work and the command to transition an issue into active
-  work or inspect mission status explicitly.
+  work or inspect issue status <objective-id> explicitly.
 - `active`: show active work, ready work, blockers, evidence gaps, and the next
   issue, evidence, or health command that advances the mission.
 - `blocked`: show the open blocker records first and point to the specific
@@ -316,11 +315,11 @@ State-specific next actions are part of the command contract:
   required proof is attached to accountable work, explicit validation or
   validation work has approved any parent-level judgment required by the mission,
   health gates are current, and the checkout is clean:
-  `atelier mission close <id> --reason "..."`.
+  `atelier issue transition <id> close --reason "..."`.
 - `closed`: show the close reason, completion evidence or validation issue, and
   history/audit drill-down commands without suggesting new implementation work.
 
-`atelier mission status <id> --verbose` is the mission terminal-check
+`atelier issue status <id> --verbose` is the mission terminal-check
 drill-down. It remains advisory orientation unless a workflow explicitly
 requires linked validation work; parent judgment that can block completion
 belongs to linked validation work with attached evidence and workflow approval.
@@ -328,7 +327,7 @@ Raw workflow validator names are diagnostic detail; normal completion output
 names the operator-facing blocker class and the next domain command.
 `atelier lint` owns committed
 workflow/config validity, `issue transition --options` owns issue-level
-readiness inspection, and `mission status` owns mission completion inspection;
+readiness inspection, and `issue status <objective-id>` owns mission completion inspection;
 removed policy-debug commands do not replace them. Fast docs/help drift guards for
 `AGENTS.md`, product command docs, visible root help, and
 obsolete command-test references belong in `atelier lint` or an explicitly
@@ -369,7 +368,7 @@ scoped forms such as `atelier history --mission <id>`, `atelier history --issue
 first-class records, evidence, and record links. History defaults to newest
 first with bounded output, supports event kind, actor, time, and scope filters,
 and separates canonical tracker history from local runtime diagnostics. Issue
-and mission show surfaces may include compact recent activity or record context,
+and issue show <objective-id> surfaces may include compact recent activity or record context,
 but they point to scoped history for full activity instead of expanding
 unbounded logs.
 Issue workflow commands mutate the canonical Markdown tracker copy. They must
@@ -392,9 +391,9 @@ operator to infer branch or review policy from static docs.
 There is no target-state rule that one checkout may hold only one current issue.
 Repeated starts of the same issue are harmless, and starting a second issue in
 the same checkout should extend the current-work set when the workflow allows
-it. `atelier status` and `atelier mission status` should render all
+it. `atelier status` and `atelier issue status` should render all
 `in_progress` issues visible in the checkout rather than promote one hidden
-"active issue". Use issue and mission status to render all current work in the
+"active issue". Use issue and issue status <objective-id> to render all current work in the
 checkout, and use the epic branch as the review boundary.
 
 Different Git checkouts or branches may legitimately show different
@@ -404,7 +403,7 @@ Markdown records. Legacy root `abandon` and `repair` commands have been removed:
 stopping work without a durable status change does not need a cleanup command,
 and stale checkout recovery should use normal status inspection plus canonical
 issue transitions rather than hidden active-pointer repair.
-Root `atelier status`, `atelier mission status`, and `atelier issue transition
+Root `atelier status`, `atelier issue status`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
 the removed work-status helper or any legacy work-start path for
 normal workflow.
@@ -466,20 +465,20 @@ surface is `delete` unless it is in the core list above.
 | Evidence add predecessor | Remove | Splits manual proof capture away from the unified evidence workflow. | `atelier evidence record --target ... "summary"` |
 | Evidence capture predecessor | Remove | Splits transcript capture away from the same proof workflow. | `atelier evidence record --target ... -- <command>` |
 | `atelier evidence attach` | Keep with distinct purpose | Needed only when an existing evidence record is being mirrored or reused on another accountable target. | Do not teach as the normal first proof step. |
-| Export check diagnostic | Low-level diagnostic | Cache/projection state should be transparent; normal health and completion routes use `lint`, mission status/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
+| Export check diagnostic | Low-level diagnostic | Cache/projection state should be transparent; normal health and completion routes use `lint`, issue status <objective-id>/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
 | Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns admin explicit local repair. |
 | Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns admin explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, root `search`, issue detail/status, record-specific notes, `evidence`, and `status`. |
-| Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and mission status as next-step sources. |
-| `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
+| Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and issue status <objective-id> as next-step sources. |
+| `issue show <objective-id>` | Remove | Duplicate of the richer mission detail surface. | `issue show <objective-id>` |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle, blockers, links, detail, and objective status. |
-| Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers and links use issue commands; evidence uses evidence commands; issue detail/status inspect impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
+| Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `issue link/unlink`; issue blockers and links use issue commands; evidence uses evidence commands; issue detail/status inspect impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
 | Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `init --import-beads` and temporarily hidden/manual `import-beads` for migration. |
 | `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | Issue detail/status, record-specific note commands, and lifecycle commands. |
 
 Removed command surfaces:
 
-- `mission view`; use `mission show`.
+- `issue show <objective-id>`; use `issue show <objective-id>`.
 - The normal `work start` and `work status` group; use status, issue workflow
   detail, and transition output instead.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,
@@ -560,14 +559,14 @@ generic relationship verb.
 
 | Need | Record kinds accepted | Supported command path | Boundary |
 | --- | --- | --- | --- |
-| Show mission intent, linked work, blockers, evidence, and completion state | mission ID | `atelier mission show <mission-id>` or `atelier mission status <mission-id>` | Mission reads own mission coordination. It does not replace issue detail or proof records. |
+| Show mission intent, linked work, blockers, evidence, and completion state | mission ID | `atelier issue show <mission-id>` or `atelier issue status <mission-id>` | Mission reads own mission coordination. It does not replace issue detail or proof records. |
 | Show issue accountability, status, blockers, notes, and completion status | issue ID | `atelier issue show <issue-id>` or `atelier issue transition <issue-id> --options` | Issue commands accept issue IDs. Passing a mission or evidence ID should produce wrong-kind guidance to the matching show surface. Historical plan or milestone IDs are deferred records and should not be accepted as v1 issue targets. |
-| Add or remove mission work | mission ID plus issue or epic ID | `atelier mission add-work <mission-id> <issue-id>` and `atelier mission unlink <mission-id> <issue-id>` | Mission work links use the `advances` relation. Do not use a generic link command. |
-| Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier mission add-blocker <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
+| Add or remove mission work | mission ID plus issue or epic ID | `atelier issue link <mission-id> <issue-id> --role advances` and `atelier issue unlink <mission-id> <issue-id>` | Mission work links use the `advances` relation. Do not use a generic link command. |
+| Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier issue block <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
 | Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation "summary"` or `atelier evidence record --target issue/<id> --kind test -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit completion mirroring. |
 | Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
 | Inspect issue impact or objective hierarchy | issue ID or objective issue ID | `atelier issue show <issue-id>` and `atelier issue status <objective-id>` | Issue views inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
-| Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
+| Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier issue note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
 | Reference execution plans | repository Markdown path or prose inside a mission, epic, issue, or evidence record | edit the accountable Markdown record or attach evidence that names the plan path | Plans are ordinary Markdown artifacts in v1. They are not `.atelier/plans/` records and do not replace issue blockers or mission work links. |
 | Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file>` | Bundle apply requires its explicit confirmation flag. Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |
 | Inspect or repair epic review branches | epic or issue ID | `atelier branch status`, `atelier branch for-epic <epic-id>`, and `atelier branch merge <epic-id>` | Branch helpers are advanced Git lifecycle surfaces. Routine workers follow `atelier status`, issue detail, and transition output for lifecycle routing. |
@@ -576,7 +575,7 @@ generic relationship verb.
 Mission-vs-issue example:
 
 ```text
-atelier mission add-work atelier-hy2i atelier-4p7q
+atelier issue link atelier-hy2i atelier-4p7q
 atelier issue block atelier-isd5 atelier-a625
 atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map checked against current help"
 atelier issue status atelier-4p7q
@@ -608,12 +607,12 @@ Use this recovery order:
 | Operator-facing command reports stale or missing derived state | Re-run the same command once after the automatic refresh path, then follow its named repair guidance if it still reports degraded local state. | Use `atelier doctor --fix` for ignored runtime/cache/projection repair. It must not edit tracked canonical records. |
 | Canonical Markdown parse or schema error | `atelier lint <id-or-path>` | Fix the named tracked file. Do not treat parser failures as cache problems. |
 | Checkout context is unclear after interrupted cleanup | `atelier status` then `git status --short --branch` | Reconcile canonical issue statuses through normal issue transitions or record edits. There is no separate active-pointer repair path in the target workflow. |
-| Workspace isolation is needed for a risky or conflicting slice | Plain Git checkout/worktree commands outside Atelier | Keep the durable issue state in canonical `.atelier/` records and use `atelier status`/`mission status` inside the checkout. |
+| Workspace isolation is needed for a risky or conflicting slice | Plain Git checkout/worktree commands outside Atelier | Keep the durable issue state in canonical `.atelier/` records and use `atelier status`/`issue status <objective-id>` inside the checkout. |
 | Installed binary does not understand committed record shape | `cargo build` then `target/debug/atelier <command>` for local CLI changes | Update or rebuild the binary before diagnosing canonical records. |
 
 Export and rebuild diagnostics are advanced implementation tools. Normal
 handoff and completion should cite `atelier lint`, `atelier status`, `atelier
-mission status`, and the specific command that was retried after repair.
+issue status <objective-id>`, and the specific command that was retried after repair.
 
 ## Removed Or Deferred Behavior
 

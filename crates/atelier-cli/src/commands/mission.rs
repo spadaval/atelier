@@ -117,9 +117,9 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
     }
     print_mission_heading("Next Commands");
     if let Some(row) = rows.first() {
-        println!("  atelier mission status {}", row.record.id);
+        println!("  atelier issue status {}", row.record.id);
     }
-    println!("  atelier mission list");
+    println!("  atelier issue list --status all");
     println!("  atelier issue list --ready");
     Ok(())
 }
@@ -416,7 +416,7 @@ fn print_status_next_commands(
     print_mission_heading("Next Commands");
     let lifecycle = mission_lifecycle_status(mission);
     println!(
-        "  Inspect mission record (durable intent and linked work): atelier mission show {}",
+        "  Inspect mission record (durable intent and linked work): atelier issue show {}",
         mission.id
     );
     match lifecycle.as_str() {
@@ -429,25 +429,25 @@ fn print_status_next_commands(
         }
         "draft" => {
             println!(
-                "  Shape mission work or move to ready when gates permit: atelier mission update {} --status ready",
+                "  Shape mission work or move to ready when gates permit: atelier issue show {}",
                 mission.id
             );
         }
         _ => {
             println!(
-                "  Refresh mission status (current blockers and terminal checks): atelier mission status {}",
+                "  Refresh mission status (current blockers and terminal checks): atelier issue status {}",
                 mission.id
             );
         }
     }
     if terminal.ready() {
         println!(
-            "  Close mission (all terminal checks pass): atelier mission close {} --reason \"...\"",
+            "  Close mission (all terminal checks pass): atelier issue transition {} close --reason \"...\"",
             mission.id
         );
     } else {
         println!(
-            "  Inspect terminal check detail: atelier mission status {} --verbose",
+            "  Inspect terminal check detail: atelier issue status {} --verbose",
             mission.id
         );
         if summary.total_work().blocked > 0 || summary.open_blockers > 0 {
@@ -670,7 +670,7 @@ pub fn update(
         let status = normalize_mission_status(status)?;
         if status == "closed" && current.header.status != "closed" {
             bail!(
-                "Mission terminal checks use `atelier mission close {id} --reason \"...\"`; `mission update --status closed` is not the ordinary terminal path."
+                "Mission terminal checks use `atelier issue transition {id} close --reason \"...\"`; direct status edits are not the ordinary terminal path."
             );
         }
         current.header.status = status.to_string();
@@ -687,7 +687,7 @@ pub fn update(
 
 pub fn close(state_dir: &Path, db_path: &Path, id: &str, reason: &str) -> Result<()> {
     if reason.trim().is_empty() {
-        bail!("mission close requires --reason \"...\"");
+        bail!("issue transition <mission-id> close requires --reason \"...\"");
     }
     let db = app_use_cases::open_database(db_path)?;
     enforce_mission_terminal_checks(&db, state_dir, id)?;
@@ -776,18 +776,18 @@ impl MissionTerminalStatus {
         let mut messages = Vec::new();
         if !self.has_work {
             messages.push(
-                "no linked mission work: add accountable work before mission close".to_string(),
+                "no linked mission work: add accountable work before objective close".to_string(),
             );
         }
         if !self.open_work.is_empty() {
             messages.push(format!(
-                "open mission work: {}; close or defer linked work before mission close",
+                "open mission work: {}; close or defer linked work before objective close",
                 compact_strings(&self.open_work)
             ));
         }
         if !self.open_blockers.is_empty() {
             messages.push(format!(
-                "open blockers: {}; close or remove blocker links before mission close",
+                "open blockers: {}; close or remove blocker links before objective close",
                 compact_strings(&self.open_blockers)
             ));
         }
@@ -817,7 +817,7 @@ impl MissionTerminalStatus {
         }
         if !self.has_work {
             println!("Work: missing");
-            println!("  Next: atelier mission add-work <mission-id> <issue-id>");
+            println!("  Next: atelier issue link <mission-id> <issue-id> --role advances");
         } else if self.open_work.is_empty() {
             println!("Work: closed");
         } else {
@@ -927,7 +927,7 @@ fn print_reliability_summary(
     }
 
     println!("Drill-downs:");
-    println!("  atelier mission status {} --verbose", mission.id);
+    println!("  atelier issue status {} --verbose", mission.id);
     println!("  atelier lint");
     Ok(())
 }
@@ -1120,7 +1120,7 @@ fn terminal_validator_user_text(
             "Validation Criteria",
             "satisfied",
             "incomplete",
-            "atelier mission status {mission} --verbose",
+            "atelier issue status {mission}",
         )),
         "git.worktree_clean" => Some((
             "Checkout",
@@ -1133,7 +1133,7 @@ fn terminal_validator_user_text(
             "Additional Terminal Check",
             "passed",
             "failed",
-            "atelier mission status {mission}",
+            "atelier issue status {mission}",
         )),
     }
 }
@@ -1298,7 +1298,7 @@ fn enforce_mission_terminal_checks(
     for message in terminal.blocking_messages() {
         println!("  - {message}");
     }
-    bail!("mission terminal checks blocked; run `atelier mission status {mission_id}` for next commands")
+    bail!("mission terminal checks blocked; run `atelier issue status {mission_id}` for next commands")
 }
 
 fn mission_terminal_status(
@@ -1640,11 +1640,11 @@ fn print_mission_list_group<'a>(title: &str, rows: impl Iterator<Item = &'a Miss
 fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
     print_mission_heading("Next Commands");
     if let Some(row) = first_actionable {
-        println!("  atelier mission status {}", row.record.id);
-        println!("  atelier mission show {}", row.record.id);
+        println!("  atelier issue status {}", row.record.id);
+        println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier mission status");
-    println!("  atelier mission create \"...\"");
+    println!("  atelier issue status");
+    println!("  atelier issue create \"...\" --issue-type mission");
 }
 
 fn compare_mission_list_rows(a: &MissionListRow, b: &MissionListRow) -> std::cmp::Ordering {
@@ -2132,21 +2132,18 @@ fn print_evidence_gaps(evidence: &[Value]) {
 
 fn print_mission_next_commands(mission: &MissionRecord) {
     print_mission_heading("Next Commands");
-    println!("  atelier mission status {}", mission.header.id);
-    println!("  atelier mission show {}", mission.header.id);
-    println!("  atelier mission note {} \"...\"", mission.header.id);
+    println!("  atelier issue status {}", mission.header.id);
+    println!("  atelier issue show {}", mission.header.id);
+    println!("  atelier issue note {} \"...\"", mission.header.id);
     println!("  atelier history --mission {}", mission.header.id);
     if mission.header.status == "closed" {
-        println!(
-            "  atelier mission update {} --status ready",
-            mission.header.id
-        );
+        println!("  atelier issue show {}", mission.header.id);
     } else {
         println!(
-            "  atelier mission add-work {} <issue-id>",
+            "  atelier issue link {} <issue-id> --role advances",
             mission.header.id
         );
-        println!("  atelier mission status {}", mission.header.id);
+        println!("  atelier issue status {}", mission.header.id);
     }
 }
 
