@@ -26,9 +26,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-20T01:47:35.370749216+00:00"
+status: "done"
 title: "Epic: Implement custom issue types"
-updated_at: "2026-06-20T01:47:10.146647981+00:00"
+updated_at: "2026-06-20T01:47:35.370749216+00:00"
 ---
 
 ## Description
