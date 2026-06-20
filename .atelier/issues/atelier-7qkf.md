@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-20T20:09:53.162271772+00:00"
+status: "done"
 title: "Extract workflow transition planning and execution from the CLI command module"
-updated_at: "2026-06-20T19:58:30.112349665+00:00"
+updated_at: "2026-06-20T20:09:53.162271772+00:00"
 ---
 
 ## Description
