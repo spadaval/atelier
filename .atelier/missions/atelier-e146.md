@@ -19,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "active"
 title: "Command surface cutting pass"
-updated_at: "2026-06-20T16:49:24.272753937+00:00"
+updated_at: "2026-06-20T19:20:16.364311157+00:00"
 ---
 
 ## Intent

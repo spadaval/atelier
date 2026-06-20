@@ -436,7 +436,7 @@ checkouts. When more than one issue is `in_progress` in the same checkout,
 `atelier status` and `atelier mission status` should render that set directly
 rather than nominate one hidden active issue.
 
-The visible `atelier worktree` surface is removed pending redesign. Explicit
+The visible worktree command surface is removed pending redesign. Explicit
 branch helpers such as `atelier branch for-epic <epic-id>` create or locate
 reviewable branches for diagnostics, advanced repair, or manual recovery.
 Routine worker guidance should come from `atelier status`, issue detail,
