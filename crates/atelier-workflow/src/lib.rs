@@ -21,6 +21,14 @@ branch_policy:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
 
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
+
 statuses:
   todo:
     category: todo
@@ -156,7 +164,6 @@ pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
 const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "review", "validation", "done"];
-const BUILTIN_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "tracker.current",
     "issue.sections_parseable",
@@ -189,6 +196,7 @@ const TOP_LEVEL_FIELDS: &[&str] = &[
     "schema",
     "schema_version",
     "branch_policy",
+    "issue_types",
     "statuses",
     "workflows",
 ];
@@ -198,6 +206,7 @@ const ALLOWED_BRANCH_TEMPLATE_VARIABLES: &[&str] = &["issue.id", "issue.type"];
 pub struct WorkflowPolicy {
     pub schema_version: i64,
     pub branch_policy: BranchLifecycleConfig,
+    pub issue_types: BTreeMap<String, IssueTypeDefinition>,
     pub workflow_by_issue_type: BTreeMap<String, String>,
     pub statuses: BTreeMap<String, StatusDefinition>,
     pub workflows: BTreeMap<String, WorkflowDefinition>,
@@ -274,6 +283,11 @@ pub struct BranchLifecycleResolution {
 #[derive(Debug, Clone)]
 pub struct StatusDefinition {
     pub category: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct IssueTypeDefinition {
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -479,6 +493,12 @@ struct StatusDefinitionRaw {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct IssueTypeDefinitionRaw {
+    label: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WorkflowDefinitionRaw {
     applies_to: Vec<String>,
     initial_status: String,
@@ -583,6 +603,16 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
         display_path,
     )?;
     let branch_policy = parse_branch_policy(root.get("branch_policy"), display_path)?;
+    let issue_types = parse_issue_types(
+        require_mapping(
+            root,
+            display_path,
+            "issue_types",
+            "workflow_config_invalid_issue_type",
+            "issue_types must be a mapping of issue type names to issue type definitions",
+        )?,
+        display_path,
+    )?;
     let workflows = parse_workflows(
         require_mapping(
             root,
@@ -593,11 +623,13 @@ fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolicy> {
         )?,
         display_path,
     )?;
-    let workflow_by_issue_type = issue_type_mappings_from_workflows(&workflows, display_path)?;
+    let workflow_by_issue_type =
+        issue_type_mappings_from_workflows(&issue_types, &workflows, display_path)?;
 
     let policy = WorkflowPolicy {
         schema_version,
         branch_policy,
+        issue_types,
         workflow_by_issue_type,
         statuses,
         workflows,
@@ -802,21 +834,21 @@ fn validate_schema(root: &Mapping, display_path: &str) -> Result<i64> {
 }
 
 fn issue_type_mappings_from_workflows(
+    issue_types: &BTreeMap<String, IssueTypeDefinition>,
     workflows: &BTreeMap<String, WorkflowDefinition>,
     display_path: &str,
 ) -> Result<BTreeMap<String, String>> {
     let mut mappings = BTreeMap::new();
     for (workflow_name, workflow) in workflows {
         for issue_type in &workflow.applies_to {
-            if !BUILTIN_ISSUE_TYPES.contains(&issue_type.as_str()) {
+            if !issue_types.contains_key(issue_type) {
                 return Err(policy_error_with_field(
-                    "workflow_config_invalid_issue_type_mapping",
+                    "workflow_config_invalid_issue_type",
                     display_path,
                     format!("workflows.{}.applies_to", workflow_name),
                     format!(
-                        "unsupported built-in issue type '{}'; expected {}",
-                        issue_type,
-                        BUILTIN_ISSUE_TYPES.join(", ")
+                        "workflow '{}' applies to unregistered issue type '{}'",
+                        workflow_name, issue_type
                     ),
                 ));
             }
@@ -824,7 +856,7 @@ fn issue_type_mappings_from_workflows(
                 mappings.insert(issue_type.clone(), workflow_name.clone())
             {
                 return Err(policy_error_with_field(
-                    "workflow_config_invalid_issue_type_mapping",
+                    "workflow_config_invalid_issue_type",
                     display_path,
                     format!("workflows.{}.applies_to", workflow_name),
                     format!(
@@ -835,20 +867,75 @@ fn issue_type_mappings_from_workflows(
             }
         }
     }
-    for issue_type in BUILTIN_ISSUE_TYPES {
-        if !mappings.contains_key(*issue_type) {
+    for issue_type in issue_types.keys() {
+        if !mappings.contains_key(issue_type) {
             return Err(policy_error_with_field(
-                "workflow_config_invalid_issue_type_mapping",
+                "workflow_config_invalid_issue_type",
                 display_path,
                 "workflows.*.applies_to",
                 format!(
-                    "missing workflow applies_to entry for built-in issue type '{}'",
+                    "missing workflow applies_to entry for registered issue type '{}'",
                     issue_type
                 ),
             ));
         }
     }
     Ok(mappings)
+}
+
+fn parse_issue_types(
+    mapping: &Mapping,
+    display_path: &str,
+) -> Result<BTreeMap<String, IssueTypeDefinition>> {
+    if mapping.is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_issue_type",
+            display_path,
+            "issue_types",
+            "issue_types must define at least one issue type",
+        ));
+    }
+    let mut issue_types = BTreeMap::new();
+    for (key, value) in mapping {
+        let Some(name) = key.as_str() else {
+            return Err(policy_error(
+                "workflow_config_invalid_issue_type",
+                display_path,
+                "issue_types keys must be strings",
+            ));
+        };
+        ensure_identifier(
+            name,
+            display_path,
+            &format!("issue_types.{}", name),
+            "workflow_config_invalid_issue_type",
+            "issue type names",
+        )?;
+        let raw = deserialize_entry::<IssueTypeDefinitionRaw>(
+            value,
+            display_path,
+            &format!("issue_types.{}", name),
+            "workflow_config_invalid_issue_type",
+        )?;
+        let label = raw.label.ok_or_else(|| {
+            policy_error_with_field(
+                "workflow_config_invalid_issue_type",
+                display_path,
+                format!("issue_types.{}.label", name),
+                "issue type label is required",
+            )
+        })?;
+        if label.trim().is_empty() {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_issue_type",
+                display_path,
+                format!("issue_types.{}.label", name),
+                "issue type label must not be empty",
+            ));
+        }
+        issue_types.insert(name.to_string(), IssueTypeDefinition { label });
+    }
+    Ok(issue_types)
 }
 
 fn parse_statuses(
@@ -1068,10 +1155,10 @@ fn validate_workflow_shape(
 ) -> Result<()> {
     if raw.applies_to.is_empty() {
         return Err(policy_error_with_field(
-            "workflow_config_invalid_issue_type_mapping",
+            "workflow_config_invalid_issue_type",
             display_path,
             format!("workflows.{}.applies_to", workflow_name),
-            "workflow applies_to must contain at least one built-in issue type",
+            "workflow applies_to must contain at least one registered issue type",
         ));
     }
     if raw.done_statuses.is_empty() {
@@ -1757,12 +1844,27 @@ pub fn validate_issue_against_policy(
     issue: &Issue,
     policy_path: &Path,
 ) -> Result<()> {
+    if !policy.issue_types.contains_key(&issue.issue_type) {
+        return Err(WorkflowPolicyError {
+            code: "workflow_issue_type_unknown",
+            path: policy_path.display().to_string(),
+            message: format!(
+                "issue {} has issue_type '{}' which is not registered in issue_types",
+                issue.id, issue.issue_type
+            ),
+            field: Some("issue_type".to_string()),
+            reference: Some(issue.id.clone()),
+            line: None,
+            column: None,
+        }
+        .into());
+    }
     let workflow_name = policy
         .workflow_by_issue_type
         .get(&issue.issue_type)
         .ok_or_else(|| {
             policy_error_with_field(
-                "workflow_config_invalid_issue_type_mapping",
+                "workflow_config_invalid_issue_type",
                 WORKFLOW_POLICY_PATH,
                 format!("workflows.*.applies_to.{}", issue.issue_type),
                 format!(
@@ -1773,7 +1875,7 @@ pub fn validate_issue_against_policy(
         })?;
     let workflow = policy.workflows.get(workflow_name).ok_or_else(|| {
         policy_error_with_reference(
-            "workflow_config_invalid_issue_type_mapping",
+            "workflow_config_invalid_issue_type",
             WORKFLOW_POLICY_PATH,
             format!("workflows.*.applies_to.{}", issue.issue_type),
             workflow_name,
@@ -2234,6 +2336,13 @@ mod tests {
         );
         assert_eq!(
             policy
+                .issue_types
+                .get("task")
+                .map(|issue_type| issue_type.label.as_str()),
+            Some("Task")
+        );
+        assert_eq!(
+            policy
                 .statuses
                 .get("done")
                 .map(|status| status.category.as_str()),
@@ -2382,8 +2491,8 @@ mod tests {
     fn starter_policy_does_not_require_legacy_pr_merge_gate() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
 
-        for issue_type in BUILTIN_ISSUE_TYPES {
-            let workflow_name = policy.workflow_by_issue_type.get(*issue_type).unwrap();
+        for issue_type in policy.issue_types.keys() {
+            let workflow_name = policy.workflow_by_issue_type.get(issue_type).unwrap();
             let close_validators = policy.workflows[workflow_name]
                 .transitions
                 .get("close")
@@ -2452,14 +2561,29 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_issue_type_in_record() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let mut issue = issue_with_fields(Default::default());
+        issue.issue_type = "incident".to_string();
+
+        let error = validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("workflow_issue_type_unknown"));
+        assert!(error.contains("incident"));
+        assert!(error.contains("issue_types"));
+    }
+
+    #[test]
     fn rejects_removed_top_level_fields() {
-        let text = format!("{}\nissue_types: {{}}\n", valid_policy());
+        let text = format!("{}\nguidance_templates: {{}}\n", valid_policy());
         let error = parse_policy_text(&text, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("workflow_config_unknown_field"));
-        assert!(error.contains("issue_types"));
+        assert!(error.contains("guidance_templates"));
     }
 
     #[test]
@@ -2597,13 +2721,82 @@ mod tests {
     #[test]
     fn rejects_missing_issue_type_coverage() {
         let error = parse_policy_text(
-            &valid_policy().replace("    applies_to: [spike]\n", "    applies_to: []\n"),
+            &valid_policy().replace(
+                "  validation: { label: Validation }\n",
+                "  validation: { label: Validation }\n  incident: { label: Incident }\n",
+            ),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
         .to_string();
-        assert!(error.contains("workflow_config_invalid_issue_type_mapping"));
-        assert!(error.contains("spike"));
+        assert!(error.contains("workflow_config_invalid_issue_type"));
+        assert!(error.contains("incident"));
+    }
+
+    #[test]
+    fn parses_custom_issue_type_registry() {
+        let policy = valid_policy()
+            .replace(
+                "  validation: { label: Validation }\n",
+                "  validation: { label: Validation }\n  incident: { label: Incident }\n",
+            )
+            .replace(
+                "    applies_to: [bug, feature, task]\n",
+                "    applies_to: [bug, feature, incident, task]\n",
+            );
+
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+
+        assert_eq!(
+            policy
+                .issue_types
+                .get("incident")
+                .map(|issue_type| issue_type.label.as_str()),
+            Some("Incident")
+        );
+        assert_eq!(
+            policy
+                .workflow_by_issue_type
+                .get("incident")
+                .map(String::as_str),
+            Some("standard")
+        );
+    }
+
+    #[test]
+    fn rejects_missing_issue_type_registry_entry() {
+        let error = parse_policy_text(
+            &valid_policy().replace(
+                "    applies_to: [bug, feature, task]\n",
+                "    applies_to: [bug, feature, incident, task]\n",
+            ),
+            WORKFLOW_POLICY_PATH,
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("workflow_config_invalid_issue_type"));
+        assert!(error.contains("incident"));
+        assert!(error.contains("unregistered"));
+    }
+
+    #[test]
+    fn rejects_invalid_issue_type_name_and_label() {
+        let invalid_name =
+            valid_policy().replace("  task: { label: Task }\n", "  Task: { label: Task }\n");
+        let error = parse_policy_text(&invalid_name, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_issue_type"));
+        assert!(error.contains("issue type names"));
+
+        let empty_label =
+            valid_policy().replace("  task: { label: Task }\n", "  task: { label: \"\" }\n");
+        let error = parse_policy_text(&empty_label, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_issue_type"));
+        assert!(error.contains("label must not be empty"));
     }
 
     #[test]
@@ -2629,7 +2822,7 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert!(error.contains("workflow_config_invalid_issue_type_mapping"));
+        assert!(error.contains("workflow_config_invalid_issue_type"));
         assert!(error.contains("task"));
     }
 }

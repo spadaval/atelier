@@ -8,6 +8,14 @@ branch_policy:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
 
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
+
 statuses:
   todo:
     category: todo
