@@ -932,12 +932,12 @@ fn write_branch_action_workflow(dir: &Path) {
         2,
     );
     workflow = workflow.replace(
-        "          - durable_state_current\n\n  epic_reviewed:",
-        "          - durable_state_current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
+        "          - tracker.current\n\n  epic_reviewed:",
+        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
     );
     workflow = workflow.replace(
-        "          - git_worktree_clean\n\n  validation_reviewed:",
-        "          - git_worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
@@ -972,6 +972,44 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
         "{stdout}"
     );
     assert!(!stdout.contains("role_authors"), "{stdout}");
+}
+
+#[test]
+fn request_review_preserves_review_artifact_field() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Review field epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Review field epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_review"],
+    );
+    assert!(success, "request_review failed: {stderr}");
+
+    let front_matter = canonical_record_front_matter(dir.path(), "issues", &issue_id);
+    assert_eq!(front_matter["status"], "review");
+    assert_eq!(front_matter["review"]["kind"], "room");
+    assert!(
+        front_matter["review"]["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("atelier-")),
+        "{front_matter:#}"
+    );
 }
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {

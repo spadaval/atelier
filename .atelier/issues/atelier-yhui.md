@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "validators"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 9
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -21,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T01:19:54.303356557+00:00"
+status: "done"
 title: "Epic: Namespace validators and fix semantics"
-updated_at: "2026-06-19T22:42:57.816675476+00:00"
+updated_at: "2026-06-20T01:19:54.303356557+00:00"
 ---
 
 ## Description

@@ -356,7 +356,7 @@ no drift, stale obsolete-command tests are explicitly owned or deferred, and
 the Git worktree is clean. Routine mission completion does not require a second
 direct mission evidence record when those child and health gates already prove
 the mission shell.
-The `validation_criteria_satisfied` completion gate is Atelier-owned: for mission
+The `validation.criteria_satisfied` completion gate is Atelier-owned: for mission
 completion it checks configured workflow approval on explicit validation or
 validation work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through

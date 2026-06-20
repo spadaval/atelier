@@ -1280,8 +1280,8 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
     assert!(
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
-    assert!(docs.contains("no_blocking_lints"));
-    assert!(docs.contains("durable_state_current"));
+    assert!(docs.contains("lint.none_blocking"));
+    assert!(docs.contains("tracker.current"));
 }
 
 #[test]
@@ -1565,7 +1565,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_complete"), "{stderr}");
+    assert!(stderr.contains("review.complete"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1574,7 +1574,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_complete failed:",
+            "reason: \"validator review.complete failed:",
         ],
     );
 }
@@ -1849,7 +1849,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &policy_path,
         policy.replace(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
         ),
     )
     .unwrap();
@@ -1858,7 +1858,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("evidence_attached"), "{stderr}");
+    assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
@@ -1870,7 +1870,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &[
             "Blocked transition start from todo",
             "transition: \"start\"",
-            "reason: \"validator evidence_attached failed:",
+            "reason: \"validator evidence.attached failed:",
         ],
     );
     assert!(
@@ -1927,7 +1927,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_complete"), "{stderr}");
+    assert!(stderr.contains("review.complete"), "{stderr}");
     assert!(stderr.contains("blocked"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
@@ -1937,7 +1937,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_complete failed:",
+            "reason: \"validator review.complete failed:",
         ],
     );
 
@@ -1990,8 +1990,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked without reason and proof");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("evidence_attached"), "{stderr}");
-    assert!(stderr.contains("git_worktree_clean"), "{stderr}");
+    assert!(stderr.contains("evidence.attached"), "{stderr}");
+    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -2000,8 +2000,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         &[
             "Blocked transition close from validation",
             "transition: \"close\"",
-            "reason: \"validator evidence_attached failed:",
-            "validator git_worktree_clean failed:",
+            "reason: \"validator evidence.attached failed:",
+            "validator git.worktree_clean failed:",
         ],
     );
 }
@@ -2098,8 +2098,8 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     std::fs::write(
         &policy_path,
         policy.replace(
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n",
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - evidence_attached\n          - epic_child_proof_complete\n          - no_open_blockers\n          - no_blocking_lints\n          - durable_state_current\n          - git_worktree_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
         ),
     )
     .unwrap();

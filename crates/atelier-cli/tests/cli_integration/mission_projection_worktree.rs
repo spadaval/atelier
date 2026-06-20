@@ -147,7 +147,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         &policy_path,
         policy.replacen(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
             1,
         ),
     )
@@ -169,7 +169,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         run_atelier(dir.path(), &["issue", "transition", &ready_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
-    assert!(options_out.contains("evidence_attached"), "{options_out}");
+    assert!(options_out.contains("evidence.attached"), "{options_out}");
 }
 
 #[test]
@@ -711,7 +711,7 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_out.contains("Advanced Validator Detail"));
     assert!(verbose_out.contains("advanced terminal validator failure"));
-    assert!(verbose_out.contains("git_worktree_clean"));
+    assert!(verbose_out.contains("git.worktree_clean"));
 }
 
 #[test]

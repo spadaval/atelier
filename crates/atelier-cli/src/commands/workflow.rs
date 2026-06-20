@@ -482,6 +482,7 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
+    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
@@ -2100,46 +2101,46 @@ fn print_text_list(title: &str, values: &[String]) {
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
         ("issue", "start") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
         ],
         ("issue", "close") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
-            "evidence_attached",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
+            "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
         ("mission", _) => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
         ],
-        ("evidence", _) => &["durable_state_current"],
+        ("evidence", _) => &["tracker.current"],
         ("tracker", "health") => &[
-            "durable_state_current",
-            "no_blocking_lints",
+            "tracker.current",
+            "lint.none_blocking",
             "command_surface_current",
             "ignored_tests_reviewed",
-            "git_worktree_clean",
+            "git.worktree_clean",
         ],
-        _ => &["durable_state_current"],
+        _ => &["tracker.current"],
     };
     names.iter().map(|name| (*name).to_string()).collect()
 }
 
 pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
     &[
-        "durable_state_current",
-        "issue_sections_parseable",
+        "tracker.current",
+        "issue.sections_parseable",
         "no_open_work",
-        "no_open_blockers",
-        "validation_criteria_satisfied",
-        "no_blocking_lints",
+        "blockers.none_open",
+        "validation.criteria_satisfied",
+        "lint.none_blocking",
         "command_surface_current",
         "ignored_tests_reviewed",
-        "git_worktree_clean",
+        "git.worktree_clean",
     ]
 }
 
@@ -2275,7 +2276,7 @@ fn evaluate_builtin_with_params(
     params: Option<&atelier_app::workflow_policy::ValidatorParams>,
 ) -> Result<(bool, String)> {
     match validator {
-        "durable_state_current" => {
+        "tracker.current" => {
             let state_dir =
                 atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
             let stale = atelier_app::export::canonical_stale_entries(db, &state_dir)?;
@@ -2288,7 +2289,7 @@ fn evaluate_builtin_with_params(
                 ))
             }
         }
-        "evidence_attached" => {
+        "evidence.attached" => {
             if target_kind == "issue" {
                 let issue = db.require_issue(target_id)?;
                 let state_dir =
@@ -2331,7 +2332,7 @@ fn evaluate_builtin_with_params(
                 Ok((false, "no validating evidence link found".to_string()))
             }
         }
-        "no_open_blockers" => {
+        "blockers.none_open" => {
             let open = open_blockers(db, policy, target_kind, target_id)?;
             if open.is_empty() {
                 Ok((true, "no open blockers".to_string()))
@@ -2347,8 +2348,8 @@ fn evaluate_builtin_with_params(
                 Ok((false, format!("open linked work: {}", open.join(", "))))
             }
         }
-        "git_worktree_clean" => git_worktree_clean(),
-        "no_blocking_lints" => {
+        "git.worktree_clean" => git_worktree_clean(),
+        "lint.none_blocking" => {
             let status = Command::new(std::env::current_exe()?)
                 .arg("lint")
                 .status()?;
@@ -2360,15 +2361,13 @@ fn evaluate_builtin_with_params(
         }
         "ignored_tests_reviewed" => ignored_tests_reviewed(),
         "command_surface_current" => command_surface_current(),
-        "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
-        "validation_criteria_satisfied" => {
+        "issue.sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
+        "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, target_kind, target_id)
         }
-        "linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
-        "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
-        "epic_child_proof_complete" => {
-            epic_child_proof_complete(db, policy, target_kind, target_id)
-        }
+        "review.linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
+        "review.complete" => review_complete(db, policy, target_kind, target_id, transition),
+        "children.proof_complete" => epic_child_proof_complete(db, policy, target_kind, target_id),
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
 }
@@ -2663,7 +2662,7 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
 
 fn review_complete(
     db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
     _transition: &str,
@@ -2674,22 +2673,61 @@ fn review_complete(
             format!("review completion does not apply to {target_kind}"),
         ));
     }
-    let issue = db.require_issue(target_id)?;
-    match policy.status_category(&issue.status) {
-        Some("review") | Some("validation") | Some("done") => Ok((
-            true,
-            format!(
-                "issue {} has completed review state {}",
-                issue.id, issue.status
-            ),
-        )),
-        _ => Ok((
+    let repo_root = repo_root()?;
+    match ProjectConfig::load(&repo_root) {
+        Ok(ProjectConfig {
+            review: ReviewConfig::Room,
+            ..
+        }) => room_review_complete(db, &repo_root, target_id),
+        Ok(ProjectConfig {
+            review:
+                ReviewConfig::Provider(atelier_app::project_config::ReviewProviderConfig {
+                    provider: ReviewProviderKind::Forgejo(_),
+                }),
+            ..
+        }) => linked_pr_merged(db, target_kind, target_id),
+        Err(error) => Ok((
             false,
             format!(
-                "issue {} must reach a review status before this transition; current status is {}",
-                issue.id, issue.status
+                "{}; run `atelier review status --issue {}`",
+                error, target_id
             ),
         )),
+    }
+}
+
+fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
+    let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let outcome = match review_room::status(
+        db,
+        review_room::RoomStatusRequest {
+            repo_root,
+            state_dir: &state_dir,
+            issue_ref: Some(issue_id),
+        },
+    ) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Ok((
+                false,
+                format!(
+                    "{}; run `atelier review status --issue {}`",
+                    error, issue_id
+                ),
+            ))
+        }
+    };
+
+    if outcome.status == "merged" {
+        Ok((true, format!("review room {} is merged", outcome.review_id)))
+    } else {
+        Ok((
+            false,
+            format!(
+                "review room {} is {}; run `atelier review status --issue {}`",
+                outcome.review_id, outcome.status, issue_id
+            ),
+        ))
     }
 }
 
@@ -3408,18 +3446,18 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert_eq!(
             default_validators("issue", "start"),
             vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_blockers"
+                "tracker.current",
+                "issue.sections_parseable",
+                "blockers.none_open"
             ]
         );
         assert_eq!(
             default_validators("issue", "close"),
             vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_blockers",
-                "evidence_attached"
+                "tracker.current",
+                "issue.sections_parseable",
+                "blockers.none_open",
+                "evidence.attached"
             ]
         );
         assert_eq!(
@@ -3431,16 +3469,16 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         );
         assert_eq!(
             default_validators("evidence", "attach"),
-            vec!["durable_state_current"]
+            vec!["tracker.current"]
         );
         assert_eq!(
             default_validators("tracker", "health"),
             vec![
-                "durable_state_current",
-                "no_blocking_lints",
+                "tracker.current",
+                "lint.none_blocking",
                 "command_surface_current",
                 "ignored_tests_reviewed",
-                "git_worktree_clean"
+                "git.worktree_clean"
             ]
         );
     }
@@ -3597,6 +3635,78 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
+    fn room_review_complete_requires_merged_room_artifact() {
+        let dir = tempdir().unwrap();
+        write_room_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let mut issue = test_issue("atelier-epic1");
+        issue.status = "review".to_string();
+        insert_canonical_issue(&db, &state_dir, issue);
+
+        let outcome = review_room::open(
+            &db,
+            review_room::RoomOpenRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "worker",
+                title: "Review atelier-epic1",
+                body: "Please review.",
+                source_branch: "epic/atelier-epic1",
+                target_branch: "master",
+            },
+        )
+        .unwrap();
+        drop(db);
+        let db = Database::open(&db_path).unwrap();
+
+        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        assert!(!passed);
+        assert!(
+            reason.contains(&format!("review room {}", outcome.review_id)),
+            "{reason}"
+        );
+        assert!(
+            reason.contains("atelier review status --issue atelier-epic1"),
+            "{reason}"
+        );
+
+        review_room::approve(
+            &db,
+            review_room::RoomDecisionRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "reviewer",
+                body: "Approved.",
+            },
+        )
+        .unwrap();
+        review_room::merge(
+            &db,
+            review_room::RoomMergeRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "manager",
+            },
+        )
+        .unwrap();
+
+        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        assert!(passed);
+        assert_eq!(
+            reason,
+            format!("review room {} is merged", outcome.review_id)
+        );
+    }
+
+    #[test]
     fn linked_pr_merged_validator_reports_required_states() {
         let (dir, db) = setup_pr_validator_repo();
         let forgejo = forgejo_config();
@@ -3670,7 +3780,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let linked_pr_validators = epic_close
             .validators
             .iter()
-            .filter(|validator| validator.builtin == "linked_pr_merged")
+            .filter(|validator| validator.builtin == "review.linked_pr_merged")
             .cloned()
             .collect::<Vec<_>>();
         assert!(linked_pr_validators.is_empty());
@@ -3691,7 +3801,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert!(!validation_close
             .validators
             .iter()
-            .any(|validator| validator.builtin == "linked_pr_merged"));
+            .any(|validator| validator.builtin == "review.linked_pr_merged"));
     }
 
     #[test]
