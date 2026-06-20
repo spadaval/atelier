@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-20T00:18:20.946672948+00:00"
+status: "done"
 title: "Move review provider policy into workflow actions"
-updated_at: "2026-06-20T00:05:23.702621290+00:00"
+updated_at: "2026-06-20T00:18:20.946672948+00:00"
 ---
 
 ## Description
