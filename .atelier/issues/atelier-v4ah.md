@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T01:07:59.273579968+00:00"
+status: "done"
 title: "Make review.complete validate actual review completion"
-updated_at: "2026-06-19T22:42:56.468829940+00:00"
+updated_at: "2026-06-20T01:07:59.273579968+00:00"
 ---
 
 ## Description
