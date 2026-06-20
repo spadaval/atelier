@@ -9,8 +9,9 @@ fn test_relate_nonexistent_first_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Existing"]);
+    let existing_id = issue_ref(dir.path(), 1);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "relate", "999", "1"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", "999", &existing_id]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -22,8 +23,9 @@ fn test_relate_nonexistent_second_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Existing"]);
+    let existing_id = issue_ref(dir.path(), 1);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "relate", "1", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &existing_id, "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -36,10 +38,12 @@ fn test_relate_already_related() {
 
     run_atelier(dir.path(), &["issue", "create", "Issue A"]);
     run_atelier(dir.path(), &["issue", "create", "Issue B"]);
-    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
+    let issue_a = issue_ref(dir.path(), 1);
+    let issue_b = issue_ref(dir.path(), 2);
+    run_atelier(dir.path(), &["issue", "block", &issue_a, &issue_b]);
 
     // Try to relate again
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "block", &issue_a, &issue_b]);
 
     assert!(success);
     assert!(stdout.contains("already") || stdout.contains("related"));
@@ -52,9 +56,11 @@ fn test_unrelate_no_relation() {
 
     run_atelier(dir.path(), &["issue", "create", "Issue A"]);
     run_atelier(dir.path(), &["issue", "create", "Issue B"]);
+    let issue_a = issue_ref(dir.path(), 1);
+    let issue_b = issue_ref(dir.path(), 2);
 
     // Try to unrelate issues that aren't related
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "unrelate", "1", "2"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "unblock", &issue_a, &issue_b]);
 
     assert!(success);
     assert!(
@@ -70,8 +76,9 @@ fn test_related_no_relations() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Solo issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "related", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "blocked", &issue_id]);
 
     assert!(success);
     assert!(
@@ -86,7 +93,7 @@ fn test_related_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "related", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "blocked", "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -98,7 +105,8 @@ fn test_label_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "label", "999", "bug"]);
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "update", "999", "--label", "bug"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -110,10 +118,17 @@ fn test_label_already_exists() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
-    run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    let issue_id = issue_ref(dir.path(), 1);
+    run_atelier(
+        dir.path(),
+        &["issue", "update", &issue_id, "--label", "bug"],
+    );
 
     // Try to add same label again
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
+    let (success, stdout, _) = run_atelier(
+        dir.path(),
+        &["issue", "update", &issue_id, "--label", "bug"],
+    );
 
     assert!(success);
     assert!(
@@ -135,7 +150,10 @@ fn test_unlabel_nonexistent_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "unlabel", "999", "bug"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", "999", "--remove-label", "bug"],
+    );
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
@@ -147,8 +165,18 @@ fn test_unlabel_nonexistent_label() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "unlabel", "1", "nonexistent"]);
+    let (success, stdout, _) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "update",
+            &issue_id,
+            "--remove-label",
+            "nonexistent",
+        ],
+    );
 
     assert!(success);
     assert!(
@@ -195,8 +223,9 @@ fn test_block_self() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "1"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &issue_id, &issue_id]);
 
     assert!(!success, "Blocking an issue by itself should fail");
     assert!(
@@ -212,32 +241,15 @@ fn test_block_nonexistent_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
+    let issue_id = issue_ref(dir.path(), 1);
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "999"]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &issue_id, "999"]);
 
     assert!(!success);
     assert!(stderr.contains("not found") || stderr.contains("999"));
 }
 
 // --- session.rs: Session status deleted issue ---
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_session_status_deleted_issue() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["issue", "create", "To delete"]);
-    run_atelier(dir.path(), &["session", "start"]);
-    run_atelier(dir.path(), &["session", "work", "1"]);
-    run_atelier(dir.path(), &["issue", "delete", "1", "-f"]);
-
-    let (success, stdout, _) = run_atelier(dir.path(), &["session", "status"]);
-
-    assert!(success);
-    // Should show issue not found or empty working status
-    assert!(stdout.contains("not found") || stdout.contains("#1") || stdout.contains("Session"));
-}
-
 // --- show.rs: Show with related issues ---
 #[test]
 fn test_show_with_related_issues() {
@@ -246,48 +258,17 @@ fn test_show_with_related_issues() {
 
     run_atelier(dir.path(), &["issue", "create", "Main issue"]);
     run_atelier(dir.path(), &["issue", "create", "Related issue"]);
-    run_atelier(dir.path(), &["issue", "relate", "1", "2"]);
+    let main_id = issue_ref(dir.path(), 1);
+    let related_id = issue_ref(dir.path(), 2);
+    run_atelier(dir.path(), &["issue", "block", &main_id, &related_id]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &main_id]);
 
     assert!(success);
     assert!(stdout.contains("Related") || stdout.contains("#2") || stdout.contains("Main issue"));
 }
 
 // --- milestone.rs: Edge cases ---
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_milestone_add_nonexistent_issue() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    run_atelier(dir.path(), &["milestone", "create", "v1.0"]);
-
-    let (success, stdout, _) = run_atelier(dir.path(), &["milestone", "add", "1", "999"]);
-
-    // Command succeeds but warns about nonexistent issue
-    assert!(success);
-    assert!(
-        stdout.contains("not found")
-            || stdout.contains("999")
-            || stdout.contains("Warning")
-            || stdout.contains("skipping")
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_milestone_delete_nonexistent() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let (success, stdout, _) = run_atelier(dir.path(), &["milestone", "delete", "999"]);
-
-    // Command succeeds but reports not found
-    assert!(success);
-    assert!(stdout.contains("not found") || stdout.contains("999"));
-}
-
 // ==================== Security & Stress Tests ====================
 
 /// Test with very long title — within limit should succeed, over limit should fail
@@ -306,7 +287,8 @@ fn test_stress_very_long_title() {
     let (success, _, _) = run_atelier(dir.path(), &["issue", "list"]);
     assert!(success);
 
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let issue_id = issue_ref(dir.path(), 1);
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success);
 
     // Over the 512-char limit: should fail
@@ -324,14 +306,15 @@ fn test_stress_very_long_description() {
 
     // Use 5000 chars - safe for Windows command line limits
     let long_desc = "B".repeat(5000);
-    let (success, _, _) = run_atelier(
-        dir.path(),
-        &["issue", "create", "Long desc issue", "-d", &long_desc],
-    );
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Long desc issue"]);
 
     assert!(success);
+    let issue_id = issue_ref(dir.path(), 1);
+    set_issue_description(dir.path(), &issue_id, &long_desc);
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after description edit failed: {stderr}");
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success);
     // Should contain at least part of the description
     assert!(stdout.contains("BBBB"));
@@ -356,7 +339,7 @@ fn test_stress_many_issues() {
     assert!(stdout.contains("Issue number 99"));
 
     // Verify search works on large DB
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "search", "number 50"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["search", "number 50"]);
     assert!(success);
     assert!(stdout.contains("50"));
 }
@@ -369,13 +352,17 @@ fn test_stress_deep_nesting() {
 
     // Create root issue
     run_atelier(dir.path(), &["issue", "create", "Level 0"]);
+    let mut parent_id = issue_ref(dir.path(), 1);
 
     // Create 20 levels of nesting
     for i in 1..=20 {
-        let parent_id = i.to_string();
         let title = format!("Level {}", i);
-        let (success, _, _) = run_atelier(dir.path(), &["issue", "subissue", &parent_id, &title]);
+        let (success, _, _) = run_atelier(
+            dir.path(),
+            &["issue", "create", &title, "--parent", &parent_id],
+        );
         assert!(success, "Failed to create subissue at level {}", i);
+        parent_id = issue_ref(dir.path(), i + 1);
     }
 
     // Verify objective status handles deep nesting.
@@ -426,7 +413,7 @@ fn test_security_sql_injection_search() {
     ];
 
     for query in malicious_searches {
-        let (success, _, _) = run_atelier(dir.path(), &["issue", "search", query]);
+        let (success, _, _) = run_atelier(dir.path(), &["search", query]);
         // Should not crash, may or may not find results
         assert!(success, "Search crashed with query: {}", query);
     }
@@ -496,10 +483,11 @@ fn test_edge_empty_strings() {
 
     // Empty comment
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
-    let (_, _, _) = run_atelier(dir.path(), &["issue", "comment", "1", ""]);
+    let issue_id = issue_ref(dir.path(), 1);
+    let (_, _, _) = run_atelier(dir.path(), &["issue", "note", &issue_id, ""]);
 
     // Empty label
-    let (_, _, _) = run_atelier(dir.path(), &["issue", "label", "1", ""]);
+    let (_, _, _) = run_atelier(dir.path(), &["issue", "update", &issue_id, "--label", ""]);
 }
 
 /// Test integer overflow in IDs
@@ -509,6 +497,7 @@ fn test_edge_large_ids() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Test"]);
+    let issue_id = issue_ref(dir.path(), 1);
 
     // Very large IDs - should fail with "not found" since issue doesn't exist
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "show", "9223372036854775807"]); // i64::MAX
@@ -538,9 +527,9 @@ fn test_stress_rapid_operations() {
     for i in 0..20 {
         let title = format!("Rapid issue {}", i);
         run_atelier(dir.path(), &["issue", "create", &title]);
-        let id = (i + 1).to_string();
-        run_atelier(dir.path(), &["issue", "comment", &id, "Rapid comment"]);
-        run_atelier(dir.path(), &["issue", "label", &id, "rapid"]);
+        let id = issue_ref(dir.path(), i + 1);
+        run_atelier(dir.path(), &["issue", "note", &id, "Rapid comment"]);
+        run_atelier(dir.path(), &["issue", "update", &id, "--label", "rapid"]);
     }
 
     // Verify all operations completed
@@ -550,60 +539,6 @@ fn test_stress_rapid_operations() {
 }
 
 /// Test export/import round-trip preserves data
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_integrity_export_import_roundtrip() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    // Create complex data
-    run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Parent",
-            "-p",
-            "high",
-            "-d",
-            "Parent desc",
-        ],
-    );
-    run_atelier(dir.path(), &["issue", "subissue", "1", "Child"]);
-    run_atelier(dir.path(), &["issue", "label", "1", "important"]);
-    run_atelier(dir.path(), &["issue", "comment", "1", "Test comment"]);
-
-    // Export
-    let export_path = dir.path().join("backup.json");
-    let (success, _, _) = run_atelier(
-        dir.path(),
-        &["export", "-o", export_path.to_str().unwrap(), "-f", "json"],
-    );
-    assert!(success);
-
-    // Import to new location
-    let dir2 = tempdir().unwrap();
-    init_atelier(dir2.path());
-    std::fs::copy(&export_path, dir2.path().join("backup.json")).unwrap();
-
-    let (success, _, _) = run_atelier(
-        dir2.path(),
-        &["import", dir2.path().join("backup.json").to_str().unwrap()],
-    );
-    assert!(success);
-
-    // Verify data integrity - title and structure preserved
-    let parent_id = issue_id_by_title(dir2.path(), "Parent");
-    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "show", &parent_id]);
-    assert!(success);
-    assert!(stdout.contains("Parent"));
-
-    // Verify child was imported
-    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "list"]);
-    assert!(success);
-    assert!(stdout.contains("Child") || stdout.contains("#2"));
-}
-
 #[test]
 fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     let dir = tempdir().unwrap();
@@ -615,8 +550,6 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
 
     for args in [
         vec!["issue", "list", "--json"],
-        vec!["issue", "show", "1", "--json"],
-        vec!["issue", "update", "1", "--priority", "high", "--json"],
         vec!["issue", "list", "--json"],
         vec!["workflow", "check", "--json"],
         vec!["doctor", "--json"],
@@ -663,12 +596,26 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     assert!(stdout.contains("Next Commands"));
     let task_id = issue_id_by_title(dir.path(), "Agent Factory task");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", "1", "--claim"]);
+    for args in [
+        vec!["issue", "show", &task_id, "--json"],
+        vec!["issue", "update", &task_id, "--priority", "high", "--json"],
+    ] {
+        let (success, _, stderr) = run_atelier_raw(dir.path(), &args);
+        assert!(!success, "{args:?} should reject --json");
+        assert!(
+            stderr.contains("unexpected argument '--json'"),
+            "{args:?} stderr did not reject --json: {stderr}"
+        );
+    }
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "update", &task_id, "--claim"]);
     assert!(!success, "claim update should be rejected");
     assert!(stderr.contains("unexpected argument '--claim'"));
 
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "update", "1", "--priority", "high"]);
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &task_id, "--priority", "high"],
+    );
     assert!(success, "update failed: {stderr}");
     assert!(stdout.contains(&format!("Updated issue {task_id}")));
     assert!(stdout.contains("Priority: high"));
@@ -698,16 +645,18 @@ fn test_command_result_json_mode_is_rejected_and_human_subset_works() {
     );
     assert!(success, "blocker create failed: {stderr}");
     let blocker_id = issue_ref(dir.path(), 2);
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "block", "1", "2"]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "block", &task_id, &blocker_id]);
     assert!(success, "issue block failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "blocked", &task_id]);
     assert!(success, "issue blocked failed: {stderr}");
     assert!(stdout.contains(&blocker_id));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "unblock", "1", "2"]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "unblock", &task_id, &blocker_id]);
     assert!(success, "issue unblock failed: {stderr}");
     assert!(stdout.contains(&task_id));
     assert!(stdout.contains(&blocker_id));

@@ -1,100 +1,8 @@
 use std::fs;
 
-use super::harness::{assert_stdout_contains, SmokeHarness};
+use super::harness::SmokeHarness;
 
 // ==================== Import/Export Tests ====================
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_export_empty_db_json() {
-    let h = SmokeHarness::new();
-    let export_path = h.temp_dir.path().join("export.json");
-    h.run_ok(&["export", "-o", export_path.to_str().unwrap(), "-f", "json"]);
-
-    let content = fs::read_to_string(&export_path).expect("Failed to read export file");
-    let parsed: serde_json::Value =
-        serde_json::from_str(&content).expect("Export is not valid JSON");
-    // Should be valid JSON (either empty array or wrapper object)
-    assert!(
-        parsed.is_array() || parsed.is_object(),
-        "Export should be a JSON array or object, got: {}",
-        content
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_export_json_format() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "First issue", "-p", "high"]);
-    h.run_ok(&["issue", "create", "Second issue", "-d", "Has a description"]);
-    h.run_ok(&["issue", "label", "1", "bug"]);
-    h.run_ok(&["issue", "comment", "1", "A comment on issue 1"]);
-
-    let export_path = h.temp_dir.path().join("export.json");
-    h.run_ok(&["export", "-o", export_path.to_str().unwrap(), "-f", "json"]);
-
-    let content = fs::read_to_string(&export_path).expect("Failed to read export file");
-    let parsed: serde_json::Value =
-        serde_json::from_str(&content).expect("Export is not valid JSON");
-
-    // Find the issues array (may be top-level or nested under "issues")
-    let issues = if parsed.is_array() {
-        parsed.as_array().unwrap().clone()
-    } else if let Some(arr) = parsed.get("issues").and_then(|v| v.as_array()) {
-        arr.clone()
-    } else {
-        panic!("Could not find issues array in export: {}", content);
-    };
-
-    assert_eq!(issues.len(), 2, "Should export 2 issues");
-
-    let first = issues
-        .iter()
-        .find(|i| i["title"].as_str() == Some("First issue"))
-        .expect("Should find 'First issue' in export");
-
-    assert_eq!(first["priority"].as_str().unwrap(), "high");
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_export_markdown_format() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "Open issue", "-p", "high"]);
-    h.run_ok(&["issue", "create", "Closed issue"]);
-    h.close_issue_with_evidence("2");
-
-    let export_path = h.temp_dir.path().join("export.md");
-    h.run_ok(&[
-        "export",
-        "-o",
-        export_path.to_str().unwrap(),
-        "-f",
-        "markdown",
-    ]);
-
-    let content = fs::read_to_string(&export_path).expect("Failed to read export file");
-
-    assert!(
-        content.contains("Open"),
-        "Markdown should have Open section"
-    );
-    assert!(
-        content.contains("Closed"),
-        "Markdown should have Closed section"
-    );
-    assert!(
-        content.contains("Open issue"),
-        "Markdown should contain issue title"
-    );
-    assert!(
-        content.contains("Closed issue"),
-        "Markdown should contain closed issue title"
-    );
-}
 
 #[test]
 fn test_canonical_export_check_cli() {
@@ -103,8 +11,15 @@ fn test_canonical_export_check_cli() {
     h.run_ok(&["issue", "create", "Canonical issue"]);
     h.run_ok(&["export"]);
     h.run_ok(&["export", "--check"]);
+    let issue_id = h.issue_id(1);
 
-    h.run_ok(&["issue", "update", "1", "--title", "Changed canonical issue"]);
+    h.run_ok(&[
+        "issue",
+        "update",
+        &issue_id,
+        "--title",
+        "Changed canonical issue",
+    ]);
     h.run_ok(&["export", "--check"]);
 
     let issue_id = h.issue_id_by_title("Changed canonical issue");
@@ -165,185 +80,7 @@ fn test_import_malformed_json() {
     );
 }
 
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_import_export_roundtrip() {
-    let h = SmokeHarness::new();
-
-    // Create 10 issues with labels and comments
-    for i in 1..=10 {
-        h.run_ok(&[
-            "issue",
-            "create",
-            &format!("Roundtrip issue {}", i),
-            "-p",
-            "medium",
-        ]);
-    }
-    h.run_ok(&["issue", "label", "1", "bug"]);
-    h.run_ok(&["issue", "label", "2", "feature"]);
-    h.run_ok(&["issue", "label", "3", "bug"]);
-    h.run_ok(&["issue", "comment", "1", "Comment on issue 1"]);
-    h.run_ok(&["issue", "comment", "2", "Comment on issue 2"]);
-    h.run_ok(&["issue", "comment", "5", "Comment on issue 5"]);
-    h.close_issue_with_evidence("4");
-    h.close_issue_with_evidence("7");
-
-    // Export
-    let export1_path = h.temp_dir.path().join("export1.json");
-    h.run_ok(&["export", "-o", export1_path.to_str().unwrap(), "-f", "json"]);
-    let export1 = fs::read_to_string(&export1_path).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&export1).unwrap();
-    let issues1 = if parsed.is_array() {
-        parsed.as_array().unwrap().clone()
-    } else {
-        parsed["issues"].as_array().unwrap().clone()
-    };
-    assert_eq!(issues1.len(), 10);
-
-    // Delete the database and reinitialize
-    fs::remove_file(h.db_path()).expect("Failed to remove database");
-    h.run_ok(&["init"]);
-
-    // Import
-    h.run_ok(&["import", export1_path.to_str().unwrap()]);
-
-    // Export again
-    let export2_path = h.temp_dir.path().join("export2.json");
-    h.run_ok(&["export", "-o", export2_path.to_str().unwrap(), "-f", "json"]);
-    let export2 = fs::read_to_string(&export2_path).unwrap();
-    let parsed2: serde_json::Value = serde_json::from_str(&export2).unwrap();
-    let issues2 = if parsed2.is_array() {
-        parsed2.as_array().unwrap().clone()
-    } else {
-        parsed2["issues"].as_array().unwrap().clone()
-    };
-
-    assert_eq!(
-        issues1.len(),
-        issues2.len(),
-        "Roundtrip should preserve issue count"
-    );
-
-    let mut titles1: Vec<String> = issues1
-        .iter()
-        .map(|i| i["title"].as_str().unwrap().to_string())
-        .collect();
-    let mut titles2: Vec<String> = issues2
-        .iter()
-        .map(|i| i["title"].as_str().unwrap().to_string())
-        .collect();
-    titles1.sort();
-    titles2.sort();
-    assert_eq!(titles1, titles2, "Roundtrip should preserve issue titles");
-}
-
 // ==================== Archive Tests ====================
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_archive_full_lifecycle() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "Archive me"]);
-    h.close_issue_with_evidence("1");
-
-    let result = h.run_ok(&["archive", "add", "1"]);
-    assert_stdout_contains(&result, "Archived");
-
-    let list_result = h.run_ok(&["archive", "list"]);
-    assert!(
-        list_result.stdout.contains("Archive me"),
-        "Archived issue should appear in archive list"
-    );
-
-    // Should not appear in open or closed lists
-    let open_list = h.run_ok(&["issue", "list", "-s", "open"]);
-    assert!(
-        !open_list.stdout.contains("Archive me"),
-        "Archived issue should not appear in open list"
-    );
-    let closed_list = h.run_ok(&["issue", "list", "-s", "closed"]);
-    assert!(
-        !closed_list.stdout.contains("Archive me"),
-        "Archived issue should not appear in closed list"
-    );
-
-    // Unarchive
-    let unarchive_result = h.run_ok(&["archive", "remove", "1"]);
-    assert_stdout_contains(&unarchive_result, "Unarchived");
-
-    // Should now appear in closed list
-    let closed_list = h.run_ok(&["issue", "list", "-s", "closed"]);
-    assert!(
-        closed_list.stdout.contains("Archive me"),
-        "Unarchived issue should appear in closed list"
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_archive_open_issue_fails_smoke() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "Open issue"]);
-
-    let result = h.run_err(&["archive", "add", "1"]);
-    assert!(
-        result.stderr.contains("closed")
-            || result.stderr.contains("only archive closed")
-            || result.stderr.contains("Can only archive")
-            || result.stderr.contains("not closed"),
-        "Should indicate only closed issues can be archived, got stderr: {}",
-        result.stderr
-    );
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_archive_older_batch() {
-    let h = SmokeHarness::new();
-
-    for i in 1..=5 {
-        h.run_ok(&["issue", "create", &format!("Issue {}", i)]);
-    }
-    for i in 1..=5 {
-        h.close_issue_with_evidence(&i.to_string());
-    }
-
-    let result = h.run_ok(&["archive", "older", "0"]);
-    assert!(
-        result.stdout.contains("Archived") || result.stdout.contains("archived"),
-        "Should indicate issues were archived, got: {}",
-        result.stdout
-    );
-
-    let archive_list = h.run_ok(&["archive", "list"]);
-    for i in 1..=5 {
-        assert!(
-            archive_list.stdout.contains(&format!("Issue {}", i)),
-            "Issue {} should be in archive list",
-            i
-        );
-    }
-}
-
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_unarchive_not_archived() {
-    let h = SmokeHarness::new();
-
-    h.run_ok(&["issue", "create", "Not archived"]);
-
-    let result = h.run_err(&["archive", "remove", "1"]);
-    assert!(
-        result.stderr.contains("not found or not archived")
-            || result.stderr.contains("not archived")
-            || result.stderr.contains("not found"),
-        "Should indicate issue is not archived, got stderr: {}",
-        result.stderr
-    );
-}
 
 // ==================== Next command ====================
 
@@ -355,7 +92,7 @@ fn test_next_suggests_highest_priority() {
     h.run_ok(&["issue", "create", "Critical task", "-p", "critical"]);
     h.run_ok(&["issue", "create", "Medium task", "-p", "medium"]);
 
-    let next = h.run_ok(&["issue", "next"]);
+    let next = h.run_ok(&["issue", "list", "--ready"]);
     // The critical task should be suggested first
     assert!(
         next.stdout.contains("Critical task"),
@@ -370,9 +107,11 @@ fn test_next_skips_blocked() {
 
     h.run_ok(&["issue", "create", "Blocked task", "-p", "critical"]);
     h.run_ok(&["issue", "create", "Blocker task", "-p", "low"]);
-    h.run_ok(&["issue", "block", "1", "2"]);
+    let blocked_id = h.issue_id(1);
+    let blocker_id = h.issue_id(2);
+    h.run_ok(&["issue", "block", &blocked_id, &blocker_id]);
 
-    let next = h.run_ok(&["issue", "next"]);
+    let next = h.run_ok(&["issue", "list", "--ready"]);
     // Should suggest the blocker (which is unblocked) not the blocked task
     assert!(
         !next.stdout.contains("Blocked task") || next.stdout.contains("Blocker task"),

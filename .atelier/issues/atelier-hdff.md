@@ -6,6 +6,10 @@ labels:
 - "command-surface"
 - "cutting-pass"
 - "removal"
+review:
+  kind: pull_request
+  number: 16
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -22,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Remove workspace and retired command machinery"
-updated_at: "2026-06-20T16:48:55.597699878+00:00"
+updated_at: "2026-06-20T22:00:55.713344879+00:00"
 ---
 
 ## Description

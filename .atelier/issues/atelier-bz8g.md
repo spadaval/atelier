@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T21:50:57.395357304+00:00"
+status: "done"
 title: "Remove legacy command translation tests and obsolete ignored suite"
-updated_at: "2026-06-20T16:48:50.531656557+00:00"
+updated_at: "2026-06-20T21:50:57.395357304+00:00"
 ---
 
 ## Description

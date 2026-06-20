@@ -201,7 +201,8 @@ complete detail output must be migrated to one of the supported surfaces above.
 ## Compact Hierarchy Views
 
 Use a compact hierarchy view when the operator needs shape rather than every
-field. The compact hierarchy view is distinct from the exhaustive `issue tree`
+field. The compact hierarchy view is distinct from exhaustive relationship
+tree output
 view.
 
 Compact hierarchy output should:

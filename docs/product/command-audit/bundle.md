@@ -25,7 +25,5 @@ issue, relationship, and evidence records?"
 
 ## Cutting Note
 
-The current implementation delegates `commands::bundle` to `commands::plan`.
-That boundary keeps a removed/deferred product name alive in code. Rename the
-implementation module to `bundle` once any tests or internal imports that still
-refer to plan semantics are removed.
+The implementation is owned by `commands::bundle`; it no longer delegates to a
+plan-named module.

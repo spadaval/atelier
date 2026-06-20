@@ -58,7 +58,7 @@ may be cited as ordinary workflow proof.
 
 | Category | Definition | Examples | Excluded non-examples |
 | --- | --- | --- | --- |
-| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary committed-state health. They may appear in root help, role guides, issue next actions, issue status <objective-id>, and Agent Factory workflow guidance. | `status`, `issue show`, `issue transition --options`, `issue status <objective-id>`, `evidence record`, `lint`, plus lifecycle or review primitives when command output routes there | `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
+| Normal workflow | Product-facing commands used to orient, select work, mutate canonical records, record proof, inspect completion status, and check ordinary committed-state health. They may appear in root help, role guides, ready-work actions, issue status <objective-id>, and Agent Factory workflow guidance. | `status`, `issue show`, `issue transition --options`, `issue status <objective-id>`, `evidence record`, `lint`, plus lifecycle or review primitives when command output routes there | `doctor`, `export`, `rebuild`, `workflow check`, `diagnostics slow`, `import-beads`, destructive `maintenance delete` |
 | Admin maintenance | Visible but specialized commands for setup, explicit local-state repair, explicit pruning, destructive record surgery, or manual owner-branch recovery. They may appear in admin guidance or targeted recovery output, but not as the default worker/reviewer loop. | `init`, `doctor`, `doctor --fix`, `prune`, `prune --apply`, `maintenance delete ... --force`, `branch status`, `branch merge` | `issue status <objective-id>`, hidden `workflow check`, hidden `diagnostics slow` |
 | Hidden debug diagnostics | Callable implementation probes for raw workflow-policy detail, local telemetry, deterministic rendering, or projection debugging. They stay out of root help and ordinary role loops. Targeted diagnostics, tests, or migration notes may name them. | hidden `workflow check`, hidden `diagnostics slow`, hidden/advanced `export --check`, hidden/advanced `rebuild` when used as a projection probe | `lint`, `doctor`, `issue status <objective-id>`, `issue transition --options` |
 | Temporary migration | Transitional surfaces that exist only to move inherited state or prove deterministic renderers while the Markdown-first store stabilizes. They must name their sunset or follow-up owner and must not become new workflow requirements. | `init --import-beads`, hidden/manual `import-beads`, hidden/admin `export` for deterministic renderer testing during migration | backup `import`, `export --format json|markdown`, routine handoff checks |
@@ -171,7 +171,7 @@ time pressure:
 - Select and run work: choose a clear slice, inspect workflow state, leave notes
   and proof, and follow the lifecycle or recovery command Atelier prints for
   the current item. Owned by `atelier status`, `atelier issue ...`, `atelier
-  worktree ...`, record-specific note commands, and `atelier evidence ...`.
+  evidence ...`, and record-specific note commands.
   Explicit `atelier branch ...` commands are advanced diagnostics or repair
   surfaces unless Atelier routes the operator there.
 - Coordinate objective progress: see linked work by state, blockers, evidence
@@ -188,8 +188,8 @@ time pressure:
   should appear only when a command reports degraded local state. Low-level
   state diagnostics such as export/rebuild are not normal handoff commands.
 
-Normal workflow commands speak in product terms: issue, mission, worktree,
-evidence, blocker, proof, completion, and committed-state validity. Advanced
+Normal workflow commands speak in product terms: issue, mission, evidence,
+blocker, proof, completion, and committed-state validity. Advanced
 diagnostics may expose workflow policy names, projections, cache repair,
 command telemetry, JSON summaries, or raw validator detail, but normal
 operators should only run them when an admin repair path, targeted error,
