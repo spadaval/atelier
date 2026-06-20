@@ -26,9 +26,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+closed_at: "2026-06-20T22:02:49.143825858+00:00"
+status: "done"
 title: "Epic: Remove workspace and retired command machinery"
-updated_at: "2026-06-20T22:00:55.713344879+00:00"
+updated_at: "2026-06-20T22:02:49.143825858+00:00"
 ---
 
 ## Description
