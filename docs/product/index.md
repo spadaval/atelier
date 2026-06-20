@@ -26,7 +26,7 @@ that can be implemented and validated.
   evidence.
 - [Workflow Configuration Contract](workflow-configuration.md):
   fixed `.atelier/workflow.yaml` issue-policy path, schema, built-in validators,
-  guidance templates, strict errors, and starter workflow examples.
+  transition actions, strict errors, and starter workflow examples.
 - [Work View Ordering](work-view-ordering.md): blocker-aware ordering and row
   state vocabulary for issue-like work queues.
 

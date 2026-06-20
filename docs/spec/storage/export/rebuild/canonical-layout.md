@@ -54,28 +54,29 @@ where they live, not their contents. The current tracked config also carries
 `compatibility_state_root` as a compatibility-only path while `.atelier-state/`
 repair and migration flows still exist.
 
-Forgejo PR integration is optional tracked project configuration. Repositories
-that use `atelier pr` or PR validators configure the remote and role author
-mapping in `.atelier/config.toml`:
+Review provider integration is optional tracked project configuration. The
+current implementation ships a Forgejo provider, so repositories that use
+`atelier review` commands or review validators with Forgejo configure the
+remote and token environment variable name in `.atelier/config.toml`:
 
 ```toml
-[forgejo]
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
 host = "forge.example.test"
 owner = "workspace"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
-
-[forgejo.role_authors]
-worker = "atelier-worker"
-reviewer = "atelier-reviewer"
-validator = "atelier-validator"
-manager = "atelier-manager"
 ```
 
 The admin token value stays in the named environment variable. The config parser
-rejects missing Forgejo remote fields, missing role author mappings, empty
-values, obsolete sudo-user mappings, and invalid token environment variable
-names with errors that name the required key.
+rejects missing Forgejo remote fields, empty values, obsolete sudo-user
+mappings, and invalid token environment variable names with errors that name
+the required key. Workflow action role attribution, including Forgejo
+role-author mappings used by review artifact actions, belongs in
+`.atelier/workflow.yaml`.
 
 ## Schema Identity
 
@@ -366,9 +367,10 @@ The required section policy is:
 - `Outcome` is required for every issue and describes the desired finished
   world in observable terms.
 - `Evidence` is required for every issue and describes the proof artifacts,
-  commands, file contents, rejected commands, screenshots, lint/export checks,
-  or evidence records needed to show the outcome was met. When no proof artifact
-  is meaningful, the section must explicitly say why it is not applicable.
+  commands, file contents, rejected commands, screenshots, lint/doctor checks,
+  explicit deterministic export diagnostics, or evidence records needed to show
+  the outcome was met. When no proof artifact is meaningful, the section must
+  explicitly say why it is not applicable.
 - `Notes` is optional and carries handoff context, sequencing notes, caveats,
   or non-contract background.
 
@@ -519,7 +521,7 @@ from canonical records and focused command output.
 ## Validation
 
 - Mission closeout requires linked work closed, validation evidence attached,
-  workflow validators passing, and tracker export/lint checks passing.
+  workflow validators passing, and tracker lint/doctor checks passing.
 
 Planning notes: see `docs/plans/cli-workflow-repair.md`.
 Checkpoint criteria: closeout proof must show every linked work item closed and
@@ -629,8 +631,8 @@ defines its durable layout.
 ## Mutating Command Rollout
 
 Hidden/admin `atelier export` remains the deterministic check surface for
-canonical records during migration, and normal durable writes target
-`.atelier/` directly.
+canonical records during migration or targeted maintenance, and normal durable
+writes target `.atelier/` directly.
 
 Hidden/admin `atelier rebuild` recreates `.atelier/runtime/state.db` from
 tracked `.atelier/` canonical records and may create ignored runtime/cache

@@ -656,17 +656,19 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier mission add-work/unlink/add-blocker`
 - `atelier bundle preview/apply`
 - `atelier evidence record/show/list/attach`
-- `atelier pr open/status/show/comments/comment/review`
+- `atelier review open/status/show/comments/comment/approve/request-changes`
+- `atelier forgejo roles check`
 - `atelier session`
 - `atelier history`
 - `atelier worktree for/status/merge/repair/remove`
+- `atelier prune`
 - `atelier maintenance delete`
 - `atelier lint`
-- `atelier doctor`
 
 ## Advanced Repair
 
 - `atelier branch for-epic/status/merge`
+- `atelier doctor`
 "#
 }
 
@@ -680,7 +682,7 @@ fn write_valid_command_guidance(dir: &Path) {
     write_command_surface_doc(dir, valid_command_surface_doc());
     fs::write(
         dir.join("AGENTS.md"),
-        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier export --check`\n",
+        "# Agent Instructions\n\n- `atelier issue list --ready`\n- `atelier lint`\n",
     )
     .unwrap();
 }
@@ -881,6 +883,133 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     let (success, _, stderr) = run_atelier(dir, &args);
     assert!(success, "issue close failed: {stderr}");
     issue_id
+}
+
+fn write_provider_config_without_role_authors(dir: &Path) {
+    fs::create_dir_all(dir.join(".atelier")).unwrap();
+    fs::write(
+        dir.join(".atelier/config.toml"),
+        r#"schema = "atelier.project_config"
+schema_version = 1
+project_slug = "atelier-test"
+
+[paths]
+state_root = ".atelier"
+runtime_dir = ".atelier/runtime"
+runtime_database = ".atelier/runtime/state.db"
+cache_dir = ".atelier/cache"
+
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
+host = "https://forge.example.test"
+owner = "tools"
+repo = "atelier"
+admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
+"#,
+    )
+    .unwrap();
+}
+
+fn write_provider_review_action_workflow(dir: &Path) {
+    let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
+        "          - review.open: { role: worker }",
+        "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
+    );
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
+}
+
+fn write_branch_action_workflow(dir: &Path) {
+    let start_without_actions =
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n";
+    let start_with_prepare =
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        actions:\n          - branch_prepare\n";
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
+        start_without_actions,
+        start_with_prepare,
+        2,
+    );
+    workflow = workflow.replace(
+        "          - tracker.current\n\n  epic_reviewed:",
+        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
+    );
+    workflow = workflow.replace(
+        "          - git.worktree_clean\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
+    );
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
+}
+
+#[test]
+fn provider_review_open_action_reads_workflow_config_and_env_secret() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_provider_config_without_role_authors(dir.path());
+    write_provider_review_action_workflow(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Provider epic", "--issue-type", "epic"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Provider epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(stdout.contains("request_review [blocked]"), "{stdout}");
+    assert!(stdout.contains("review.open"), "{stdout}");
+    assert!(stdout.contains("provider=forgejo"), "{stdout}");
+    assert!(stdout.contains("role=worker"), "{stdout}");
+    assert!(
+        stdout.contains("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("role_authors"), "{stdout}");
+}
+
+#[test]
+fn request_review_preserves_review_artifact_field() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Review field epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Review field epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_review"],
+    );
+    assert!(success, "request_review failed: {stderr}");
+
+    let front_matter = canonical_record_front_matter(dir.path(), "issues", &issue_id);
+    assert_eq!(front_matter["status"], "review");
+    assert_eq!(front_matter["review"]["kind"], "room");
+    assert!(
+        front_matter["review"]["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("atelier-")),
+        "{front_matter:#}"
+    );
 }
 
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {

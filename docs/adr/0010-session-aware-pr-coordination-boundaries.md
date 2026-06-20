@@ -1,15 +1,21 @@
-# ADR 0010: Session-As-Issue-Events And PR Coordination Boundaries
+# ADR 0010: Session-As-Issue-Events And Provider Review Boundaries
 
 ## Status
 
-Accepted.
+Accepted. Provider-specific review terminology in this ADR is superseded for
+new work by [ADR 0011](0011-native-review-modes-and-room-authority.md), which
+renames the public command surface to `atelier review`, introduces native room
+mode, and migrates issue links from `pull_request` to the structured `review`
+field.
 
 ## Context
 
-Atelier is using derived session views, Forgejo pull request integration,
-built-in pull request links, and PR-backed workflow gates. These concepts can easily
-collapse into older runtime session/current-work behavior or into a PR-driven
-workflow where remote review actions move Atelier issues directly.
+Atelier is using derived session views, provider-backed pull request
+integration, built-in pull request links, and PR-backed workflow gates. The
+first concrete provider is Forgejo, but the product concept is a PR-equivalent
+review artifact. These concepts can easily collapse into older runtime
+session/current-work behavior or into a PR-driven workflow where remote review
+actions move Atelier issues directly.
 
 The product contract needs four boundaries to stay clear before implementation:
 
@@ -37,34 +43,38 @@ commands transition issues as a side effect.
    mission context. Inspecting a derived session view must not close, block, or
    unassign an issue.
 
-3. Forgejo PRs are review artifacts.
+3. PR-equivalent review artifacts are code review workspaces.
    `atelier pr` commands may open, inspect, comment on, review, and summarize
-   Forgejo pull requests for linked issues. They do not start, close, block, or
-   otherwise transition Atelier workflow.
+   provider-backed review artifacts for linked issues or epics. They do not
+   start, close, block, or otherwise transition Atelier workflow. Forgejo is the
+   current provider, not the durable product concept.
 
-4. Forgejo role authorship is command authorship, not Atelier authorship.
-   Repository config maps Atelier PR roles to Forgejo service users for remote
-   PR operations. That mapping controls remote PR authorship and review
-   identity; it does not replace Atelier evidence producers, activity actors,
-   or session attempts.
+4. Provider role authorship is command authorship, not Atelier authorship.
+   Repository config maps Atelier PR roles to provider service users for remote
+   PR operations. In the current Forgejo provider this is the
+   `[forgejo.role_authors]` mapping. That mapping controls remote PR authorship
+   and review identity; it does not replace Atelier evidence producers,
+   activity actors, or session attempts.
 
 5. `pull_request` is a built-in issue artifact link.
    The active PR link belongs in the canonical `pull_request` field on the
    branch-owning issue or epic, not in generic attachments, evidence payloads,
    or a workflow-defined typed-field registry. Canonical storage is the
-   normalized PR number. Forgejo host, owner, repo, and branch expectations are
-   derived from project config and workflow branch policy.
+   normalized provider-local review number. Provider host, owner, repo, and
+   branch expectations are derived from project config and workflow branch
+   policy.
 
 6. PR validators are read-only workflow gates.
    Validators such as `linked_pr_merged` inspect the active `pull_request` link
-   and remote Forgejo state, then report pass/fail guidance. They do not mutate
-   Forgejo, write PR comments, merge PRs, or change Atelier issue status.
+   and remote review-provider state, then report pass/fail guidance. They do
+   not mutate the provider, write PR comments, merge PRs, or change Atelier
+   issue status.
    Their local authority is limited to facts Atelier needs for workflow
-   readiness: linked PR number, configured remote identity, expected branch
-   match, merged state, review-complete state when configured, and unresolved
-   review-comment counts for guidance. Forgejo remains the policy authority for
-   branch protection, required approvals, allowed merge methods, and merge
-   authorization.
+   readiness: linked provider-local review number, configured remote identity,
+   expected branch match, merged state, review-complete state when configured,
+   and unresolved review-comment counts for guidance. The configured review
+   provider remains the policy authority for branch protection, required
+   approvals, allowed merge methods, and merge authorization.
 
 ## Alternatives Considered
 
@@ -87,12 +97,21 @@ Atelier workflow transitions must remain explicit, inspectable, and governed by
 repository workflow policy. PR state can satisfy a validator, but the operator
 still runs the Atelier transition.
 
-### Encode Forgejo Role Mapping In Sessions
+### Encode Provider Role Mapping In Sessions
 
 This would couple remote authorship to whoever owns a local session. It was
-rejected because role-to-user sudo mapping is repository configuration for
-Forgejo operations, while sessions are derived inspection views and may be
-absent.
+rejected because role-to-user mapping is repository configuration for provider
+operations, while sessions are derived inspection views and may be absent.
+
+### Build A Native Markdown/JSON PR System
+
+This would keep review artifacts entirely local and provider-independent. It
+was rejected for the current product because threaded comments, line anchors,
+resolution state, identity, stale-anchor handling, and merge state would create
+a second review platform beside hosted PR providers. Canonical issue activity
+and evidence records may capture durable notes, handoffs, proof, and review
+summaries, but they should not become an alternate PR system or satisfy
+provider-backed merge gates.
 
 ## Consequences
 
@@ -102,13 +121,13 @@ absent.
 - Product docs and help must teach `pr` as a review-artifact surface whose
   next steps point back to issue or epic transition readiness.
 - Workflow schema version 3 does not define a top-level typed-field registry.
-  Strict validation accepts the built-in `pull_request` field as a positive PR
-  number and rejects unknown issue fields rather than accepting arbitrary JSON
-  payloads.
+  Strict validation accepts the built-in `pull_request` field as a positive
+  provider-local review number and rejects unknown issue fields rather than
+  accepting arbitrary JSON payloads.
 - `linked_pr_merged` and related validators should produce actionable failure
   guidance naming the PR state to fix and the command surface that can inspect
   it.
-- Adding local enforcement of Forgejo approval or branch-protection policy is a
+- Adding local enforcement of provider approval or branch-protection policy is a
   separate product/architecture decision, not an implied extension of
   `linked_pr_merged`, `review_complete`, or `atelier pr merge`.
 - Evidence records remain the proof mechanism for validation transcripts,

@@ -1953,6 +1953,17 @@ fn render_doctor(view: atelier_app::health::DoctorView) {
         "  projection_metadata: {}",
         if view.projection_fresh { "ok" } else { "stale" }
     );
+    println!("Review backend:");
+    println!("  mode: {}", view.review_backend.mode);
+    println!(
+        "  provider: {}",
+        view.review_backend.provider.as_deref().unwrap_or("(none)")
+    );
+    println!("  status: {}", view.review_backend.status);
+    if let Some(token_env) = &view.review_backend.token_env {
+        println!("  token_env: {}", token_env);
+    }
+    println!("  detail: {}", view.review_backend.detail);
     println!("Projection database:");
     println!(
         "  database: {}",
@@ -2001,7 +2012,6 @@ pub fn export_canonical(db: &Database, state_dir: &Path, check: bool) -> Result<
         println!("Next Commands");
         println!("-------------");
         println!("  atelier lint");
-        println!("  atelier doctor");
         Ok(())
     }
 }

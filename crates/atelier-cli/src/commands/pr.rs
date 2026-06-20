@@ -1,11 +1,13 @@
 use std::env;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use atelier_app::forgejo::{
     ForgejoClient, ForgejoComment, ForgejoReviewComment, UreqForgejoTransport,
 };
 use atelier_app::pr as app_pr;
+use atelier_app::project_config::{ProjectConfig, ReviewConfig};
+use atelier_app::review_room;
 use atelier_sqlite::Database;
 
 pub fn open(
@@ -20,10 +22,31 @@ pub fn open(
     source_branch: &str,
     target_branch: &str,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = review_room::open(
+            db,
+            review_room::RoomOpenRequest {
+                repo_root,
+                state_dir,
+                db_path,
+                issue_ref,
+                role,
+                title,
+                body,
+                source_branch,
+                target_branch,
+            },
+        )?;
+        println!("Review: {}", outcome.review_id);
+        println!("Issue:   {}", outcome.issue_id);
+        println!("Owner:   {}", outcome.owner_id);
+        println!("State:   {}", outcome.status);
+        return Ok(());
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr open`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review open`",
             forgejo.admin_token_env
         )
     })?;
@@ -47,7 +70,7 @@ pub fn open(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
     println!("State:   {}", outcome.pull.state);
@@ -62,10 +85,13 @@ pub fn link(
     issue_ref: Option<&str>,
     pull_request: &str,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        bail!("review_mode_invalid: `atelier review link` is only available when review.mode = \"provider\"");
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr link`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review link`",
             forgejo.admin_token_env
         )
     })?;
@@ -85,7 +111,7 @@ pub fn link(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Number:  {}", outcome.pull.number);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
@@ -98,6 +124,25 @@ pub fn status(
     state_dir: &Path,
     issue_ref: Option<&str>,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = review_room::status(
+            db,
+            review_room::RoomStatusRequest {
+                repo_root,
+                state_dir,
+                issue_ref,
+            },
+        )?;
+        println!("Review Status");
+        println!("=============");
+        println!("Issue:                {}", outcome.issue_id);
+        println!("Room:                 {}", outcome.review_id);
+        println!("State:                {}", outcome.status);
+        println!("Current Approvals:    {}", outcome.approvals);
+        println!("Unresolved Blocking:  {}", outcome.unresolved_blocking);
+        println!("Unresolved Findings:  {}", outcome.unresolved_nonblocking);
+        return Ok(());
+    }
     let outcome = app_pr::status(
         db,
         app_pr::PrStatusRequest {
@@ -106,8 +151,8 @@ pub fn status(
             issue_ref,
         },
     )?;
-    println!("PR Status");
-    println!("=========");
+    println!("Review Status");
+    println!("=============");
     println!("Issue:  {}", outcome.issue_id);
     println!("URL:    {}", outcome.url);
     println!("Number: {}", outcome.number);
@@ -121,10 +166,38 @@ pub fn show(
     state_dir: &Path,
     issue_ref: Option<&str>,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = review_room::show(
+            db,
+            review_room::RoomStatusRequest {
+                repo_root,
+                state_dir,
+                issue_ref,
+            },
+        )?;
+        println!("Review: {}", outcome.status.review_id);
+        println!("Issue:   {}", outcome.status.issue_id);
+        println!("Title:   {}", outcome.title);
+        println!("State:   {}", outcome.status.status);
+        println!(
+            "Branch:  {} -> {}",
+            outcome.source_branch, outcome.target_branch
+        );
+        println!("Events:");
+        for event in outcome.events {
+            println!(
+                "  {} {}{}",
+                event.id,
+                event.kind,
+                render_event_suffix(&event)
+            );
+        }
+        return Ok(());
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr show`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review show`",
             forgejo.admin_token_env
         )
     })?;
@@ -141,7 +214,7 @@ pub fn show(
         },
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Number:  {}", outcome.pull.number);
     println!("State:   {}", outcome.pull.state);
@@ -157,10 +230,30 @@ pub fn merge(
     issue_ref: Option<&str>,
     role: &str,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = review_room::merge(
+            db,
+            review_room::RoomMergeRequest {
+                repo_root,
+                state_dir,
+                db_path,
+                issue_ref,
+                role,
+            },
+        )?;
+        println!("Review: {}", outcome.review_id);
+        println!("Issue:   {}", outcome.issue_id);
+        println!("State:   {}", outcome.status);
+        println!(
+            "Next:    atelier issue transition {} --options",
+            outcome.issue_id
+        );
+        return Ok(());
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr merge`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review merge`",
             forgejo.admin_token_env
         )
     })?;
@@ -180,7 +273,7 @@ pub fn merge(
         &forgejo,
         &client,
     )?;
-    println!("PR:      {}", outcome.pull.url);
+    println!("Review: {}", outcome.pull.url);
     println!("Issue:   {}", outcome.issue_id);
     println!("Owner:   {}", outcome.owner_id);
     println!("State:   {}", outcome.pull.state);
@@ -199,10 +292,35 @@ pub fn comments(
     issue_ref: Option<&str>,
     unresolved: bool,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        println!("Review Comments");
+        println!("===============");
+        let outcome = review_room::comments(
+            db,
+            review_room::RoomStatusRequest {
+                repo_root,
+                state_dir,
+                issue_ref,
+            },
+        )?;
+        let lines = outcome
+            .into_iter()
+            .filter(|event| !unresolved || event.kind == "finding")
+            .map(|event| format!("{} {}{}", event.id, event.kind, render_event_suffix(&event)))
+            .collect::<Vec<_>>();
+        if lines.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for line in lines {
+            println!("{line}");
+        }
+        return Ok(());
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
-            "forgejo_config_missing_token: environment variable {} is required for `atelier pr comments`",
+            "forgejo_config_missing_token: environment variable {} is required for `atelier review comments`",
             forgejo.admin_token_env
         )
     })?;
@@ -210,8 +328,8 @@ pub fn comments(
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    println!("PR Comments");
-    println!("===========");
+    println!("Review Comments");
+    println!("===============");
     let outcome = app_pr::comments_with_client(
         db,
         app_pr::PrCommentsRequest {
@@ -240,10 +358,39 @@ pub fn comment(
     db: &Database,
     repo_root: &Path,
     state_dir: &Path,
+    db_path: &Path,
     issue_ref: Option<&str>,
     role: &str,
     body: &str,
+    finding: bool,
+    severity: Option<&str>,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = review_room::comment(
+            db,
+            review_room::RoomCommentRequest {
+                repo_root,
+                state_dir,
+                db_path,
+                issue_ref,
+                role,
+                body,
+                finding,
+                severity,
+            },
+        )?;
+        println!("Comment: {}", outcome.event_id);
+        println!("Issue:   {}", outcome.issue_id);
+        println!("Review:  {}", outcome.review_id);
+        println!(
+            "Next:    atelier review comments --issue {}",
+            outcome.issue_id
+        );
+        return Ok(());
+    }
+    if finding || severity.is_some() {
+        bail!("review_mode_invalid: --finding and --severity are only available for native review rooms");
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env)?;
     let client = ForgejoClient::new(
@@ -264,7 +411,10 @@ pub fn comment(
     )?;
     println!("Comment: {}", outcome.comment.id);
     println!("Issue:   {}", outcome.issue_id);
-    println!("Next:    atelier pr comments --issue {}", outcome.issue_id);
+    println!(
+        "Next:    atelier review comments --issue {}",
+        outcome.issue_id
+    );
     Ok(())
 }
 
@@ -272,11 +422,46 @@ pub fn review(
     db: &Database,
     repo_root: &Path,
     state_dir: &Path,
+    db_path: &Path,
     issue_ref: Option<&str>,
     role: &str,
     event: &str,
     body: &str,
 ) -> Result<()> {
+    if review_mode(repo_root)? == ReviewMode::Room {
+        let outcome = match event {
+            "approve" => review_room::approve(
+                db,
+                review_room::RoomDecisionRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref,
+                    role,
+                    body,
+                },
+            )?,
+            "request-changes" => review_room::request_changes(
+                db,
+                review_room::RoomDecisionRequest {
+                    repo_root,
+                    state_dir,
+                    db_path,
+                    issue_ref,
+                    role,
+                    body,
+                },
+            )?,
+            _ => bail!(
+                "review_room_invalid: unsupported room review event {}",
+                event
+            ),
+        };
+        println!("Review: {}", outcome.event_id);
+        println!("State:  {}", outcome.status);
+        println!("Issue:  {}", outcome.issue_id);
+        return Ok(());
+    }
     let forgejo = app_pr::load_forgejo(repo_root)?;
     let token = env::var(&forgejo.admin_token_env)?;
     let event = app_pr::parse_review_event(event)?;
@@ -301,6 +486,65 @@ pub fn review(
     println!("State:  {}", outcome.review.state);
     println!("Issue:  {}", outcome.issue_id);
     Ok(())
+}
+
+pub fn resolve(
+    db: &Database,
+    repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: Option<&str>,
+    finding: &str,
+) -> Result<()> {
+    let outcome = review_room::resolve(
+        db,
+        review_room::RoomResolveRequest {
+            repo_root,
+            state_dir,
+            db_path,
+            issue_ref,
+            finding,
+        },
+    )?;
+    println!("Resolved: {}", outcome.event_id);
+    println!("Finding:  {}", finding);
+    println!("Issue:    {}", outcome.issue_id);
+    println!("Review:   {}", outcome.review_id);
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReviewMode {
+    Room,
+    Provider,
+}
+
+fn review_mode(repo_root: &Path) -> Result<ReviewMode> {
+    match ProjectConfig::load(repo_root)?.review {
+        ReviewConfig::Room => Ok(ReviewMode::Room),
+        ReviewConfig::Provider(_) => Ok(ReviewMode::Provider),
+    }
+}
+
+fn render_event_suffix(event: &review_room::RoomEventView) -> String {
+    let mut parts = Vec::new();
+    if let Some(actor) = &event.actor {
+        parts.push(format!("actor={actor}"));
+    }
+    if let Some(severity) = &event.severity {
+        parts.push(format!("severity={severity}"));
+    }
+    if let Some(finding) = &event.finding {
+        parts.push(format!("finding={finding}"));
+    }
+    if let Some(body) = &event.body {
+        parts.push(single_line_body(body));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" - {}", parts.join(" - "))
+    }
 }
 
 fn render_pull_comment_lines(comments: Vec<ForgejoComment>) -> Vec<String> {

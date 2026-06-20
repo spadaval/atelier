@@ -47,23 +47,36 @@
   but they are weak when they are the only proof for a concrete outcome.
 - Workflow: repository-owned policy that defines issue workflow statuses,
   transitions, terminal states, validators, descriptions, and applicability.
+- Issue type registry: the repository-owned `issue_types` map in workflow
+  policy. It defines valid issue type names and user-facing labels before
+  workflows claim coverage.
 - Workflow applicability: the issue type coverage owned by each workflow through
-  `workflows.*.applies_to`. Every built-in issue type must be covered exactly
+  `workflows.*.applies_to`. Every registered issue type must be covered exactly
   once by the committed workflow policy.
 - Workflow status: the canonical issue `status` value defined by workflow
   policy. It is durable repository state, not a derived summary or a local
   runtime marker.
 - Status category: derived orientation metadata that groups workflow statuses
-  into stable operator-facing buckets such as ready, active, blocked, done, or
-  archived. Categories help commands summarize work but do not replace workflow
-  status in durable state or transition checks.
-- Transition: a named workflow action that moves a record from one workflow
+  into stable operator-facing buckets such as todo, active, blocked, or done.
+  Categories help commands summarize work but do not replace workflow status in
+  durable state or transition checks. `review` and `validation` are issue types
+  or workflow statuses when configured, not required global categories.
+- Transition: a named workflow rule that moves a record from one workflow
   status to another after required fields, evidence, and validators succeed.
+- Transition action: configured work run by an explicit issue transition after
+  required fields and validators succeed. Actions may write canonical tracker
+  records, local branch commits, review artifact links, or provider requests,
+  but they are scoped to the transition that declares them and are not hidden
+  automation hooks.
 - Validator: a machine-readable workflow transition check that controls whether
   a transition can proceed and returns an actionable failure reason.
 - Transition description: static workflow text rendered near an action, status,
   or failure to explain the next operator move. Descriptions inform;
   validators decide.
+- Review artifact action: the v1 transition action that opens or links the
+  configured review artifact for the branch-owning issue or epic and writes the
+  canonical `review` field. It follows the active review mode and must not
+  merge, approve, comment on, or close review or issue workflow by itself.
 - Mission: a high-level objective that may span multiple epics, issues,
   evidence records, agents, derived session views, and deferred run metadata.
   It is also the shared background workspace boundary: one mission normally
@@ -86,11 +99,33 @@
   from canonical issue activity. A session can explain who did what and when,
   but it does not define current work, it is inspection-only, and it is not a
   standalone workflow record.
-- Pull request artifact: a Forgejo review object linked from issue state through
-  the built-in canonical `pull_request` field. Canonical storage is the
-  normalized PR number; Forgejo host, owner, repo, and branch expectations are
-  derived from project config and workflow branch policy. It is a review
-  artifact, not an Atelier workflow transition.
+- Review mode: the repository-wide review backend selected in
+  `.atelier/config.toml`. Exactly one mode is active for a project:
+  `room` for native Atelier review rooms or `provider` for a hosted
+  PR-equivalent provider such as Forgejo.
+- Review artifact: the configured review object linked from issue state
+  through the canonical `review` field. In room mode this is a native
+  `.atelier/reviews/<id>.yaml` room. In provider mode this is the normalized
+  provider-local review number plus provider kind. Review artifacts are code
+  review workspaces, not Atelier workflow transitions, and they do not replace
+  evidence records.
+- Review room: a native Atelier review artifact stored as tracked YAML under
+  `.atelier/reviews/<id>.yaml`. Its current state is derived from room metadata
+  plus ordered events such as comments, findings, approvals, change requests,
+  resolutions, stale-approval invalidations, and merge.
+- Room event: an append-only review-room timeline entry. Events are the durable
+  source for comments, decisions, approvals, finding resolution, stale approval
+  invalidation, and merge state.
+- Finding: a review-room decision event that names a blocking or non-blocking
+  problem. Blocking findings must be resolved before room merge can succeed.
+- Approval: a review-room decision event that can satisfy merge readiness until
+  it becomes stale. New commits or change-request events invalidate previous
+  approvals rather than mutating them in place.
+- Merge authority: the `atelier review merge` boundary. In room mode it checks
+  room approvals, stale approvals, blocking findings, and expected branch state
+  and records a room merge event. In provider mode it delegates merge or merge
+  confirmation to the configured provider. In both modes it does not transition
+  Atelier issue workflow.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -158,14 +193,21 @@
   Sessions summarize bounded worker, reviewer, and validator attempts from
   canonical issue activity. Local command diagnostics are ignored runtime
   telemetry for command health and are not exported work records.
-- Pull request artifacts and validators are distinct. `atelier pr` commands
-  operate on Forgejo review artifacts and record their issue or epic linkage,
-  while workflow validators such as `linked_pr_merged` only read PR state to
-  decide whether an Atelier transition is allowed.
-- Pull request links and evidence attachments are distinct. The `pull_request`
-  field stores the active PR artifact number for a branch-owning issue or epic;
-  evidence attachments prove claims with command transcripts, reviews, or
-  validation records.
+- Review artifacts and validators are distinct. `atelier review` commands
+  operate on native rooms or provider-backed review artifacts and record their
+  issue or epic linkage, while workflow validators such as
+  `review.linked_pr_merged` only read review state to decide whether an Atelier
+  transition is allowed.
+- Review artifact actions and review commands are distinct. A workflow
+  transition may declare an action that opens or links the branch owner's review
+  artifact after validators pass, but approval, comments, request-changes,
+  finding resolution, merge, and workflow status changes remain owned by
+  explicit review and issue commands.
+- Review links and evidence attachments are distinct. The `review` field stores
+  the active review artifact for a branch-owning issue or epic; evidence
+  attachments prove claims with command transcripts, review summaries, or
+  validation records. Legacy `pull_request` fields are migration input, not the
+  durable target shape.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
   worktrees/background checkouts, epics own reviewable branches, and ordinary
   issues own local implementation proof. Per-issue worktrees or branches are

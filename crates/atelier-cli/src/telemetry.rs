@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Days, SecondsFormat, Utc};
+use chrono::{DateTime, Days, NaiveDate, SecondsFormat, Utc};
 use serde_json::json;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -13,6 +13,24 @@ use std::time::Duration;
 const SCHEMA: &str = "atelier.command_event";
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_RETENTION_DAYS: u64 = 30;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagnosticsPruneCandidate {
+    pub path: PathBuf,
+    pub date: NaiveDate,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagnosticsPruneSummary {
+    pub root: Option<PathBuf>,
+    pub commands_dir: Option<PathBuf>,
+    pub retention_days: u64,
+    pub cutoff: NaiveDate,
+    pub candidates: Vec<DiagnosticsPruneCandidate>,
+    pub removed: Vec<PathBuf>,
+    pub failures: Vec<(PathBuf, String)>,
+}
 
 pub fn diagnostics_enabled() -> bool {
     !env_disables("ATELIER_TELEMETRY") && !env_disables("ATELIER_DIAGNOSTICS")
@@ -119,6 +137,87 @@ pub fn slow_command_summary(days: u64, threshold_ms: u64) -> Result<Value> {
     }))
 }
 
+pub fn prune_diagnostics_logs(
+    retention_days_override: Option<u64>,
+    apply: bool,
+) -> Result<DiagnosticsPruneSummary> {
+    let retention_days = retention_days_override.unwrap_or_else(retention_days);
+    let cutoff = Utc::now()
+        .date_naive()
+        .checked_sub_days(Days::new(retention_days))
+        .unwrap_or_else(|| Utc::now().date_naive());
+    let Some(root) = diagnostics_root() else {
+        return Ok(DiagnosticsPruneSummary {
+            root: None,
+            commands_dir: None,
+            retention_days,
+            cutoff,
+            candidates: Vec::new(),
+            removed: Vec::new(),
+            failures: Vec::new(),
+        });
+    };
+    let commands_dir = root.join("commands");
+    if !commands_dir.is_dir() {
+        return Ok(DiagnosticsPruneSummary {
+            root: Some(root),
+            commands_dir: Some(commands_dir),
+            retention_days,
+            cutoff,
+            candidates: Vec::new(),
+            removed: Vec::new(),
+            failures: Vec::new(),
+        });
+    }
+
+    let mut candidates = Vec::new();
+    for entry in fs::read_dir(&commands_dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("ndjson") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        let Ok(date) = NaiveDate::parse_from_str(stem, "%Y-%m-%d") else {
+            continue;
+        };
+        if date >= cutoff {
+            continue;
+        }
+        let size_bytes = fs::metadata(&path)
+            .map(|metadata| metadata.len())
+            .unwrap_or(0);
+        candidates.push(DiagnosticsPruneCandidate {
+            path,
+            date,
+            size_bytes,
+        });
+    }
+    candidates.sort_by(|left, right| left.path.cmp(&right.path));
+
+    let mut removed = Vec::new();
+    let mut failures = Vec::new();
+    if apply {
+        for candidate in &candidates {
+            match fs::remove_file(&candidate.path) {
+                Ok(()) => removed.push(candidate.path.clone()),
+                Err(error) => failures.push((candidate.path.clone(), error.to_string())),
+            }
+        }
+    }
+
+    Ok(DiagnosticsPruneSummary {
+        root: Some(root),
+        commands_dir: Some(commands_dir),
+        retention_days,
+        cutoff,
+        candidates,
+        removed,
+        failures,
+    })
+}
+
 fn write_command_event(
     command: &str,
     started_at: DateTime<Utc>,
@@ -133,8 +232,6 @@ fn write_command_event(
     fs::create_dir_all(&commands_dir)?;
 
     let finished_at = Utc::now();
-    prune_old_logs(&commands_dir, started_at);
-
     let workspace_root = workspace_root();
     let verbose = env_truthy("ATELIER_DIAGNOSTICS_VERBOSE");
     let workspace_id = workspace_root
@@ -317,32 +414,6 @@ fn stable_workspace_id(root: &Path) -> Result<String> {
 fn event_id(started_at: DateTime<Utc>) -> String {
     let timestamp = started_at.format("%Y%m%dT%H%M%S%6fZ");
     format!("{timestamp}-{}", std::process::id())
-}
-
-fn prune_old_logs(commands_dir: &Path, now: DateTime<Utc>) {
-    let days = retention_days();
-    let cutoff = now
-        .date_naive()
-        .checked_sub_days(Days::new(days))
-        .unwrap_or_else(|| now.date_naive());
-    let Ok(entries) = fs::read_dir(commands_dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("ndjson") {
-            continue;
-        }
-        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
-            continue;
-        };
-        let Ok(date) = chrono::NaiveDate::parse_from_str(stem, "%Y-%m-%d") else {
-            continue;
-        };
-        if date < cutoff {
-            let _ = fs::remove_file(path);
-        }
-    }
 }
 
 fn retention_days() -> u64 {

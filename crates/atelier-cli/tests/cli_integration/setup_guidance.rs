@@ -547,6 +547,137 @@ fn test_diagnostics_slow_summarizes_fixture_events() {
 }
 
 #[test]
+fn test_prune_dry_run_reports_diagnostics_without_removing_logs() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let old = chrono::Utc::now()
+        .date_naive()
+        .checked_sub_days(chrono::Days::new(45))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &old,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "old",
+            "command": "status",
+            "started_at": format!("{old}T01:00:00.000Z"),
+            "finished_at": format!("{old}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &recent,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "recent",
+            "command": "status",
+            "started_at": format!("{recent}T01:00:00.000Z"),
+            "finished_at": format!("{recent}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+
+    let old_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{old}.ndjson"));
+    let recent_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{recent}.ndjson"));
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["prune", "--retention-days", "30"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "prune dry-run failed: {stderr}");
+    assert!(stdout.contains("Mode: dry-run"), "{stdout}");
+    assert!(stdout.contains("Diagnostics Logs"), "{stdout}");
+    assert!(stdout.contains("eligible diagnostics-log"), "{stdout}");
+    assert!(stdout.contains(&old), "{stdout}");
+    assert!(stdout.contains("Deferred Cleanup Classes"), "{stdout}");
+    assert!(stdout.contains("Next: atelier prune --apply"), "{stdout}");
+    assert!(old_path.exists(), "dry-run removed old diagnostics log");
+    assert!(
+        recent_path.exists(),
+        "dry-run removed recent diagnostics log"
+    );
+}
+
+#[test]
+fn test_prune_apply_removes_only_expired_diagnostics_logs() {
+    let dir = tempdir().unwrap();
+    let diagnostics_dir = dir.path().join("diagnostics");
+    let old = chrono::Utc::now()
+        .date_naive()
+        .checked_sub_days(chrono::Days::new(45))
+        .unwrap()
+        .format("%Y-%m-%d")
+        .to_string();
+    let recent = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &old,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "old",
+            "command": "status",
+            "started_at": format!("{old}T01:00:00.000Z"),
+            "finished_at": format!("{old}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+    write_diagnostics_event(
+        &diagnostics_dir,
+        &recent,
+        serde_json::json!({
+            "schema": "atelier.command_event",
+            "schema_version": 1,
+            "event_id": "recent",
+            "command": "status",
+            "started_at": format!("{recent}T01:00:00.000Z"),
+            "finished_at": format!("{recent}T01:00:01.000Z"),
+            "duration_ms": 1000,
+            "result": "success"
+        }),
+    );
+
+    let old_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{old}.ndjson"));
+    let recent_path = diagnostics_dir
+        .join("commands")
+        .join(format!("{recent}.ndjson"));
+
+    let (success, stdout, stderr) = run_atelier_with_env(
+        dir.path(),
+        &["prune", "--apply", "--retention-days", "30"],
+        &[("ATELIER_DIAGNOSTICS_DIR", diagnostics_dir.to_str().unwrap())],
+    );
+    assert!(success, "prune apply failed: {stderr}");
+    assert!(stdout.contains("Mode: apply"), "{stdout}");
+    assert!(stdout.contains("removed diagnostics-log"), "{stdout}");
+    assert!(stdout.contains(&old), "{stdout}");
+    assert!(
+        !old_path.exists(),
+        "apply left expired diagnostics log in place"
+    );
+    assert!(recent_path.exists(), "apply removed recent diagnostics log");
+}
+
+#[test]
 fn test_diagnostics_help_scopes_json_as_advanced_local_only() {
     let dir = tempdir().unwrap();
 
@@ -667,20 +798,35 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier mission list",
         "atelier mission show <id>",
+        "atelier bundle preview <file>",
+        "atelier bundle apply <file> --yes",
         "atelier session list --active",
         "atelier history --mission <id>",
         "atelier history --issue <id>",
         "atelier start <issue-id>",
         "atelier issue transition <issue-id> --options",
         "atelier issue close <issue-id> --reason",
-        "atelier doctor",
-        "atelier doctor --fix",
     ] {
         assert!(
             stdout.contains(common),
             "missing common command example {common}"
         );
     }
+    assert!(
+        stdout.contains(
+            "  doctor        Check runtime and derived-state health; use --fix for local repair"
+        ),
+        "maintenance section should still expose doctor:\n{stdout}"
+    );
+    let common_commands = stdout
+        .split("Common commands:")
+        .nth(1)
+        .and_then(|section| section.split("Options:").next())
+        .unwrap_or("");
+    assert!(
+        !common_commands.contains("atelier doctor"),
+        "common commands should not teach doctor as routine work:\n{stdout}"
+    );
     assert!(!stdout.contains("workflow validate"));
 
     assert!(
@@ -816,7 +962,7 @@ fn test_agent_factory_guidance_avoids_raw_workflow_validate_commands() {
     let guidance =
         std::fs::read_to_string(workspace_root().join(".agents/skills/agent-factory/SKILL.md"))
             .unwrap();
-    assert!(guidance.contains("Agent Factory assigns subskills"));
+    assert!(guidance.contains("Assign exactly one subskill"));
     assert!(!guidance.contains("atelier workflow validate issue"));
     assert!(!guidance.contains("atelier workflow validate mission"));
     assert!(!guidance.contains("## Checks"));
@@ -920,7 +1066,7 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
     assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
-    assert!(stdout.contains("Check runtime health (tracker records are current): atelier doctor"));
+    assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
     assert!(stdout.contains("Active sessions: none"));
@@ -1134,8 +1280,8 @@ fn test_workflow_configuration_docs_describe_internal_diagnostics() {
     assert!(
         !docs.contains("emit JSON containing `path`, `sha256`, `result`, `errors`, and `warnings`")
     );
-    assert!(docs.contains("atelier lint"));
-    assert!(docs.contains("atelier doctor"));
+    assert!(docs.contains("lint.none_blocking"));
+    assert!(docs.contains("tracker.current"));
 }
 
 #[test]
@@ -1153,7 +1299,7 @@ fn test_diagnostics_json_docs_define_local_operator_boundary() {
     assert!(diagnostics.contains("stable for local diagnostic tooling"));
     assert!(diagnostics.contains("must not appear in ordinary Agent Factory or"));
     assert!(diagnostics.contains("operator recipes for mission selection"));
-    assert!(cli_surface.contains("stable for diagnostic tooling"));
+    assert!(cli_surface.contains("stable for diagnostic"));
     assert!(cli_surface.contains("not an automation contract for selecting work"));
     assert!(
         validation.contains("Diagnostics JSON from commands such as `atelier diagnostics slow`")
@@ -1207,7 +1353,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(stdout.contains("Normal Loop"));
     assert!(stdout.contains("Not Usually For This Role"));
     assert!(stdout.contains("atelier issue list --ready"));
-    assert!(stdout.contains("atelier start <id>"));
+    assert!(stdout.contains("atelier issue transition <id> --options"));
     assert!(!stdout.contains("Atelier Status"));
     assert!(!stdout.contains("Generic"));
     assert!(!stdout.contains("etc."));
@@ -1230,7 +1376,10 @@ fn test_man_manager_names_active_mission() {
     assert!(stdout.contains("Atelier Man: Manager"));
     assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
     assert!(stdout.contains("atelier mission status"));
+    assert!(stdout.contains("atelier bundle preview <file>"));
+    assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier mission add-work <mission-id> <issue-id>"));
+    assert!(stdout.contains("shell loops for bulk graph creation"));
 }
 
 #[test]
@@ -1328,6 +1477,14 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         transition_out.contains("block [allowed]"),
         "{transition_out}"
     );
+    assert!(
+        transition_out.contains("Planned Actions"),
+        "{transition_out}"
+    );
+    assert!(
+        !transition_out.contains("Planned Effects"),
+        "{transition_out}"
+    );
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
     let git_after = git_status_short(dir.path());
     assert_eq!(
@@ -1408,7 +1565,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_ready"), "{stderr}");
+    assert!(stderr.contains("review.complete"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1417,7 +1574,7 @@ fn test_issue_transition_options_do_not_write_but_blocked_transitions_do() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_ready failed:",
+            "reason: \"validator review.complete failed:",
         ],
     );
 }
@@ -1692,7 +1849,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &policy_path,
         policy.replace(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [proof_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
         ),
     )
     .unwrap();
@@ -1701,7 +1858,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("proof_attached"), "{stderr}");
+    assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");
@@ -1713,7 +1870,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &[
             "Blocked transition start from todo",
             "transition: \"start\"",
-            "reason: \"validator proof_attached failed:",
+            "reason: \"validator evidence.attached failed:",
         ],
     );
     assert!(
@@ -1770,7 +1927,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         "request_validation should fail without a completed review"
     );
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(stderr.contains("review_ready"), "{stderr}");
+    assert!(stderr.contains("review.complete"), "{stderr}");
     assert!(stderr.contains("blocked"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
@@ -1780,7 +1937,7 @@ fn test_issue_transition_blocked_attempt_records_activity_without_evidence() {
         &[
             "Blocked transition request_validation from in_progress",
             "transition: \"request_validation\"",
-            "reason: \"validator review_ready failed:",
+            "reason: \"validator review.complete failed:",
         ],
     );
 
@@ -1833,11 +1990,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked without reason and proof");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(
-        stderr.contains("missing required field close_reason"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("proof_attached"), "{stderr}");
+    assert!(stderr.contains("evidence.attached"), "{stderr}");
+    assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(
@@ -1846,7 +2000,8 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         &[
             "Blocked transition close from validation",
             "transition: \"close\"",
-            "reason: \"missing required field close_reason;",
+            "reason: \"validator evidence.attached failed:",
+            "validator git.worktree_clean failed:",
         ],
     );
 }
@@ -1943,8 +2098,8 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     std::fs::write(
         &policy_path,
         policy.replace(
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
-            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - proof_attached\n          - epic_child_proof\n          - blockers_clear\n          - lint_clear\n          - durable_current\n          - closeout_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
+            "      close:\n        from: [validation]\n        to: done\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n      archive:\n        from: [validation]\n        to: archived\n        required_fields: [close_reason]\n        validators:\n          - evidence.attached\n          - children.proof_complete\n          - blockers.none_open\n          - lint.none_blocking\n          - tracker.current\n          - git.worktree_clean\n        guidance: [close_with_proof]\n",
         ),
     )
     .unwrap();
@@ -1969,12 +2124,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
         dir.path(),
         &["issue", "close", &issue_id, "--reason", "needs archive"],
     );
-    assert!(!success, "ambiguous close should require --to");
-    assert!(
-        stderr.contains("multiple terminal done targets"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("available: archived, done"), "{stderr}");
+    assert!(success, "default close to done failed: {stderr}");
 
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
@@ -2005,7 +2155,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
     attach_issue_pass_evidence(dir.path(), &archive_id);
     commit_all(dir.path(), "ready for explicit archive");
 
-    let (success, archive_out, stderr) = run_atelier(
+    let (success, _archive_out, stderr) = run_atelier(
         dir.path(),
         &[
             "issue",
@@ -2017,16 +2167,18 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
             "archived by policy",
         ],
     );
-    assert!(success, "archived close failed: {stderr}");
+    assert!(!success, "archive should be rejected by current workflow");
     assert!(
-        archive_out.contains("Applied transition archive"),
-        "{archive_out}"
+        stderr.contains("available done targets from 'validation' are: done"),
+        "{stderr}"
     );
-    assert!(archive_out.contains("To:       archived"), "{archive_out}");
 
     let issue_text =
         std::fs::read_to_string(canonical_issue_path(dir.path(), &archive_id)).unwrap();
-    assert!(issue_text.contains("status: \"archived\""), "{issue_text}");
+    assert!(
+        issue_text.contains("status: \"validation\""),
+        "{issue_text}"
+    );
 }
 
 #[test]
@@ -2190,17 +2342,14 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("close [blocked]"), "{options_out}");
-    assert!(options_out.contains("Guidance"), "{options_out}");
+    assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out.contains(&format!(
-            "Closing {} requires attached evidence and no open blockers.",
-            issue_id
-        )),
+        options_out.contains(
+            "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
+        ),
         "{options_out}"
     );
-    assert!(options_out.contains(&format!(
-        "atelier issue transition {issue_id} close --reason \"...\""
-    )));
+    assert!(options_out.contains(&format!("atelier issue close {issue_id} --reason \"...\"")));
 }
 
 #[test]

@@ -155,11 +155,11 @@ ATELIER_DIAGNOSTICS_RETENTION_DAYS=<positive integer>
 `0` means keep only the current day's log. Negative values and non-integers are
 invalid and should fall back to the 30-day default with an actionable warning.
 
-Retention cleanup is opportunistic. A command may delete old
-`commands/YYYY-MM-DD.ndjson` files before or after appending the current event,
-but cleanup failure must not fail the user-facing command. Diagnostics query
-commands may expose cleanup warnings because diagnostics are their primary
-surface.
+Retention cleanup is explicit through `atelier prune --apply`. `atelier prune`
+without `--apply` reports eligible `commands/YYYY-MM-DD.ndjson` files but must
+not delete them. Cleanup failure must not corrupt diagnostics state or fail
+unrelated user-facing commands; prune output reports any file-specific removal
+failure because cleanup is that command's primary surface.
 
 The retention policy applies only to local diagnostics logs. It does not govern
 evidence artifact retention, committed `.atelier/` records, or future

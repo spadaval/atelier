@@ -27,6 +27,11 @@ separate issue hierarchy.
 - Workflow validator: a transition check attached to workflow policy. A
   validator allows or rejects a transition and returns an actionable failure
   reason. Validators are not milestone fields.
+- Transition action: configured work run by an explicit issue transition after
+  required fields and validators pass. Actions may create owner branch commits,
+  integrate owner branches, or open/link review artifacts. Intrinsic workflow
+  status and transition activity writes are engine behavior, not configurable
+  action authority, and actions do not replace explicit review or issue commands.
 - Evidence: durable proof that accountable work, review, validation, or completion
   happened. Normal evidence attaches to issue-shaped work because issues own
   accountability. Parent completion is derived from linked implementation,
@@ -226,6 +231,13 @@ Independent review moves to the epic by default. Ordinary implementation issues
 close with their own proof, while epic completion maps child issue proof to the
 parent outcome and records the review or validation judgment for the branch.
 
+Workflow transitions may prepare review state through declared actions. For
+example, an epic `request_review` transition can open or link the configured
+review artifact after validators pass, then write the artifact link to the
+branch-owning issue. That action prepares the review workspace only. Review
+comments, approvals, change requests, finding resolution, and merge stay on
+`atelier review`; issue status changes stay on `atelier issue transition`.
+
 ## Relationships
 
 Use hierarchy for ownership and typed links for contribution, validation, and
@@ -353,46 +365,59 @@ An agent tasked with a mission should be able to:
 2. Inspect linked epics, issues, and evidence to understand what has already
    been proven and what remains.
 3. Select a ready issue or epic slice that advances the mission.
-4. Follow the issue workflow: start with `atelier start <issue-id>`, implement
-   or validate, record notes, attach evidence, inspect transition options with
-   `atelier issue transition <id> --options`, and close only when validators
-   allow the transition.
+4. Use Atelier workflow surfaces to decide the next process step: inspect
+   status, show the relevant issue, preview transitions, then follow the
+   command and recovery guidance printed for the current item.
 5. Leave enough evidence that another agent can verify what changed, which
    criteria it supports, and what remains.
 
 `atelier status` is the normal current-work orientation surface. In a checkout,
 current work is the set of canonical issue records in that checkout's tracked
-`.atelier/` tree whose workflow status is `in_progress`. Root `atelier start
-<issue-id>` is the convenience entrypoint for moving an issue into that set
-after preparing the branch owner required by the work graph. Root `atelier
-issue close <issue-id> --reason "..."` is the normal completion path for
-tracked work and owns the close-time tracker commit and integration behavior.
+`.atelier/` tree whose workflow status is `in_progress`. Static docs should
+not tell an agent which review artifact, provider, branch action, merge action,
+or completion command to use. That process guidance belongs to Atelier command
+output and workflow policy for the current checkout.
 
-Branch owner derivation is deterministic:
+Branch ownership, branch naming, base branch selection, and merge strategy are
+Atelier workflow/configuration concerns. Commands that need branch context must
+report the computed owner, target, and recovery path directly; agents should
+not infer branch action from static work-model prose.
 
-- Child issue: use the nearest parent epic's branch.
-- Standalone issue: use an issue branch.
-- Epic: use an epic branch.
+Completion behavior follows the owner boundary:
 
-Branch naming templates, base branch selection, and merge strategy are
-configuration policy. The default merge strategy is squash merge; configured
-alternatives may include merge commit or fast-forward-only when a repository
-chooses them. Base branch selection defaults to the repository integration
-branch unless mission or epic policy selects a narrower base.
-
-Close behavior follows the owner boundary:
-
-- Closing a child issue commits the tracker-state close on the parent epic
-  branch and leaves the epic branch open for grouped review.
-- Closing a standalone issue commits the tracker-state close on the issue
-  branch and merges that owner branch to the configured base.
-- Closing an epic commits the tracker-state close on the epic branch and merges
-  that owner branch to the configured base.
+Atelier command output should name the workflow transition, tracker write,
+review state, branch action, and recovery command that apply to the current
+item. Static docs should not encode a second completion recipe beside the
+configured workflow.
 
 Close must be failure-atomic for durable workflow state. If the tracker commit,
 merge, push, or configured integration step fails, the item must not appear
 closed on the integration branch. The command should leave enough state for a
 repair or retry command to explain which step failed.
+
+Workflow transitions may declare transition actions. A transition action is
+configured work run by the explicit issue transition after required fields and
+validators pass. The transition is complete only after required actions and the
+final canonical status write succeed; action output must name the affected
+artifact, local record path when relevant, and retry or recovery command.
+
+The v1 action set is limited to the built-in transition actions described by
+workflow policy. Review artifact actions use the repository's configured review
+mode to create, locate, or link the review artifact for the branch-owning issue
+or epic, then write the canonical `review` field. They do not merge the
+artifact, approve review, request changes, post comments, close hidden issues,
+revive `pr` aliases, or provide a general automation-hook mechanism. Those
+operations remain separate review or workflow commands.
+
+Action failure handling must be explicit:
+
+- Preflight failure stops before canonical status or review-link writes.
+- Local write failure names the failed write and does not report transition
+  success.
+- External provider failure leaves the issue transition incomplete and names
+  provider recovery or retry guidance.
+- Retry is idempotent by reusing an existing matching review link or artifact;
+  ambiguous provider state must route to an explicit link recovery path.
 
 There is no separate durable active-pointer concept. If a worker stops without
 changing the issue's durable workflow state, no extra cleanup command is
@@ -417,9 +442,10 @@ worktree using the configured path policy, rebuilds local SQLite state from
 tracked `.atelier/` records, and reports the mission workspace association.
 Explicit branch helpers such as `atelier branch for-epic <epic-id>` create or
 locate reviewable branches for diagnostics, advanced repair, or manual
-recovery. Routine worker starts should use `atelier start <id>` so lifecycle
-policy owns branch preparation. Workflow-defined hooks are deferred in v1 and
-are not part of the current worktree contract.
+recovery. Routine worker guidance should come from `atelier status`, issue
+detail, transition options, and any recovery text they print. Workflow-defined
+general hooks are deferred in v1; transition actions are the narrow configured
+integration points described by workflow policy.
 `atelier worktree status` reports path, branch, dirty paths, ahead/behind when
 an upstream exists, unpushed commit count, associated mission/epic/issue work,
 and operator-facing health when available. `atelier worktree merge <id>`,
@@ -448,9 +474,9 @@ A workflow may say:
 transitions:
   complete:
     validators:
-      - required_validation_criteria_satisfied
-      - no_open_blockers
-      - evidence_records_present
+      - validation.criteria_satisfied
+      - blockers.none_open
+      - evidence.attached
 ```
 
 The validator does not define the checkpoint's meaning. It only enforces whether

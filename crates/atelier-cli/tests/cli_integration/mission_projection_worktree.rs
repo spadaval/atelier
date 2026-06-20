@@ -147,7 +147,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         &policy_path,
         policy.replacen(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
-            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [proof_attached]\n",
+            "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
             1,
         ),
     )
@@ -169,7 +169,7 @@ fn test_issue_ready_queue_requires_allowed_in_progress_transition() {
         run_atelier(dir.path(), &["issue", "transition", &ready_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start [blocked]"), "{options_out}");
-    assert!(options_out.contains("proof_attached"), "{options_out}");
+    assert!(options_out.contains("evidence.attached"), "{options_out}");
 }
 
 #[test]
@@ -711,7 +711,7 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_out.contains("Advanced Validator Detail"));
     assert!(verbose_out.contains("advanced terminal validator failure"));
-    assert!(verbose_out.contains("git_worktree_clean"));
+    assert!(verbose_out.contains("git.worktree_clean"));
 }
 
 #[test]
@@ -1372,7 +1372,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Open Blockers: 1 open"));
     assert!(status_out.contains(&format!("atelier mission status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
-    assert!(status_out.contains("atelier doctor"));
+    assert!(!status_out.contains("atelier doctor"));
     assert!(status_out.contains("Terminal Checks"));
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure detected."));
@@ -3296,6 +3296,181 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show failed: {stderr}");
     assert!(show_out.contains("Status:   todo"), "{show_out}");
+}
+
+#[test]
+fn test_branch_actions_prepare_and_integrate_epic_workflow() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_branch_action_workflow(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Action integrated epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Action integrated epic");
+    commit_all(dir.path(), "initial tracker state");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(success, "epic action start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains("Action:   branch_prepare"),
+        "{start_out}"
+    );
+
+    std::fs::write(dir.path().join("epic-action.txt"), "epic action work\n").unwrap();
+    commit_all(dir.path(), "epic action implementation");
+    move_issue_to_validation(dir.path(), &epic_id);
+    ensure_all_issue_completion_sections(dir.path());
+    attach_issue_pass_evidence(dir.path(), &epic_id);
+    commit_all(dir.path(), "epic action proof ready");
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &epic_id, "--reason", "done"],
+    );
+    assert!(success, "epic action close failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), "main");
+    assert!(close_out.contains("Action:   branch_commit"), "{close_out}");
+    assert!(
+        close_out.contains("Action:   branch_integrate squash commit"),
+        "{close_out}"
+    );
+    let main_log = git_log_oneline(dir.path(), "main", 2);
+    assert!(
+        main_log.contains(&format!("Squash merge epic/{epic_id} into main")),
+        "{main_log}"
+    );
+    assert!(git_status_short(dir.path()).trim().is_empty());
+}
+
+#[test]
+fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_branch_action_workflow(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Parent action epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Parent action epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Child action checkout",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(success, "child create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Child action checkout");
+    commit_all(dir.path(), "initial tracker state");
+
+    let (success, start_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &child_id, "start"]);
+    assert!(success, "child action start failed: {stderr}");
+    assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
+    assert!(
+        start_out.contains("Action:   branch_prepare"),
+        "{start_out}"
+    );
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
+    assert!(success, "child show failed: {stderr}");
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+}
+
+#[test]
+fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+    write_branch_action_workflow(dir.path());
+    Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "-M", "main"])
+        .status()
+        .unwrap();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Action conflict"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Action conflict");
+    commit_all(dir.path(), "initial tracker state");
+
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "action start failed: {stderr}");
+    std::fs::write(dir.path().join("action-conflict.txt"), "issue branch\n").unwrap();
+    commit_all(dir.path(), "issue branch conflict content");
+    ensure_all_issue_completion_sections(dir.path());
+    attach_issue_pass_evidence(dir.path(), &issue_id);
+    commit_all(dir.path(), "issue action proof ready before conflict close");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "main"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch to main failed");
+    std::fs::write(dir.path().join("action-conflict.txt"), "main branch\n").unwrap();
+    commit_all(dir.path(), "main branch conflict content");
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", &format!("codex/{issue_id}")])
+        .status()
+        .unwrap();
+    assert!(status.success(), "switch back to issue branch failed");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "close", &issue_id, "--reason", "done"],
+    );
+    assert!(
+        !success,
+        "conflicting action close unexpectedly succeeded:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("action branch_integrate failed during squash merge")
+            && stderr.contains("Recovery:")
+            && stderr.contains(&format!("transition for {issue_id}")),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), format!("codex/{issue_id}"));
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "issue show failed after action rollback: {stderr}");
+    assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+    assert!(!show_out.contains("Status:   done"), "{show_out}");
+    assert!(git_status_short(dir.path()).trim().is_empty());
 }
 
 #[test]

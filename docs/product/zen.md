@@ -4,6 +4,9 @@ Atelier exists to make long-running semi-autonomous work trustworthy.
 
 ## Principles
 
+Reliable outcomes over plausible output: agent work is cheap to generate, but
+trust comes from structure, proof, and durable context.
+
 Purpose over task lists: missions give work a durable reason to exist, while
 issues define accountable steps toward that reason.
 
@@ -33,8 +36,18 @@ Coordination must be visible: agreements about ownership, blockers, state, and
 proof can live in records, docs, or workflow policy, but not only in someone's
 head, branch name, or chat transcript.
 
+Bounded roles over blended responsibility: planning, coordination,
+implementation, review, validation, documentation, audit, and readiness ask
+different questions and should not collapse into one undifferentiated task.
+
+Delegation is stewardship: a coordinator remains responsible for scope, handoff
+quality, integration, and recovery even when other agents perform the work.
+
 Proof must stand on its own: autonomous work is trustworthy only when someone
 who did not do the work can inspect the record, check the claim, and continue.
+
+Verification methods are not interchangeable: tests, review, validation, and
+terminal checks can support one another, but each answers a different question.
 
 Resilience over perfection: records may be incomplete, stale, or wrong; Atelier
 should keep useful paths open while making uncertainty visible.
@@ -53,6 +66,10 @@ blocker resolution, or human judgment is missing.
 Process should target agent failure modes: add enforcement where agents are
 likely to skip evidence, miss blockers, or close too early; keep routine work
 light.
+
+Failures should become durable signals: a blocked, failed, deferred, or
+not-applicable result is useful when it is named, classified, and carried
+forward with an owner or next step.
 
 Parent completion should synthesize accountable child proof: missions and epics
 protect coordination, coverage, and review boundaries without forcing a second

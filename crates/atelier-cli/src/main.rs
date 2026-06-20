@@ -37,7 +37,7 @@ Missions and planning:
 Records:
   evidence      Capture validation evidence
   session       Inspect derived issue attempts
-  pr            Manage Forgejo pull request review artifacts
+  review        Manage configured review artifacts
   forgejo       Configure and verify Forgejo integration
   history       Inspect canonical repo, mission, issue, or epic activity
 
@@ -46,6 +46,7 @@ Advanced work:
   branch        Inspect and repair epic review branches
 
 Maintenance:
+  prune         Prune accumulated local artifacts safely
   maintenance   Run explicit destructive maintenance commands
   lint          Validate tracker records
   doctor        Check runtime and derived-state health; use --fix for local repair
@@ -69,6 +70,8 @@ Common commands:
   atelier mission show <id>
   atelier mission status
   atelier mission close <id> --reason \"...\"
+  atelier bundle preview <file>
+  atelier bundle apply <file> --yes
   atelier session list --active
   atelier forgejo roles check
   atelier history --mission <id>
@@ -76,8 +79,8 @@ Common commands:
   atelier start <issue-id>
   atelier issue transition <issue-id> --options
   atelier issue close <issue-id> --reason \"...\"
-  atelier doctor
-  atelier doctor --fix
+  atelier prune
+  atelier prune --apply
   atelier help <command>
 ")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
@@ -153,7 +156,7 @@ enum Commands {
         action: GraphCommands,
     },
 
-    /// Advanced deterministic-renderer diagnostic; normal health uses lint and doctor
+    /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
     #[command(hide = true)]
     Export {
         /// State directory for canonical export diagnostics
@@ -164,7 +167,7 @@ enum Commands {
         check: bool,
     },
 
-    /// Advanced projection diagnostic; normal local repair uses doctor --fix
+    /// Advanced projection diagnostic; explicit local repair uses doctor --fix
     #[command(hide = true)]
     Rebuild {
         /// Canonical state directory to rebuild from
@@ -206,10 +209,10 @@ enum Commands {
         action: SessionCommands,
     },
 
-    /// Forgejo pull request review artifacts
-    Pr {
+    /// Configured review artifacts
+    Review {
         #[command(subcommand)]
-        action: PrCommands,
+        action: ReviewCommands,
     },
 
     /// Configure and verify Forgejo integration
@@ -276,6 +279,16 @@ enum Commands {
     Maintenance {
         #[command(subcommand)]
         action: MaintenanceCommands,
+    },
+
+    /// Prune accumulated local artifacts safely
+    Prune {
+        /// Apply eligible cleanup; without this flag the command only reports candidates
+        #[arg(long)]
+        apply: bool,
+        /// Retain diagnostics logs for this many UTC days
+        #[arg(long)]
+        retention_days: Option<u64>,
     },
 
     /// Validate tracker records
@@ -615,8 +628,8 @@ enum SessionCommands {
 }
 
 #[derive(Subcommand)]
-enum PrCommands {
-    /// Open or confirm the active Forgejo pull request for an issue owner
+enum ReviewCommands {
+    /// Open or confirm the active review artifact for an issue owner
     Open {
         #[arg(long)]
         issue: Option<String>,
@@ -631,54 +644,73 @@ enum PrCommands {
         #[arg(long, default_value = "master")]
         target_branch: String,
     },
-    /// Link an existing Forgejo PR by number or URL
+    /// Link an existing review artifact by number or URL
     Link {
         #[arg(long)]
         issue: Option<String>,
         pull_request: String,
     },
-    /// Show concise linked PR status
+    /// Show concise linked review status
     Status {
         #[arg(long)]
         issue: Option<String>,
     },
-    /// Show linked PR details
+    /// Show linked review details
     Show {
         #[arg(long)]
         issue: Option<String>,
     },
-    /// Merge or confirm the linked Forgejo PR without changing Atelier workflow state
+    /// Merge or confirm the linked review artifact without changing Atelier workflow state
     Merge {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         role: String,
     },
-    /// List live PR comments and review comments
+    /// List live review comments
     Comments {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         unresolved: bool,
     },
-    /// Add a Forgejo PR comment
+    /// Add a review artifact comment
     Comment {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         role: String,
+        /// Record this room comment as a finding instead of a plain timeline comment
+        #[arg(long)]
+        finding: bool,
+        /// Finding severity for native room mode
+        #[arg(long, default_value = "blocking")]
+        severity: String,
         body: String,
     },
-    /// Submit a Forgejo PR review
-    Review {
+    /// Approve a review artifact
+    Approve {
         #[arg(long)]
         issue: Option<String>,
         #[arg(long)]
         role: String,
-        #[arg(long)]
-        event: String,
         #[arg(long, default_value = "")]
         body: String,
+    },
+    /// Request changes on a review artifact
+    RequestChanges {
+        #[arg(long)]
+        issue: Option<String>,
+        #[arg(long)]
+        role: String,
+        #[arg(long, default_value = "")]
+        body: String,
+    },
+    /// Resolve a native room finding
+    Resolve {
+        #[arg(long)]
+        issue: Option<String>,
+        finding: String,
     },
 }
 
@@ -697,7 +729,7 @@ enum ForgejoRolesCommands {
     Check,
     /// Create missing role author users and grant repository access
     Provision {
-        /// Persist the role author mapping in .atelier/config.toml
+        /// Rejected legacy flag; role authors live in workflow action params
         #[arg(long)]
         write_config: bool,
     },
@@ -1453,10 +1485,10 @@ fn run() -> Result<()> {
             }
         },
 
-        Commands::Pr { action } => {
+        Commands::Review { action } => {
             let storage = command_storage(CommandStorageAccess::CanonicalMutation)?;
             match action {
-                PrCommands::Open {
+                ReviewCommands::Open {
                     issue,
                     role,
                     title,
@@ -1475,7 +1507,7 @@ fn run() -> Result<()> {
                     &source_branch,
                     &target_branch,
                 ),
-                PrCommands::Link {
+                ReviewCommands::Link {
                     issue,
                     pull_request,
                 } => commands::pr::link(
@@ -1486,19 +1518,19 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     &pull_request,
                 ),
-                PrCommands::Status { issue } => commands::pr::status(
+                ReviewCommands::Status { issue } => commands::pr::status(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                 ),
-                PrCommands::Show { issue } => commands::pr::show(
+                ReviewCommands::Show { issue } => commands::pr::show(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                 ),
-                PrCommands::Merge { issue, role } => commands::pr::merge(
+                ReviewCommands::Merge { issue, role } => commands::pr::merge(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
@@ -1506,34 +1538,57 @@ fn run() -> Result<()> {
                     issue.as_deref(),
                     &role,
                 ),
-                PrCommands::Comments { issue, unresolved } => commands::pr::comments(
+                ReviewCommands::Comments { issue, unresolved } => commands::pr::comments(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
                     issue.as_deref(),
                     unresolved,
                 ),
-                PrCommands::Comment { issue, role, body } => commands::pr::comment(
-                    storage.db(),
-                    storage.repo_root(),
-                    &storage.state_dir(),
-                    issue.as_deref(),
-                    &role,
-                    &body,
-                ),
-                PrCommands::Review {
+                ReviewCommands::Comment {
                     issue,
                     role,
-                    event,
+                    finding,
+                    severity,
                     body,
-                } => commands::pr::review(
+                } => commands::pr::comment(
                     storage.db(),
                     storage.repo_root(),
                     &storage.state_dir(),
+                    &storage.db_path(),
                     issue.as_deref(),
                     &role,
-                    &event,
                     &body,
+                    finding,
+                    finding.then_some(severity.as_str()),
+                ),
+                ReviewCommands::Approve { issue, role, body } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    "approve",
+                    &body,
+                ),
+                ReviewCommands::RequestChanges { issue, role, body } => commands::pr::review(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &role,
+                    "request-changes",
+                    &body,
+                ),
+                ReviewCommands::Resolve { issue, finding } => commands::pr::resolve(
+                    storage.db(),
+                    storage.repo_root(),
+                    &storage.state_dir(),
+                    &storage.db_path(),
+                    issue.as_deref(),
+                    &finding,
                 ),
             }
         }
@@ -1661,6 +1716,11 @@ fn run() -> Result<()> {
             }
         },
 
+        Commands::Prune {
+            apply,
+            retention_days,
+        } => commands::prune::run(apply, retention_days),
+
         Commands::Lint { id } => {
             let db = lint_db()?;
             commands::agent_factory::lint(&db, id.as_deref())
@@ -1762,15 +1822,17 @@ fn command_identity(command: &Commands) -> &'static str {
             SessionCommands::Show { .. } => "session show",
             SessionCommands::List { .. } => "session list",
         },
-        Commands::Pr { action } => match action {
-            PrCommands::Open { .. } => "pr open",
-            PrCommands::Link { .. } => "pr link",
-            PrCommands::Status { .. } => "pr status",
-            PrCommands::Show { .. } => "pr show",
-            PrCommands::Merge { .. } => "pr merge",
-            PrCommands::Comments { .. } => "pr comments",
-            PrCommands::Comment { .. } => "pr comment",
-            PrCommands::Review { .. } => "pr review",
+        Commands::Review { action } => match action {
+            ReviewCommands::Open { .. } => "review open",
+            ReviewCommands::Link { .. } => "review link",
+            ReviewCommands::Status { .. } => "review status",
+            ReviewCommands::Show { .. } => "review show",
+            ReviewCommands::Merge { .. } => "review merge",
+            ReviewCommands::Comments { .. } => "review comments",
+            ReviewCommands::Comment { .. } => "review comment",
+            ReviewCommands::Approve { .. } => "review approve",
+            ReviewCommands::RequestChanges { .. } => "review request-changes",
+            ReviewCommands::Resolve { .. } => "review resolve",
         },
         Commands::Forgejo { action } => match action {
             ForgejoCommands::Roles { action } => match action {
@@ -1801,6 +1863,13 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Maintenance { action } => match action {
             MaintenanceCommands::Delete { .. } => "maintenance delete",
         },
+        Commands::Prune { apply, .. } => {
+            if *apply {
+                "prune --apply"
+            } else {
+                "prune"
+            }
+        }
         Commands::Lint { .. } => "lint",
         Commands::Doctor { .. } => "doctor",
     }

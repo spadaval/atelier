@@ -26,13 +26,13 @@ storage migration or repair?"
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
 | hidden/admin `atelier export` | Admin/migration | Materialize deterministic renderer output during migration or debugging. | Temporary migration or test-only. |
-| hidden/admin `atelier export --check` | Admin/debug | Check deterministic renderer/projection freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `lint` and `doctor`. |
+| hidden/admin `atelier export --check` | Admin/debug | Check deterministic renderer/projection freshness during migration or targeted diagnostics. | Not normal health; route normal operators to `lint`; use admin repair only when local state is degraded. |
 
 ## Boundary
 
 Tracked `.atelier/` Markdown is authoritative. Ignored projection, runtime,
 diagnostic, lock, and cache state is repairable checkout state. Normal commands
-should refresh projections safely when possible, `doctor` reports local health,
-and `doctor --fix` owns explicit ignored-state repair. `export` must not
-overwrite canonical records during recovery and must not be presented as the
-ordinary proof that a handoff, validation, or terminal check is ready.
+should refresh projections safely when possible. `doctor` and `doctor --fix`
+own explicit ignored-state inspection and repair. `export` must not overwrite
+canonical records during recovery and must not be presented as the ordinary
+proof that a handoff, validation, or terminal check is ready.

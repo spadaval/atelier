@@ -33,7 +33,8 @@ Agent Factory remains the portable orchestration discipline.
 1. Atelier owns repository-specific executable guidance.
    Repo-specific command selection, workflow recovery, tracker state
    explanation, mission and issue drill-down, evidence routing, health checks,
-   readiness cues, and closeout diagnostics belong in Atelier-owned surfaces:
+   readiness cues, branch/review/provider routing, and closeout diagnostics
+   belong in Atelier-owned surfaces:
    `atelier man <role>`, `atelier status`, mission and issue commands, workflow
    policy, product docs, validation docs, and command help.
 
@@ -47,7 +48,9 @@ Agent Factory remains the portable orchestration discipline.
    `AGENTS.md` identifies authoritative repository sources, tracker identity,
    durable versus runtime tracker state, and the small set of repository-specific
    constraints needed before invoking Atelier-owned guidance. It should not
-   restate a full command or policy contract.
+   restate a full command or policy contract, and it should not decide whether
+   a work item needs a review artifact, which provider to use, or which branch
+   action closes the work.
 
 4. Tactical guidance should be executable before it is copied into prompts.
    When a repo-specific instruction can depend on current tracker state,
@@ -71,6 +74,8 @@ Agent Factory remains the portable orchestration discipline.
   to carry this repository's tactical command cookbook.
 - Repository instructions should stay small as Atelier surfaces take over
   recurring tracker and workflow instructions.
+- Agents get current process direction from Atelier command output rather than
+  from static prompt lore, available Git remotes, or installed provider tools.
 - Adding new context tools to Atelier is useful only when paired with removing
   duplicated tactical guidance from Agent Factory or static repository docs.
 

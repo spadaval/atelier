@@ -60,7 +60,7 @@ struct Snapshot {
 fn run_stateful(role: Role) -> Result<()> {
     let storage = command_storage(CommandStorageAccess::ProjectionQuery).map_err(|error| {
         anyhow::anyhow!(
-            "{error:#}\nRecovery: use `atelier man admin` for setup/repair guidance, or run `atelier doctor` when this is an initialized checkout."
+            "{error:#}\nRecovery: use `atelier man admin` for setup or repair guidance."
         )
     })?;
     let repo = storage.repo_root().display().to_string();
@@ -219,32 +219,38 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             } else {
                 println!("  1. atelier issue list --ready - Find executable work.");
                 println!("  2. atelier issue show <id> - Read the issue contract before editing.");
-                println!("  3. atelier start <id> - Move the issue into the current-work set.");
+                println!("  3. atelier issue transition <id> --options - Follow current lifecycle guidance.");
             }
         }
         Role::Reviewer => {
             println!("  1. atelier issue transition <id> --options - Inspect workflow gates.");
             println!("  2. atelier evidence show <evidence-id> - Inspect attached proof.");
-            println!("  3. atelier pr comments --issue <id> - Inspect PR discussion.");
+            println!(
+                "  3. atelier history --issue <id> - Inspect recorded proof and review activity."
+            );
         }
         Role::Validator => {
             println!(
                 "  1. atelier issue show <id> - Read the validation target and proof contract."
             );
             println!("  2. atelier evidence record --target issue/<id> --kind validation -- <command> - Attach validation proof.");
-            println!("  3. atelier pr review --issue <id> --role validator --event approve --body \"...\" - Record PR validation judgment.");
+            println!(
+                "  3. atelier issue transition <id> --options - Follow current workflow guidance."
+            );
         }
         Role::Manager => {
             if snapshot.and_then(|s| s.active_mission.as_ref()).is_some() {
                 println!(
                     "  1. atelier mission status - Review active mission readiness and blockers."
                 );
-                println!("  2. atelier issue create \"...\" - Create an actionable work item.");
-                println!("  3. atelier mission add-work <mission-id> <issue-id> - Link work to mission scope.");
+                println!("  2. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
+                println!(
+                    "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
+                );
             } else {
                 println!("  1. atelier mission list - Choose mission focus.");
                 println!("  2. atelier mission start <id> --switch - Set active mission focus.");
-                println!("  3. atelier graph tree --compact - Inspect work hierarchy.");
+                println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
             }
         }
         Role::Admin => {
@@ -264,18 +270,14 @@ fn print_normal_loop(role: Role) {
             println!("  atelier session list --active");
             println!("  atelier issue list --ready");
             println!("  atelier issue show <id>");
-            println!("  atelier start <id>");
-            println!("  atelier pr comment --issue <id> --role worker --body \"...\"");
+            println!("  atelier issue transition <id> --options");
+            println!("  atelier issue note <id> \"...\"");
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
-            println!("  atelier issue close <id> --reason \"...\"");
         }
         Role::Reviewer => {
             println!("  atelier mission status");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
-            println!("  atelier pr comments --issue <id>");
-            println!("  atelier pr comment --issue <id> --role reviewer --body \"...\"");
-            println!("  atelier pr review --issue <id> --role reviewer --event request-changes --body \"...\"");
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
@@ -288,13 +290,11 @@ fn print_normal_loop(role: Role) {
             println!(
                 "  atelier evidence record --target issue/<id> --kind validation -- <command>"
             );
-            println!("  atelier pr comments --issue <id>");
-            println!(
-                "  atelier pr review --issue <id> --role validator --event approve --body \"...\""
-            );
         }
         Role::Manager => {
             println!("  atelier mission status");
+            println!("  atelier bundle preview <file>");
+            println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
             println!("  atelier mission add-work <mission-id> <issue-id>");
             println!("  atelier issue block <blocked-id> <blocker-id>");
@@ -325,7 +325,7 @@ fn print_not_usually(role: Role) {
         }
         Role::Manager => {
             println!(
-                "  diagnostics slow, rebuild, maintenance delete except during explicit repair"
+                "  diagnostics slow, rebuild, maintenance delete except during explicit repair; shell loops for bulk graph creation"
             );
         }
         Role::Admin => {

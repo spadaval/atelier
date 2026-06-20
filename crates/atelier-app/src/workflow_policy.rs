@@ -7,15 +7,16 @@ use atelier_sqlite::Database;
 use serde_json::Value;
 
 pub use atelier_workflow::{
-    configured_initial_status, load, validate_issue_against_policy, BranchLifecycleConfig,
-    BranchLifecycleResolution, BranchOwnerKind, BranchTemplates, GuidanceTemplate, MergeStrategy,
-    StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
-    WorkflowDefinition, WorkflowPolicy, WORKFLOW_POLICY_PATH,
+    configured_initial_status, load, validate_issue_against_policy, ActionDefinition, ActionParams,
+    BranchLifecycleConfig, BranchLifecycleResolution, BranchOwnerKind, BranchTemplates,
+    GuidanceTemplate, MergeStrategy, ReviewArtifactActionParams, StatusDefinition,
+    TransitionDefinition, ValidatorDefinition, ValidatorParams, WorkflowDefinition,
+    WorkflowForgejoRoleAuthors, WorkflowPolicy, WORKFLOW_POLICY_PATH,
 };
 
 pub use atelier_workflow::STARTER_POLICY_YAML;
 
-pub const PULL_REQUEST_FIELD: &str = "pull_request";
+pub const REVIEW_FIELD: &str = "review";
 
 #[derive(Debug, Clone)]
 pub struct WorkflowCheckReport {
@@ -66,14 +67,18 @@ pub fn resolve_branch_lifecycle(
 }
 
 pub fn effective_pull_request_field(db: &Database, issue_id: &str) -> Result<Option<Value>> {
+    effective_review_field(db, issue_id)
+}
+
+pub fn effective_review_field(db: &Database, issue_id: &str) -> Result<Option<Value>> {
     let issue = db.require_issue(issue_id)?;
-    if issue.parent_id.is_some() && issue.fields.contains_key(PULL_REQUEST_FIELD) {
+    if issue.parent_id.is_some() && issue.fields.contains_key(REVIEW_FIELD) {
         return Err(anyhow!(
-            "workflow_issue_field_invalid: issue {} defines pull_request directly, but child issues inherit pull_request from the nearest parent epic; move the field to the owning epic or remove it from the child",
+            "workflow_issue_field_invalid: issue {} defines review directly, but child issues inherit review from the nearest parent epic; move the field to the owning epic or remove it from the child",
             issue.id
         ));
     }
-    if let Some(value) = issue.fields.get(PULL_REQUEST_FIELD) {
+    if let Some(value) = issue.fields.get(REVIEW_FIELD) {
         return Ok(Some(value.clone()));
     }
 
@@ -82,19 +87,19 @@ pub fn effective_pull_request_field(db: &Database, issue_id: &str) -> Result<Opt
     while let Some(current_id) = parent_id {
         if !seen.insert(current_id.clone()) {
             return Err(anyhow!(
-                "workflow_pull_request_invalid_graph: issue {} has a cyclic parent graph while resolving pull_request",
+                "workflow_review_invalid_graph: issue {} has a cyclic parent graph while resolving review",
                 issue.id
             ));
         }
         let parent = db.get_issue(&current_id)?.ok_or_else(|| {
             anyhow!(
-                "workflow_pull_request_invalid_graph: issue {} references missing parent issue {}",
+                "workflow_review_invalid_graph: issue {} references missing parent issue {}",
                 issue.id,
                 current_id
             )
         })?;
         if parent.issue_type == "epic" {
-            return Ok(parent.fields.get(PULL_REQUEST_FIELD).cloned());
+            return Ok(parent.fields.get(REVIEW_FIELD).cloned());
         }
         parent_id = parent.parent_id;
     }
@@ -167,17 +172,20 @@ mod tests {
         .unwrap();
     }
 
-    fn pull_request_field() -> BTreeMap<String, Value> {
+    fn review_field() -> BTreeMap<String, Value> {
         let mut fields = BTreeMap::new();
-        fields.insert(PULL_REQUEST_FIELD.to_string(), serde_json::json!(42));
+        fields.insert(
+            REVIEW_FIELD.to_string(),
+            serde_json::json!({"kind": "room", "id": "atelier-rvw1"}),
+        );
         fields
     }
 
     #[test]
-    fn effective_pull_request_field_inherits_from_nearest_parent_epic() {
+    fn effective_review_field_inherits_from_nearest_parent_epic() {
         let (db, _dir) = setup_test_db();
-        let parent_fields = pull_request_field();
-        let expected = parent_fields.get(PULL_REQUEST_FIELD).unwrap().clone();
+        let parent_fields = review_field();
+        let expected = parent_fields.get(REVIEW_FIELD).unwrap().clone();
         insert_issue(&db, "atelier-epic", "epic", None, parent_fields);
         insert_issue(
             &db,
@@ -187,28 +195,28 @@ mod tests {
             BTreeMap::new(),
         );
 
-        let inherited = effective_pull_request_field(&db, "atelier-child").unwrap();
+        let inherited = effective_review_field(&db, "atelier-child").unwrap();
 
         assert_eq!(inherited, Some(expected));
     }
 
     #[test]
-    fn effective_pull_request_field_rejects_child_duplicate() {
+    fn effective_review_field_rejects_child_duplicate() {
         let (db, _dir) = setup_test_db();
-        insert_issue(&db, "atelier-epic", "epic", None, pull_request_field());
+        insert_issue(&db, "atelier-epic", "epic", None, review_field());
         insert_issue(
             &db,
             "atelier-child",
             "task",
             Some("atelier-epic"),
-            pull_request_field(),
+            review_field(),
         );
 
-        let error = effective_pull_request_field(&db, "atelier-child")
+        let error = effective_review_field(&db, "atelier-child")
             .unwrap_err()
             .to_string();
 
         assert!(error.contains("workflow_issue_field_invalid"));
-        assert!(error.contains("child issues inherit pull_request"));
+        assert!(error.contains("child issues inherit review"));
     }
 }

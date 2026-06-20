@@ -13,8 +13,8 @@ use atelier_core::{
 };
 pub use atelier_core::{
     EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
-    MissionSectionName, MissionSections, Record, RecordHeader, SessionRecord, SessionRecordData,
-    SessionTarget,
+    MissionSectionName, MissionSections, Record, RecordHeader, ReviewRecord, SessionRecord,
+    SessionRecordData, SessionTarget,
 };
 
 pub mod activity;
@@ -46,6 +46,7 @@ pub enum RecordKind {
     Evidence,
     Issue,
     Mission,
+    Review,
     Session,
 }
 
@@ -55,6 +56,7 @@ impl RecordKind {
             Self::Evidence => "evidence",
             Self::Issue => "issues",
             Self::Mission => "missions",
+            Self::Review => "reviews",
             Self::Session => "sessions",
         }
     }
@@ -317,11 +319,8 @@ impl RecordStore {
     }
 
     pub fn canonical_id_exists(&self, id: &str) -> Result<bool> {
-        for relative in canonical_record_dirs()
-            .into_iter()
-            .map(PathBuf::from)
-            .map(|dir| dir.join(format!("{id}.md")))
-        {
+        for spec in CANONICAL_RECORD_KINDS {
+            let relative = canonical_record_path(spec, id)?;
             if self.state_dir.join(relative).exists() {
                 return Ok(true);
             }
@@ -873,8 +872,8 @@ pub fn render_issue_record(record: &CanonicalIssueRecord) -> Result<String> {
     write_yaml_scalar(&mut output, "issue_type", Some(&record.issue.issue_type))?;
     write_yaml_array(&mut output, "labels", &labels)?;
     let mut fields = record.issue.fields.clone();
-    if let Some(pull_request) = fields.remove("pull_request") {
-        write_yaml_value(&mut output, "pull_request", &pull_request)?;
+    if let Some(review) = fields.remove("review") {
+        write_yaml_value(&mut output, "review", &review)?;
     }
     write_yaml_map_if_not_empty(&mut output, "fields", &fields)?;
     write_yaml_scalar(
@@ -966,6 +965,7 @@ pub fn render_record(record: &Record) -> Result<String> {
     }
     match spec.kind {
         "evidence" => return render_evidence_record(&record, &relationships, spec),
+        "review" => return render_review_record(&record, &relationships, spec),
         "session" => return render_session_record(&record, &relationships, spec),
         _ => {}
     }
@@ -1030,8 +1030,14 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
     let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
     let closed_at = optional_datetime(&front_matter, "closed_at", relative)?;
     let mut fields = optional_object(&front_matter, "fields", relative)?;
-    if let Some(pull_request) = front_matter.get("pull_request") {
-        fields.insert("pull_request".to_string(), pull_request.clone());
+    if front_matter.contains_key("pull_request") {
+        bail!(
+            "Legacy pull_request field in {}; use structured review field",
+            display_state_path(relative)
+        );
+    }
+    if let Some(review) = front_matter.get("review") {
+        fields.insert("review".to_string(), review.clone());
     }
     let sections = parse_issue_sections(body, relative)?;
 
@@ -1059,6 +1065,9 @@ pub fn parse_issue_record(text: &str, relative: &Path) -> Result<CanonicalIssueR
 pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
     if spec.kind == ISSUE_KIND.kind {
         return Ok(parse_issue_record(text, relative)?.into_record());
+    }
+    if spec.kind == "review" {
+        return parse_review_record(text, relative, spec);
     }
 
     let (front_matter, body) = split_front_matter(text, relative)?;
@@ -1176,9 +1185,157 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
             validate_session_record(record, relative)?;
             return Ok(());
         }
+        "review" => {
+            validate_review_record(record, relative)?;
+            return Ok(());
+        }
         _ => {}
     }
     validate_relationships(&record.header().relationships, relative)?;
+    Ok(())
+}
+
+fn render_review_record(
+    record: &Record,
+    relationships: &Relationships,
+    spec: &RecordKindSpec,
+) -> Result<String> {
+    let Record::Review(record) = record else {
+        bail!("Expected review record");
+    };
+    let mut labels = record.header.labels.clone();
+    labels.sort();
+    labels.dedup();
+    let mut output = String::new();
+    write_yaml_scalar(
+        &mut output,
+        "created_at",
+        Some(&record.header.created_at.to_rfc3339()),
+    )?;
+    write_yaml_value(&mut output, "events", &Value::Array(record.events.clone()))?;
+    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
+    write_yaml_scalar(&mut output, "issue", Some(&record.issue_id))?;
+    write_yaml_array(&mut output, "labels", &labels)?;
+    write_yaml_scalar(&mut output, "mode", Some(&record.mode))?;
+    write_yaml_relationships(&mut output, relationships)?;
+    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
+    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
+    write_yaml_scalar(&mut output, "source_branch", Some(&record.source_branch))?;
+    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
+    write_yaml_scalar(&mut output, "target_branch", Some(&record.target_branch))?;
+    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
+    write_yaml_scalar(
+        &mut output,
+        "updated_at",
+        Some(&record.header.updated_at.to_rfc3339()),
+    )?;
+    Ok(output)
+}
+
+fn parse_review_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Result<Record> {
+    let front_matter = parse_yaml_document(text, relative)?;
+    let schema = require_scalar(&front_matter, "schema", relative)?;
+    if schema != spec.schema {
+        bail!(
+            "Unsupported schema '{}' in {}; expected {}",
+            schema,
+            display_state_path(relative),
+            spec.schema
+        );
+    }
+    let schema_version = require_i64(&front_matter, "schema_version", relative)?;
+    if schema_version != spec.schema_version {
+        bail!(
+            "Unsupported schema_version {} in {}; expected {}",
+            schema_version,
+            display_state_path(relative),
+            spec.schema_version
+        );
+    }
+    let id = require_scalar(&front_matter, "id", relative)?;
+    record_id::validate_record_id(&id).with_context(|| {
+        format!(
+            "Invalid review id {} in {}",
+            id,
+            display_state_path(relative)
+        )
+    })?;
+    let expected = canonical_record_path(spec, &id)?;
+    if relative != expected {
+        bail!(
+            "review id {} in {} does not match canonical path {}",
+            id,
+            display_state_path(relative),
+            display_state_path(&expected)
+        );
+    }
+    reject_forbidden_data_front_matter(&front_matter, relative)?;
+    let relationships = parse_relationships(&front_matter, relative)?;
+    let mode = require_scalar(&front_matter, "mode", relative)?;
+    if mode != "room" {
+        bail!(
+            "Review record {} mode must be 'room', got '{}'",
+            display_state_path(relative),
+            mode
+        );
+    }
+    let events = front_matter
+        .get("events")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let labels = string_array(&front_matter, "labels", relative)?;
+    validate_sorted_unique("labels", &labels, relative)?;
+    let status = require_scalar(&front_matter, "status", relative)?;
+    validate_status(&status)
+        .with_context(|| format!("Invalid review status in {}", display_state_path(relative)))?;
+    let issue_id = require_scalar(&front_matter, "issue", relative)?;
+    record_id::validate_record_id(&issue_id).with_context(|| {
+        format!(
+            "Invalid review issue id {} in {}",
+            issue_id,
+            display_state_path(relative)
+        )
+    })?;
+    Ok(Record::Review(ReviewRecord {
+        header: RecordHeader {
+            id,
+            kind: spec.kind.to_string(),
+            title: require_scalar(&front_matter, "title", relative)?,
+            status,
+            labels,
+            relationships,
+            created_at: require_datetime(&front_matter, "created_at", relative)?,
+            updated_at: require_datetime(&front_matter, "updated_at", relative)?,
+        },
+        mode,
+        issue_id,
+        source_branch: require_scalar(&front_matter, "source_branch", relative)?,
+        target_branch: require_scalar(&front_matter, "target_branch", relative)?,
+        events,
+    }))
+}
+
+fn validate_review_record(record: &Record, relative: &Path) -> Result<()> {
+    let Record::Review(record) = record else {
+        bail!("Expected review record in {}", display_state_path(relative));
+    };
+    if record.mode != "room" {
+        bail!(
+            "Review record mode must be 'room' in {}",
+            display_state_path(relative)
+        );
+    }
+    record_id::validate_record_id(&record.issue_id).with_context(|| {
+        format!(
+            "Invalid review issue id '{}' in {}",
+            record.issue_id,
+            display_state_path(relative)
+        )
+    })?;
+    validate_status(&record.header.status)
+        .with_context(|| format!("Invalid review status in {}", display_state_path(relative)))?;
+    validate_relationships(&record.header.relationships, relative)?;
     Ok(())
 }
 
@@ -1905,6 +2062,16 @@ fn add_relationship_to_bucket(
 }
 
 fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf>) -> Result<()> {
+    collect_record_paths(root, dir, "md", "issue", records)
+}
+
+fn collect_record_paths(
+    root: &Path,
+    dir: &Path,
+    extension: &str,
+    kind_name: &str,
+    records: &mut Vec<PathBuf>,
+) -> Result<()> {
     for entry in fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
         let entry = entry?;
         let path = entry.path();
@@ -1916,19 +2083,21 @@ fn collect_issue_record_paths(root: &Path, dir: &Path, records: &mut Vec<PathBuf
             {
                 continue;
             }
-            collect_issue_record_paths(root, &path, records)?;
+            collect_record_paths(root, &path, extension, kind_name, records)?;
         } else if path.is_file() {
             let relative = path
                 .strip_prefix(root)
-                .context("Failed to relativize canonical issue path")?
+                .context("Failed to relativize canonical record path")?
                 .to_path_buf();
             if is_local_atelier_path(&relative) {
                 continue;
             }
-            if relative.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            if relative.extension().and_then(|ext| ext.to_str()) != Some(extension) {
                 bail!(
-                    "Unsupported canonical issue file {}; expected Markdown .md record",
-                    display_state_path(&relative)
+                    "Unsupported canonical {} file {}; expected .{} record",
+                    kind_name,
+                    display_state_path(&relative),
+                    extension
                 );
             }
             records.push(relative);
@@ -2002,6 +2171,11 @@ fn parse_front_matter(front: &str, relative: &Path) -> Result<BTreeMap<String, V
             display_state_path(relative)
         )
     })
+}
+
+fn parse_yaml_document(text: &str, relative: &Path) -> Result<BTreeMap<String, Value>> {
+    serde_yaml::from_str(text)
+        .with_context(|| format!("Invalid YAML document in {}", display_state_path(relative)))
 }
 
 fn require_scalar(values: &BTreeMap<String, Value>, key: &str, relative: &Path) -> Result<String> {
@@ -2685,8 +2859,19 @@ fn write_yaml_scalar_if_some(output: &mut String, key: &str, value: Option<&str>
 
 fn write_yaml_value(output: &mut String, key: &str, value: &Value) -> Result<()> {
     output.push_str(key);
+    let rendered = serde_yaml::to_string(value)?;
+    let rendered = rendered.trim();
+    if value.is_array() || value.is_object() {
+        output.push_str(":\n");
+        for line in rendered.lines() {
+            output.push_str("  ");
+            output.push_str(line);
+            output.push('\n');
+        }
+        return Ok(());
+    }
     output.push_str(": ");
-    output.push_str(serde_yaml::to_string(value)?.trim());
+    output.push_str(rendered);
     output.push('\n');
     Ok(())
 }
@@ -3275,14 +3460,17 @@ updated_at: "2026-06-10T13:00:00+00:00"
                 ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
                 ("session", "atelier.session", 1, Some("sessions")),
+                ("review", "atelier.review", 1, Some("reviews")),
             ]
         );
         for (kind, _, _, _) in canonical_contracts {
             assert!(validate_canonical_record_kind(kind).is_ok());
             let spec = canonical_record_kind(kind).unwrap();
+            let extension = if kind == "review" { "yaml" } else { "md" };
             assert_eq!(
                 canonical_record_path(spec, "atelier-abcd").unwrap(),
-                PathBuf::from(spec.canonical_dir.unwrap()).join("atelier-abcd.md")
+                PathBuf::from(spec.canonical_dir.unwrap())
+                    .join(format!("atelier-abcd.{extension}"))
             );
         }
 
@@ -3290,7 +3478,10 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["mission", "evidence", "session"]);
+        assert_eq!(
+            generic_contracts,
+            vec!["mission", "evidence", "session", "review"]
+        );
     }
 
     #[test]
@@ -3334,20 +3525,75 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn issue_record_round_trips_pull_request_link() {
+    fn issue_record_round_trips_review_link() {
         let mut record = issue_record("atelier-flds");
-        record
-            .issue
-            .fields
-            .insert("pull_request".to_string(), serde_json::json!(42));
+        record.issue.fields.insert(
+            "review".to_string(),
+            serde_json::json!({"kind": "room", "id": "atelier-rvw1"}),
+        );
 
         let text = render_issue_record(&record).unwrap();
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-flds")).unwrap();
 
         assert_eq!(parsed.issue.fields, record.issue.fields);
         assert_eq!(render_issue_record(&parsed).unwrap(), text);
-        assert!(text.contains("pull_request: 42\n"));
+        assert!(text.contains("review:\n"));
+        assert!(text.contains("kind: room"));
+        assert!(text.contains("id: atelier-rvw1"));
         assert!(!text.contains("fields:\n"));
+    }
+
+    #[test]
+    fn issue_record_rejects_legacy_pull_request_field() {
+        let text = sectioned_issue_text(
+            "atelier-flds",
+            "## Description\n\nBody\n\n## Outcome\n\nDone\n\n## Evidence\n\nProof",
+        )
+        .replace("priority: \"P1\"\n", "priority: \"P1\"\npull_request: 42\n");
+
+        let error = parse_issue_record(&text, &issue_record_path("atelier-flds"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("Legacy pull_request field"));
+    }
+
+    #[test]
+    fn review_room_record_renders_and_parses_yaml() {
+        let record = Record::Review(ReviewRecord {
+            header: record_header(
+                "review",
+                "atelier-rvw1",
+                "Review room",
+                "open",
+                vec!["review".to_string()],
+                Relationships::default(),
+            ),
+            mode: "room".to_string(),
+            issue_id: "atelier-epic".to_string(),
+            source_branch: "epic/atelier-epic".to_string(),
+            target_branch: "master".to_string(),
+            events: vec![serde_json::json!({
+                "id": "evt-0001",
+                "kind": "comment",
+                "actor": "reviewer",
+                "body": "Looks good"
+            })],
+        });
+        let spec = canonical_record_kind("review").unwrap();
+        let text = render_record(&record).unwrap();
+        let parsed = parse_record(
+            &text,
+            &canonical_record_path(spec, "atelier-rvw1").unwrap(),
+            spec,
+        )
+        .unwrap();
+
+        assert_eq!(parsed, record);
+        assert_eq!(render_record(&parsed).unwrap(), text);
+        assert!(text.contains("schema: \"atelier.review\""));
+        assert!(text.contains("events:\n"));
+        assert!(!text.starts_with("---"));
     }
 
     #[test]

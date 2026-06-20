@@ -42,10 +42,10 @@ workflows:
         required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -61,24 +61,31 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        actions:
+          - review.open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
       request_validation:
         from: [in_progress, review]
         to: validation
         validators:
-          - review_complete
+          - review.complete
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, validation, review merge, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - linked_pr_merged
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   validation_reviewed:
     applies_to: [validation]
@@ -94,23 +101,31 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
+        actions:
+          - review.open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
       request_validation:
         from: [in_progress, review]
         to: validation
         validators:
-          - review_complete
+          - review.complete
       close:
         from: [validation]
         to: done
-        required_fields: [close_reason]
-        description: "Closing requires attached evidence, complete child proof, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   spike:
     applies_to: [spike]
@@ -132,8 +147,7 @@ workflows:
       close:
         from: [review]
         to: done
-        required_fields: [close_reason]
-        description: "Record the spike outcome before closing."
+        description: "Closing requires a complete review."
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current

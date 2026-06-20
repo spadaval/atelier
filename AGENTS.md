@@ -7,15 +7,20 @@
   copy lives at `.agents/skills/agent-factory/SKILL.md`.
 - Use Atelier (`atelier`) for durable task tracking. Do not replace it with private
   chat notes or ad hoc TODO files.
+- Treat Atelier command output as the source of process guidance. Use
+  `atelier status`, `atelier issue show`, `atelier issue transition --options`,
+  and `atelier mission status` to decide the next lifecycle action; do not infer
+  review, branch, provider, merge, or completion steps from general agent habits,
+  available remotes, or installed tools.
 - Orchestrators assign exactly one agent-factory subskill to each subagent.
 - Do not use interactive tracker commands; use explicit `atelier issue`
   commands instead.
 - Do not plan or validate work by parsing command-result JSON. Use focused
-  show/list/ready/status/workflow commands and drill down explicitly.
+  show/list/ready/status/transition commands and drill down explicitly.
 - Treat `.atelier/` canonical Markdown and tracked config as the committed
-  durable tracker state. Treat `.atelier/runtime/state.db`, `.atelier/runtime/`,
-  identity, locks, diagnostics, and `.atelier/cache/` as ignored local
-  runtime/cache state that can be rebuilt or recreated.
+  durable tracker state. Do not edit ignored Atelier runtime/cache files; use
+  normal Atelier commands, and run repair commands only when Atelier reports
+  local state needs repair.
 - Do not add compatibility aliases, staged deprecations, fallback behavior, or
   old-command shims unless a human explicitly asks for them. Prefer hard
   removal, direct committed-state migrations, and docs/tests for only the new
@@ -23,7 +28,7 @@
 - Issues must be actionable. For important choices, create artifact-update
   tasks and block dependent implementation on those tasks when needed.
 - Validation criteria must name observable completion behavior: command output,
-  rejected commands, help text, file content, tests, lint/export checks, or
+  rejected commands, help text, file content, tests, lint checks, or
   evidence records.
 
 ## Repository Shape
@@ -53,9 +58,7 @@ cargo nextest run
 cargo nextest run --profile extended --run-ignored=only
 git diff --check
 atelier issue list --ready
-atelier export --check
 atelier lint
-atelier doctor
 ```
 
 ## Current Product State

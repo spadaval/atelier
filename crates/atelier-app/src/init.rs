@@ -18,20 +18,22 @@ runtime_dir = ".atelier/runtime"
 runtime_database = ".atelier/runtime/state.db"
 cache_dir = ".atelier/cache"
 
-# Forgejo PR integration is optional until `atelier pr` commands or PR
-# validators need it. Uncomment and fill these values in tracked project config.
+# Native room mode stores review rooms under .atelier/reviews. Provider mode
+# currently supports Forgejo.
+[review]
+mode = "room"
+
+# To use Forgejo instead, replace the [review] table above with:
 #
-# [forgejo]
+# [review]
+# mode = "provider"
+# provider = "forgejo"
+#
+# [review.providers.forgejo]
 # host = "forge.example.test"
 # owner = "workspace"
 # repo = "atelier"
 # admin_token_env = "FORGEJO_ADMIN_TOKEN"
-#
-# [forgejo.role_authors]
-# worker = "atelier-worker"
-# reviewer = "atelier-reviewer"
-# validator = "atelier-validator"
-# manager = "atelier-manager"
 "#;
 
 pub const ROOT_GITIGNORE_ENTRIES: &[&str] = &[

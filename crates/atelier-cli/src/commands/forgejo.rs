@@ -4,20 +4,17 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
 use atelier_app::project_config::{
-    load_forgejo_with_default_role_authors, ForgejoConfig, ForgejoRoleAuthors, ProjectConfig,
-    FORGEJO_ROLES,
+    ForgejoConfig, ForgejoRoleAuthors, ProjectConfig, FORGEJO_ROLES,
 };
-use atelier_app::storage_layout::StorageLayout;
+use atelier_app::workflow_policy::{ActionParams, WorkflowForgejoRoleAuthors};
 
 const ROLE_PERMISSION: &str = "write";
 
 pub fn roles_check(repo_root: &Path) -> Result<()> {
-    let config_path = repo_root.join(".atelier/config.toml");
-    let config = ProjectConfig::load(repo_root)?;
-    let forgejo = config.require_forgejo(&config_path)?.clone();
+    let forgejo = load_forgejo_with_workflow_role_authors(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
             "forgejo_config_missing_token: environment variable {} is required for `atelier forgejo roles check`",
@@ -35,8 +32,12 @@ pub fn roles_check(repo_root: &Path) -> Result<()> {
 }
 
 pub fn roles_provision(repo_root: &Path, write_config: bool) -> Result<()> {
-    let default_authors = default_role_authors();
-    let forgejo = load_forgejo_for_provisioning(repo_root, default_authors)?;
+    if write_config {
+        bail!(
+            "forgejo_role_authors_config_removed: role authors are workflow action parameters; remove --write-config and update .atelier/workflow.yaml instead"
+        );
+    }
+    let forgejo = load_forgejo_with_workflow_role_authors(repo_root)?;
     let token = env::var(&forgejo.admin_token_env).with_context(|| {
         format!(
             "forgejo_config_missing_token: environment variable {} is required for `atelier forgejo roles provision`",
@@ -65,27 +66,55 @@ pub fn roles_provision(repo_root: &Path, write_config: bool) -> Result<()> {
     print_report("Forgejo Role Provisioning", &report);
     ensure_report_passes(&report)?;
 
-    let config_block = role_authors_config_block(&forgejo);
-    if write_config {
-        write_role_authors_config(repo_root, &config_block)?;
-        println!("Config:  updated .atelier/config.toml");
-    } else {
-        println!();
-        println!("Config block to apply:");
-        print!("{config_block}");
-    }
+    println!();
+    println!("Config:  role authors sourced from .atelier/workflow.yaml actions");
     Ok(())
 }
 
-fn load_forgejo_for_provisioning(
-    repo_root: &Path,
-    default_authors: ForgejoRoleAuthors,
-) -> Result<ForgejoConfig> {
+fn load_forgejo_with_workflow_role_authors(repo_root: &Path) -> Result<ForgejoConfig> {
     let config_path = repo_root.join(".atelier/config.toml");
-    match ProjectConfig::load(repo_root) {
-        Ok(config) => Ok(config.require_forgejo(&config_path)?.clone()),
-        Err(_) => load_forgejo_with_default_role_authors(repo_root, default_authors),
+    let config = ProjectConfig::load(repo_root)?;
+    let mut forgejo = config.require_forgejo(&config_path)?.clone();
+    forgejo.role_authors = Some(workflow_forgejo_role_authors(repo_root)?);
+    Ok(forgejo)
+}
+
+fn workflow_forgejo_role_authors(repo_root: &Path) -> Result<ForgejoRoleAuthors> {
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let mut found: Option<WorkflowForgejoRoleAuthors> = None;
+    for workflow in policy.workflows.values() {
+        for transition in workflow.transitions.values() {
+            for action in &transition.actions {
+                let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {
+                    continue;
+                };
+                if params.provider.as_deref() != Some("forgejo") {
+                    continue;
+                }
+                let role_authors = params.role_authors.clone().ok_or_else(|| {
+                    anyhow!(
+                        "workflow_config_invalid_action: Forgejo review action '{}' is missing role_authors",
+                        action.builtin
+                    )
+                })?;
+                if let Some(existing) = &found {
+                    if existing != &role_authors {
+                        bail!(
+                            "workflow_config_invalid_action: Forgejo review actions define conflicting role_authors"
+                        );
+                    }
+                } else {
+                    found = Some(role_authors);
+                }
+            }
+        }
     }
+    let role_authors = found.ok_or_else(|| {
+        anyhow!(
+            "workflow_config_missing_role_authors: no Forgejo review action role_authors found in .atelier/workflow.yaml"
+        )
+    })?;
+    Ok(workflow_role_authors_to_project(&role_authors))
 }
 
 #[derive(Debug)]
@@ -204,12 +233,14 @@ fn ensure_report_passes(report: &RoleReport) -> Result<()> {
     }
 }
 
-fn default_role_authors() -> ForgejoRoleAuthors {
+fn workflow_role_authors_to_project(
+    role_authors: &WorkflowForgejoRoleAuthors,
+) -> ForgejoRoleAuthors {
     ForgejoRoleAuthors {
-        worker: "atelier-worker".to_string(),
-        reviewer: "atelier-reviewer".to_string(),
-        validator: "atelier-validator".to_string(),
-        manager: "atelier-manager".to_string(),
+        worker: role_authors.worker.clone(),
+        reviewer: role_authors.reviewer.clone(),
+        validator: role_authors.validator.clone(),
+        manager: role_authors.manager.clone(),
     }
 }
 
@@ -233,56 +264,12 @@ fn random_password() -> Result<String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn role_authors_config_block(forgejo: &ForgejoConfig) -> String {
-    format!(
-        "[forgejo.role_authors]\nworker = \"{}\"\nreviewer = \"{}\"\nvalidator = \"{}\"\nmanager = \"{}\"\n",
-        forgejo.role_authors.worker,
-        forgejo.role_authors.reviewer,
-        forgejo.role_authors.validator,
-        forgejo.role_authors.manager
-    )
-}
-
-fn write_role_authors_config(repo_root: &Path, block: &str) -> Result<()> {
-    let config_path = StorageLayout::new(repo_root).config_path();
-    let text = fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    let mut output = String::new();
-    let mut skipping_role_table = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed == "[forgejo.role_authors]" {
-            skipping_role_table = true;
-            continue;
-        }
-        if skipping_role_table && trimmed.starts_with('[') {
-            skipping_role_table = false;
-        }
-        if !skipping_role_table {
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    while output.ends_with("\n\n") {
-        output.pop();
-    }
-    if !output.ends_with('\n') {
-        output.push('\n');
-    }
-    output.push('\n');
-    output.push_str(block);
-    fs::write(&config_path, output)
-        .with_context(|| format!("failed to write {}", config_path.display()))?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use anyhow::anyhow;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
     use std::cell::RefCell;
-    use tempfile::tempdir;
 
     #[derive(Debug)]
     struct MockTransport {
@@ -315,7 +302,12 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            role_authors: default_role_authors(),
+            role_authors: Some(ForgejoRoleAuthors {
+                worker: "atelier-worker".to_string(),
+                reviewer: "atelier-reviewer".to_string(),
+                validator: "atelier-validator".to_string(),
+                manager: "atelier-manager".to_string(),
+            }),
         }
     }
 
@@ -380,20 +372,17 @@ mod tests {
     }
 
     #[test]
-    fn write_config_replaces_role_authors_table() {
-        let dir = tempdir().unwrap();
-        fs::create_dir_all(dir.path().join(".atelier")).unwrap();
-        fs::write(
-            dir.path().join(".atelier/config.toml"),
-            "schema = \"atelier.project_config\"\n\n[forgejo]\nhost = \"forge\"\n\n[forgejo.role_authors]\nworker = \"old\"\nreviewer = \"old\"\nvalidator = \"old\"\nmanager = \"old\"\n",
-        )
-        .unwrap();
+    fn workflow_role_authors_are_mapped_to_forgejo_config() {
+        let authors = WorkflowForgejoRoleAuthors {
+            worker: "forge-worker".to_string(),
+            reviewer: "forge-reviewer".to_string(),
+            validator: "forge-validator".to_string(),
+            manager: "forge-manager".to_string(),
+        };
 
-        write_role_authors_config(dir.path(), &role_authors_config_block(&forgejo_config()))
-            .unwrap();
-        let text = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
+        let mapped = workflow_role_authors_to_project(&authors);
 
-        assert!(text.contains("[forgejo.role_authors]\nworker = \"atelier-worker\""));
-        assert!(!text.contains("worker = \"old\""));
+        assert_eq!(mapped.worker, "forge-worker");
+        assert_eq!(mapped.validator, "forge-validator");
     }
 }

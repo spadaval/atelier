@@ -891,13 +891,11 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         println!("-------------");
         println!("  atelier mission show {id}");
         println!("  atelier lint");
-        println!("  atelier doctor");
     } else if !preview {
         println!();
         println!("Next Commands");
         println!("-------------");
         println!("  atelier lint");
-        println!("  atelier doctor");
     }
     Ok(())
 }
