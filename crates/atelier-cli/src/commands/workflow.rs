@@ -14,7 +14,9 @@ use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use atelier_app::review_room;
 use atelier_app::use_cases as app_use_cases;
-use atelier_app::workflow_policy::{BranchLifecycleResolution, MergeStrategy};
+use atelier_app::workflow_policy::{
+    ActionParams, BranchLifecycleResolution, MergeStrategy, WorkflowForgejoRoleAuthors,
+};
 use atelier_core::{EvidenceRecord, Issue, Record};
 use atelier_records::{CanonicalIssueRecord, IssueSections};
 use atelier_sqlite::Database;
@@ -51,6 +53,9 @@ pub struct PlannedAction {
     pub target_issue_id: String,
     pub branch_owner_id: String,
     pub review_artifact_target: Option<String>,
+    pub review_artifact_provider: Option<String>,
+    pub review_artifact_role: Option<String>,
+    pub forgejo_role_authors: Option<atelier_app::project_config::ForgejoRoleAuthors>,
     pub confirmation_required: bool,
     pub skip_reason: Option<String>,
     pub block_reason: Option<String>,
@@ -178,26 +183,68 @@ fn plan_actions_for_resolution(
         .iter()
         .enumerate()
         .map(|(index, action)| {
-            let review_artifact_target = if matches!(
-                action.builtin.as_str(),
-                "review_artifact_open" | "review_artifact_link"
-            ) {
-                Some(resolution.owner_id.clone())
-            } else {
-                None
-            };
+            let review_artifact = review_artifact_action_plan(action, resolution);
             PlannedAction {
                 order: index + 1,
                 name: action.builtin.clone(),
                 target_issue_id: issue.id.clone(),
                 branch_owner_id: resolution.owner_id.clone(),
-                review_artifact_target,
+                review_artifact_target: review_artifact
+                    .as_ref()
+                    .map(|review| review.target_issue_id.clone()),
+                review_artifact_provider: review_artifact
+                    .as_ref()
+                    .and_then(|review| review.provider.clone()),
+                review_artifact_role: review_artifact.as_ref().map(|review| review.role.clone()),
+                forgejo_role_authors: review_artifact.and_then(|review| review.role_authors),
                 confirmation_required: action.builtin == "branch_integrate",
                 skip_reason: None,
                 block_reason: None,
             }
         })
         .collect()
+}
+
+struct ReviewArtifactActionPlan {
+    target_issue_id: String,
+    provider: Option<String>,
+    role: String,
+    role_authors: Option<atelier_app::project_config::ForgejoRoleAuthors>,
+}
+
+fn review_artifact_action_plan(
+    action: &atelier_app::workflow_policy::ActionDefinition,
+    resolution: &BranchLifecycleResolution,
+) -> Option<ReviewArtifactActionPlan> {
+    if !matches!(
+        action.builtin.as_str(),
+        "review_artifact_open" | "review_artifact_link"
+    ) {
+        return None;
+    }
+    let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {
+        return None;
+    };
+    Some(ReviewArtifactActionPlan {
+        target_issue_id: resolution.owner_id.clone(),
+        provider: params.provider.clone(),
+        role: params.role.clone(),
+        role_authors: params
+            .role_authors
+            .as_ref()
+            .map(workflow_role_authors_to_project),
+    })
+}
+
+fn workflow_role_authors_to_project(
+    role_authors: &WorkflowForgejoRoleAuthors,
+) -> atelier_app::project_config::ForgejoRoleAuthors {
+    atelier_app::project_config::ForgejoRoleAuthors {
+        worker: role_authors.worker.clone(),
+        reviewer: role_authors.reviewer.clone(),
+        validator: role_authors.validator.clone(),
+        manager: role_authors.manager.clone(),
+    }
 }
 
 pub(crate) fn branch_lifecycle_context(
@@ -589,17 +636,44 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
             action.name
         ));
     }
+    let Some(role) = &action.review_artifact_role else {
+        return Some(format!(
+            "action {} failed preflight: missing review artifact role",
+            action.name
+        ));
+    };
     match ProjectConfig::load(repo_root).map(|config| config.review) {
-        Ok(ReviewConfig::Room) => None,
+        Ok(ReviewConfig::Room) => {
+            if action.review_artifact_provider.is_some() {
+                return Some(format!(
+                    "action {} failed preflight: provider action config is only valid when review.mode = \"provider\"",
+                    action.name
+                ));
+            }
+            let _ = role;
+            None
+        }
         Ok(ReviewConfig::Provider(provider)) => match provider.provider {
-            ReviewProviderKind::Forgejo(forgejo) => env::var(&forgejo.admin_token_env)
-                .err()
-                .map(|_| {
+            ReviewProviderKind::Forgejo(forgejo) => {
+                if action.review_artifact_provider.as_deref() != Some("forgejo") {
+                    return Some(format!(
+                        "action {} failed preflight: provider review open requires workflow action provider: forgejo",
+                        action.name
+                    ));
+                }
+                if action.forgejo_role_authors.is_none() {
+                    return Some(format!(
+                        "action {} failed preflight: provider review open requires workflow action role_authors",
+                        action.name
+                    ));
+                }
+                env::var(&forgejo.admin_token_env).err().map(|_| {
                     format!(
                         "action {} failed preflight: environment variable {} is required for provider review open",
                         action.name, forgejo.admin_token_env
                     )
-                }),
+                })
+            }
         },
         Err(error) => Some(format!(
             "action {} failed preflight: {}",
@@ -663,8 +737,20 @@ fn open_review_artifact_action(
         "Opened by transition action `{}` for issue {}.",
         action.name, issue.id
     );
+    let role = action.review_artifact_role.as_deref().ok_or_else(|| {
+        anyhow!(
+            "action {} failed: missing workflow action role",
+            action.name
+        )
+    })?;
     match ProjectConfig::load(repo_root)?.review {
         ReviewConfig::Room => {
+            if action.review_artifact_provider.is_some() {
+                bail!(
+                    "action {} failed: provider action config is only valid when review.mode = \"provider\"",
+                    action.name
+                );
+            }
             let outcome = review_room::open(
                 db,
                 review_room::RoomOpenRequest {
@@ -672,7 +758,7 @@ fn open_review_artifact_action(
                     state_dir,
                     db_path,
                     issue_ref: Some(&resolution.owner_id),
-                    role: "worker",
+                    role,
                     title: &title,
                     body: &body,
                     source_branch: &resolution.expected_branch,
@@ -682,7 +768,19 @@ fn open_review_artifact_action(
             Ok(format!("opened room {}", outcome.review_id))
         }
         ReviewConfig::Provider(provider) => match provider.provider {
-            ReviewProviderKind::Forgejo(forgejo) => {
+            ReviewProviderKind::Forgejo(mut forgejo) => {
+                if action.review_artifact_provider.as_deref() != Some("forgejo") {
+                    bail!(
+                        "action {} failed: provider review open requires workflow action provider: forgejo",
+                        action.name
+                    );
+                }
+                forgejo.role_authors = Some(action.forgejo_role_authors.clone().ok_or_else(|| {
+                    anyhow!(
+                        "action {} failed: provider review open requires workflow action role_authors",
+                        action.name
+                    )
+                })?);
                 let token = env::var(&forgejo.admin_token_env).with_context(|| {
                     format!(
                         "action {} failed: environment variable {} is required for provider review open",
@@ -700,7 +798,7 @@ fn open_review_artifact_action(
                         state_dir,
                         db_path,
                         issue_ref: Some(&resolution.owner_id),
-                        role: "worker",
+                        role,
                         title: &title,
                         body: &body,
                         source_branch: &resolution.expected_branch,
@@ -756,7 +854,7 @@ fn record_applied_actions(
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}\nreview_artifact_provider: {}\nreview_artifact_role: {}",
                 transition_name,
                 action.name,
                 action.order,
@@ -765,7 +863,12 @@ fn record_applied_actions(
                 action
                     .review_artifact_target
                     .as_deref()
-                    .unwrap_or("(none)")
+                    .unwrap_or("(none)"),
+                action
+                    .review_artifact_provider
+                    .as_deref()
+                    .unwrap_or("(none)"),
+                action.review_artifact_role.as_deref().unwrap_or("(none)")
             ),
         )?;
     }
@@ -1453,6 +1556,12 @@ fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
             );
             if let Some(review_target) = &action.review_artifact_target {
                 line.push_str(&format!(" review_target={review_target}"));
+            }
+            if let Some(provider) = &action.review_artifact_provider {
+                line.push_str(&format!(" provider={provider}"));
+            }
+            if let Some(role) = &action.review_artifact_role {
+                line.push_str(&format!(" role={role}"));
             }
             if action.confirmation_required {
                 line.push_str(" confirmation=required");
@@ -2574,6 +2683,7 @@ mod tests {
     use anyhow::Result;
     use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
     use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
+    use atelier_app::workflow_policy::ReviewArtifactActionParams;
     use atelier_records::{RecordStore, Relationships};
     use chrono::Utc;
     use serde_json::json;
@@ -2625,12 +2735,12 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            role_authors: ForgejoRoleAuthors {
+            role_authors: Some(ForgejoRoleAuthors {
                 worker: "forge-worker".to_string(),
                 reviewer: "forge-reviewer".to_string(),
                 validator: "forge-validator".to_string(),
                 manager: "forge-manager".to_string(),
-            },
+            }),
         }
     }
 
@@ -2657,6 +2767,34 @@ mod tests {
     fn action(name: &str) -> atelier_app::workflow_policy::ActionDefinition {
         atelier_app::workflow_policy::ActionDefinition {
             builtin: name.to_string(),
+            params: None,
+        }
+    }
+
+    fn review_action() -> atelier_app::workflow_policy::ActionDefinition {
+        atelier_app::workflow_policy::ActionDefinition {
+            builtin: "review_artifact_open".to_string(),
+            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
+                provider: None,
+                role: "worker".to_string(),
+                role_authors: None,
+            })),
+        }
+    }
+
+    fn forgejo_review_action() -> atelier_app::workflow_policy::ActionDefinition {
+        atelier_app::workflow_policy::ActionDefinition {
+            builtin: "review_artifact_open".to_string(),
+            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
+                provider: Some("forgejo".to_string()),
+                role: "worker".to_string(),
+                role_authors: Some(WorkflowForgejoRoleAuthors {
+                    worker: "forge-worker".to_string(),
+                    reviewer: "forge-reviewer".to_string(),
+                    validator: "forge-validator".to_string(),
+                    manager: "forge-manager".to_string(),
+                }),
+            })),
         }
     }
 
@@ -2683,6 +2821,34 @@ mode = "room"
             dir.path().join(".atelier/workflow.yaml"),
             atelier_app::workflow_policy::STARTER_POLICY_YAML
                 .replace("base_branch: main", "base_branch: master"),
+        )
+        .unwrap();
+    }
+
+    fn write_provider_config_without_role_authors(dir: &TempDir) {
+        std::fs::create_dir_all(dir.path().join(".atelier/runtime")).unwrap();
+        std::fs::write(
+            dir.path().join(".atelier/config.toml"),
+            r#"schema = "atelier.project_config"
+schema_version = 1
+project_slug = "atelier-test"
+
+[paths]
+state_root = ".atelier"
+runtime_dir = ".atelier/runtime"
+runtime_database = ".atelier/runtime/state.db"
+cache_dir = ".atelier/cache"
+
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
+host = "https://forge.example.test"
+owner = "tools"
+repo = "atelier"
+admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
+"#,
         )
         .unwrap();
     }
@@ -2800,7 +2966,7 @@ mode = "room"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let actions = vec![action("review_artifact_open"), action("branch_integrate")];
+        let actions = vec![review_action(), action("branch_integrate")];
 
         let plan = plan_actions_for_resolution(&issue, &resolution, &actions);
 
@@ -2814,10 +2980,13 @@ mode = "room"
             plan[0].review_artifact_target.as_deref(),
             Some("atelier-epic1")
         );
+        assert_eq!(plan[0].review_artifact_provider.as_deref(), None);
+        assert_eq!(plan[0].review_artifact_role.as_deref(), Some("worker"));
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
         assert_eq!(plan[1].name, "branch_integrate");
         assert!(plan[1].review_artifact_target.is_none());
+        assert!(plan[1].review_artifact_role.is_none());
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|action| action.skip_reason.is_none()));
         assert!(plan.iter().all(|action| action.block_reason.is_none()));
@@ -2849,6 +3018,40 @@ mode = "room"
     }
 
     #[test]
+    fn provider_review_action_preflight_uses_workflow_role_authors_and_env_secret() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let dir = tempdir().unwrap();
+        write_provider_config_without_role_authors(&dir);
+
+        let actions = plan_actions_for_resolution(&issue, &resolution, &[forgejo_review_action()]);
+        let blockers = action_preflight_blockers(dir.path(), &actions);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("ATELIER_TEST_FORGEJO_TOKEN"));
+        assert!(!blockers[0].contains("role_authors"));
+        assert_eq!(
+            actions[0].review_artifact_provider.as_deref(),
+            Some("forgejo")
+        );
+        assert_eq!(actions[0].review_artifact_role.as_deref(), Some("worker"));
+        assert_eq!(
+            actions[0].forgejo_role_authors.as_ref().unwrap().worker,
+            "forge-worker"
+        );
+    }
+
+    #[test]
     fn review_artifact_open_action_persists_room_review_field() {
         let dir = tempdir().unwrap();
         write_room_config_and_workflow(&dir);
@@ -2868,9 +3071,7 @@ mode = "room"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let action =
-            plan_actions_for_resolution(&issue, &resolution, &[action("review_artifact_open")])
-                .remove(0);
+        let action = plan_actions_for_resolution(&issue, &resolution, &[review_action()]).remove(0);
 
         let detail = open_review_artifact_action(
             &db,

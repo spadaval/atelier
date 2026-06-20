@@ -20,8 +20,8 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, ignored runtime/cache paths, active review mode, provider backend identity, provider remote coordinates, role-author mapping, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, provider secret values, local runtime contents, projection data, diagnostics, locks, or caches. |
-| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, and ordered transition actions. | Provider host/owner/repo/token settings, role-author mapping, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, ignored runtime/cache paths, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
 The boundary is intentionally split for review integration. `.atelier/config.toml`
@@ -30,6 +30,9 @@ selects the review backend, such as `review.mode = "provider"` with
 normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
 transition opens or links the branch owner's review artifact through explicit
 actions such as `review_artifact_open` or `review_artifact_link`. Provider
+review actions declare the workflow role and any provider role-author mapping
+they use; provider secrets remain environment-only through the token variable
+named in `.atelier/config.toml`. Provider
 approval rules, branch protection, and merge authorization remain with the
 provider or native room implementation; workflow validators only read enough
 review state to decide whether an Atelier transition may proceed.
@@ -140,7 +143,14 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open
+          - review_artifact_open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -173,7 +183,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open
+          - review_artifact_open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -348,6 +358,32 @@ In room mode they create or reuse a native review room. In provider mode they
 create, fetch, or link the configured provider artifact. They do not approve,
 comment, request changes, resolve findings, merge review artifacts, close
 issues, add `pr` aliases, or replace explicit `atelier issue transition`.
+
+Review artifact actions require parameter objects. Room-mode actions declare
+the local Atelier role:
+
+```yaml
+actions:
+  - review_artifact_open: { role: worker }
+```
+
+Forgejo-backed provider actions also declare `provider: forgejo` and the role
+author mapping used by the action's provider calls:
+
+```yaml
+actions:
+  - review_artifact_open:
+      provider: forgejo
+      role: worker
+      role_authors:
+        worker: atelier-worker
+        reviewer: atelier-reviewer
+        validator: atelier-validator
+        manager: atelier-manager
+```
+
+The Forgejo admin token value is not a workflow parameter. It remains a secret
+read from the environment variable named by `.atelier/config.toml`.
 
 Failure behavior is part of the action contract:
 

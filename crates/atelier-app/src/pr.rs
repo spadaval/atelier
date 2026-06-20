@@ -863,12 +863,12 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            role_authors: ForgejoRoleAuthors {
+            role_authors: Some(ForgejoRoleAuthors {
                 worker: "worker".to_string(),
                 reviewer: "reviewer".to_string(),
                 validator: "validator".to_string(),
                 manager: "manager".to_string(),
-            },
+            }),
         }
     }
 

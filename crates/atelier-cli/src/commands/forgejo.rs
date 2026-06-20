@@ -65,7 +65,7 @@ pub fn roles_provision(repo_root: &Path, write_config: bool) -> Result<()> {
     print_report("Forgejo Role Provisioning", &report);
     ensure_report_passes(&report)?;
 
-    let config_block = role_authors_config_block(&forgejo);
+    let config_block = role_authors_config_block(&forgejo)?;
     if write_config {
         write_role_authors_config(repo_root, &config_block)?;
         println!("Config:  updated .atelier/config.toml");
@@ -233,14 +233,19 @@ fn random_password() -> Result<String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn role_authors_config_block(forgejo: &ForgejoConfig) -> String {
-    format!(
+fn role_authors_config_block(forgejo: &ForgejoConfig) -> Result<String> {
+    let role_authors = forgejo.role_authors.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "forgejo_config_missing_role_authors: Forgejo role authors are required for provisioning"
+        )
+    })?;
+    Ok(format!(
         "[review.providers.forgejo.role_authors]\nworker = \"{}\"\nreviewer = \"{}\"\nvalidator = \"{}\"\nmanager = \"{}\"\n",
-        forgejo.role_authors.worker,
-        forgejo.role_authors.reviewer,
-        forgejo.role_authors.validator,
-        forgejo.role_authors.manager
-    )
+        role_authors.worker,
+        role_authors.reviewer,
+        role_authors.validator,
+        role_authors.manager
+    ))
 }
 
 fn write_role_authors_config(repo_root: &Path, block: &str) -> Result<()> {
@@ -317,7 +322,7 @@ mod tests {
             owner: "tools".to_string(),
             repo: "atelier".to_string(),
             admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            role_authors: default_role_authors(),
+            role_authors: Some(default_role_authors()),
         }
     }
 
@@ -391,8 +396,11 @@ mod tests {
         )
         .unwrap();
 
-        write_role_authors_config(dir.path(), &role_authors_config_block(&forgejo_config()))
-            .unwrap();
+        write_role_authors_config(
+            dir.path(),
+            &role_authors_config_block(&forgejo_config()).unwrap(),
+        )
+        .unwrap();
         let text = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
 
         assert!(

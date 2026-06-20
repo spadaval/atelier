@@ -885,6 +885,74 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     issue_id
 }
 
+fn write_provider_config_without_role_authors(dir: &Path) {
+    fs::create_dir_all(dir.join(".atelier")).unwrap();
+    fs::write(
+        dir.join(".atelier/config.toml"),
+        r#"schema = "atelier.project_config"
+schema_version = 1
+project_slug = "atelier-test"
+
+[paths]
+state_root = ".atelier"
+runtime_dir = ".atelier/runtime"
+runtime_database = ".atelier/runtime/state.db"
+cache_dir = ".atelier/cache"
+
+[review]
+mode = "provider"
+provider = "forgejo"
+
+[review.providers.forgejo]
+host = "https://forge.example.test"
+owner = "tools"
+repo = "atelier"
+admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
+"#,
+    )
+    .unwrap();
+}
+
+fn write_provider_review_action_workflow(dir: &Path) {
+    let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
+        "          - review_artifact_open: { role: worker }",
+        "          - review_artifact_open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
+    );
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
+}
+
+#[test]
+fn provider_review_open_action_reads_workflow_config_and_env_secret() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_provider_config_without_role_authors(dir.path());
+    write_provider_review_action_workflow(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Provider epic", "--issue-type", "epic"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Provider epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(stdout.contains("request_review [blocked]"), "{stdout}");
+    assert!(stdout.contains("review_artifact_open"), "{stdout}");
+    assert!(stdout.contains("provider=forgejo"), "{stdout}");
+    assert!(stdout.contains("role=worker"), "{stdout}");
+    assert!(
+        stdout.contains("ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("role_authors"), "{stdout}");
+}
+
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
     let activity_dir = dir
         .join(".atelier")

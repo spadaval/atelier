@@ -48,7 +48,7 @@ pub struct ForgejoConfig {
     pub owner: String,
     pub repo: String,
     pub admin_token_env: String,
-    pub role_authors: ForgejoRoleAuthors,
+    pub role_authors: Option<ForgejoRoleAuthors>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -79,11 +79,17 @@ impl ProjectConfig {
 
 impl ForgejoConfig {
     pub fn role_author_for_role(&self, role: &str) -> Result<&str> {
+        let role_authors = self.role_authors.as_ref().ok_or_else(|| {
+            anyhow!(
+                "forgejo_config_missing_role_authors: Forgejo role authors are required for role '{}'; configure them in workflow action params",
+                role
+            )
+        })?;
         match role {
-            "worker" => Ok(&self.role_authors.worker),
-            "reviewer" => Ok(&self.role_authors.reviewer),
-            "validator" => Ok(&self.role_authors.validator),
-            "manager" => Ok(&self.role_authors.manager),
+            "worker" => Ok(&role_authors.worker),
+            "reviewer" => Ok(&role_authors.reviewer),
+            "validator" => Ok(&role_authors.validator),
+            "manager" => Ok(&role_authors.manager),
             other => Err(anyhow!(
                 "forgejo_config_invalid_role: unsupported Atelier role '{}'; expected {}",
                 other,
@@ -198,7 +204,7 @@ pub fn load_forgejo_with_default_role_authors(
             &config_path,
             "review.providers.forgejo.admin_token_env",
         )?,
-        role_authors,
+        role_authors: Some(role_authors),
     })
 }
 
@@ -323,13 +329,10 @@ fn provider_forgejo_config(raw: RawReviewConfig, config_path: &Path) -> Result<R
 }
 
 fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<ForgejoConfig> {
-    let role_authors = raw.role_authors.ok_or_else(|| {
-        anyhow!(
-            "forgejo_config_invalid: {} [review.providers.forgejo.role_authors] is required; map {} to Forgejo role author users",
-            config_path.display(),
-            FORGEJO_ROLES.join(", ")
-        )
-    })?;
+    let role_authors = raw
+        .role_authors
+        .map(|role_authors| parse_forgejo_role_authors(role_authors, config_path))
+        .transpose()?;
     let config = ForgejoConfig {
         host: require_owned_option(raw.host, config_path, "review.providers.forgejo.host")?,
         owner: require_owned_option(raw.owner, config_path, "review.providers.forgejo.owner")?,
@@ -339,30 +342,37 @@ fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<For
             config_path,
             "review.providers.forgejo.admin_token_env",
         )?,
-        role_authors: ForgejoRoleAuthors {
-            worker: require_owned_option(
-                role_authors.worker,
-                config_path,
-                "review.providers.forgejo.role_authors.worker",
-            )?,
-            reviewer: require_owned_option(
-                role_authors.reviewer,
-                config_path,
-                "review.providers.forgejo.role_authors.reviewer",
-            )?,
-            validator: require_owned_option(
-                role_authors.validator,
-                config_path,
-                "review.providers.forgejo.role_authors.validator",
-            )?,
-            manager: require_owned_option(
-                role_authors.manager,
-                config_path,
-                "review.providers.forgejo.role_authors.manager",
-            )?,
-        },
+        role_authors,
     };
     Ok(config)
+}
+
+fn parse_forgejo_role_authors(
+    role_authors: RawForgejoRoleAuthors,
+    config_path: &Path,
+) -> Result<ForgejoRoleAuthors> {
+    Ok(ForgejoRoleAuthors {
+        worker: require_owned_option(
+            role_authors.worker,
+            config_path,
+            "review.providers.forgejo.role_authors.worker",
+        )?,
+        reviewer: require_owned_option(
+            role_authors.reviewer,
+            config_path,
+            "review.providers.forgejo.role_authors.reviewer",
+        )?,
+        validator: require_owned_option(
+            role_authors.validator,
+            config_path,
+            "review.providers.forgejo.role_authors.validator",
+        )?,
+        manager: require_owned_option(
+            role_authors.manager,
+            config_path,
+            "review.providers.forgejo.role_authors.manager",
+        )?,
+    })
 }
 
 fn require_owned(value: String, config_path: &Path, field: &str) -> Result<String> {
@@ -500,6 +510,18 @@ mode = "room"
             .unwrap_err()
             .to_string();
         assert!(error.contains("review.providers.forgejo.role_authors.validator"));
+
+        let missing_role_authors = valid_config().replace(
+            "\n[review.providers.forgejo.role_authors]\nworker = \"atelier-worker\"\nreviewer = \"atelier-reviewer\"\nvalidator = \"atelier-validator\"\nmanager = \"atelier-manager\"\n",
+            "\n",
+        );
+        let config = parse_project_config(&missing_role_authors, &path()).unwrap();
+        let forgejo = config.require_forgejo(&path()).unwrap();
+        let error = forgejo
+            .role_author_for_role("worker")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("forgejo_config_missing_role_authors"));
 
         let old_sudo_users = valid_config().replace(
             "[review.providers.forgejo.role_authors]",
