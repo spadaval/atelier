@@ -974,6 +974,44 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
     assert!(!stdout.contains("role_authors"), "{stdout}");
 }
 
+#[test]
+fn request_review_preserves_review_artifact_field() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Review field epic",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Review field epic");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &issue_id, "request_review"],
+    );
+    assert!(success, "request_review failed: {stderr}");
+
+    let front_matter = canonical_record_front_matter(dir.path(), "issues", &issue_id);
+    assert_eq!(front_matter["status"], "review");
+    assert_eq!(front_matter["review"]["kind"], "room");
+    assert!(
+        front_matter["review"]["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("atelier-")),
+        "{front_matter:#}"
+    );
+}
+
 fn issue_activity_texts(dir: &Path, issue_id: &str) -> Vec<String> {
     let activity_dir = dir
         .join(".atelier")

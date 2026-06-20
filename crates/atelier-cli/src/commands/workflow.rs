@@ -482,6 +482,7 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
+    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
