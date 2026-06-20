@@ -20,6 +20,9 @@ present.
 The repository is the shared memory: durable work state should be reviewable,
 mergeable, and recoverable from the repo.
 
+Explicit policy over hidden machinery: the repo should own the workflow. 
+Atelier executes. No magic, no surprises. 
+
 Information hierarchy matters: default views should emphasize what is current,
 mission-relevant, and actionable without making the full record the default
 view.
