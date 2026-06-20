@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-20T21:19:50.514427374+00:00"
+status: "done"
 title: "Collapse Forgejo provisioning flags to the supported roles workflow"
-updated_at: "2026-06-20T21:16:34.564414207+00:00"
+updated_at: "2026-06-20T21:19:50.514427374+00:00"
 ---
 
 ## Description
