@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:24:48.752788344+00:00"
+status: "done"
 title: "Make status guidance derive from transition options"
-updated_at: "2026-06-20T04:17:09.566876467+00:00"
+updated_at: "2026-06-20T05:24:48.752788344+00:00"
 ---
 
 ## Description

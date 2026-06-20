@@ -327,11 +327,11 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
             "current branch matches expected branch".to_string()
         }
         Some(current) => format!(
-            "mismatch - current branch {current}; run `atelier start {}` before continuing work",
+            "mismatch - current branch {current}; inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
             context.resolution.issue_id
         ),
         None => format!(
-            "detached or unknown - run `atelier start {}` before continuing work",
+            "detached or unknown - inspect `atelier issue transition {} --options` and `atelier worktree status` before continuing work",
             context.resolution.issue_id
         ),
     }

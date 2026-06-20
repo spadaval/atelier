@@ -1072,7 +1072,10 @@ fn test_root_status_summarizes_checkout_orientation() {
     );
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
-    assert!(stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
+    assert!(stdout.contains(
+        "Inspect selected work transitions (ready work exists): atelier issue transition <issue-id> --options"
+    ));
+    assert!(!stdout.contains("Start selected work (ready work exists): atelier start <issue-id>"));
     assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
     assert!(!stdout.contains("issue next"));
@@ -1182,8 +1185,9 @@ fn test_root_status_reports_active_mission_contract_fields() {
         "Inspect active mission health ({mission_id}): atelier mission status {mission_id}"
     )));
     assert!(stdout.contains(&format!(
-        "Start selectable active-mission work (2 selectable issue(s)): atelier start {blocker_id}"
+        "Inspect selectable active-mission work transitions (2 selectable issue(s)): atelier issue transition {blocker_id} --options"
     )));
+    assert!(!stdout.contains("Start selectable active-mission work"));
     assert!(
         !stdout.contains("workflow validate"),
         "normal status next actions must not route to raw workflow validators:\n{stdout}"

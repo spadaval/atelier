@@ -3114,13 +3114,17 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         assert!(show_out.contains(&expected), "{show_out}");
         assert!(show_out.contains(scope), "{show_out}");
         assert!(
-            show_out.contains(&format!("Next:     atelier start {id}")),
+            show_out.contains(&format!(
+                "Options:  atelier issue transition {id} --options"
+            )),
             "{show_out}"
         );
         assert!(
-            show_out.contains(&format!(
-                "Close:    atelier issue transition {id} close --reason \"...\""
-            )),
+            show_out.contains("Worktree: atelier worktree status"),
+            "{show_out}"
+        );
+        assert!(
+            !show_out.contains(&format!("Next:     atelier start {id}")),
             "{show_out}"
         );
         assert!(!show_out.contains("branch for-epic"), "{show_out}");
@@ -3183,7 +3187,9 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     );
     assert!(
         issue_status.contains(&format!("{child_id} - owner epic {epic_id} (epic)"))
-            && issue_status.contains(&format!("mismatch; run `atelier start {child_id}`")),
+            && issue_status.contains(&format!(
+                "mismatch; inspect `atelier issue transition {child_id} --options` and `atelier worktree status`"
+            )),
         "{issue_status}"
     );
 
@@ -3200,11 +3206,15 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         "{wrong_status}"
     );
     assert!(
-        wrong_status.contains(&format!("mismatch; run `atelier start {child_id}`")),
+        wrong_status.contains(&format!(
+            "mismatch; inspect `atelier issue transition {child_id} --options` and `atelier worktree status`"
+        )),
         "{wrong_status}"
     );
     assert!(
-        wrong_status.contains(&format!("mismatch; run `atelier start {standalone_id}`")),
+        wrong_status.contains(&format!(
+            "mismatch; inspect `atelier issue transition {standalone_id} --options` and `atelier worktree status`"
+        )),
         "{wrong_status}"
     );
 
@@ -3225,13 +3235,13 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     assert!(mission_status.contains("Dirty state:"), "{mission_status}");
     assert!(
         mission_status.contains(&format!(
-            "{child_id} expected epic/{epic_id}; run `atelier start {child_id}`"
+            "{child_id} expected epic/{epic_id}; inspect `atelier issue transition {child_id} --options` and `atelier worktree status`"
         )),
         "{mission_status}"
     );
     assert!(
         mission_status.contains(&format!(
-            "{standalone_id} expected codex/{standalone_id}; run `atelier start {standalone_id}`"
+            "{standalone_id} expected codex/{standalone_id}; inspect `atelier issue transition {standalone_id} --options` and `atelier worktree status`"
         )),
         "{mission_status}"
     );
