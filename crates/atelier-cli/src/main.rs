@@ -333,6 +333,12 @@ enum IssueCommands {
         id: String,
     },
 
+    /// Show type-aware issue status for objective records
+    Status {
+        /// Issue ID
+        id: String,
+    },
+
     /// Show issue transition options and blockers
     Transition {
         /// Issue ID
@@ -920,6 +926,11 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Show { id } => {
             let db = degraded_projection_query_db()?;
             commands::agent_factory::show(&db, &id)
+        }
+
+        IssueCommands::Status { id } => {
+            let db = degraded_projection_query_db()?;
+            commands::issue_status::run(&db, &id, quiet)
         }
 
         IssueCommands::Transition {
@@ -1625,6 +1636,7 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
+            IssueCommands::Status { .. } => "issue status",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",

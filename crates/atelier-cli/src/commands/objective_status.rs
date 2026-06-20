@@ -95,6 +95,54 @@ pub(crate) fn snapshot_for_mission(
     Ok(snapshot)
 }
 
+pub(crate) fn snapshot_for_issue_objective(
+    db: &Database,
+    issue_id: &str,
+    active_issue_ids: &BTreeSet<&str>,
+) -> Result<ObjectiveStatusSnapshot> {
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut snapshot = ObjectiveStatusSnapshot {
+        issue_ids: issue_descendant_ids(db, issue_id)?,
+        open_blockers: open_issue_objective_blockers(db, issue_id)?,
+        ..ObjectiveStatusSnapshot::default()
+    };
+
+    for child_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(child_id)? else {
+            continue;
+        };
+        match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
+            ObjectiveIssueBucket::Active => {
+                snapshot.active += 1;
+                snapshot.active_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Ready => {
+                snapshot.ready += 1;
+                if is_selectable_work(db, &issue)? {
+                    snapshot.selectable_issues.push(issue.clone());
+                }
+                snapshot.ready_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Blocked => {
+                snapshot.blocked += 1;
+                snapshot.blocked_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Done => snapshot.done += 1,
+            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
+        }
+    }
+
+    snapshot.active_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.active_issues)?;
+    snapshot.ready_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.ready_issues)?;
+    snapshot.selectable_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
+    snapshot.blocked_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
+    Ok(snapshot)
+}
+
 pub(crate) fn issue_bucket(
     db: &Database,
     issue: &Issue,
@@ -227,6 +275,29 @@ pub(crate) fn open_objective_blockers(
     Ok(open)
 }
 
+pub(crate) fn open_issue_objective_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut blocker_ids = db
+        .get_blockers(issue_id)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    for child_id in issue_descendant_ids(db, issue_id)? {
+        for blocker_id in db.get_blockers(&child_id)? {
+            blocker_ids.insert(blocker_id);
+        }
+    }
+    let mut open = blocker_ids
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter(|issue| {
+            commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
+        })
+        .map(|issue| issue.id)
+        .collect::<Vec<_>>();
+    open.sort();
+    Ok(open)
+}
+
 pub(crate) fn open_objective_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut open = mission_issue_ids(db, mission_id)?
@@ -250,6 +321,14 @@ pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTree
         if kind == "issue" && link.relation_type == "advances" {
             collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
         }
+    }
+    Ok(issue_ids)
+}
+
+pub(crate) fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTreeSet<String>> {
+    let mut issue_ids = BTreeSet::new();
+    for child in db.get_subissues(issue_id)? {
+        collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
     }
     Ok(issue_ids)
 }

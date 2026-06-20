@@ -1196,6 +1196,83 @@ fn test_root_status_reports_active_mission_contract_fields() {
 }
 
 #[test]
+fn test_issue_status_renders_objective_work_health() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Objective root", "--issue-type", "epic"],
+    );
+    assert!(success, "objective issue create failed: {stderr}");
+    let objective_id = issue_id_by_title(dir.path(), "Objective root");
+    let objective_id = objective_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Ready child", "--parent", objective_id],
+    );
+    assert!(success, "ready child create failed: {stderr}");
+    let ready_id = issue_id_by_title(dir.path(), "Ready child");
+    let ready_id = ready_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocked child", "--parent", objective_id],
+    );
+    assert!(success, "blocked child create failed: {stderr}");
+    let blocked_id = issue_id_by_title(dir.path(), "Blocked child");
+    let blocked_id = blocked_id.as_str();
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Blocking child",
+            "--parent",
+            objective_id,
+        ],
+    );
+    assert!(success, "blocking child create failed: {stderr}");
+    let blocker_id = issue_id_by_title(dir.path(), "Blocking child");
+    let blocker_id = blocker_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
+    assert!(success, "block issue failed: {stderr}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
+    assert!(success, "issue status failed: {stderr}");
+    assert!(stdout.contains(&format!("Issue Status {objective_id} - Objective root")));
+    assert!(stdout.contains("Health:   blocked"));
+    assert!(stdout.contains("Work"));
+    assert!(stdout.contains("Total: ready 2, blocked 1, done 0, backlog 0"));
+    assert!(stdout.contains("Ready Work"));
+    assert!(stdout.contains(&format!(
+        "ready {ready_id} - Ready child | no open blockers; parent {objective_id}; proof missing"
+    )));
+    assert!(stdout.contains(&format!(
+        "ready {blocker_id} - Blocking child | no open blockers; parent {objective_id}; proof missing"
+    )));
+    assert!(stdout.contains("Blocked Work"));
+    assert!(stdout.contains(&format!(
+        "blocked {blocked_id} - Blocked child | 1 blocker; details: atelier issue blocked {blocked_id}"
+    )));
+    assert!(stdout.contains("Open Blockers: 1 open"));
+    assert!(stdout.contains(blocker_id));
+    assert!(stdout.contains("Attached Proof: missing - issue proof gaps"));
+    assert!(stdout.contains("Terminal Checks"));
+    assert!(stdout.contains("Work: open"));
+    assert!(stdout.contains("Blockers: open"));
+    assert!(stdout.contains(&format!(
+        "Open objective record: atelier issue show {objective_id}"
+    )));
+    assert!(stdout.contains(&format!(
+        "Inspect ready work transitions: atelier issue transition {blocker_id} --options"
+    )));
+}
+
+#[test]
 fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

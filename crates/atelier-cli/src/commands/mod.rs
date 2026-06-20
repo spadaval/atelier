@@ -10,6 +10,7 @@ pub mod forgejo;
 pub mod history;
 pub mod import;
 pub mod init;
+pub mod issue_status;
 pub mod issue_workflow;
 pub mod label;
 pub mod man;
