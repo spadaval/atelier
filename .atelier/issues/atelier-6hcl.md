@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Delete retired command modules and stale implementation owners"
-updated_at: "2026-06-20T16:48:45.948008296+00:00"
+updated_at: "2026-06-20T21:51:36.799068614+00:00"
 ---
 
 ## Description
