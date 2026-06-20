@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:20:05.908261388+00:00"
+status: "done"
 title: "Unify Forgejo review config and doctor readiness checks"
-updated_at: "2026-06-20T04:17:09.570108923+00:00"
+updated_at: "2026-06-20T05:20:05.908261388+00:00"
 ---
 
 ## Description

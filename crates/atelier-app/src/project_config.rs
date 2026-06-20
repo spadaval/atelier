@@ -1,10 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
 use crate::storage_layout::StorageLayout;
+use crate::workflow_policy::{self, ActionParams, WorkflowForgejoRoleAuthors};
 
 const PROJECT_CONFIG_SCHEMA: &str = "atelier.project_config";
 const PROJECT_CONFIG_SCHEMA_VERSION: i64 = 1;
@@ -70,6 +71,63 @@ impl ProjectConfig {
                 config_path.display()
             )),
         }
+    }
+}
+
+pub fn load_forgejo_with_workflow_role_authors(repo_root: &Path) -> Result<ForgejoConfig> {
+    let config_path = StorageLayout::new(repo_root).config_path();
+    let config = ProjectConfig::load(repo_root)?;
+    let mut forgejo = config.require_forgejo(&config_path)?.clone();
+    forgejo.role_authors = Some(workflow_forgejo_role_authors(repo_root)?);
+    Ok(forgejo)
+}
+
+pub fn workflow_forgejo_role_authors(repo_root: &Path) -> Result<ForgejoRoleAuthors> {
+    let policy = workflow_policy::load(repo_root)?;
+    let mut found: Option<WorkflowForgejoRoleAuthors> = None;
+    for workflow in policy.workflows.values() {
+        for transition in workflow.transitions.values() {
+            for action in &transition.actions {
+                let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {
+                    continue;
+                };
+                if params.provider.as_deref() != Some("forgejo") {
+                    continue;
+                }
+                let role_authors = params.role_authors.clone().ok_or_else(|| {
+                    anyhow!(
+                        "workflow_config_invalid_action: Forgejo review action '{}' is missing role_authors",
+                        action.builtin
+                    )
+                })?;
+                if let Some(existing) = &found {
+                    if existing != &role_authors {
+                        bail!(
+                            "workflow_config_invalid_action: Forgejo review actions define conflicting role_authors"
+                        );
+                    }
+                } else {
+                    found = Some(role_authors);
+                }
+            }
+        }
+    }
+    let role_authors = found.ok_or_else(|| {
+        anyhow!(
+            "workflow_config_missing_role_authors: no Forgejo review action role_authors found in .atelier/workflow.yaml"
+        )
+    })?;
+    Ok(workflow_role_authors_to_project(&role_authors))
+}
+
+fn workflow_role_authors_to_project(
+    role_authors: &WorkflowForgejoRoleAuthors,
+) -> ForgejoRoleAuthors {
+    ForgejoRoleAuthors {
+        worker: role_authors.worker.clone(),
+        reviewer: role_authors.reviewer.clone(),
+        validator: role_authors.validator.clone(),
+        manager: role_authors.manager.clone(),
     }
 }
 
@@ -318,7 +376,9 @@ fn require_non_empty(value: &str, config_path: &Path, field: &str) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use tempfile::tempdir;
 
     fn path() -> PathBuf {
         PathBuf::from(".atelier/config.toml")
@@ -342,6 +402,87 @@ owner = "tools"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
 "#
+    }
+
+    fn valid_workflow(role_suffix: &str) -> String {
+        format!(
+            r#"schema: atelier.workflow
+schema_version: 3
+branch_policy:
+  base_branch: master
+  merge_strategy: squash
+issue_types:
+  epic: {{ label: Epic }}
+statuses:
+  todo:
+    category: todo
+  review:
+    category: active
+  done:
+    category: done
+workflows:
+  epic_delivery:
+    applies_to: [epic]
+    initial_status: todo
+    done_statuses: [done]
+    transitions:
+      request_review:
+        from: [todo]
+        to: review
+        actions:
+          - review.open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: forge-worker{role_suffix}
+                reviewer: forge-reviewer{role_suffix}
+                validator: forge-validator{role_suffix}
+                manager: forge-manager{role_suffix}
+"#
+        )
+    }
+
+    fn write_repo_config(repo_root: &Path, workflow: &str) {
+        let atelier_dir = repo_root.join(".atelier");
+        fs::create_dir_all(&atelier_dir).unwrap();
+        fs::write(atelier_dir.join("config.toml"), valid_config()).unwrap();
+        fs::write(atelier_dir.join("workflow.yaml"), workflow).unwrap();
+    }
+
+    #[test]
+    fn forgejo_loader_applies_workflow_role_authors() {
+        let dir = tempdir().unwrap();
+        write_repo_config(dir.path(), &valid_workflow(""));
+
+        let forgejo = load_forgejo_with_workflow_role_authors(dir.path()).unwrap();
+
+        assert_eq!(forgejo.host, "forge.example.test");
+        assert_eq!(
+            forgejo.role_author_for_role("worker").unwrap(),
+            "forge-worker"
+        );
+        assert_eq!(
+            forgejo.role_author_for_role("validator").unwrap(),
+            "forge-validator"
+        );
+    }
+
+    #[test]
+    fn forgejo_loader_rejects_conflicting_workflow_role_authors() {
+        let dir = tempdir().unwrap();
+        let workflow = valid_workflow("").replace(
+            "      request_review:",
+            &format!(
+                "      alternate_review:\n        from: [todo]\n        to: review\n        actions:\n          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker-alt\n                reviewer: forge-reviewer-alt\n                validator: forge-validator-alt\n                manager: forge-manager-alt\n      request_review:"
+            ),
+        );
+        write_repo_config(dir.path(), &workflow);
+
+        let error = load_forgejo_with_workflow_role_authors(dir.path())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("conflicting role_authors"));
     }
 
     #[test]
