@@ -42,9 +42,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-20T21:14:55.799057940+00:00"
+status: "done"
 title: "Epic: Collapse mission, issue, and graph command surfaces"
-updated_at: "2026-06-20T21:14:24.033402570+00:00"
+updated_at: "2026-06-20T21:14:55.799057940+00:00"
 ---
 
 ## Description
