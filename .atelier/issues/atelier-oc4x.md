@@ -6,6 +6,10 @@ labels:
 - "command-surface"
 - "cutting-pass"
 - "review"
+review:
+  kind: pull_request
+  number: 15
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Simplify review and provider command surface"
-updated_at: "2026-06-20T21:24:30.490939918+00:00"
+updated_at: "2026-06-20T21:25:11.103502611+00:00"
 ---
 
 ## Description
