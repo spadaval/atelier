@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Namespace validators and fix semantics"
-updated_at: "2026-06-19T22:42:57.816675476+00:00"
+updated_at: "2026-06-20T01:08:22.638624565+00:00"
 ---
 
 ## Description
