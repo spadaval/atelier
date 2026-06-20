@@ -14,6 +14,7 @@ pub mod issue_workflow;
 pub mod label;
 pub mod man;
 pub mod mission;
+pub(crate) mod objective_status;
 pub mod plan;
 pub mod pr;
 pub mod prune;

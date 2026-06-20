@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::commands::work_order::WorkOrderRow;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{Issue, MissionRecord, Record, RecordLink};
 use atelier_records as record_store;
@@ -258,8 +257,8 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 "  {state} {} - {} | no open blockers; {}; {}",
                 issue.id,
                 issue.title,
-                parent_context(issue),
-                proof_context(db, &issue.id)?
+                crate::commands::objective_status::parent_context(issue),
+                crate::commands::objective_status::proof_context(db, &issue.id)?
             );
         }
     }
@@ -276,8 +275,8 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
                 blocked.blockers.len(),
                 plural_suffix(blocked.blockers.len()),
                 blocked.issue.id,
-                parent_context(&blocked.issue),
-                proof_context(db, &blocked.issue.id)?
+                crate::commands::objective_status::parent_context(&blocked.issue),
+                crate::commands::objective_status::proof_context(db, &blocked.issue.id)?
             );
         }
     }
@@ -656,7 +655,7 @@ fn is_current_mission_status(status: &str) -> bool {
 }
 
 pub fn issue_advances_mission(db: &Database, mission_id: &str, issue_id: &str) -> Result<bool> {
-    Ok(mission_issue_ids(db, mission_id)?.contains(issue_id))
+    Ok(crate::commands::objective_status::mission_issue_ids(db, mission_id)?.contains(issue_id))
 }
 
 fn find_state_dir_from_cwd() -> Result<Option<PathBuf>> {
@@ -1042,7 +1041,7 @@ fn mission_issue_section_gaps(
     mission_id: &str,
 ) -> Result<IssueSectionGapSummary> {
     let mut gaps = IssueSectionGapSummary::default();
-    for issue_id in mission_issue_ids(db, mission_id)? {
+    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
         match app_use_cases::load_canonical_issue(state_dir, &issue_id) {
             Ok(record) => {
                 for state in record.sections.section_states() {
@@ -1082,7 +1081,7 @@ fn mission_issue_section_gaps(
 
 fn mission_issue_proof_gaps(db: &Database, mission_id: &str) -> Result<Vec<String>> {
     let mut gaps = Vec::new();
-    for issue_id in mission_issue_ids(db, mission_id)? {
+    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
         if validating_evidence_ids(db, "issue", &issue_id)?.is_empty() {
             gaps.push(issue_id);
         }
@@ -1283,7 +1282,7 @@ impl MissionWorkflowApproval {
 fn mission_workflow_approval(db: &Database, mission_id: &str) -> Result<MissionWorkflowApproval> {
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let mut approval = MissionWorkflowApproval::default();
-    for issue_id in mission_issue_ids(db, mission_id)? {
+    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
         let issue = db.require_issue(&issue_id)?;
         if issue.issue_type != "validation" {
             continue;
@@ -1352,9 +1351,11 @@ fn mission_terminal_status(
     mission: &RecordSummary,
     _summary: &MissionListSummary,
 ) -> Result<MissionTerminalStatus> {
-    let has_work = !mission_issue_ids(db, &mission.id)?.is_empty();
-    let open_work = open_mission_work(db, &mission.id)?;
-    let open_blockers = open_mission_blockers(db, &mission.id)?;
+    let has_work =
+        !crate::commands::objective_status::mission_issue_ids(db, &mission.id)?.is_empty();
+    let open_work = crate::commands::objective_status::open_objective_work(db, &mission.id)?;
+    let open_blockers =
+        crate::commands::objective_status::open_objective_blockers(db, KIND, &mission.id)?;
     let validator_results = match crate::commands::workflow::evaluate(
         db,
         KIND,
@@ -1380,59 +1381,6 @@ fn mission_terminal_status(
         open_blockers,
         validator_results,
     })
-}
-
-fn open_mission_work(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut open = mission_issue_ids(db, mission_id)?
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| {
-            crate::commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
-        })
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    open.sort();
-    Ok(open)
-}
-
-fn open_mission_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut blocker_ids = BTreeSet::new();
-    for blocker in mission_direct_blocker_ids(db, mission_id)? {
-        blocker_ids.insert(blocker);
-    }
-    for issue_id in mission_issue_ids(db, mission_id)? {
-        for blocker in db.get_blockers(&issue_id)? {
-            blocker_ids.insert(blocker);
-        }
-    }
-    let mut open = blocker_ids
-        .into_iter()
-        .filter_map(|id| db.get_issue(&id).ok().flatten())
-        .filter(|issue| {
-            crate::commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), issue)
-        })
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
-    open.sort();
-    Ok(open)
-}
-
-fn mission_direct_blocker_ids(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for link in db.list_record_links(KIND, mission_id)? {
-        if link.relation_type != "blocked_by" {
-            continue;
-        }
-        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
-            continue;
-        };
-        if kind == "issue" {
-            blockers.push(linked_id.to_string());
-        }
-    }
-    Ok(blockers)
 }
 
 pub fn add_blocker(state_dir: &Path, db_path: &Path, id: &str, issue_id: &str) -> Result<()> {
@@ -1553,7 +1501,7 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         .filter(|issue| issue.issue_type == "epic")
         .map(|issue| issue.id.clone())
         .collect::<BTreeSet<_>>();
-    let mission_issue_ids = mission_issue_ids(db, mission_id)?;
+    let mission_issue_ids = crate::commands::objective_status::mission_issue_ids(db, mission_id)?;
 
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     for issue_id in &mission_issue_ids {
@@ -1584,10 +1532,11 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
 
     for issue_id in mission_issue_ids {
         let issue = db.require_issue(&issue_id)?;
-        if !is_selectable_work(db, &issue)? {
+        if !crate::commands::objective_status::is_selectable_work(db, &issue)? {
             continue;
         }
-        let blockers = open_blockers(db, &issue.id)?;
+        let blockers =
+            crate::commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?;
         if !blockers.is_empty() {
             summary
                 .blocked_work
@@ -1600,7 +1549,10 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
     }
 
     summary.epics = order_mission_epics(db, summary.epics)?;
-    summary.selectable_work = order_issues_by_work(db, summary.selectable_work)?;
+    summary.selectable_work = crate::commands::objective_status::order_issues_by_work_with_default(
+        db,
+        summary.selectable_work,
+    )?;
     summary.blocked_work = order_blocked_work(db, summary.blocked_work)?;
     Ok(summary)
 }
@@ -2049,7 +2001,7 @@ fn mission_health_for(mission: &RecordSummary, summary: &MissionListSummary) -> 
 }
 
 fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
-    let issue_ids = mission_issue_ids(db, mission_id)?;
+    let issue_ids = crate::commands::objective_status::mission_issue_ids(db, mission_id)?;
     let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     let issues = db
         .list_issues(Some("all"), None, None)?
@@ -2064,20 +2016,7 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
                 == Some("active")
         })
         .collect::<Vec<_>>();
-    order_issues_by_work(db, issues)
-}
-
-fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    let mut issue_ids = BTreeSet::new();
-    for link in db.list_record_links(KIND, mission_id)? {
-        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
-            continue;
-        };
-        if kind == "issue" && link.relation_type == "advances" {
-            collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
-        }
-    }
-    Ok(issue_ids)
+    crate::commands::objective_status::order_issues_by_work_with_default(db, issues)
 }
 
 fn is_active_mission(record: &RecordSummary) -> bool {
@@ -2095,20 +2034,6 @@ fn set_mission_active_state(record: &mut MissionRecord, active: bool) -> Result<
 
 fn mission_focus_label(record: &RecordSummary) -> String {
     mission_lifecycle_status(record)
-}
-
-fn collect_issue_and_descendants(
-    db: &Database,
-    issue_id: &str,
-    issue_ids: &mut BTreeSet<String>,
-) -> Result<()> {
-    if !issue_ids.insert(issue_id.to_string()) {
-        return Ok(());
-    }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
-    }
-    Ok(())
 }
 
 fn count_label(count: usize, label: &str) -> String {
@@ -2403,7 +2328,7 @@ fn issue_json_with_relation(db: &Database, issue: &Issue, relation_type: &str) -
         "priority": issue.priority,
         "issue_type": issue.issue_type,
         "relation_type": relation_type,
-        "open_blockers": open_blockers(db, &issue.id)?,
+        "open_blockers": crate::commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?,
     }))
 }
 
@@ -2412,26 +2337,20 @@ fn issue_bucket(db: &Database, issue: &Issue) -> Result<&'static str> {
     if crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), issue) {
         return Ok("done");
     }
-    if !open_blockers(db, &issue.id)?.is_empty() {
+    if !crate::commands::objective_status::open_issue_blockers_with_default(db, &issue.id)?
+        .is_empty()
+    {
         return Ok("blocked");
     }
     mission_issue_state(db, issue).map(|state| if state == "ready" { "ready" } else { "backlog" })
 }
 
 fn mission_issue_state(db: &Database, issue: &Issue) -> Result<&'static str> {
-    Ok(work_order_row_for_issue(db, issue)?.state().label())
-}
-
-fn order_issues_by_work(db: &Database, issues: Vec<Issue>) -> Result<Vec<Issue>> {
-    let rows = issues
-        .iter()
-        .map(|issue| work_order_row_for_issue(db, issue))
-        .collect::<Result<Vec<_>>>()?;
-    let mut keyed = issues.into_iter().map(Some).collect::<Vec<_>>();
-    Ok(crate::commands::work_order::ordered_work_indices(&rows)
-        .into_iter()
-        .filter_map(|index| keyed[index].take())
-        .collect())
+    Ok(
+        crate::commands::objective_status::work_order_row_for_issue_with_default(db, issue)?
+            .state()
+            .label(),
+    )
 }
 
 fn order_blocked_work(
@@ -2440,7 +2359,9 @@ fn order_blocked_work(
 ) -> Result<Vec<BlockedMissionWork>> {
     let rows = blocked
         .iter()
-        .map(|row| work_order_row_for_issue(db, &row.issue))
+        .map(|row| {
+            crate::commands::objective_status::work_order_row_for_issue_with_default(db, &row.issue)
+        })
         .collect::<Result<Vec<_>>>()?;
     let mut keyed = blocked.into_iter().map(Some).collect::<Vec<_>>();
     Ok(crate::commands::work_order::ordered_work_indices(&rows)
@@ -2452,73 +2373,18 @@ fn order_blocked_work(
 fn order_mission_epics(db: &Database, epics: Vec<MissionListEpic>) -> Result<Vec<MissionListEpic>> {
     let rows = epics
         .iter()
-        .map(|epic| work_order_row_for_issue(db, &epic.issue))
+        .map(|epic| {
+            crate::commands::objective_status::work_order_row_for_issue_with_default(
+                db,
+                &epic.issue,
+            )
+        })
         .collect::<Result<Vec<_>>>()?;
     let mut keyed = epics.into_iter().map(Some).collect::<Vec<_>>();
     Ok(crate::commands::work_order::ordered_work_indices(&rows)
         .into_iter()
         .filter_map(|index| keyed[index].take())
         .collect())
-}
-
-fn work_order_row_for_issue(db: &Database, issue: &Issue) -> Result<WorkOrderRow> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    Ok(WorkOrderRow {
-        id: issue.id.clone(),
-        status_category: crate::commands::issue_workflow::issue_status_category(
-            workflow_policy.as_ref(),
-            &issue.status,
-        ),
-        priority: issue.priority.clone(),
-        updated_at: issue.updated_at,
-        open_blockers: open_blockers(db, &issue.id)?,
-    })
-}
-
-fn open_blockers(db: &Database, issue_id: &str) -> Result<Vec<String>> {
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
-    let mut blockers = Vec::new();
-    for blocker_id in db.get_blockers(issue_id)? {
-        if crate::commands::issue_workflow::issue_blocks_work(
-            workflow_policy.as_ref(),
-            &db.require_issue(&blocker_id)?,
-        ) {
-            blockers.push(blocker_id);
-        }
-    }
-    blockers.sort();
-    Ok(blockers)
-}
-
-fn is_selectable_work(db: &Database, issue: &Issue) -> Result<bool> {
-    Ok(issue.issue_type != "epic" || db.get_subissues(&issue.id)?.is_empty())
-}
-
-fn parent_context(issue: &Issue) -> String {
-    match issue.parent_id.as_deref() {
-        Some(parent_id) => format!("parent {parent_id}"),
-        None => "mission-linked root".to_string(),
-    }
-}
-
-fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
-    if has_validating_evidence(db, issue_id)? {
-        Ok("proof attached")
-    } else {
-        Ok("proof missing")
-    }
-}
-
-fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
-    for link in db.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        if link.source_kind == "evidence" || link.target_kind == "evidence" {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn replace_section_list(section: &mut String, values: Vec<String>) {
