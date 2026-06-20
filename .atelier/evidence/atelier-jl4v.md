@@ -104,4 +104,3 @@ Truncated: no
      Running unittests src/lib.rs (target/debug/deps/atelier_workflow-1c1848f4dab0f01c)
    Doc-tests atelier_workflow
 ```
-

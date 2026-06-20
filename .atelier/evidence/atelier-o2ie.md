@@ -141,4 +141,3 @@ Truncated: no
    Compiling atelier-cli v0.2.0 (/root/atelier/crates/atelier-cli)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.92s
 ```
-

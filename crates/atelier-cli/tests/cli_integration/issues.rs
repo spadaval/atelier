@@ -678,6 +678,61 @@ fn test_unregistered_issue_type_reports_configured_values() {
 }
 
 #[test]
+fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Archived task"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Archived task");
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "archived")
+    });
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &issue_id, "--issue-type", "spike"],
+    );
+    assert!(!success, "incompatible issue type update should fail");
+    assert!(
+        stderr.contains("status 'archived' that is not allowed")
+            || stderr.contains("not allowed by the workflow policy")
+            || stderr.contains("status 'archived' which is not valid"),
+        "{stderr}"
+    );
+
+    let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(issue_text.contains("issue_type: \"task\""), "{issue_text}");
+    assert!(
+        !issue_text.contains("issue_type: \"spike\""),
+        "{issue_text}"
+    );
+}
+
+#[test]
+fn test_issue_type_help_uses_workflow_policy_wording() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(
+        stdout.contains(".atelier/workflow.yaml issue_types"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("bug, epic, feature, spike, task, validation"));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
+    assert!(success, "issue update help failed: {stderr}");
+    assert!(
+        stdout.contains(".atelier/workflow.yaml issue_types"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("bug, epic, feature, spike, task, validation"));
+}
+
+#[test]
 fn test_plan_apply_command_is_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

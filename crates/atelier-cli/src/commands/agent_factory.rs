@@ -1571,6 +1571,18 @@ fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<
     }
 }
 
+fn validate_issue_record_against_workflow(state_dir: &Path, issue: &Issue) -> Result<()> {
+    let policy = load_repo_policy(state_dir)?;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    atelier_app::workflow_policy::validate_issue_against_policy(&policy, issue, &policy_path)
+}
+
 fn load_repo_policy(state_dir: &Path) -> Result<WorkflowPolicy> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
@@ -1695,6 +1707,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
+    validate_issue_record_against_workflow(state_dir, &record.issue)?;
     store.write_issue_atomic(&record)?;
 
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;
