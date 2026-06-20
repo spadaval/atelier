@@ -24,9 +24,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T19:23:48.061685329+00:00"
+status: "done"
 title: "Define mission-as-type target command contract"
-updated_at: "2026-06-20T16:54:08.882641410+00:00"
+updated_at: "2026-06-20T19:23:48.061685329+00:00"
 ---
 
 ## Description
