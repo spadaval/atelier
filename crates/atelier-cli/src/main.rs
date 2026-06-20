@@ -627,11 +627,7 @@ enum ForgejoRolesCommands {
     /// Verify configured role author users, repo permissions, and sudo access
     Check,
     /// Create missing role author users and grant repository access
-    Provision {
-        /// Rejected legacy flag; role authors live in workflow action params
-        #[arg(long)]
-        write_config: bool,
-    },
+    Provision,
 }
 
 #[derive(Subcommand)]
@@ -1426,8 +1422,8 @@ fn run() -> Result<()> {
             match action {
                 ForgejoCommands::Roles { action } => match action {
                     ForgejoRolesCommands::Check => commands::forgejo::roles_check(&repo_root),
-                    ForgejoRolesCommands::Provision { write_config } => {
-                        commands::forgejo::roles_provision(&repo_root, write_config)
+                    ForgejoRolesCommands::Provision => {
+                        commands::forgejo::roles_provision(&repo_root)
                     }
                 },
             }
@@ -1619,7 +1615,7 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Forgejo { action } => match action {
             ForgejoCommands::Roles { action } => match action {
                 ForgejoRolesCommands::Check => "forgejo roles check",
-                ForgejoRolesCommands::Provision { .. } => "forgejo roles provision",
+                ForgejoRolesCommands::Provision => "forgejo roles provision",
             },
         },
         Commands::History { .. } => "history",

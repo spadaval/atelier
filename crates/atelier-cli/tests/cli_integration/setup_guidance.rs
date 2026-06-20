@@ -889,6 +889,32 @@ fn test_root_active_pointer_cleanup_commands_are_removed() {
 }
 
 #[test]
+fn test_forgejo_roles_provision_write_config_flag_is_removed() {
+    let dir = tempdir().unwrap();
+
+    let (success, help_out, stderr) =
+        run_atelier_raw(dir.path(), &["forgejo", "roles", "provision", "--help"]);
+    assert!(success, "forgejo roles provision help failed: {stderr}");
+    assert!(
+        !help_out.contains("--write-config"),
+        "removed write-config flag should not appear in help:\n{help_out}"
+    );
+
+    let (success, stdout, stderr) = run_atelier_raw(
+        dir.path(),
+        &["forgejo", "roles", "provision", "--write-config"],
+    );
+    assert!(
+        !success,
+        "removed write-config flag should be rejected:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("unexpected argument '--write-config'"),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn test_generic_note_command_rejects_with_record_specific_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

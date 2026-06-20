@@ -9,7 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::issue::issue_evidence_gate_status;
-use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
+use atelier_app::forgejo::{ForgejoClient, UreqForgejoTransport};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use atelier_app::review_room;
@@ -2061,13 +2061,6 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
         ));
     }
 
-    let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
-    if field.is_none() {
-        return Ok((
-            false,
-            format!("no linked review field; run `atelier review open --issue {target_id}`"),
-        ));
-    }
     let repo_root = repo_root()?;
     let config_path = repo_root.join(".atelier/config.toml");
     let forgejo = match ProjectConfig::load(&repo_root)
@@ -2103,64 +2096,7 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
         forgejo.clone(),
         UreqForgejoTransport::new(&forgejo.host, token),
     );
-    linked_pr_merged_with_client(db, &repo_root, field, &client, target_id)
-}
-
-fn linked_pr_merged_with_client<T: ForgejoTransport>(
-    db: &Database,
-    repo_root: &Path,
-    field: Option<Value>,
-    client: &ForgejoClient<T>,
-    issue_id: &str,
-) -> Result<(bool, String)> {
-    let Some(field) = field else {
-        return Ok((
-            false,
-            format!("no linked review field; run `atelier review open --issue {issue_id}`"),
-        ));
-    };
-    let number = field
-        .as_object()
-        .filter(|object| {
-            object.get("kind").and_then(Value::as_str) == Some("pull_request")
-                && object.get("provider").and_then(Value::as_str) == Some("forgejo")
-        })
-        .and_then(|object| object.get("number"))
-        .and_then(Value::as_u64)
-        .filter(|number| *number > 0)
-        .ok_or_else(|| {
-            anyhow!("pull_request_invalid: field review must be a provider pull_request object")
-        })?;
-    let pull = client.show_pull(number)?;
-    let policy = atelier_app::workflow_policy::load(repo_root)?;
-    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
-    if pull.source_branch != resolution.expected_branch
-        || pull.target_branch != resolution.base_branch
-    {
-        return Ok((
-            false,
-            format!(
-                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
-                pull.source_branch,
-                pull.target_branch,
-                resolution.owner_id,
-                resolution.expected_branch,
-                resolution.base_branch,
-                issue_id
-            ),
-        ));
-    }
-    if pull.merged {
-        Ok((true, format!("linked PR {} is merged", pull.number)))
-    } else {
-        Ok((
-            false,
-            format!(
-                "linked PR {} is {} and not merged; run `atelier review status --issue {}`",
-                pull.number, pull.state, issue_id
-            ),
-        ))
-    }
+    app_pr::linked_pull_request_merge_status_with_client(db, &repo_root, target_id, &client)
 }
 
 fn epic_child_proof_complete(
@@ -2893,75 +2829,13 @@ pub(crate) fn repo_root() -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::commands::workflow_planning::plan_actions_for_resolution;
-    use anyhow::Result;
-    use atelier_app::forgejo::{ForgejoRequest, ForgejoResponse};
-    use atelier_app::project_config::{ForgejoConfig, ForgejoRoleAuthors};
     use atelier_app::workflow_policy::{
         ActionParams, ReviewArtifactActionParams, WorkflowForgejoRoleAuthors,
     };
     use atelier_records::{RecordStore, Relationships};
     use chrono::Utc;
-    use serde_json::json;
     use std::collections::BTreeMap;
     use tempfile::{tempdir, TempDir};
-
-    struct FakeForgejoTransport {
-        state: &'static str,
-        merged: bool,
-        source_branch: &'static str,
-        target_branch: &'static str,
-    }
-
-    impl FakeForgejoTransport {
-        fn merged() -> Self {
-            Self {
-                state: "closed",
-                merged: true,
-                source_branch: "epic/atelier-hw9t",
-                target_branch: "master",
-            }
-        }
-    }
-
-    impl ForgejoTransport for FakeForgejoTransport {
-        fn send(&self, request: ForgejoRequest) -> Result<ForgejoResponse> {
-            assert_eq!(request.method, "GET");
-            assert_eq!(request.path, "/api/v1/repos/tools/atelier/pulls/42");
-            Ok(ForgejoResponse {
-                status: 200,
-                body: format!(
-                    r#"{{
-                        "number": 42,
-                        "url": "https://forge.example.test/tools/atelier/pulls/42",
-                        "state": "{}",
-                        "merged": {},
-                        "head": {{ "ref": "{}" }},
-                        "base": {{ "ref": "{}" }}
-                    }}"#,
-                    self.state, self.merged, self.source_branch, self.target_branch
-                ),
-            })
-        }
-    }
-
-    fn forgejo_config() -> ForgejoConfig {
-        ForgejoConfig {
-            host: "https://forge.example.test".to_string(),
-            owner: "tools".to_string(),
-            repo: "atelier".to_string(),
-            admin_token_env: "FORGEJO_ADMIN_TOKEN".to_string(),
-            role_authors: Some(ForgejoRoleAuthors {
-                worker: "forge-worker".to_string(),
-                reviewer: "forge-reviewer".to_string(),
-                validator: "forge-validator".to_string(),
-                manager: "forge-manager".to_string(),
-            }),
-        }
-    }
-
-    fn pull_request_field() -> Value {
-        json!({"kind": "pull_request", "provider": "forgejo", "number": 42})
-    }
 
     fn test_issue(id: &str) -> Issue {
         Issue {
@@ -3472,71 +3346,6 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn linked_pr_merged_validator_reports_required_states() {
-        let (dir, db) = setup_pr_validator_repo();
-        let forgejo = forgejo_config();
-        let merged_client = ForgejoClient::new(forgejo.clone(), FakeForgejoTransport::merged());
-
-        let (passed, reason) =
-            linked_pr_merged_with_client(&db, dir.path(), None, &merged_client, "atelier-hw9t")
-                .unwrap();
-        assert!(!passed);
-        assert!(reason.contains("atelier review open --issue atelier-hw9t"));
-
-        let open_client = ForgejoClient::new(
-            forgejo.clone(),
-            FakeForgejoTransport {
-                state: "open",
-                merged: false,
-                source_branch: "epic/atelier-hw9t",
-                target_branch: "master",
-            },
-        );
-        let (passed, reason) = linked_pr_merged_with_client(
-            &db,
-            dir.path(),
-            Some(pull_request_field()),
-            &open_client,
-            "atelier-hw9t",
-        )
-        .unwrap();
-        assert!(!passed);
-        assert!(reason.contains("not merged"));
-        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
-
-        let closed_client = ForgejoClient::new(
-            forgejo.clone(),
-            FakeForgejoTransport {
-                state: "closed",
-                merged: false,
-                source_branch: "epic/atelier-hw9t",
-                target_branch: "master",
-            },
-        );
-        let (passed, reason) = linked_pr_merged_with_client(
-            &db,
-            dir.path(),
-            Some(pull_request_field()),
-            &closed_client,
-            "atelier-hw9t",
-        )
-        .unwrap();
-        assert!(!passed);
-        assert!(reason.contains("closed and not merged"));
-
-        let (passed, reason) = linked_pr_merged_with_client(
-            &db,
-            dir.path(),
-            Some(pull_request_field()),
-            &merged_client,
-            "atelier-hw9t",
-        )
-        .unwrap();
-        assert!(passed);
-        assert_eq!(reason, "linked PR 42 is merged");
-    }
-
-    #[test]
     fn linked_pr_merged_is_not_in_starter_close_policy() {
         let (dir, db) = setup_pr_validator_repo();
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
@@ -3567,31 +3376,5 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             .validators
             .iter()
             .any(|validator| validator.builtin == "review.linked_pr_merged"));
-    }
-
-    #[test]
-    fn linked_pr_merged_validator_rejects_branch_mismatch() {
-        let (dir, db) = setup_pr_validator_repo();
-        let forgejo = forgejo_config();
-        let wrong_branch_client = ForgejoClient::new(
-            forgejo.clone(),
-            FakeForgejoTransport {
-                state: "closed",
-                merged: true,
-                source_branch: "epic/other",
-                target_branch: "master",
-            },
-        );
-        let (passed, reason) = linked_pr_merged_with_client(
-            &db,
-            dir.path(),
-            Some(pull_request_field()),
-            &wrong_branch_client,
-            "atelier-hw9t",
-        )
-        .unwrap();
-        assert!(!passed);
-        assert!(reason.contains("linked PR branches"));
-        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
     }
 }
