@@ -1,9 +1,17 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
+use std::path::Path;
 
 use crate::utils::format_issue_id;
-use atelier_core::Issue;
+use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
-use atelier_sqlite::{validate_relation_type, Database};
+use atelier_sqlite::{validate_relation_type, validate_relationship_type, Database};
+
+const BLOCKED_BY_ROLE: &str = "blocked_by";
+
+struct LinkEndpoint {
+    kind: String,
+    id: String,
+}
 
 #[cfg(test)]
 pub fn add_typed(
@@ -65,6 +73,39 @@ pub fn add_typed_canonical(
     Ok(())
 }
 
+pub fn link_issue(
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    target_ref: &str,
+    role: &str,
+) -> Result<()> {
+    validate_relationship_type(role)?;
+    let db = Database::open(db_path)?;
+    let source = resolve_link_endpoint(&db, issue_ref)?;
+    let target = resolve_link_endpoint(&db, target_ref)?;
+    let store = RecordStore::new(state_dir);
+    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
+        store.add_issue_block(&source.id, &target.id)?
+    } else if source.kind == "issue" && target.kind == "issue" {
+        store.add_issue_relation(&source.id, &target.id, role)?
+    } else {
+        store.add_record_relationship(&source.kind, &source.id, &target.kind, &target.id, role)?
+    };
+    drop(db);
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    if changed {
+        println!("Linked {} -> {} ({role})", source.id, target.id);
+    } else {
+        println!(
+            "Link {} -> {} ({role}) already exists",
+            source.id, target.id
+        );
+    }
+    print_link_next_commands(&source.id, &target.id);
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn remove_typed(
     db: &Database,
@@ -123,6 +164,74 @@ pub fn remove_typed_canonical(
     Ok(())
 }
 
+pub fn unlink_issue(
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    target_ref: &str,
+    role: &str,
+) -> Result<()> {
+    validate_relationship_type(role)?;
+    let db = Database::open(db_path)?;
+    let source = resolve_link_endpoint(&db, issue_ref)?;
+    let target = resolve_link_endpoint(&db, target_ref)?;
+    let store = RecordStore::new(state_dir);
+    let changed = if source.kind == "issue" && target.kind == "issue" && role == BLOCKED_BY_ROLE {
+        store.remove_issue_block(&source.id, &target.id)?
+    } else if source.kind == "issue" && target.kind == "issue" {
+        store.remove_issue_relation(&source.id, &target.id, role)?
+    } else if source.kind == "mission" {
+        store.remove_relates_relationship(
+            &source.kind,
+            &source.id,
+            &target.kind,
+            &target.id,
+            role,
+        )?
+    } else {
+        bail!(
+            "Removing {role} links from {} records is not supported",
+            source.kind
+        );
+    };
+    drop(db);
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    if changed {
+        println!("Unlinked {} -> {} ({role})", source.id, target.id);
+    } else {
+        println!("No link {} -> {} ({role}) exists", source.id, target.id);
+    }
+    print_link_next_commands(&source.id, &target.id);
+    Ok(())
+}
+
+fn resolve_link_endpoint(db: &Database, reference: &str) -> Result<LinkEndpoint> {
+    if let Some(issue_id) = db.resolve_issue_ref(reference)? {
+        return Ok(LinkEndpoint {
+            kind: "issue".to_string(),
+            id: issue_id,
+        });
+    }
+    if let Some(kind) = db.record_kind_for_id(reference)? {
+        if kind == "mission" {
+            return Ok(LinkEndpoint {
+                kind,
+                id: reference.to_string(),
+            });
+        }
+        bail!("{reference} is a {kind} record, not an issue or mission record");
+    }
+    Err(anyhow!("Issue or mission {reference} was not found"))
+}
+
+fn print_link_next_commands(issue_id: &str, target_id: &str) {
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier issue show {issue_id}");
+    println!("  atelier issue status {issue_id}");
+    println!("  atelier issue show {target_id}");
+}
+
 pub fn list(db: &Database, issue_id: &str) -> Result<()> {
     db.require_issue(issue_id)?;
 
@@ -171,141 +280,6 @@ pub fn list(db: &Database, issue_id: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-pub fn impact(db: &Database, kind: &str, id: &str) -> Result<()> {
-    match kind {
-        "issue" => issue_impact(db, id),
-        "mission" => mission_impact(db, id),
-        _ => {
-            anyhow::bail!("`atelier graph impact` supports mission and issue records; got '{kind}'")
-        }
-    }
-}
-
-fn issue_impact(db: &Database, issue_id: &str) -> Result<()> {
-    db.require_issue(issue_id)?;
-
-    let affected = db.downstream_impact(issue_id)?;
-
-    if affected.is_empty() {
-        println!(
-            "No downstream issues found for {}",
-            format_issue_id(issue_id)
-        );
-        return Ok(());
-    }
-
-    println!(
-        "{} has downstream impact on {} issue(s):\n",
-        format_issue_id(issue_id),
-        affected.len()
-    );
-
-    for issue in &affected {
-        print_impact_issue(issue);
-    }
-
-    println!(
-        "\nThese issues are linked through hierarchy or impact-bearing relations from {}.",
-        format_issue_id(issue_id)
-    );
-    println!("Review each issue before changing, closing, or invalidating the source.");
-
-    Ok(())
-}
-
-fn mission_impact(db: &Database, mission_id: &str) -> Result<()> {
-    let mission = db.require_record("mission", mission_id)?;
-    let affected = mission_downstream_issues(db, mission_id)?;
-
-    if affected.is_empty() {
-        println!(
-            "No downstream records found for mission {}",
-            format_issue_id(mission_id)
-        );
-        return Ok(());
-    }
-
-    println!(
-        "Mission {} [{}] {} has downstream impact on {} record(s):\n",
-        format_issue_id(&mission.id),
-        mission.status,
-        mission.title,
-        affected.len()
-    );
-
-    for issue in &affected {
-        print_impact_issue(issue);
-    }
-
-    println!(
-        "\nThese records are linked through mission work, hierarchy, or impact-bearing relations from mission {}.",
-        format_issue_id(mission_id)
-    );
-    println!("Review each issue before changing, closing, or invalidating the mission.");
-
-    Ok(())
-}
-
-fn mission_downstream_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut affected = Vec::new();
-
-    for issue in mission_linked_issues(db, mission_id)? {
-        if seen.insert(issue.id.clone()) {
-            affected.push(issue.clone());
-        }
-        for downstream in db.downstream_impact(&issue.id)? {
-            if seen.insert(downstream.id.clone()) {
-                affected.push(downstream);
-            }
-        }
-    }
-
-    Ok(affected)
-}
-
-fn mission_linked_issues(db: &Database, mission_id: &str) -> Result<Vec<Issue>> {
-    let mut issues = Vec::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type != "advances" {
-            continue;
-        }
-        let issue_id = if link.source_kind == "issue" {
-            Some(link.source_id)
-        } else if link.target_kind == "issue" {
-            Some(link.target_id)
-        } else {
-            None
-        };
-        if let Some(issue_id) = issue_id {
-            issues.push(db.require_issue(&issue_id)?);
-        }
-    }
-    issues.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(issues)
-}
-
-fn print_impact_issue(issue: &Issue) {
-    let status_marker = if matches!(issue.status.as_str(), "done" | "archived") {
-        "✓"
-    } else {
-        " "
-    };
-    let parent_note = if let Some(pid) = &issue.parent_id {
-        format!(" (child of {})", format_issue_id(pid))
-    } else {
-        String::new()
-    };
-    println!(
-        "  {:<5} [{}] {:8} {}{}",
-        format_issue_id(&issue.id),
-        status_marker,
-        issue.priority,
-        issue.title,
-        parent_note
-    );
 }
 
 #[cfg(test)]

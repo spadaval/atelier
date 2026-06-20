@@ -62,7 +62,7 @@ bundle apply, branch merge, and destructive record deletion.
 
 Primary job: check proof, review outputs, and validate transitions.
 
-Default first command: `atelier mission status`.
+Default first command: `atelier issue status`.
 
 Orientation loop:
 
@@ -73,7 +73,7 @@ atelier evidence show <evidence-id>
 atelier evidence record --target issue/<id> --kind validation -- <command>
 atelier history --issue <id>
 atelier lint <id>
-atelier mission status <id> --verbose
+atelier issue status <id> --verbose
 ```
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
@@ -107,20 +107,20 @@ Primary job: create and coordinate work.
 `manager` is the broad CLI role class. `orchestrator` remains a specific Agent
 Factory agent type within that class.
 
-Default first command: `atelier mission status`.
+Default first command: `atelier issue status`.
 
 Core loop:
 
 ```text
 atelier mission list
-atelier mission show <id>
-atelier mission start <id> --switch
+atelier issue show <id>
+atelier issue status <id>
 atelier bundle preview <file>
 atelier bundle apply <file> --yes
 atelier issue create "..."
-atelier mission add-work <mission-id> <issue-id>
+atelier issue link <mission-id> <issue-id> --role advances
 atelier issue block <blocked-id> <blocker-id>
-atelier mission show <mission-id>
+atelier issue show <mission-id>
 atelier status
 ```
 
@@ -131,8 +131,8 @@ Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
 branch commands belong in advanced repair and diagnostic guidance when Atelier
 routes the operator there.
-The manager guide should not teach `graph tree` as a routine path; mission and
-issue views should own hierarchy and impact context.
+The manager guide should not teach retired graph commands as a routine path;
+mission and issue views should own hierarchy and impact context.
 
 ## Admin Guide
 

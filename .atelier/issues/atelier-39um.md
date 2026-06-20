@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T19:57:38.783043079+00:00"
+status: "done"
 title: "Delete graph and tree rendering code after replacement views land"
-updated_at: "2026-06-20T17:02:38.162390498+00:00"
+updated_at: "2026-06-20T19:57:38.783043079+00:00"
 ---
 
 ## Description

@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T19:31:38.739677822+00:00"
+status: "done"
 title: "Extract objective status view models from mission and status rendering"
-updated_at: "2026-06-20T17:02:20.200248152+00:00"
+updated_at: "2026-06-20T19:31:38.739677822+00:00"
 ---
 
 ## Description

@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T21:09:27.221591662+00:00"
+status: "done"
 title: "Sequence mission-specific command collapse work"
-updated_at: "2026-06-20T16:48:31.291804899+00:00"
+updated_at: "2026-06-20T21:09:27.221591662+00:00"
 ---
 
 ## Description

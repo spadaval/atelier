@@ -8,15 +8,18 @@ labels:
 - "removal"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-p1yz"
   children: []
   attachments: []
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T21:07:18.061567979+00:00"
+status: "done"
 title: "Remove mission command namespace after type-aware replacements land"
-updated_at: "2026-06-20T16:54:50.562480578+00:00"
+updated_at: "2026-06-20T21:07:18.061567979+00:00"
 ---
 
 ## Description

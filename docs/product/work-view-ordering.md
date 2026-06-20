@@ -8,7 +8,7 @@ This contract applies to issue-like row sets in:
 
 - `atelier issue list`
 - `atelier issue show` subissues
-- `atelier graph tree`
+- `atelier issue status`
 - `atelier mission status`
 - `atelier mission list`
 - root `atelier status`

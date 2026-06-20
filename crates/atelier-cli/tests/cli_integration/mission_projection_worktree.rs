@@ -111,15 +111,24 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(show_out.contains("Status:   in_progress"), "{show_out}");
     assert!(show_out.contains("Category: active"), "{show_out}");
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Workflow mission"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Workflow mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "Workflow mission");
     for issue_id in [&todo_id, &active_id, &done_id] {
         let (success, _, stderr) =
-            run_atelier(dir.path(), &["mission", "add-work", &mission_id, issue_id]);
+            run_atelier(dir.path(), &["issue", "link", &mission_id, issue_id]);
         assert!(success, "mission add-work failed for {issue_id}: {stderr}");
     }
-    let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("[todo]"), "{mission_out}");
     assert!(mission_out.contains("[in_progress]"), "{mission_out}");
@@ -456,10 +465,18 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Strict closeout"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Strict closeout",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Strict closeout");
 
     let (success, work_out, stderr) =
@@ -467,13 +484,19 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     assert!(success, "issue create failed: {stderr}");
     assert!(work_out.contains("Created issue atelier-"));
     let work_id = issue_id_by_title(dir.path(), "Closeout work");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
 
     let (success, closeout_blocked_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &mission_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(!success, "mission close should fail with open work");
     assert!(closeout_blocked_out.contains("Mission terminal checks blocked"));
@@ -484,20 +507,21 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "closed"],
+        &["issue", "update", &mission_id, "--status", "closed"],
     );
     assert!(
         !success,
         "mission update --status closed should not be the ordinary closeout path"
     );
-    assert!(stderr.contains("atelier mission close"));
+    assert!(stderr.contains(&format!("atelier issue transition {mission_id} close")));
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
         &[
-            "mission",
-            "close",
+            "issue",
+            "transition",
             &mission_id,
+            "close",
             "--reason",
             "ready to close",
         ],
@@ -514,7 +538,7 @@ fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     std::fs::write(dir.path().join("dirty-after-close.txt"), "dirty").unwrap();
     let (success, reopen_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", &mission_id, "--status", "ready"],
+        &["issue", "update", &mission_id, "--status", "ready"],
     );
     assert!(
         success,
@@ -529,25 +553,39 @@ fn test_dirty_worktree_blocks_mission_closeout() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Dirty closeout"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Dirty closeout",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Dirty closeout");
     let (success, work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Dirty terminal work"]);
     assert!(success, "work create failed: {stderr}");
     assert!(work_out.contains("Created issue atelier-"));
     let work_id = issue_id_by_title(dir.path(), "Dirty terminal work");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
     close_issue_with_evidence(dir.path(), &work_id, Some("done"));
     std::fs::write(dir.path().join("untracked-closeout.txt"), "dirty").unwrap();
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &mission_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(!success, "dirty worktree must block mission closeout");
     assert!(stdout.contains("Mission terminal checks blocked"));
@@ -565,10 +603,16 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
 
     let (success, mission_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "create", "Tracker bookkeeping closeout"],
+        &[
+            "issue",
+            "create",
+            "Tracker bookkeeping closeout",
+            "--issue-type",
+            "mission",
+        ],
     );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Tracker bookkeeping closeout");
 
     let (success, issue_out, stderr) = run_atelier(
@@ -579,8 +623,7 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Closeout bookkeeping work");
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
     attach_pass_evidence(
         dir.path(),
@@ -596,8 +639,7 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
         "transition close should commit canonical bookkeeping before mission close:\n{dirty}"
     );
 
-    let (success, status_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
     assert!(
         success,
         "mission status should tolerate tracker bookkeeping: {stderr}"
@@ -611,7 +653,14 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &mission_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(
         success,
@@ -629,10 +678,16 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
 
     let (success, mission_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "create", "Dirty canonical tracker closeout"],
+        &[
+            "issue",
+            "create",
+            "Dirty canonical tracker closeout",
+            "--issue-type",
+            "mission",
+        ],
     );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Dirty canonical tracker closeout");
 
     let (success, issue_out, stderr) = run_atelier(
@@ -643,8 +698,7 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Hand edited canonical work");
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &issue_id]);
     assert!(success, "mission add work failed: {stderr}");
     attach_pass_evidence(
         dir.path(),
@@ -663,7 +717,14 @@ fn test_mission_close_still_blocks_hand_edited_issue_markdown() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &mission_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(
         !success,
@@ -681,10 +742,18 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Status blockers"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Status blockers",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Status blockers");
     let (success, work_out, stderr) = run_atelier(dir.path(), &["issue", "create", "Still open"]);
     assert!(success, "issue create failed: {stderr}");
@@ -695,16 +764,14 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(success, "blocker create failed: {stderr}");
     assert!(blocker_out.contains("Created issue atelier-"));
     let blocker_id = issue_id_by_title(dir.path(), "Open blocker");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &work_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
     assert!(success, "mission add work failed: {stderr}");
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", &work_id, &blocker_id]);
     assert!(success, "issue block failed: {stderr}");
     commit_all(dir.path(), "status baseline");
     std::fs::write(dir.path().join("status-dirty.txt"), "dirty").unwrap();
 
-    let (success, status_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains("Terminal Checks"));
     assert!(status_out.contains("Work: open"));
@@ -717,7 +784,7 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(!status_out.contains("advanced terminal validator failure"));
 
     let (success, verbose_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", "--verbose", &mission_id]);
+        run_atelier(dir.path(), &["issue", "status", "--verbose", &mission_id]);
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_out.contains("Advanced Validator Detail"));
     assert!(verbose_out.contains("advanced terminal validator failure"));
@@ -730,10 +797,18 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Record health blockers"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Record health blockers",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Record health blockers");
     let mission_id = mission_id.as_str();
     let (success, issue_out, stderr) =
@@ -748,12 +823,11 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     assert!(evidence_issue_out.contains("Created issue atelier-"));
     let evidence_issue_id = issue_id_by_title(dir.path(), "Record evidence work");
     let evidence_issue_id = evidence_issue_id.as_str();
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, issue_id]);
     assert!(success, "mission add work failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "add-work", mission_id, evidence_issue_id],
+        &["issue", "link", mission_id, evidence_issue_id],
     );
     assert!(success, "mission add evidence work failed: {stderr}");
     commit_all(dir.path(), "record health baseline");
@@ -776,8 +850,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     .unwrap();
     commit_all(dir.path(), "stale record source");
 
-    let (success, stale_status, stderr) =
-        run_atelier(dir.path(), &["mission", "status", mission_id]);
+    let (success, stale_status, stderr) = run_atelier(dir.path(), &["issue", "status", mission_id]);
     assert!(success, "stale mission status failed: {stderr}");
     assert!(
         stderr.contains("Projection index was stale; rebuilt local SQLite projection"),
@@ -817,7 +890,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     commit_all(dir.path(), "malformed record source");
 
     let (success, malformed_status, stderr) =
-        run_atelier(dir.path(), &["mission", "status", mission_id]);
+        run_atelier(dir.path(), &["issue", "status", mission_id]);
     assert!(success, "malformed mission status failed: {stderr}");
     assert!(malformed_status.contains("Reliability"));
     assert!(malformed_status.contains("Malformed Work: found"));
@@ -835,18 +908,26 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let valid_body = "## Description\n\nValid orientation body.\n\n## Outcome\n\nValid linked work remains visible during degraded orientation.\n\n## Evidence\n\n- `atelier mission status <id>` lists valid linked work.";
+    let valid_body = "## Description\n\nValid orientation body.\n\n## Outcome\n\nValid linked work remains visible during degraded orientation.\n\n## Evidence\n\n- `atelier issue status <id>` lists valid linked work.";
     let malformed_body = "## Description\n\nMalformed orientation body.\n\n## Outcome\n\nMalformed linked work is reported as a degraded blocker.\n\n## Evidence\n\n- `atelier lint <id>` reports the malformed record.";
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Degraded orientation"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Degraded orientation",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Degraded orientation");
     let mission_id = mission_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", mission_id, "--status", "active"],
+        &["issue", "update", mission_id, "--status", "active"],
     );
     assert!(success, "mission activate failed: {stderr}");
 
@@ -882,7 +963,7 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
 
     for issue_id in [valid_id, malformed_id] {
         let (success, _, stderr) =
-            run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+            run_atelier(dir.path(), &["issue", "link", mission_id, issue_id]);
         assert!(success, "mission add work failed for {issue_id}: {stderr}");
     }
     commit_all(dir.path(), "valid degraded orientation baseline");
@@ -906,7 +987,7 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
     assert_degraded_repair_guidance(&status_err, malformed_id);
 
     let (mission_success, mission_out, mission_err) =
-        run_atelier(dir.path(), &["mission", "status", mission_id]);
+        run_atelier(dir.path(), &["issue", "status", mission_id]);
     assert!(
         mission_success,
         "mission status should degrade instead of failing: {mission_err}"
@@ -921,7 +1002,7 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
     assert_degraded_repair_guidance(&mission_err, malformed_id);
 
     let (mission_show_success, mission_show_out, mission_show_err) =
-        run_atelier(dir.path(), &["mission", "show", mission_id]);
+        run_atelier(dir.path(), &["issue", "show", mission_id]);
     assert!(
         mission_show_success,
         "mission show should degrade instead of failing: {mission_show_err}"
@@ -1021,26 +1102,44 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, older_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Older ready"]);
+    let (success, older_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Older ready", "--issue-type", "mission"],
+    );
     assert!(success, "older mission create failed: {stderr}");
-    assert!(older_out.contains("Mission atelier-"));
+    assert!(older_out.contains("mission objective atelier-"));
     let older_id = record_id_by_title(dir.path(), "missions", "Older ready");
     let older_id = older_id.as_str();
 
     std::thread::sleep(std::time::Duration::from_millis(5));
-    let (success, active_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Active mission"]);
+    let (success, active_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Active mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "active mission create failed: {stderr}");
-    assert!(active_out.contains("Mission atelier-"));
+    assert!(active_out.contains("mission objective atelier-"));
     let active_id = record_id_by_title(dir.path(), "missions", "Active mission");
     let active_id = active_id.as_str();
 
     std::thread::sleep(std::time::Duration::from_millis(5));
-    let (success, closed_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Newest closed"]);
+    let (success, closed_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Newest closed",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "closed mission create failed: {stderr}");
-    assert!(closed_out.contains("Mission atelier-"));
+    assert!(closed_out.contains("mission objective atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Newest closed");
     let closed_id = closed_id.as_str();
     let (success, closed_work_out, stderr) =
@@ -1049,10 +1148,8 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(closed_work_out.contains("Created issue atelier-"));
     let closed_work_id = issue_id_by_title(dir.path(), "Newest closed work");
     let closed_work_id = closed_work_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["mission", "add-work", closed_id, closed_work_id],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "link", closed_id, closed_work_id]);
     assert!(success, "closed mission add work failed: {stderr}");
     close_issue_with_evidence(dir.path(), closed_work_id, Some("done"));
 
@@ -1083,19 +1180,34 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     commit_all(dir.path(), "close newest mission");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &closed_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &closed_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(success, "close mission failed: {stderr}");
 
-    let (success, superseded_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Superseded mission"]);
+    let (success, superseded_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Superseded mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "superseded mission create failed: {stderr}");
-    assert!(superseded_out.contains("Mission atelier-"));
+    assert!(superseded_out.contains("mission objective atelier-"));
     let superseded_id = record_id_by_title(dir.path(), "missions", "Superseded mission");
     let superseded_id = superseded_id.as_str();
     let (success, superseded_update, stderr) = run_atelier(
         dir.path(),
-        &["mission", "update", superseded_id, "--status", "superseded"],
+        &["issue", "update", superseded_id, "--status", "superseded"],
     );
     assert!(success, "superseded mission update failed: {stderr}");
     assert!(superseded_update.contains("Status: superseded"));
@@ -1149,12 +1261,12 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
 
     for issue_id in [&epic_id, &loose_id] {
         let (success, _, stderr) =
-            run_atelier(dir.path(), &["mission", "add-work", &active_id, issue_id]);
+            run_atelier(dir.path(), &["issue", "link", &active_id, issue_id]);
         assert!(success, "link work {issue_id} failed: {stderr}");
     }
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "add-blocker", &active_id, &mission_blocker_id],
+        &["issue", "block", &active_id, &mission_blocker_id],
     );
     assert!(success, "link mission blocker failed: {stderr}");
 
@@ -1178,18 +1290,16 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     );
     assert!(success, "link evidence failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status"]);
     assert!(success, "mission list failed: {stderr}");
-    assert!(stdout.contains("Missions"));
+    assert!(stdout.contains("Mission Status"));
     assert!(stdout.contains("2 ready missions | 1 blocked"));
-    assert!(!stdout.contains("Updated:"));
-    assert!(stdout.contains("Evidence gaps:"));
+    assert!(stdout.contains("evidence gaps"));
     assert!(!stdout.contains("ready="));
-    assert!(stdout.contains("Ready"));
     assert!(!stdout.contains("Closed"));
 
-    let active_row = format!("{active_id} [ready] - Active mission");
-    let older_row = format!("{older_id} [ready] - Older ready");
+    let active_row = format!("{active_id} ");
+    let older_row = format!("{older_id} ");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
     let superseded_row = format!("{superseded_id} [superseded] - Superseded mission");
     let active_pos = stdout.find(&active_row).expect("missing active row");
@@ -1200,74 +1310,16 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     );
     assert!(!stdout.contains(&closed_row));
     assert!(!stdout.contains(&superseded_row));
-    assert!(
-        stdout.contains(&format!(
-            "[epic] {epic_id} [ready] medium - Mission epic | ready 1, blocked 1, done 1"
-        )),
-        "missing linked epic summary:\n{stdout}"
-    );
-    assert!(
-        stdout.contains(&format!("Next work: ready {ready_id} - Ready work")),
-        "mission list should cue the visible blocker before blocked work:\n{stdout}"
-    );
-    assert!(stdout.contains("Other linked work: 1 ready"));
-    assert!(stdout.contains("Mission blockers: 1 open"));
-    assert!(stdout.contains("No linked epics."));
+    assert!(stdout.contains(&format!("atelier issue status {active_id}")));
+    assert!(stdout.contains("atelier issue list --ready"));
     assert!(!stdout.contains("Loose mission work"));
     assert!(!stdout.contains("Blocked work |"));
     assert!(!stdout.contains("todo/todo"));
-    assert!(stdout.contains(&format!("atelier mission status {active_id}")));
-    assert!(stdout.contains(&format!("atelier mission show {active_id}")));
-    assert!(stdout.contains("atelier mission status"));
-    assert!(stdout.contains("atelier mission create \"...\""));
+    assert!(stdout.contains(&format!("atelier issue status {active_id}")));
+    assert!(stdout.contains("atelier issue status"));
+    assert!(stdout.contains("atelier issue list --status all"));
 
-    let (success, all_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "all"]);
-    assert!(success, "all mission list failed: {stderr}");
-    assert!(all_out.contains("4 missions | 1 closed, 2 ready, 1 superseded | 1 blocked"));
-    assert!(all_out.contains(&active_row));
-    assert!(all_out.contains(&older_row));
-    assert!(all_out.contains(&closed_row));
-    assert!(all_out.contains(&superseded_row));
-    let active_pos = all_out.find(&active_row).expect("missing active row");
-    let superseded_pos = all_out
-        .find(&superseded_row)
-        .expect("missing superseded row");
-    let closed_pos = all_out.find(&closed_row).expect("missing closed row");
-    assert!(
-        active_pos < superseded_pos && superseded_pos < closed_pos,
-        "current missions should sort before superseded and closed missions:\n{all_out}"
-    );
-
-    let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "ready"]);
-    assert!(success, "filtered mission list failed: {stderr}");
-    assert!(ready_out.contains(&active_row));
-    assert!(ready_out.contains(&older_row));
-    assert!(!ready_out.contains(&closed_row));
-    assert!(!ready_out.contains(&superseded_row));
-
-    let (success, superseded_filter_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "superseded"]);
-    assert!(success, "superseded mission list failed: {stderr}");
-    assert!(superseded_filter_out.contains("1 superseded mission | 0 blocked"));
-    assert!(superseded_filter_out.contains(&superseded_row));
-    assert!(!superseded_filter_out.contains(&active_row));
-
-    let (success, open_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "open"]);
-    assert!(!success, "mission status alias should be rejected");
-    assert!(open_out.is_empty());
-    assert!(stderr.contains("Invalid mission status 'open'"));
-
-    let (success, empty_out, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "draft"]);
-    assert!(success, "empty filtered mission list failed: {stderr}");
-    assert!(empty_out.contains("0 missions"));
-    assert!(empty_out.contains("(none)"));
-    assert!(empty_out.contains("atelier mission create \"...\""));
-
-    let (success, list_out, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    let (success, list_out, stderr) = run_atelier(dir.path(), &["issue", "status"]);
     assert!(success, "mission list failed: {stderr}");
     assert!(list_out.contains(&active_row));
 }
@@ -1278,10 +1330,18 @@ fn test_mission_status_cli_reports_control_state() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Autonomy status"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Autonomy status",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Autonomy status");
     let mission_id = mission_id.as_str();
 
@@ -1310,7 +1370,7 @@ fn test_mission_status_cli_reports_control_state() {
             )
             .replace(
                 "Evidence was not specified.",
-                "- Manual check: `atelier mission status <mission-id>` lists this work as ready.",
+                "- Manual check: `atelier issue status <mission-id>` lists this work as ready.",
             )
     });
 
@@ -1330,7 +1390,7 @@ fn test_mission_status_cli_reports_control_state() {
             )
             .replace(
                 "Evidence was not specified.",
-                "- Manual check: `atelier mission status <mission-id>` lists this work as blocked.",
+                "- Manual check: `atelier issue status <mission-id>` lists this work as blocked.",
             )
     });
 
@@ -1348,17 +1408,16 @@ fn test_mission_status_cli_reports_control_state() {
             )
             .replace(
                 "Evidence was not specified.",
-                "- Manual check: `atelier mission status <mission-id>` lists this blocker.",
+                "- Manual check: `atelier issue status <mission-id>` lists this blocker.",
             )
     });
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
     assert!(success, "block issue failed: {stderr}");
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", mission_id, epic_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, epic_id]);
     assert!(success, "mission add work failed: {stderr}");
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status", mission_id]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains(&format!(
         "Mission Status {mission_id} [ready] - Autonomy status"
@@ -1387,23 +1446,23 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Missing Evidence Sections: none"));
     assert!(status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
-    assert!(status_out.contains(&format!("atelier mission status {mission_id} --verbose")));
+    assert!(status_out.contains(&format!("atelier issue status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
     assert!(!status_out.contains("atelier doctor"));
     assert!(status_out.contains("Terminal Checks"));
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure detected."));
     let (success, verbose_status_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", "--verbose", mission_id]);
+        run_atelier(dir.path(), &["issue", "status", "--verbose", mission_id]);
     assert!(success, "verbose mission status failed: {stderr}");
     assert!(verbose_status_out.contains("Advanced Validator Detail"));
     assert!(verbose_status_out.contains("advanced terminal validator failure detected."));
     assert!(status_out.contains("Next Commands"));
     assert!(status_out.contains(&format!(
-        "Inspect mission record (durable intent and linked work): atelier mission show {mission_id}"
+        "Inspect mission record (durable intent and linked work): atelier issue show {mission_id}"
     )));
     assert!(status_out.contains(&format!(
-        "Refresh mission status (current blockers and terminal checks): atelier mission status {mission_id}"
+        "Refresh mission status (current blockers and terminal checks): atelier issue status {mission_id}"
     )));
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
@@ -1417,23 +1476,31 @@ fn test_mission_status_cli_reports_control_state() {
     );
 
     let (success, quiet_out, stderr) =
-        run_atelier(dir.path(), &["--quiet", "mission", "status", mission_id]);
+        run_atelier(dir.path(), &["--quiet", "issue", "status", mission_id]);
     assert!(success, "quiet mission status failed: {stderr}");
     assert!(quiet_out.contains(&format!("{mission_id} health=blocked")));
     assert!(quiet_out.contains("evidence_gaps="));
     assert!(quiet_out.contains("tracker=ok"));
 
-    let (success, dashboard_out, stderr) = run_atelier(dir.path(), &["mission", "status"]);
+    let (success, dashboard_out, stderr) = run_atelier(dir.path(), &["issue", "status"]);
     assert!(success, "mission status dashboard failed: {stderr}");
     assert!(dashboard_out.contains("Mission Status"));
     assert!(dashboard_out.contains("1 ready mission | 1 blocked | tracker ok"));
     assert!(dashboard_out.contains(&format!("{mission_id} [blocked] ready - Autonomy status")));
 
     let closeout_mission = {
-        let (success, out, stderr) =
-            run_atelier(dir.path(), &["mission", "create", "Closeout mission"]);
+        let (success, out, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "Closeout mission",
+                "--issue-type",
+                "mission",
+            ],
+        );
         assert!(success, "closeout mission create failed: {stderr}");
-        assert!(out.contains("Mission atelier-"));
+        assert!(out.contains("mission objective atelier-"));
         record_id_by_title(dir.path(), "missions", "Closeout mission")
     };
     let closeout_mission = closeout_mission.as_str();
@@ -1443,10 +1510,8 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(work_out.contains("Created issue atelier-"));
     let work_id = issue_id_by_title(dir.path(), "Finished mission work");
     let work_id = work_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["mission", "add-work", closeout_mission, work_id],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "link", closeout_mission, work_id]);
     assert!(success, "closeout mission add work failed: {stderr}");
     commit_all(dir.path(), "ready closeout mission fixture");
     close_issue_with_evidence(dir.path(), work_id, Some("done"));
@@ -1478,7 +1543,7 @@ fn test_mission_status_cli_reports_control_state() {
     commit_all(dir.path(), "closeout status ready");
 
     let (success, closeout_status, stderr) =
-        run_atelier(dir.path(), &["mission", "status", closeout_mission]);
+        run_atelier(dir.path(), &["issue", "status", closeout_mission]);
     assert!(success, "closeout mission status failed: {stderr}");
     assert!(closeout_status.contains("Health:   terminal"));
     assert!(
@@ -1491,7 +1556,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(closeout_status.contains("Ignored Test Review: current"));
     assert!(closeout_status.contains("Open Blockers: none"));
     assert!(closeout_status.contains(&format!(
-        "Close mission (all terminal checks pass): atelier mission close {closeout_mission} --reason \"...\""
+        "Close mission (all terminal checks pass): atelier issue transition {closeout_mission} close --reason \"...\""
     )));
 
     let mission_path = dir
@@ -1505,8 +1570,7 @@ fn test_mission_status_cli_reports_control_state() {
         mission_markdown.replace("Autonomy status", "Autonomy status stale"),
     )
     .unwrap();
-    let (success, stale_status, stderr) =
-        run_atelier(dir.path(), &["mission", "status", mission_id]);
+    let (success, stale_status, stderr) = run_atelier(dir.path(), &["issue", "status", mission_id]);
     assert!(success, "stale mission status failed: {stderr}");
     assert!(stale_status.contains("Autonomy status stale"));
     assert!(stale_status.contains("Tracker:"));
@@ -1520,10 +1584,18 @@ fn test_mission_status_deduplicates_duplicate_reachability() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Duplicate reachability"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Duplicate reachability",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Duplicate reachability");
 
     let (success, epic_out, stderr) = run_atelier(
@@ -1542,7 +1614,7 @@ fn test_mission_status_deduplicates_duplicate_reachability() {
             epic_id.as_str(),
             "Duplicate child",
             "--description",
-            "## Description\n\nDuplicate reachability child.\n\n## Outcome\n\nMission status counts this child once.\n\n## Evidence\n\n- `atelier mission status <mission-id>` counts this child once and reports duplicate reachability.",
+            "## Description\n\nDuplicate reachability child.\n\n## Outcome\n\nMission status counts this child once.\n\n## Evidence\n\n- `atelier issue status <mission-id>` counts this child once and reports duplicate reachability.",
         ],
     );
     assert!(success, "child create failed: {stderr}");
@@ -1551,22 +1623,17 @@ fn test_mission_status_deduplicates_duplicate_reachability() {
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "add-work", mission_id.as_str(), epic_id.as_str()],
+        &["issue", "link", mission_id.as_str(), epic_id.as_str()],
     );
     assert!(success, "mission add epic failed: {stderr}");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &[
-            "mission",
-            "add-work",
-            mission_id.as_str(),
-            child_id.as_str(),
-        ],
+        &["issue", "link", mission_id.as_str(), child_id.as_str()],
     );
     assert!(success, "mission add child failed: {stderr}");
 
     let (success, status_out, stderr) =
-        run_atelier(dir.path(), &["mission", "status", mission_id.as_str()]);
+        run_atelier(dir.path(), &["issue", "status", mission_id.as_str()]);
     assert!(success, "mission status failed: {stderr}");
     assert!(status_out.contains("Total: 2 ready"));
     assert!(status_out.contains(&format!(
@@ -1584,7 +1651,10 @@ fn test_active_mission_focus_guides_status_and_work() {
     init_git_repo(dir.path());
     migrate_default_issue_workflow(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Active focus"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Active focus", "--issue-type", "mission"],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "Active focus");
     let mission_id = mission_id.as_str();
@@ -1593,16 +1663,16 @@ fn test_active_mission_focus_guides_status_and_work() {
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Mission work");
     let issue_id = issue_id.as_str();
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, issue_id]);
     assert!(success, "mission add work failed: {stderr}");
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id]);
-    assert!(success, "mission start failed: {stderr}");
-    assert!(start_out.contains(&format!("Active mission: {mission_id}")));
-    assert!(start_out.contains(&format!("atelier mission status {mission_id}")));
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "legacy active mission setup failed: {stderr}");
 
-    let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status"]);
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status"]);
     assert!(success, "active mission status failed: {stderr}");
     assert!(status_out.contains(&format!(
         "Mission Status {mission_id} [active] - Active focus"
@@ -1630,57 +1700,14 @@ fn test_active_mission_focus_guides_status_and_work() {
 }
 
 #[test]
-fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
+fn test_mission_start_is_removed_without_compatibility_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    init_git_repo(dir.path());
-    migrate_default_issue_workflow(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "First mission"]);
-    assert!(success, "first mission create failed: {stderr}");
-    let first_id = record_id_by_title(dir.path(), "missions", "First mission");
-    let first_id = first_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Second mission"]);
-    assert!(success, "second mission create failed: {stderr}");
-    let second_id = record_id_by_title(dir.path(), "missions", "Second mission");
-    let second_id = second_id.as_str();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", first_id]);
-    assert!(success, "first mission start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", second_id]);
-    assert!(!success, "second mission start without switch should fail");
-    assert!(
-        stderr.contains("--switch"),
-        "expected switch guidance in stderr: {stderr}"
-    );
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "start", second_id, "--switch"]);
-    assert!(success, "mission switch failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Outside work"]);
-    assert!(success, "outside issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Outside work");
-    let issue_id = issue_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(success, "doctor --fix failed: {stderr}");
-    migrate_default_issue_workflow(dir.path());
-    Command::new("git")
-        .current_dir(dir.path())
-        .args(["add", "."])
-        .status()
-        .unwrap();
-    Command::new("git")
-        .current_dir(dir.path())
-        .args(["commit", "-q", "-m", "switched mission"])
-        .status()
-        .unwrap();
-
-    let (success, work_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", issue_id, "start"]);
-    assert!(success, "outside root start failed: {stderr}");
-    assert!(work_out.contains(&format!(
-        "Warning: {issue_id} is outside active mission {second_id}"
-    )));
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", "atelier-missing"]);
+    assert!(!success, "mission start should be removed");
+    assert!(stderr.contains("unrecognized subcommand"), "{stderr}");
+    assert!(!stderr.contains("--switch"), "{stderr}");
 }
 
 #[test]
@@ -1689,20 +1716,20 @@ fn test_mission_list_default_current_empty_state() {
     init_atelier(dir.path());
     init_git_repo(dir.path());
 
-    let (success, closed_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Closed only"]);
+    let (success, closed_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Closed only", "--issue-type", "mission"],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(closed_out.contains("Mission atelier-"));
+    assert!(closed_out.contains("mission objective atelier-"));
     let closed_id = record_id_by_title(dir.path(), "missions", "Closed only");
     let (success, closed_work_out, stderr) =
         run_atelier(dir.path(), &["issue", "create", "Closed only work"]);
     assert!(success, "closed-only work create failed: {stderr}");
     assert!(closed_work_out.contains("Created issue atelier-"));
     let closed_work_id = issue_id_by_title(dir.path(), "Closed only work");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["mission", "add-work", &closed_id, &closed_work_id],
-    );
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "link", &closed_id, &closed_work_id]);
     assert!(success, "closed-only mission add work failed: {stderr}");
     close_issue_with_evidence(dir.path(), &closed_work_id, Some("done"));
 
@@ -1727,21 +1754,22 @@ fn test_mission_list_default_current_empty_state() {
     commit_all(dir.path(), "close only mission");
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["mission", "close", &closed_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &closed_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(success, "close mission failed: {stderr}");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["mission", "list"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status"]);
     assert!(success, "mission list failed: {stderr}");
     assert!(stdout.contains("0 missions | 0 blocked"));
     assert!(stdout.contains("(none)"));
     assert!(!stdout.contains("Closed only"));
-
-    let (success, closedstdout, stderr) =
-        run_atelier(dir.path(), &["mission", "list", "--status", "closed"]);
-    assert!(success, "closed mission list failed: {stderr}");
-    assert!(closedstdout.contains("1 closed mission | 0 blocked"));
-    assert!(closedstdout.contains("Closed only"));
 }
 
 #[test]
@@ -1749,10 +1777,12 @@ fn test_first_class_record_rebuild_rejects_schema_drift() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, mission_out, stderr) =
-        run_atelier(dir.path(), &["mission", "create", "Guard schema"]);
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Guard schema", "--issue-type", "mission"],
+    );
     assert!(success, "mission create failed: {stderr}");
-    assert!(mission_out.contains("Mission atelier-"));
+    assert!(mission_out.contains("mission objective atelier-"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Guard schema");
     edit_canonical_record(dir.path(), "missions", &mission_id, |markdown| {
         markdown.replace("schema: \"atelier.mission\"", "schema: \"atelier.issue\"")
@@ -2484,14 +2514,22 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     assert_lint_rejects_canonical_mutation(
         "Duplicate ID fixture",
         |dir, issue_id| {
-            let (success, mission_out, stderr) =
-                run_atelier(dir, &["mission", "create", "Duplicate ID mission"]);
+            let (success, mission_out, stderr) = run_atelier(
+                dir,
+                &[
+                    "issue",
+                    "create",
+                    "Duplicate ID mission",
+                    "--issue-type",
+                    "mission",
+                ],
+            );
             assert!(success, "mission create failed: {stderr}");
             let mission_id = mission_out
                 .lines()
                 .find_map(|line| {
-                    line.strip_prefix("Mission ")
-                        .and_then(|rest| rest.split(':').next())
+                    line.strip_prefix("Created mission objective ")
+                        .and_then(|rest| rest.split_whitespace().next())
                 })
                 .expect("mission create output should include an id")
                 .to_string();
@@ -2634,7 +2672,7 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     assert!(success, "bundle apply failed: {stderr}");
     assert!(apply_out.contains("Bundle applied."));
     assert!(apply_out.contains("Applied:       true"));
-    assert!(apply_out.contains("atelier mission show"));
+    assert!(apply_out.contains("atelier issue show"));
     let mission_id = record_id_by_title(dir.path(), "missions", "Bundle mission");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["export", "--check"]);
@@ -2644,7 +2682,7 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild after bundle apply failed: {stderr}");
 
-    let (success, view_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    let (success, view_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show after bundle apply failed: {stderr}");
     assert!(view_out.contains("Records: evidence=1"));
     assert!(view_out.contains("Work: ready=0 blocked=0 done=0 backlog=1"));
@@ -2965,17 +3003,27 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Lifecycle solo"]);
     assert!(success, "standalone create failed: {stderr}");
     let standalone_id = issue_id_by_title(dir.path(), "Lifecycle solo");
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Lifecycle mission"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Lifecycle mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "Lifecycle mission");
     for id in [&epic_id, &standalone_id] {
-        let (success, _, stderr) =
-            run_atelier(dir.path(), &["mission", "add-work", &mission_id, id]);
+        let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, id]);
         assert!(success, "mission add-work failed for {id}: {stderr}");
     }
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "start", &mission_id, "--switch"]);
-    assert!(success, "mission start failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &mission_id, "--status", "active"],
+    );
+    assert!(success, "legacy active mission setup failed: {stderr}");
     commit_all(dir.path(), "initial lifecycle context tracker state");
 
     let (success, base_status, stderr) = run_atelier(dir.path(), &["status"]);
@@ -3130,7 +3178,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     );
 
     let (success, mission_status, stderr) =
-        run_atelier(dir.path(), &["mission", "status", &mission_id]);
+        run_atelier(dir.path(), &["issue", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
     assert!(mission_status.contains("Branch Policy"), "{mission_status}");
     assert!(
@@ -3721,7 +3769,16 @@ fn test_epic_branch_commands_use_current_checkout() {
     init_atelier(dir.path());
     migrate_default_issue_workflow(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Branch mission"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Branch mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "Branch mission");
 
@@ -3732,8 +3789,7 @@ fn test_epic_branch_commands_use_current_checkout() {
     assert!(success, "epic create failed: {stderr}");
     let epic_id = issue_id_by_title(dir.path(), "Branch epic");
 
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &epic_id]);
     assert!(success, "mission add epic failed: {stderr}");
     commit_all(dir.path(), "epic branch baseline");
 

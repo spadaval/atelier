@@ -76,7 +76,7 @@ fn test_issue_create_help_is_markdown_first() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
     assert!(success, "issue create help failed: {stderr}");
-    assert!(!stdout.contains("--description"), "{stdout}");
+    assert!(stdout.contains("--description <DESCRIPTION>"), "{stdout}");
     assert!(stdout.contains("--template"), "{stdout}");
 }
 
@@ -624,6 +624,86 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
 }
 
 #[test]
+fn test_issue_create_mission_type_writes_mission_sections_and_issue_show_reads_them() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Typed objective",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission issue create failed: {stderr}");
+    assert!(
+        stdout.contains("Created mission objective atelier-"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Type:     mission"), "{stdout}");
+    assert!(stdout.contains(".atelier/missions/"), "{stdout}");
+
+    let mission_id = record_id_by_title(dir.path(), "missions", "Typed objective");
+    let mission_text = read_canonical_record(dir.path(), "missions", &mission_id);
+    assert!(
+        mission_text.contains("schema: \"atelier.mission\""),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Intent\n\nTyped objective"),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Constraints\n\n- None."),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Risks\n\n- None."),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Validation\n\n- Validation was not specified."),
+        "{mission_text}"
+    );
+
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    assert!(success, "issue show mission failed: {stderr}");
+    assert!(show.contains("Mission "), "{show}");
+    assert!(show.contains("Intent"), "{show}");
+    assert!(show.contains("Constraints"), "{show}");
+    assert!(show.contains("Risks"), "{show}");
+    assert!(show.contains("Validation"), "{show}");
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
+    assert!(success, "focused mission lint failed: {stderr}");
+    assert!(lint_out.contains("Lint passed."));
+
+    let (success, status, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
+    assert!(success, "issue status mission failed: {stderr}");
+    assert!(
+        status.contains(&format!("Mission Status {mission_id}")),
+        "{status}"
+    );
+
+    let mission_path = canonical_record_path(dir.path(), "missions", &mission_id);
+    let broken = std::fs::read_to_string(&mission_path)
+        .unwrap()
+        .replace("## Risks\n\n- None.\n\n", "");
+    std::fs::write(&mission_path, broken).unwrap();
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
+    assert!(!success, "focused mission lint should reject missing Risks");
+    let transcript = format!("{lint_out}\n{stderr}");
+    assert!(
+        transcript.contains("Missing required mission body section 'Risks'"),
+        "{transcript}"
+    );
+}
+
+#[test]
 fn test_bundle_apply_accepts_configured_custom_issue_type() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1062,7 +1142,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
-            "mission",
+            "issue",
             "create",
             "Canonical mission",
             "--body",
@@ -1099,7 +1179,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     )
     .unwrap();
 
-    let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
+    let (success, mission_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
     assert!(mission_out.contains("Canonical mission body"));
     assert!(mission_out.contains("Canonical constraint"));
@@ -1322,7 +1402,16 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "History mission"]);
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "History mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "History mission");
 
@@ -1337,12 +1426,11 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     );
     assert!(success, "child create failed: {stderr}");
     let child_id = issue_id_by_title(dir.path(), "History child");
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "add-work", &mission_id, &epic_id]);
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &epic_id]);
     assert!(success, "mission add-work failed: {stderr}");
     let (success, note_out, stderr) = run_atelier(
         dir.path(),
-        &["mission", "note", &mission_id, "Mission note body"],
+        &["issue", "note", &mission_id, "Mission note body"],
     );
     assert!(success, "mission note failed: {stderr}");
     assert!(note_out.contains("Added note to mission"));
@@ -1388,7 +1476,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
     assert!(stdout.contains(&format!("Scope:          mission {mission_id}")));
     assert!(stdout.contains(&format!("Attached evidence {evidence_id}")));
     assert!(stdout.contains(&child_id));
-    assert!(stdout.contains(&format!("atelier mission show {mission_id}")));
+    assert!(stdout.contains(&format!("atelier issue show {mission_id}")));
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),

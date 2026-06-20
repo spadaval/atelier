@@ -6,6 +6,10 @@ labels:
 - "command-surface"
 - "cutting-pass"
 - "mission-collapse"
+review:
+  kind: pull_request
+  number: 14
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -38,9 +42,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Collapse mission, issue, and graph command surfaces"
-updated_at: "2026-06-20T17:02:38.166652378+00:00"
+updated_at: "2026-06-20T21:13:27.467489115+00:00"
 ---
 
 ## Description

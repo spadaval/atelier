@@ -27,10 +27,8 @@ Orientation:
 Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
-  graph         Inspect mission and issue hierarchy and impact
 
-Missions and planning:
-  mission       Create, list, show, status, close, and update durable missions
+Planning:
   bundle        Preview and apply one-shot graph bundle files
 
 Records:
@@ -63,10 +61,10 @@ Common commands:
   atelier issue block <blocked-id> <blocker-id>
   atelier issue unblock <blocked-id> <blocker-id>
   atelier issue blocked [<id>]
-  atelier mission list
-  atelier mission show <id>
-  atelier mission status
-  atelier mission close <id> --reason \"...\"
+  atelier issue create \"...\" --issue-type mission
+  atelier issue show <mission-id>
+  atelier issue status
+  atelier issue transition <mission-id> close --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
   atelier forgejo roles check
@@ -135,12 +133,6 @@ enum Commands {
         query: String,
     },
 
-    /// Mission and issue graph commands
-    Graph {
-        #[command(subcommand)]
-        action: GraphCommands,
-    },
-
     /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
     #[command(hide = true)]
     Export {
@@ -168,12 +160,6 @@ enum Commands {
         /// Canonical state directory to write after import
         #[arg(short, long)]
         output: Option<String>,
-    },
-
-    /// First-class mission records
-    Mission {
-        #[command(subcommand)]
-        action: MissionCommands,
     },
 
     /// One-shot graph bundle files
@@ -288,6 +274,21 @@ enum IssueCommands {
     Create {
         /// Issue title
         title: String,
+        /// Initial Markdown description/body text
+        #[arg(long)]
+        description: Option<String>,
+        /// Mission intent/body text; requires --issue-type mission
+        #[arg(long)]
+        body: Option<String>,
+        /// Add one mission Constraints section bullet; repeat for multiple constraints
+        #[arg(long)]
+        constraint: Vec<String>,
+        /// Add one mission Risks section bullet; repeat for multiple risks
+        #[arg(long)]
+        risk: Vec<String>,
+        /// Add one mission Validation section bullet; repeat for multiple validation criteria
+        #[arg(long)]
+        validation: Vec<String>,
         /// Priority (low, medium, high, critical)
         #[arg(short, long, default_value = "medium")]
         priority: String,
@@ -297,7 +298,7 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
-        /// Explicit work type from .atelier/workflow.yaml issue_types
+        /// Explicit work type from .atelier/workflow.yaml issue_types, or built-in mission
         #[arg(long)]
         issue_type: Option<String>,
         /// Parent issue ID or imported source ID
@@ -333,6 +334,15 @@ enum IssueCommands {
         id: String,
     },
 
+    /// Show type-aware issue status for objective records
+    Status {
+        /// Issue ID
+        id: Option<String>,
+        /// Show verbose validator detail for mission objective records
+        #[arg(long)]
+        verbose: bool,
+    },
+
     /// Show issue transition options and blockers
     Transition {
         /// Issue ID
@@ -360,6 +370,21 @@ enum IssueCommands {
         /// New issue type from .atelier/workflow.yaml issue_types
         #[arg(long)]
         issue_type: Option<String>,
+        /// New status for mission objective records
+        #[arg(long)]
+        status: Option<String>,
+        /// Mission intent/body text; requires a mission objective record
+        #[arg(long)]
+        body: Option<String>,
+        /// Add one mission Constraints section bullet; repeat for multiple constraints
+        #[arg(long)]
+        constraint: Vec<String>,
+        /// Add one mission Risks section bullet; repeat for multiple risks
+        #[arg(long)]
+        risk: Vec<String>,
+        /// Add one mission Validation section bullet; repeat for multiple validation criteria
+        #[arg(long)]
+        validation: Vec<String>,
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
@@ -383,6 +408,28 @@ enum IssueCommands {
         /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
         #[arg(long, default_value = "note")]
         kind: String,
+    },
+
+    /// Add a typed link from one issue to another
+    Link {
+        /// Source issue ID
+        id: String,
+        /// Target issue ID
+        target: String,
+        /// Relationship role, such as advances or blocked_by
+        #[arg(long, default_value = "advances")]
+        role: String,
+    },
+
+    /// Remove a typed link from one issue to another
+    Unlink {
+        /// Source issue ID
+        id: String,
+        /// Target issue ID
+        target: String,
+        /// Relationship role, such as advances or blocked_by
+        #[arg(long, default_value = "advances")]
+        role: String,
     },
 
     /// Mark an issue as blocked by another
@@ -409,24 +456,6 @@ enum IssueCommands {
 }
 
 #[derive(Subcommand)]
-enum GraphCommands {
-    /// Show downstream impact across mission work, hierarchy, and impact-bearing links
-    Impact {
-        /// Mission or issue ID
-        id: String,
-    },
-    /// Show missions and issues as a tree hierarchy
-    Tree {
-        /// Filter by status (todo, done, all)
-        #[arg(short, long, default_value = "all")]
-        status: String,
-        /// Show a bounded, scan-friendly hierarchy instead of the full tree
-        #[arg(long)]
-        compact: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum MaintenanceCommands {
     /// Delete a record with an explicit target kind
     Delete {
@@ -436,85 +465,6 @@ enum MaintenanceCommands {
         #[arg(short, long)]
         force: bool,
     },
-}
-
-#[derive(Subcommand)]
-enum MissionCommands {
-    /// Create a mission with generated Intent, Constraints, Risks, and Validation sections
-    Create {
-        title: String,
-        /// Intent section text; this does not replace the full mission Markdown body
-        #[arg(short, long)]
-        body: Option<String>,
-        /// Add one Constraints section bullet; repeat for multiple constraints
-        #[arg(long)]
-        constraint: Vec<String>,
-        /// Add one Risks section bullet; repeat for multiple risks
-        #[arg(long)]
-        risk: Vec<String>,
-        /// Add one Validation section bullet; repeat for multiple validation criteria
-        #[arg(long)]
-        validation: Vec<String>,
-    },
-    /// Show a mission with linked work, blockers, and evidence
-    Show { id: String },
-    /// Focus a mission as the active orchestration context
-    Start {
-        id: String,
-        /// Replace any currently active mission focus
-        #[arg(long = "switch")]
-        switch_active: bool,
-    },
-    /// Show mission-control status for one mission or all current missions
-    Status {
-        /// Show verbose validator detail in the status summary
-        #[arg(long)]
-        verbose: bool,
-        id: Option<String>,
-    },
-    /// Close a mission after terminal checks pass
-    Close {
-        id: String,
-        /// Mission close reason recorded in the mission terminal notes
-        #[arg(long)]
-        reason: String,
-    },
-    /// List missions
-    List {
-        /// Filter missions by status (default: current; use all to include closed/history)
-        #[arg(short, long)]
-        status: Option<String>,
-    },
-    /// Update mission fields
-    Update {
-        id: String,
-        #[arg(short, long)]
-        title: Option<String>,
-        #[arg(short, long)]
-        status: Option<String>,
-        #[arg(short, long)]
-        body: Option<String>,
-        #[arg(long)]
-        constraint: Vec<String>,
-        #[arg(long)]
-        risk: Vec<String>,
-        #[arg(long)]
-        validation: Vec<String>,
-    },
-    /// Add an activity note to a mission
-    Note {
-        id: String,
-        text: String,
-        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
-        #[arg(long, default_value = "note")]
-        kind: String,
-    },
-    /// Add issue work to a mission
-    AddWork { id: String, issue: String },
-    /// Remove issue work from a mission
-    Unlink { id: String, issue: String },
-    /// Add an issue blocker to a mission
-    AddBlocker { id: String, issue: String },
 }
 
 #[derive(Subcommand)]
@@ -720,9 +670,14 @@ enum DiagnosticsCommands {
 fn issue_create_parts(
     priority: &str,
     template: Option<&str>,
+    description: Option<&str>,
+    body: Option<&str>,
     labels: &[String],
     issue_type: Option<&str>,
 ) -> Result<(String, Option<String>, Vec<String>, String)> {
+    if description.is_some() && body.is_some() {
+        bail!("--description and --body cannot be combined");
+    }
     let mut labels = labels.to_vec();
     let (final_priority, final_description, template_issue_type) =
         if let Some(template_name) = template {
@@ -749,6 +704,10 @@ fn issue_create_parts(
         } else {
             (priority.to_string(), None, None)
         };
+    let final_description = description
+        .or(body)
+        .map(str::to_string)
+        .or(final_description);
 
     IssuePriority::from_cli_input(&final_priority)?;
     let final_issue_type = match (issue_type, template_issue_type) {
@@ -776,7 +735,7 @@ fn template_default_issue_type(template: &str) -> &'static str {
 }
 
 fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
-    match commands::agent_factory::resolve_id(db, issue_ref) {
+    match commands::issue::resolve_id(db, issue_ref) {
         Ok(id) => Ok(id),
         Err(error) => match db.record_kind_for_id(issue_ref)? {
             Some(actual_kind) if actual_kind != "issue" => {
@@ -799,19 +758,6 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
-fn resolve_graph_record_arg(db: &Database, id: &str) -> Result<(String, String)> {
-    match commands::agent_factory::resolve_id(db, id) {
-        Ok(issue_id) => Ok(("issue".to_string(), issue_id)),
-        Err(issue_error) => match db.record_kind_for_id(id)? {
-            Some(kind) if kind == "mission" => Ok((kind, id.to_string())),
-            Some(kind) => bail!(
-                "{id} is a {kind} record; `atelier graph impact` supports mission and issue records."
-            ),
-            None => Err(issue_error),
-        },
-    }
-}
-
 fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
     let suggested = show_command_for_kind(actual_kind)
         .map(|command| format!(" Use `{command} {id}`."))
@@ -822,7 +768,7 @@ fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> Strin
 fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
         "issue" | "epic" => Some("atelier issue show"),
-        "mission" => Some("atelier mission show"),
+        "mission" => Some("atelier issue show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }
@@ -859,6 +805,11 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
     match action {
         IssueCommands::Create {
             title,
+            description,
+            body,
+            constraint,
+            risk,
+            validation,
             priority,
             template,
             label,
@@ -866,22 +817,37 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
+            let inferred_issue_type = if issue_type.is_none()
+                && (body.is_some()
+                    || !constraint.is_empty()
+                    || !risk.is_empty()
+                    || !validation.is_empty())
+            {
+                Some("mission")
+            } else {
+                issue_type.as_deref()
+            };
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
                 template.as_deref(),
+                description.as_deref(),
+                body.as_deref(),
                 &label,
-                issue_type.as_deref(),
+                inferred_issue_type,
             )?;
-            commands::agent_factory::create_lifecycle(
+            commands::issue::create_lifecycle(
                 &state_dir,
                 &db_path,
-                commands::agent_factory::LifecycleCreateInput {
+                commands::issue::LifecycleCreateInput {
                     title: &title,
                     description: final_description.as_deref(),
                     priority: &final_priority,
                     issue_type: &issue_type,
                     labels: &labels,
                     parent: parent.as_deref(),
+                    constraints: constraint,
+                    risks: risk,
+                    validation,
                     quiet,
                 },
             )
@@ -905,7 +871,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 }
                 commands::deps::list_blocked(&db, quiet)
             } else {
-                commands::agent_factory::list(
+                commands::issue::list(
                     &db,
                     Some(&status),
                     category.as_deref(),
@@ -919,7 +885,24 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::Show { id } => {
             let db = degraded_projection_query_db()?;
-            commands::agent_factory::show(&db, &id)
+            commands::issue::show(&db, &id)
+        }
+
+        IssueCommands::Status { id, verbose } => {
+            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+            let db = storage.db();
+            match id {
+                Some(id) if db.record_kind_for_id(&id)?.as_deref() == Some("mission") => {
+                    commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
+                }
+                Some(id) => {
+                    if verbose {
+                        bail!("--verbose is only available for mission objective records");
+                    }
+                    commands::issue_status::run(db, &id, quiet)
+                }
+                None => commands::mission::status(db, &storage.state_dir(), None, quiet, verbose),
+            }
         }
 
         IssueCommands::Transition {
@@ -933,7 +916,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     bail!("--options cannot be combined with a transition name");
                 }
                 let db = degraded_projection_query_db()?;
-                commands::agent_factory::transition_options(&db, &id)
+                commands::issue::transition_options(&db, &id)
             } else {
                 let transition = transition.ok_or_else(|| {
                     anyhow::anyhow!(
@@ -943,14 +926,31 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 })?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
-                commands::workflow::transition_issue(
-                    &db,
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    &transition,
-                    close_reason.as_deref(),
-                )
+                if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                    if transition != "close" {
+                        bail!(
+                            "Mission objective {} only supports `atelier issue transition {} close --reason \"...\"`",
+                            id,
+                            id
+                        );
+                    }
+                    let reason = close_reason.as_deref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "missing required field close_reason; rerun with `atelier issue transition {} close --reason \"...\"`",
+                            id
+                        )
+                    })?;
+                    commands::mission::close(&state_dir, &db_path, &id, reason)
+                } else {
+                    commands::workflow::transition_issue(
+                        &db,
+                        &state_dir,
+                        &db_path,
+                        &id,
+                        &transition,
+                        close_reason.as_deref(),
+                    )
+                }
             }
         }
 
@@ -959,43 +959,104 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             title,
             priority,
             issue_type,
+            status,
+            body,
+            constraint,
+            risk,
+            validation,
             label,
             remove_label,
             parent,
             no_parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            commands::agent_factory::update_lifecycle(
-                &state_dir,
-                &db_path,
-                commands::agent_factory::UpdateInput {
-                    issue_ref: &id,
-                    title: title.as_deref(),
-                    priority: priority.as_deref(),
-                    issue_type: issue_type.as_deref(),
-                    labels: &label,
-                    remove_labels: &remove_label,
-                    parent: if no_parent {
-                        Some(None)
-                    } else {
-                        parent.as_deref().map(Some)
+            let db = canonical_mutation_db()?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::mission::update(
+                    &state_dir,
+                    &db_path,
+                    &id,
+                    title.as_deref(),
+                    status.as_deref(),
+                    body.as_deref(),
+                    constraint,
+                    risk,
+                    validation,
+                )
+            } else {
+                if status.is_some() {
+                    bail!("issue status changes use `atelier issue transition <issue-id> <transition>`");
+                }
+                if body.is_some()
+                    || !constraint.is_empty()
+                    || !risk.is_empty()
+                    || !validation.is_empty()
+                {
+                    bail!("mission section flags require a mission objective record");
+                }
+                commands::issue::update_lifecycle(
+                    &state_dir,
+                    &db_path,
+                    commands::issue::UpdateInput {
+                        issue_ref: &id,
+                        title: title.as_deref(),
+                        priority: priority.as_deref(),
+                        issue_type: issue_type.as_deref(),
+                        labels: &label,
+                        remove_labels: &remove_label,
+                        parent: if no_parent {
+                            Some(None)
+                        } else {
+                            parent.as_deref().map(Some)
+                        },
+                        append_notes: None,
                     },
-                    append_notes: None,
-                },
-            )
+                )
+            }
         }
 
         IssueCommands::Note { id, text, kind } => {
             let db = canonical_mutation_db()?;
-            let id = resolve_issue_arg(&db, &id)?;
-            commands::comment::run_issue_note(&db, &id, &text, &kind)
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::comment::run_mission_note(&db, &id, &text, &kind)
+            } else {
+                let id = resolve_issue_arg(&db, &id)?;
+                commands::comment::run_issue_note(&db, &id, &text, &kind)
+            }
+        }
+
+        IssueCommands::Link { id, target, role } => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::relate::link_issue(&state_dir, &db_path, &id, &target, &role)
+        }
+
+        IssueCommands::Unlink { id, target, role } => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::relate::unlink_issue(&state_dir, &db_path, &id, &target, &role)
         }
 
         IssueCommands::Block { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                let blocker = resolve_issue_arg(&db, &blocker)?;
+                let store = RecordStore::new(&state_dir);
+                let changed = store.add_relates_relationship(
+                    "mission",
+                    &id,
+                    "issue",
+                    &blocker,
+                    "blocked_by",
+                )?;
+                if changed {
+                    println!("Linked {id} -> {blocker} (blocked_by)");
+                } else {
+                    println!("Link {id} -> {blocker} (blocked_by) already exists");
+                }
+            } else {
+                let store = RecordStore::new(&state_dir);
+                commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
+            }
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1003,8 +1064,25 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Unblock { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                let blocker = resolve_issue_arg(&db, &blocker)?;
+                let store = RecordStore::new(&state_dir);
+                let changed = store.remove_relates_relationship(
+                    "mission",
+                    &id,
+                    "issue",
+                    &blocker,
+                    "blocked_by",
+                )?;
+                if changed {
+                    println!("Unlinked {id} -> {blocker} (blocked_by)");
+                } else {
+                    println!("No link {id} -> {blocker} (blocked_by) exists");
+                }
+            } else {
+                let store = RecordStore::new(&state_dir);
+                commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            }
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1012,7 +1090,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Blocked { id } => {
             let db = projection_query_db()?;
             if let Some(id) = id {
-                commands::agent_factory::dep_list(&db, Some(&id))
+                commands::issue::dep_list(&db, Some(&id))
             } else {
                 commands::deps::list_blocked(&db, quiet)
             }
@@ -1065,24 +1143,8 @@ fn run() -> Result<()> {
 
         Commands::Search { query } => {
             let db = degraded_projection_query_db()?;
-            commands::agent_factory::search(&db, &query, quiet)
+            commands::issue::search(&db, &query, quiet)
         }
-
-        Commands::Graph { action } => match action {
-            GraphCommands::Impact { id } => {
-                let db = projection_query_db()?;
-                let (kind, id) = resolve_graph_record_arg(&db, &id)?;
-                commands::relate::impact(&db, &kind, &id)
-            }
-            GraphCommands::Tree { status, compact } => {
-                let db = projection_query_db()?;
-                if compact {
-                    commands::tree::run_compact(&db, Some(&status))
-                } else {
-                    commands::tree::run(&db, Some(&status))
-                }
-            }
-        },
 
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
@@ -1090,7 +1152,7 @@ fn run() -> Result<()> {
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
-            commands::agent_factory::export_canonical(storage.db(), &state_dir, check)
+            commands::issue::export_canonical(storage.db(), &state_dir, check)
         }
 
         Commands::Rebuild { input } => {
@@ -1100,7 +1162,7 @@ fn run() -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
             let db_path = storage.db_path();
-            commands::agent_factory::rebuild(&state_dir, &db_path)
+            commands::issue::rebuild(&state_dir, &db_path)
         }
 
         Commands::ImportBeads { input, output } => {
@@ -1115,119 +1177,6 @@ fn run() -> Result<()> {
                 &state_dir,
             )
         }
-
-        Commands::Mission { action } => match action {
-            MissionCommands::Create {
-                title,
-                body,
-                constraint,
-                risk,
-                validation,
-            } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                commands::mission::create(
-                    &state_dir,
-                    &db_path,
-                    &title,
-                    body.as_deref(),
-                    constraint,
-                    risk,
-                    validation,
-                )
-            }
-            MissionCommands::Show { id } => {
-                let storage = use_cases::mission_query_storage()?;
-                let db = storage.db();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::show(db, &id)
-            }
-            MissionCommands::Start { id, switch_active } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::start(&state_dir, &db_path, &id, switch_active)
-            }
-            MissionCommands::Status { id, verbose } => {
-                let storage = use_cases::mission_query_storage()?;
-                let id = use_cases::resolve_optional_record_ref(&storage, "mission", id)?;
-                commands::mission::status(
-                    storage.db(),
-                    &storage.state_dir(),
-                    id.as_deref(),
-                    quiet,
-                    verbose,
-                )
-            }
-            MissionCommands::Close { id, reason } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::close(&state_dir, &db_path, &id, &reason)
-            }
-            MissionCommands::List { status } => {
-                let storage = use_cases::mission_query_storage()?;
-                let db = storage.db();
-                commands::mission::list(&db, status.as_deref())
-            }
-            MissionCommands::Update {
-                id,
-                title,
-                status,
-                body,
-                constraint,
-                risk,
-                validation,
-            } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::update(
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    title.as_deref(),
-                    status.as_deref(),
-                    body.as_deref(),
-                    constraint,
-                    risk,
-                    validation,
-                )
-            }
-            MissionCommands::Note { id, text, kind } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::comment::run_mission_note(storage.db(), &id, &text, &kind)
-            }
-            MissionCommands::AddWork { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::add_work(&state_dir, &db_path, &id, &issue)
-            }
-            MissionCommands::Unlink { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::unlink(&state_dir, &db_path, &id, &issue)
-            }
-            MissionCommands::AddBlocker { id, issue } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                let issue = use_cases::resolve_issue_ref(&storage, &issue)?;
-                commands::mission::add_blocker(&state_dir, &db_path, &id, &issue)
-            }
-        },
 
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { input } => {
@@ -1576,12 +1525,12 @@ fn run() -> Result<()> {
 
         Commands::Lint { id } => {
             let db = lint_db()?;
-            commands::agent_factory::lint(&db, id.as_deref())
+            commands::issue::lint(&db, id.as_deref())
         }
 
         Commands::Doctor { fix } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
-            commands::agent_factory::doctor(
+            commands::issue::doctor(
                 storage.db(),
                 storage.repo_root(),
                 &storage.state_dir(),
@@ -1625,18 +1574,17 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
             IssueCommands::Show { .. } => "issue show",
+            IssueCommands::Status { .. } => "issue status",
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
+            IssueCommands::Link { .. } => "issue link",
+            IssueCommands::Unlink { .. } => "issue unlink",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",
         },
         Commands::Search { .. } => "search",
-        Commands::Graph { action } => match action {
-            GraphCommands::Impact { .. } => "graph impact",
-            GraphCommands::Tree { .. } => "graph tree",
-        },
         Commands::Export { check, .. } => {
             if *check {
                 "export --check"
@@ -1646,19 +1594,6 @@ fn command_identity(command: &Commands) -> &'static str {
         }
         Commands::Rebuild { .. } => "rebuild",
         Commands::ImportBeads { .. } => "import-beads",
-        Commands::Mission { action } => match action {
-            MissionCommands::Create { .. } => "mission create",
-            MissionCommands::Show { .. } => "mission show",
-            MissionCommands::Start { .. } => "mission start",
-            MissionCommands::Status { .. } => "mission status",
-            MissionCommands::Close { .. } => "mission close",
-            MissionCommands::List { .. } => "mission list",
-            MissionCommands::Update { .. } => "mission update",
-            MissionCommands::Note { .. } => "mission note",
-            MissionCommands::AddWork { .. } => "mission add-work",
-            MissionCommands::Unlink { .. } => "mission unlink",
-            MissionCommands::AddBlocker { .. } => "mission add-blocker",
-        },
         Commands::Bundle { action } => match action {
             BundleCommands::Preview { .. } => "bundle preview",
             BundleCommands::Apply { .. } => "bundle apply",

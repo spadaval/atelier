@@ -25,7 +25,7 @@ The first search shows live CLI orchestration hotspots:
 - `crates/atelier-cli/src/commands/evidence.rs`,
   `crates/atelier-cli/src/commands/mission.rs`,
   `crates/atelier-cli/src/commands/workflow.rs`, and
-  `crates/atelier-cli/src/commands/agent_factory.rs` still open
+  `crates/atelier-cli/src/commands/issue.rs` still open
   `Database`, construct `RecordStore`, and call projection refresh helpers as
   part of use-case orchestration.
 - CLI unit tests also open `Database` directly; those test helpers are not the

@@ -118,7 +118,7 @@ Choose the proof surface by the claim being closed:
 
 | Claim | Enough proof | Command shape | Completion implication |
 | --- | --- | --- | --- |
-| Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier mission note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
+| Handoff context, caveat, or local observation that does not satisfy an `Evidence` requirement | Issue or mission note | `atelier issue note <issue-id> "handoff context"` or `atelier issue note <mission-id> "coordination context"` | Notes help future operators, but completion validators do not treat them as claim proof. |
 | Manual validation of an issue Outcome/Evidence line | First-class evidence record | `atelier evidence record --target issue/<issue-id> --kind validation "checked root help and docs examples against current CLI"` | The evidence summary should name the observed behavior and the target issue it validates. |
 | Command-backed test, lint, audit, or transcript | Command-backed evidence record | `atelier evidence record --target issue/<issue-id> --kind test -- target/debug/atelier lint <issue-id>` | The record stores command metadata so reviewers do not rely on copied terminal prose. |
 | Reusing an existing proof record for a second accountable target | Evidence attachment | `atelier evidence attach <evidence-id> issue <other-issue-id> --role validates` | Attachment is for reuse. New proof should still start with `evidence record`. |
@@ -143,7 +143,7 @@ Example for independent completion proof:
 
 ```text
 atelier evidence record --target issue/<validation-issue-id> --kind validation "mission completion validation maps mission expectations to closed linked work and evidence IDs"
-atelier mission close <mission-id> --reason "linked work closed and completion proof attached"
+atelier issue transition <mission-id> close --reason "linked work closed and completion proof attached"
 ```
 
 ## Parent Coverage Summaries
@@ -287,9 +287,10 @@ expectations, and terminal notes live in ordered Markdown sections:
 `Intent`, `Constraints`, `Risks`, and `Validation` are required. `Notes` is
 optional. Linked work, blockers, evidence, and other supporting records are
 typed links, not prose-only lists. Checkpoint or plan references are prose or
-repository paths inside those sections, not v1 relationship tables. `atelier
-mission show` and `atelier mission status` render mission work, blockers, and
-evidence from canonical relationships. They count only `advances` issue links
+repository paths inside those sections, not v1 relationship tables.
+`atelier issue show <mission-id>` and `atelier issue status <mission-id>` render
+mission work, blockers, and evidence from canonical relationships. They count
+only `advances` issue links
 as mission work and only `blocked_by` issue links as direct mission blockers;
 other precise relations remain supporting records instead of broadening the
 work queue.
@@ -313,7 +314,8 @@ The abbreviated readable shape keeps the mission content where reviewers can see
 it and keeps relationships typed:
 
 ```bash
-atelier mission create "Repair CLI workflow rework and validation gaps" \
+atelier issue create "Repair CLI workflow rework and validation gaps" \
+  --issue-type mission \
   --body "Repair the CLI workflow and validation gaps." \
   --constraint "Use sectioned issue Markdown." \
   --risk "Large rework can sprawl." \
@@ -433,10 +435,10 @@ because each checkout carries its own tracked `.atelier/` record copy on its
 branch. Reconciliation happens through normal Git review and merge of the
 canonical Markdown records, not by sharing runtime work-association rows across
 checkouts. When more than one issue is `in_progress` in the same checkout,
-`atelier status` and `atelier mission status` should render that set directly
+`atelier status` and `atelier issue status <mission-id>` should render that set directly
 rather than nominate one hidden active issue.
 
-The visible `atelier worktree` surface is removed pending redesign. Explicit
+The visible worktree command surface is removed pending redesign. Explicit
 branch helpers such as `atelier branch for-epic <epic-id>` create or locate
 reviewable branches for diagnostics, advanced repair, or manual recovery.
 Routine worker guidance should come from `atelier status`, issue detail,

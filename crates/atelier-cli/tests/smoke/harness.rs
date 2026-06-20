@@ -46,6 +46,7 @@ impl SmokeHarness {
         // Run atelier init
         let result = harness.run(&["init"]);
         assert!(result.success, "atelier init failed: {}", result.stderr);
+        harness.init_git_repo();
 
         harness
     }
@@ -94,6 +95,31 @@ impl SmokeHarness {
             args, result.exit_code, result.stdout, result.stderr,
         );
         result
+    }
+
+    /// Initialize a Git repository with the current tracker state committed.
+    pub fn init_git_repo(&self) {
+        self.git(&["init"]);
+        self.git(&["branch", "-M", "main"]);
+        self.git(&["config", "user.email", "smoke@example.com"]);
+        self.git(&["config", "user.name", "Smoke Test"]);
+        self.git(&["add", "."]);
+        self.git(&["commit", "-m", "initial tracker state"]);
+    }
+
+    fn git(&self, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(self.temp_dir.path())
+            .args(args)
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run git {args:?}: {error}"));
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout: {}\nstderr: {}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     /// Attach minimal validation proof to an issue fixture.
@@ -429,15 +455,6 @@ fn translate_legacy_test_command<T: AsRef<str>>(args: &[T]) -> Vec<String> {
                 .map(|arg| arg.as_ref().to_string())
                 .collect::<Vec<_>>();
             translated.extend(["search", *query].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "tree", tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["graph", "tree"].map(str::to_string));
             translated.extend(tail.iter().map(|arg| (*arg).to_string()));
             translated
         }

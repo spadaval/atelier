@@ -219,15 +219,15 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         Role::Manager => {
             if snapshot.and_then(|s| s.active_mission.as_ref()).is_some() {
                 println!(
-                    "  1. atelier mission status - Review active mission readiness and blockers."
+                    "  1. atelier issue status - Review active mission readiness and blockers."
                 );
                 println!("  2. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
                 println!(
                     "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
                 );
             } else {
-                println!("  1. atelier mission list - Choose mission focus.");
-                println!("  2. atelier mission start <id> --switch - Set active mission focus.");
+                println!("  1. atelier issue list --status all - Choose a mission to inspect explicitly.");
+                println!("  2. atelier issue status <id> - Review mission readiness and blockers.");
                 println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
             }
         }
@@ -252,7 +252,7 @@ fn print_normal_loop(role: Role) {
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
         }
         Role::Reviewer => {
-            println!("  atelier mission status");
+            println!("  atelier issue status");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
             println!(
@@ -269,11 +269,11 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
-            println!("  atelier mission status");
+            println!("  atelier issue status");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");
-            println!("  atelier mission add-work <mission-id> <issue-id>");
+            println!("  atelier issue link <mission-id> <issue-id> --role advances");
             println!("  atelier issue block <blocked-id> <blocker-id>");
             println!("  atelier status");
         }

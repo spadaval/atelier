@@ -187,8 +187,8 @@ their need:
 - Use focused drill-down commands for targeted state. Prefer commands such as
   `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
   `atelier issue list --ready`, `atelier issue list --blocked`,
-  `atelier graph tree --compact`, and issue blocker commands over scraping
-  broad human reports.
+  `atelier issue status <objective-id>`, and issue blocker commands over
+  scraping broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
@@ -289,8 +289,8 @@ unless the test is specifically for a formatter primitive.
 The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
 stabilization mission: `status`, `mission status`, `mission show`,
 `mission list`, `issue show`, `issue list --ready`, `evidence record`,
-`evidence show/list`, dependency and link list output, `graph impact`,
-`lint`, and admin repair commands when local state is
+`evidence show/list`, dependency and link list output, issue impact rendered by
+`issue show`, `lint`, and admin repair commands when local state is
 degraded.
 
 Classification:

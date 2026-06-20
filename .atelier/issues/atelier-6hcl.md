@@ -7,7 +7,9 @@ labels:
 - "removal"
 priority: "P1"
 relationships:
-  blocks: []
+  blocks:
+  - kind: "issue"
+    id: "atelier-p1yz"
   children: []
   attachments: []
   relates: []

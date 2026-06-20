@@ -267,8 +267,7 @@ During the staged migration, `atelier export` also refreshes this metadata after
 it writes canonical Markdown from SQLite so compatibility workflows remain
 queryable. Ordinary projection-backed read surfaces (`issue list`,
 `issue list --ready`, `issue search`, `issue show`, `issue blocked`,
-`graph impact`, `graph tree`, dependency lists,
-and tracker lint) check the metadata before reading SQLite whenever
+`issue status`, dependency lists, and tracker lint) check the metadata before reading SQLite whenever
 canonical records exist. If a canonical source changed, disappeared, appeared
 without being indexed, or lacks metadata, the command first attempts targeted
 repair for small first-class record changes by parsing only the changed Markdown

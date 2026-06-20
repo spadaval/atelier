@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T20:30:33.781173252+00:00"
+status: "done"
 title: "Add type-aware issue creation and sections for mission objectives"
-updated_at: "2026-06-20T16:54:08.885688768+00:00"
+updated_at: "2026-06-20T20:30:33.781173252+00:00"
 ---
 
 ## Description

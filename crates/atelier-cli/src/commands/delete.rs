@@ -65,7 +65,7 @@ pub fn run_lifecycle(state_dir: &Path, db_path: &Path, id: &str, force: bool) ->
         }
     }
 
-    let deleted = crate::commands::agent_factory::delete_lifecycle(state_dir, db_path, id)?;
+    let deleted = crate::commands::issue::delete_lifecycle(state_dir, db_path, id)?;
     println!("Deleted issue {}", format_issue_id(&deleted));
     Ok(())
 }
