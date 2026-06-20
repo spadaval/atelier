@@ -171,7 +171,7 @@ time pressure:
 - Select and run work: choose a clear slice, inspect workflow state, leave notes
   and proof, and follow the lifecycle or recovery command Atelier prints for
   the current item. Owned by `atelier status`, `atelier issue ...`, `atelier
-  worktree ...`, record-specific note commands, and `atelier evidence ...`.
+  evidence ...`, and record-specific note commands.
   Explicit `atelier branch ...` commands are advanced diagnostics or repair
   surfaces unless Atelier routes the operator there.
 - Coordinate objective progress: see linked work by state, blockers, evidence
@@ -188,8 +188,8 @@ time pressure:
   should appear only when a command reports degraded local state. Low-level
   state diagnostics such as export/rebuild are not normal handoff commands.
 
-Normal workflow commands speak in product terms: issue, mission, worktree,
-evidence, blocker, proof, completion, and committed-state validity. Advanced
+Normal workflow commands speak in product terms: issue, mission, evidence,
+blocker, proof, completion, and committed-state validity. Advanced
 diagnostics may expose workflow policy names, projections, cache repair,
 command telemetry, JSON summaries, or raw validator detail, but normal
 operators should only run them when an admin repair path, targeted error,

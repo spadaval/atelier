@@ -23,7 +23,7 @@ mission/issue worktrees?"
 
 | Form | Previous role | Replacement |
 | --- | --- | --- |
-| `worktree for-mission <id>` | Manager/orchestrator | Deferred. Use normal checkout plus `mission status` until workspace management is redesigned. |
+| `worktree for-mission <id>` | Manager/orchestrator | Deferred. Use normal checkout plus `issue status <mission-id>` until workspace management is redesigned. |
 | `worktree for <issue-id>` | Manager/orchestrator | Deferred. Use issue transitions and explicit branch/checkouts outside Atelier when isolation is required. |
 | `worktree status` | Worker/manager | `atelier status`, `git status --short --branch`, and `issue transition <id> --options`. |
 | `worktree merge <id>` | Manager/orchestrator | Workflow close transitions or advanced `branch merge` for epic-owner recovery. |
