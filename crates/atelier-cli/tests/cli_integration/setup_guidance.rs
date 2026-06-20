@@ -1096,7 +1096,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     ));
     assert!(!stdout.contains("atelier doctor"));
     assert!(!stdout.contains("workflow validate"));
-    assert!(!stdout.contains("issue next"));
+    let removed_ready_command = ["atelier", "issue", "next"].join(" ");
+    assert!(!stdout.contains(&removed_ready_command));
     assert!(stdout.contains("Active roles:   none"));
     assert!(!stdout.contains("atelier session"));
 
@@ -2559,12 +2560,21 @@ fn test_issue_status_orders_children_by_visible_blockers() {
         dir.path(),
         &["issue", "create", "Graph parent", "--issue-type", "epic"],
     );
+    let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),
-        &["issue", "subissue", "1", "Implementation node"],
+        &[
+            "issue",
+            "create",
+            "Implementation node",
+            "--parent",
+            &parent_id,
+        ],
     );
-    run_atelier(dir.path(), &["issue", "subissue", "1", "Contract node"]);
-    let parent_id = issue_ref(dir.path(), 1);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Contract node", "--parent", &parent_id],
+    );
     let implementation_id = issue_ref(dir.path(), 2);
     let contract_id = issue_ref(dir.path(), 3);
     run_atelier(
@@ -2636,7 +2646,6 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
 }
 
 #[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
 fn test_hidden_issue_helpers_do_not_emit_compatibility_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

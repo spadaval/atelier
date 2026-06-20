@@ -433,7 +433,7 @@ Current caller map for activity sidecars:
 | Caller | Destination boundary | Notes |
 | --- | --- | --- |
 | `atelier-records/src/activity.rs` | Canonical owner | Owns sidecar paths, schema, parsing, rendering, timestamp ID allocation, listing, and create-new writes. |
-| CLI `issue note`, `issue comment`, work lifecycle, transition, evidence attachment, and bundle note adapters | App/CLI orchestration over `atelier-records::activity` | Command code converts user actions into typed activity events; follow-on app extraction should move orchestration upward without changing the storage owner. |
+| CLI `issue note`, work lifecycle, transition, evidence attachment, and bundle note adapters | App/CLI orchestration over `atelier-records::activity` | Command code converts user actions into typed activity events; follow-on app extraction should move orchestration upward without changing the storage owner. |
 | `atelier history`, issue show recent activity, Agent Factory status helpers, `export`, `rebuild`, and `lint` | Read-only consumers over `atelier-records::activity` | These surfaces may combine projection rows with sidecar events, but sidecar files remain the canonical history payload. |
 | `import-beads` preservation notes and close reasons | App/import workflow over `atelier-records::activity` | Imported predecessor comments are migration input and should be written as activity sidecars, preserving source timestamps when available. |
 | `atelier-sqlite/src/comments.rs` | Removal target for `atelier-2573` | Current read/write use of `create_issue_activity` and `list_issue_activities` blurs the projection boundary and should be removed or confined to compatibility tests/import scaffolding. |

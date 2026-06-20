@@ -29,7 +29,7 @@ A simple, lean issue tracker CLI
 
 That is no longer the product Atelier is trying to be. The Zen says missions give
 work a durable reason to exist, proof must stand on its own, and distinct
-concepts should not collapse into one generic issue tree. The visible root
+concepts should not collapse into one generic relationship tree. The visible root
 identity should therefore describe Atelier as a repository-owned work,
 mission, and proof system, not just as an issue tracker.
 

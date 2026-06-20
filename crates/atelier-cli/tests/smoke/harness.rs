@@ -64,10 +64,9 @@ impl SmokeHarness {
 
     /// Run an Atelier CLI command and return the full result.
     pub fn run(&self, args: &[&str]) -> CmdResult {
-        let translated_args = self.translate_issue_refs_owned(args);
         let output = Command::new(&self.atelier_bin)
             .current_dir(self.temp_dir.path())
-            .args(&translated_args)
+            .args(args)
             .output()
             .expect("failed to execute atelier");
 
@@ -124,15 +123,14 @@ impl SmokeHarness {
 
     /// Attach minimal validation proof to an issue fixture.
     pub fn attach_issue_pass_evidence(&self, issue_ref: &str) -> String {
-        let issue_id = self.translate_issue_ref(issue_ref);
-        let summary = format!("transition close proof for {issue_id}");
+        let summary = format!("transition close proof for {issue_ref}");
         let evidence = self.run_ok(&[
             "evidence",
             "record",
             "--kind",
             "validation",
             "--target",
-            &format!("issue/{issue_id}"),
+            &format!("issue/{issue_ref}"),
             &summary,
         ]);
         let evidence_id = first_record_id(&evidence.stdout)
@@ -142,26 +140,25 @@ impl SmokeHarness {
 
     /// Close an issue fixture through the current proof-backed closeout path.
     pub fn close_issue_with_evidence(&self, issue_ref: &str) {
-        let issue_id = self.translate_issue_ref(issue_ref);
-        self.attach_issue_pass_evidence(&issue_id);
-        self.run_ok(&["issue", "update", &issue_id, "--issue-type", "spike"]);
-        self.run_ok(&["issue", "transition", &issue_id, "start"]);
-        self.run_ok(&["issue", "transition", &issue_id, "request_review"]);
+        self.attach_issue_pass_evidence(issue_ref);
+        self.run_ok(&["issue", "update", issue_ref, "--issue-type", "spike"]);
+        self.run_ok(&["issue", "transition", issue_ref, "start"]);
+        self.run_ok(&["issue", "transition", issue_ref, "request_review"]);
         self.run_ok(&[
             "review",
             "approve",
             "--issue",
-            &issue_id,
+            issue_ref,
             "--role",
             "reviewer",
             "--body",
             "fixture approval",
         ]);
-        self.run_ok(&["review", "merge", "--issue", &issue_id, "--role", "manager"]);
+        self.run_ok(&["review", "merge", "--issue", issue_ref, "--role", "manager"]);
         self.run_ok(&[
             "issue",
             "transition",
-            &issue_id,
+            issue_ref,
             "close",
             "--reason",
             "fixture complete",
@@ -191,8 +188,7 @@ impl SmokeHarness {
     }
 
     pub fn canonical_issue_path(&self, issue_ref: &str) -> PathBuf {
-        let issue_id = self.translate_issue_ref(issue_ref);
-        self.canonical_record_path("issues", &issue_id)
+        self.canonical_record_path("issues", issue_ref)
     }
 
     pub fn canonical_record_id_by_title(&self, directory: &str, title: &str) -> String {
@@ -243,8 +239,7 @@ impl SmokeHarness {
     }
 
     pub fn edit_canonical_issue(&self, issue_ref: &str, edit: impl FnOnce(String) -> String) {
-        let issue_id = self.translate_issue_ref(issue_ref);
-        self.edit_canonical_record("issues", &issue_id, edit);
+        self.edit_canonical_record("issues", issue_ref, edit);
     }
 
     /// Path to the SQLite database.
@@ -254,37 +249,6 @@ impl SmokeHarness {
 
     pub fn issue_id(&self, ordinal: usize) -> String {
         self.issue_ref(ordinal)
-    }
-
-    fn translate_issue_refs(&self, args: &[&str]) -> Vec<String> {
-        self.translate_issue_refs_owned(
-            &args
-                .iter()
-                .map(|arg| (*arg).to_string())
-                .collect::<Vec<_>>(),
-        )
-    }
-
-    fn translate_issue_refs_owned<T: AsRef<str>>(&self, args: &[T]) -> Vec<String> {
-        let args = translate_legacy_test_command(args);
-        args.iter()
-            .enumerate()
-            .map(|(index, arg)| {
-                if issue_ref_position(&args, index) {
-                    self.translate_issue_ref(arg)
-                } else {
-                    arg.to_string()
-                }
-            })
-            .collect()
-    }
-
-    fn translate_issue_ref(&self, value: &str) -> String {
-        let numeric = value.strip_prefix('#').unwrap_or(value);
-        match numeric.parse::<usize>() {
-            Ok(ordinal) => self.issue_ref(ordinal),
-            Err(_) => value.to_string(),
-        }
     }
 
     fn issue_ref(&self, ordinal: usize) -> String {
@@ -376,154 +340,6 @@ fn is_record_id(value: &str) -> bool {
         && suffix
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
-}
-
-fn command_offset<T: AsRef<str>>(args: &[T]) -> usize {
-    args.iter()
-        .position(|arg| !arg.as_ref().starts_with('-'))
-        .unwrap_or(args.len())
-}
-
-fn translate_legacy_test_command<T: AsRef<str>>(args: &[T]) -> Vec<String> {
-    let offset = command_offset(args);
-    let rest = args
-        .get(offset..)
-        .unwrap_or_default()
-        .iter()
-        .map(|arg| arg.as_ref())
-        .collect::<Vec<_>>();
-
-    match rest.as_slice() {
-        ["issue", "label", id, label, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "update", *id, "--label", *label].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "unlabel", id, label, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated
-                .extend(["issue", "update", *id, "--remove-label", *label].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "comment", id, text, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "note", *id, *text].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "relate", blocked, blocker, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "block", *blocked, *blocker].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "unrelate", blocked, blocker, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "unblock", *blocked, *blocker].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "related", id, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "blocked", *id].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "search", query, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["search", *query].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "next", tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "list", "--ready"].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        ["issue", "subissue", parent, title, tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["issue", "create", *title, "--parent", *parent].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
-        _ => args.iter().map(|arg| arg.as_ref().to_string()).collect(),
-    }
-}
-
-fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
-    let offset = command_offset(args);
-    if index <= offset {
-        return false;
-    }
-
-    let rest = args
-        .get(offset..)
-        .unwrap_or_default()
-        .iter()
-        .map(|arg| arg.as_ref())
-        .collect::<Vec<_>>();
-    match rest.as_slice() {
-        ["show" | "update" | "close" | "reopen" | "delete" | "start" | "related", ..] => {
-            index == offset + 1
-        }
-        ["label" | "unlabel" | "comment", ..] => index == offset + 1,
-        ["block" | "unblock" | "relate" | "unrelate", ..] => {
-            index == offset + 1 || index == offset + 2
-        }
-        ["subissue", ..] => index == offset + 1,
-        ["session", "work", ..] => index == offset + 2,
-        ["archive", "add" | "remove", ..] => index == offset + 2,
-        ["milestone", "add" | "remove", ..] => index > offset + 2,
-        ["issue", "show" | "update" | "close" | "reopen" | "delete" | "related" | "impact", ..] => {
-            index == offset + 2
-        }
-        ["issue", "note", ..] => index == offset + 2,
-        ["issue", "create", ..] => {
-            index > offset + 2
-                && args
-                    .get(index - 1)
-                    .map(|arg| arg.as_ref() == "--parent")
-                    .unwrap_or(false)
-        }
-        ["issue", "label" | "unlabel" | "comment", ..] => index == offset + 2,
-        ["issue", "block" | "unblock" | "relate" | "unrelate", ..] => {
-            index == offset + 2 || index == offset + 3
-        }
-        ["issue", "subissue", ..] => index == offset + 2,
-        ["dep", "list", ..] => index == offset + 2,
-        ["dep", "add" | "remove", ..] => index == offset + 2 || index == offset + 3,
-        _ => false,
-    }
 }
 
 /// Assert that `result.stdout` contains `expected`.

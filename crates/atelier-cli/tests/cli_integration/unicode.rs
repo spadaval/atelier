@@ -72,28 +72,32 @@ fn test_unicode_in_descriptions_and_comments() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    // Create with Unicode description
-    let (success, _, _) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Unicode test",
-            "-d",
-            "Description with 日本語 and émojis 🚀",
-        ],
-    );
+    // Create with Unicode description through canonical Markdown.
+    let (success, _, _) = run_atelier(dir.path(), &["issue", "create", "Unicode test"]);
     assert!(success);
+    let issue_id = issue_ref(dir.path(), 1);
+    set_issue_description(
+        dir.path(),
+        &issue_id,
+        "Description with 日本語 and émojis 🚀",
+    );
+    let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild after description edit failed: {stderr}");
 
     // Add Unicode comment
     let (success, _, _) = run_atelier(
         dir.path(),
-        &["issue", "comment", "1", "Comment: ← back, → forward, ↑ up"],
+        &[
+            "issue",
+            "note",
+            &issue_id,
+            "Comment: ← back, → forward, ↑ up",
+        ],
     );
     assert!(success);
 
     // Show should display without panic
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success);
     assert!(
         stdout.contains("日本語"),
@@ -113,15 +117,15 @@ fn test_unicode_search() {
     run_atelier(dir.path(), &["issue", "create", "Emoji test 🎉"]);
 
     // Search for Japanese
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "日本"]);
+    let (success, _, _) = run_atelier(dir.path(), &["search", "日本"]);
     assert!(success);
 
     // Search for emoji
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "🎉"]);
+    let (success, _, _) = run_atelier(dir.path(), &["search", "🎉"]);
     assert!(success);
 
     // Search for arrow
-    let (success, _, _) = run_atelier(dir.path(), &["issue", "search", "←"]);
+    let (success, _, _) = run_atelier(dir.path(), &["search", "←"]);
     assert!(success);
 }
 
@@ -174,53 +178,6 @@ fn test_unicode_in_dependencies() {
 }
 
 /// Test export/import preserves Unicode
-#[test]
-#[ignore = "reason: obsolete legacy command surface removed; owner: cli; issue: atelier-jqds; product: no; blocking: no"]
-fn test_unicode_export_import_roundtrip() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-
-    let unicode_title = "Test: 日本語 ← → 🎉";
-    let unicode_desc = "Description: 中文 العربية Русский";
-
-    run_atelier(
-        dir.path(),
-        &["issue", "create", unicode_title, "-d", unicode_desc],
-    );
-    run_atelier(dir.path(), &["issue", "comment", "1", "コメント (comment)"]);
-
-    // Export
-    let export_path = dir.path().join("unicode_backup.json");
-    let (success, _, _) = run_atelier(
-        dir.path(),
-        &["export", "-o", export_path.to_str().unwrap(), "-f", "json"],
-    );
-    assert!(success);
-
-    // Import to new location
-    let dir2 = tempdir().unwrap();
-    init_atelier(dir2.path());
-    std::fs::copy(&export_path, dir2.path().join("unicode_backup.json")).unwrap();
-
-    let (success, _, _) = run_atelier(
-        dir2.path(),
-        &[
-            "import",
-            dir2.path().join("unicode_backup.json").to_str().unwrap(),
-        ],
-    );
-    assert!(success);
-
-    // Verify Unicode preserved
-    let unicode_id = issue_id_by_title(dir2.path(), unicode_title);
-    let (success, stdout, _) = run_atelier(dir2.path(), &["issue", "show", &unicode_id]);
-    assert!(success);
-    assert!(
-        stdout.contains("日本語") || stdout.contains("Test:"),
-        "Unicode should be preserved in export/import"
-    );
-}
-
 /// Test zero-width and special Unicode characters
 #[test]
 fn test_unicode_special_characters() {

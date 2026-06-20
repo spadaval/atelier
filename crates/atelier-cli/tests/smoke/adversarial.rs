@@ -14,7 +14,8 @@ fn test_boundary_title_exact_512() {
     let result = h.run_ok(&["issue", "create", &title]);
     assert!(result.stdout.contains("Created issue"));
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert!(show.stdout.contains(&title));
 }
 
@@ -24,7 +25,8 @@ fn test_boundary_title_over_513() {
     let title = "a".repeat(513);
     let result = h.run(&["issue", "create", &title]);
     if result.success {
-        let show = h.run_ok(&["issue", "show", "1"]);
+        let issue_id = h.issue_id(1);
+        let show = h.run_ok(&["issue", "show", &issue_id]);
         assert!(show.stdout.contains(&title[..50]));
     } else {
         assert!(
@@ -64,11 +66,12 @@ fn test_boundary_title_null_bytes() {
 fn test_boundary_label_exact_128() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Label boundary test"]);
+    let issue_id = h.issue_id(1);
 
     let label = "a".repeat(128);
-    h.run_ok(&["issue", "label", "1", &label]);
+    h.run_ok(&["issue", "update", &issue_id, "--label", &label]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert!(show.stdout.contains(&label));
 }
 
@@ -76,11 +79,12 @@ fn test_boundary_label_exact_128() {
 fn test_boundary_label_over_129() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Label boundary test"]);
+    let issue_id = h.issue_id(1);
 
     let label = "a".repeat(129);
-    let result = h.run(&["issue", "label", "1", &label]);
+    let result = h.run(&["issue", "update", &issue_id, "--label", &label]);
     if result.success {
-        let show = h.run_ok(&["issue", "show", "1"]);
+        let show = h.run_ok(&["issue", "show", &issue_id]);
         assert!(show.stdout.contains(&label[..50]));
     } else {
         assert!(
@@ -195,7 +199,8 @@ fn test_inject_sql_title() {
     let payload = "'; DROP TABLE issues; --";
     h.run_ok(&["issue", "create", payload]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, payload);
 
     h.run_ok(&["issue", "create", "Normal issue after injection"]);
@@ -212,7 +217,7 @@ fn test_inject_sql_search() {
     h.run_ok(&["issue", "create", "Findable issue"]);
     h.run_ok(&["issue", "create", "Another issue"]);
 
-    let _result = h.run_ok(&["issue", "search", "% OR 1=1 --"]);
+    let _result = h.run_ok(&["search", "% OR 1=1 --"]);
     // DB should remain intact
     let list = h.run_ok(&["issue", "list", "-s", "all"]);
     assert!(list.stdout.contains("Findable issue"));
@@ -223,15 +228,16 @@ fn test_inject_sql_search() {
 fn test_inject_sql_label() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Label injection test"]);
+    let issue_id = h.issue_id(1);
 
     let payload = "'; DELETE FROM labels; --";
-    h.run_ok(&["issue", "label", "1", payload]);
+    h.run_ok(&["issue", "update", &issue_id, "--label", payload]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, payload);
 
-    h.run_ok(&["issue", "label", "1", "safe-label"]);
-    let show2 = h.run_ok(&["issue", "show", "1"]);
+    h.run_ok(&["issue", "update", &issue_id, "--label", "safe-label"]);
+    let show2 = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show2, "safe-label");
 }
 
@@ -239,11 +245,12 @@ fn test_inject_sql_label() {
 fn test_inject_sql_comment() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Comment injection test"]);
+    let issue_id = h.issue_id(1);
 
     let payload = "comment'); DELETE FROM comments; --";
-    h.run_ok(&["issue", "comment", "1", payload]);
+    h.run_ok(&["issue", "note", &issue_id, payload]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, payload);
 }
 
@@ -257,7 +264,8 @@ fn test_inject_shell_title() {
     let payload = "Issue with $(whoami) and `id` and $HOME";
     h.run_ok(&["issue", "create", payload]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, "$(whoami)");
     assert_stdout_contains(&show, "`id`");
     assert_stdout_contains(&show, "$HOME");
@@ -267,11 +275,12 @@ fn test_inject_shell_title() {
 fn test_inject_shell_comment() {
     let h = SmokeHarness::new();
     h.run_ok(&["issue", "create", "Shell comment test"]);
+    let issue_id = h.issue_id(1);
 
     let payload = "Running $(rm -rf /) and `cat /etc/shadow` for $USER";
-    h.run_ok(&["issue", "comment", "1", payload]);
+    h.run_ok(&["issue", "note", &issue_id, payload]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, "$(rm -rf /)");
 }
 
@@ -286,7 +295,8 @@ fn test_unicode_emoji_title() {
         "Fix rendering of \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} emoji";
     h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(
         &show,
         "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}",
@@ -299,7 +309,8 @@ fn test_unicode_rtl_title() {
     let title = "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627} \u{0628}\u{0627}\u{0644}\u{0639}\u{0627}\u{0644}\u{0645}";
     h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, title);
 }
 
@@ -309,7 +320,8 @@ fn test_unicode_mixed_scripts() {
     let title = "Hello \u{041F}\u{0440}\u{0438}\u{0432}\u{0435}\u{0442} \u{4F60}\u{597D} \u{0928}\u{092E}\u{0938}\u{094D}\u{0924}\u{0947}";
     h.run_ok(&["issue", "create", title]);
 
-    let show = h.run_ok(&["issue", "show", "1"]);
+    let issue_id = h.issue_id(1);
+    let show = h.run_ok(&["issue", "show", &issue_id]);
     assert_stdout_contains(&show, title);
 }
 

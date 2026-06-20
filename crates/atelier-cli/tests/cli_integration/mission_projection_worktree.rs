@@ -1221,22 +1221,28 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let epic_id = issue_id_by_title(dir.path(), "Mission epic");
     let epic_id = epic_id.as_str();
 
-    let (success, ready_out, stderr) =
-        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Ready work"]);
+    let (success, ready_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Ready work", "--parent", epic_id],
+    );
     assert!(success, "ready subissue create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
     let ready_id = issue_id_by_title(dir.path(), "Ready work");
     let ready_id = ready_id.as_str();
 
-    let (success, blocked_out, stderr) =
-        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Blocked work"]);
+    let (success, blocked_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Blocked work", "--parent", epic_id],
+    );
     assert!(success, "blocked subissue create failed: {stderr}");
     assert!(blocked_out.contains(epic_id));
     let blocked_id = issue_id_by_title(dir.path(), "Blocked work");
     let blocked_id = blocked_id.as_str();
 
-    let (success, done_out, stderr) =
-        run_atelier(dir.path(), &["issue", "subissue", epic_id, "Done work"]);
+    let (success, done_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Done work", "--parent", epic_id],
+    );
     assert!(success, "done subissue create failed: {stderr}");
     assert!(done_out.contains(epic_id));
     let done_id = issue_id_by_title(dir.path(), "Done work");
@@ -1356,7 +1362,7 @@ fn test_mission_status_cli_reports_control_state() {
 
     let (success, ready_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "subissue", epic_id, "Ready status work"],
+        &["issue", "create", "Ready status work", "--parent", epic_id],
     );
     assert!(success, "ready work create failed: {stderr}");
     assert!(ready_out.contains(epic_id));
@@ -1376,7 +1382,13 @@ fn test_mission_status_cli_reports_control_state() {
 
     let (success, blocked_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "subissue", epic_id, "Blocked status work"],
+        &[
+            "issue",
+            "create",
+            "Blocked status work",
+            "--parent",
+            epic_id,
+        ],
     );
     assert!(success, "blocked work create failed: {stderr}");
     assert!(blocked_out.contains(epic_id));
@@ -1610,9 +1622,10 @@ fn test_mission_status_deduplicates_duplicate_reachability() {
         dir.path(),
         &[
             "issue",
-            "subissue",
-            epic_id.as_str(),
+            "create",
             "Duplicate child",
+            "--parent",
+            epic_id.as_str(),
             "--description",
             "## Description\n\nDuplicate reachability child.\n\n## Outcome\n\nMission status counts this child once.\n\n## Evidence\n\n- `atelier issue status <mission-id>` counts this child once and reports duplicate reachability.",
         ],
@@ -3912,7 +3925,7 @@ fn test_issue_type_is_canonical_not_label_derived() {
     assert!(stdout.contains("Type:     validation"));
     let issue_id = issue_id_by_title(dir.path(), "Typed issue");
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "1"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Typed issue"));
     assert!(stdout.contains("Category: todo"));
@@ -3950,7 +3963,7 @@ fn test_import_beads_reports_mapping_without_tracker_provenance() {
     assert!(stdout.contains("imported issues: 3"));
     assert!(stdout.contains("blocking relationships: 1"));
 
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "3"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", "atelier-0003"]);
     assert!(success, "mapped show failed: {stderr}");
     assert!(stdout.contains("atelier-0003"));
     assert!(stdout.contains("[task]"));
