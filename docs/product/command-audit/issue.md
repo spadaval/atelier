@@ -42,8 +42,7 @@ create compatibility aliases for the removed mission commands.
   but does not tell a worker which subset matters.
 - Design: Mostly correct. The family is broad, but cohesion is still issue
   state and issue relationships. This is where issue-sourced relationship and
-  blast-radius context should live; a separate `graph impact` command is a sign
-  that `issue show` is not yet powerful enough.
+  blast-radius context now lives after retiring the separate graph namespace.
 - Output hierarchy: For reads, current state and blockers before metadata, then
   parent/children, mission links, evidence, relationship context, and affected
   records that may need review. For mutations, changed fields or transition
@@ -55,7 +54,7 @@ create compatibility aliases for the removed mission commands.
 | --- | --- | --- | --- |
 | `issue create` | Manager/orchestrator | Create actionable issue-shaped work. | Good. Keep `--issue-type` and template behavior explicit. |
 | `issue list` | Worker | Find candidate or assigned work. | Good, but role guides should prefer `--ready`, `--blocked`, and exact status/category examples. |
-| `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Needs strengthening. It should absorb issue-scoped `graph impact` value before a separate impact command is kept. |
+| `issue show` | Worker | Understand the work slice, proof expectations, and relationship context. | Good. It includes issue-scoped downstream impact so operators do not leave the issue view for blast-radius context. |
 | `issue transition` | Reviewer | Inspect or execute workflow gates. | Good. It belongs with issue mutation; `--options` should be the reviewer entry point. |
 | `issue update` | Manager/orchestrator | Correct issue metadata, parent, labels, type, priority. | Good. Current work is derived from canonical issue status plus checkout context, not from separate runtime ownership state. |
 | `issue note` | Worker | Add durable progress, handoff, or observation context. | Good. |

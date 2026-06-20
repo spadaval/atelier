@@ -473,14 +473,15 @@ fn test_issue_impact_reports_downstream_work() {
 // ==================== Tree Tests ====================
 
 #[test]
-fn test_tree_command() {
+fn test_issue_status_replaces_tree_command() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    let parent_id = issue_ref(dir.path(), 1);
     run_atelier(dir.path(), &["issue", "subissue", "1", "Child issue"]);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "status", &parent_id]);
 
     assert!(success);
     assert!(stdout.contains("Parent issue"));
@@ -488,7 +489,7 @@ fn test_tree_command() {
 }
 
 #[test]
-fn test_tree_with_status_filter() {
+fn test_issue_list_replaces_tree_status_filter() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -496,7 +497,7 @@ fn test_tree_with_status_filter() {
     run_atelier(dir.path(), &["issue", "create", "Closed parent"]);
     close_issue_with_evidence(dir.path(), "2", None);
 
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree", "-s", "todo"]);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "list", "--status", "todo"]);
 
     assert!(success);
     assert!(stdout.contains("Open parent"));
@@ -505,6 +506,7 @@ fn test_tree_with_status_filter() {
 }
 
 #[test]
+#[ignore = "reason: compact tree rendering removed; owner: cli; issue: atelier-39um; product: no; blocking: no"]
 fn test_tree_compact_collapses_deep_hierarchy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -527,6 +529,7 @@ fn test_tree_compact_collapses_deep_hierarchy() {
 }
 
 #[test]
+#[ignore = "reason: compact tree rendering removed; owner: cli; issue: atelier-39um; product: no; blocking: no"]
 fn test_tree_compact_omits_wide_sibling_sets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -547,6 +550,7 @@ fn test_tree_compact_omits_wide_sibling_sets() {
 }
 
 #[test]
+#[ignore = "reason: compact tree rendering removed; owner: cli; issue: atelier-39um; product: no; blocking: no"]
 fn test_tree_compact_omits_wide_root_sets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -568,6 +572,7 @@ fn test_tree_compact_omits_wide_root_sets() {
 }
 
 #[test]
+#[ignore = "reason: compact tree rendering removed; owner: cli; issue: atelier-39um; product: no; blocking: no"]
 fn test_tree_compact_summarizes_mixed_open_closed_subtrees() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -1518,8 +1523,9 @@ fn test_import_with_parent_relationships() {
     assert!(stdout.contains("Imported") || stdout.contains("import"));
 
     // Verify the parent-child relationship was preserved
-    let (_, tree_out, _) = run_atelier(dir2.path(), &["issue", "tree"]);
-    assert!(tree_out.contains("Parent") && tree_out.contains("Child"));
+    let imported_parent = issue_ref(dir2.path(), 1);
+    let (_, status_out, _) = run_atelier(dir2.path(), &["issue", "status", &imported_parent]);
+    assert!(status_out.contains("Parent") && status_out.contains("Child"));
 }
 
 // --- import.rs: Import issues with labels and comments ---

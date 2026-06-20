@@ -432,15 +432,6 @@ fn translate_legacy_test_command<T: AsRef<str>>(args: &[T]) -> Vec<String> {
             translated.extend(tail.iter().map(|arg| (*arg).to_string()));
             translated
         }
-        ["issue", "tree", tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["graph", "tree"].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
         ["issue", "next", tail @ ..] => {
             let mut translated = args[..offset]
                 .iter()

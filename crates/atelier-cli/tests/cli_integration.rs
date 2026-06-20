@@ -666,8 +666,9 @@ fn valid_command_surface_doc() -> &'static str {
 - `atelier status`
 - `atelier issue ...`
 - `atelier issue transition <issue-id> start`
+- `atelier issue status <objective-id>`
+- `atelier issue link <objective-id> <issue-id> --role advances`
 - `atelier search <query>`
-- `atelier graph impact/tree`
 - `atelier issue note`
 - `atelier mission note`
 - `atelier mission create/show/list/status/update`
@@ -1207,15 +1208,6 @@ fn translate_legacy_test_command<T: AsRef<str>>(args: &[T]) -> Vec<String> {
             translated.extend(tail.iter().map(|arg| (*arg).to_string()));
             translated
         }
-        ["issue", "tree", tail @ ..] => {
-            let mut translated = args[..offset]
-                .iter()
-                .map(|arg| arg.as_ref().to_string())
-                .collect::<Vec<_>>();
-            translated.extend(["graph", "tree"].map(str::to_string));
-            translated.extend(tail.iter().map(|arg| (*arg).to_string()));
-            translated
-        }
         ["issue", "next", tail @ ..] => {
             let mut translated = args[..offset]
                 .iter()
@@ -1293,7 +1285,7 @@ fn issue_ref_position<T: AsRef<str>>(args: &[T], index: usize) -> bool {
             index == offset + 2 || index == offset + 3
         }
         ["issue", "subissue", ..] => index == offset + 2,
-        ["graph", "impact", ..] => index == offset + 2,
+        ["graph", "impact", ..] => false,
         ["note", "add", target_kind, ..] => *target_kind == "issue" && index == offset + 3,
         ["maintenance", "delete", target_kind, ..] => {
             *target_kind == "issue" && index == offset + 3

@@ -64,7 +64,7 @@ The CLI has several relationship paths:
 - `mission add-work` and `mission add-blocker`
 - `dep add`, `dep remove`, and `dep list`
 - `link add`, `link remove`, and `link list`
-- `graph hierarchy`, `graph related`, and `graph impact`
+- hierarchy, related-record, and impact inspection paths
 - `plan link`
 - `evidence attach`
 

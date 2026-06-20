@@ -27,7 +27,6 @@ Orientation:
 Issues:
   issue         Create, list, show, update, close, and manage blockers
   search        Search issue text
-  graph         Inspect mission and issue hierarchy and impact
 
 Missions and planning:
   mission       Create, list, show, status, close, and update durable missions
@@ -133,12 +132,6 @@ enum Commands {
     Search {
         /// Search query
         query: String,
-    },
-
-    /// Mission and issue graph commands
-    Graph {
-        #[command(subcommand)]
-        action: GraphCommands,
     },
 
     /// Advanced deterministic-renderer diagnostic; normal health uses lint and status
@@ -433,24 +426,6 @@ enum IssueCommands {
     Blocked {
         /// Issue ID to inspect instead of the blocked-work queue
         id: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
-enum GraphCommands {
-    /// Show downstream impact across mission work, hierarchy, and impact-bearing links
-    Impact {
-        /// Mission or issue ID
-        id: String,
-    },
-    /// Show missions and issues as a tree hierarchy
-    Tree {
-        /// Filter by status (todo, done, all)
-        #[arg(short, long, default_value = "all")]
-        status: String,
-        /// Show a bounded, scan-friendly hierarchy instead of the full tree
-        #[arg(long)]
-        compact: bool,
     },
 }
 
@@ -827,19 +802,6 @@ fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
     }
 }
 
-fn resolve_graph_record_arg(db: &Database, id: &str) -> Result<(String, String)> {
-    match commands::agent_factory::resolve_id(db, id) {
-        Ok(issue_id) => Ok(("issue".to_string(), issue_id)),
-        Err(issue_error) => match db.record_kind_for_id(id)? {
-            Some(kind) if kind == "mission" => Ok((kind, id.to_string())),
-            Some(kind) => bail!(
-                "{id} is a {kind} record; `atelier graph impact` supports mission and issue records."
-            ),
-            None => Err(issue_error),
-        },
-    }
-}
-
 fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
     let suggested = show_command_for_kind(actual_kind)
         .map(|command| format!(" Use `{command} {id}`."))
@@ -1110,22 +1072,6 @@ fn run() -> Result<()> {
             let db = degraded_projection_query_db()?;
             commands::agent_factory::search(&db, &query, quiet)
         }
-
-        Commands::Graph { action } => match action {
-            GraphCommands::Impact { id } => {
-                let db = projection_query_db()?;
-                let (kind, id) = resolve_graph_record_arg(&db, &id)?;
-                commands::relate::impact(&db, &kind, &id)
-            }
-            GraphCommands::Tree { status, compact } => {
-                let db = projection_query_db()?;
-                if compact {
-                    commands::tree::run_compact(&db, Some(&status))
-                } else {
-                    commands::tree::run(&db, Some(&status))
-                }
-            }
-        },
 
         Commands::Export { output, check } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
@@ -1679,10 +1625,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Blocked { .. } => "issue blocked",
         },
         Commands::Search { .. } => "search",
-        Commands::Graph { action } => match action {
-            GraphCommands::Impact { .. } => "graph impact",
-            GraphCommands::Tree { .. } => "graph tree",
-        },
         Commands::Export { check, .. } => {
             if *check {
                 "export --check"

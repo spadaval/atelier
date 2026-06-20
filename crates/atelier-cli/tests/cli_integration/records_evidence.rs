@@ -378,8 +378,9 @@ fn test_stress_deep_nesting() {
         assert!(success, "Failed to create subissue at level {}", i);
     }
 
-    // Verify tree command handles deep nesting
-    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "tree"]);
+    // Verify objective status handles deep nesting.
+    let root_id = issue_ref(dir.path(), 1);
+    let (success, stdout, _) = run_atelier(dir.path(), &["issue", "status", &root_id]);
     assert!(success);
     assert!(stdout.contains("Level 20"));
 }

@@ -22,7 +22,6 @@ pub mod prune;
 pub mod relate;
 pub mod status;
 pub mod tested;
-pub mod tree;
 pub mod work;
 pub(crate) mod work_order;
 pub mod workflow;

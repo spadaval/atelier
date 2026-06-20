@@ -38,8 +38,6 @@ issue or mission:
 - `atelier issue status <objective-id>`
 - `atelier issue link/unlink <objective-id> <issue-id> --role advances`
 - `atelier search <query>`
-- `atelier graph impact/tree` until relationship context is folded into
-  issue/objective views
 - `atelier mission create/show/list/status/close/update/note` until objective
   issue replacements land
 - `atelier mission add-work/unlink/add-blocker` until issue link/block
@@ -122,8 +120,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `mission status`, `issue list --ready`, role-specific commands, or `man admin` when repair is needed. |
 | `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active mission, ready count, tracker freshness, and the next work or mission commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `mission status`, `issue show <id>`, `issue list --ready`, and admin repair guidance only for degraded local state. |
 | `issue` | Create, list, show, update, transition, note, inspect type-aware status, and manage issue-owned blockers and links. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, type-aware objective status owns mission-shaped health and terminal readiness, link mutations name the source, target, and role, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, relationship roles, and canonical paths. | `issue show <id>`, `issue status <objective-id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
-| `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `history`, `graph tree --compact`. |
-| `graph` | Inspect cross-record hierarchy and downstream impact shape until record views absorb that context. | `impact` prints a bounded downstream set across objective and issue relationships; `tree` prints compact hierarchy cues unless a broader tree was explicitly requested. | IDs, counts, kinds, and status or priority tokens only. | `issue show <id>`, `issue status <objective-id>`, `issue list --blocked`. |
+| `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `issue status <objective-id>`, `history`. |
 | `mission` | Transitional namespace for existing mission records until objective issue replacements land. | Existing mission reads and mutations remain only long enough to migrate behavior to type-aware issue commands. The target state removes this root namespace rather than aliasing it. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `issue show <objective-id>`, `issue status <objective-id>`, `issue transition <objective-id> --options`, `history --issue <objective-id>`. |
 | `bundle` | Preview and apply one-shot graph bundles from files. Use this for bulk mission, epic, issue, relationship, and evidence creation instead of shell loops over individual mutation commands. | `preview` prints deterministic non-mutating validation output; `apply` requires `--yes` and prints created IDs, relationship counts, and recovery guidance when needed. | Created IDs, counts, and pass/fail tokens. | `issue show <id>`, `mission show <id>`, `evidence show <id>`, `lint`. |
 | `evidence` | Record and inspect proof records. | `record` is the default proof-capture workflow; `show` and `list` inspect existing evidence; output names target, kind, result, and reusable IDs. | Evidence IDs, target IDs, result tokens, and stored command status only. | `evidence show <id>`, `history --issue <id>`, `issue show <id>`. |
@@ -184,8 +181,8 @@ time pressure:
   Transitional mission commands remain only until those replacements land.
 - Manage relationships: record issue blockers and inspect cross-record impact
   when the next action depends on graph shape. Owned by issue blocker
-  subcommands, mission work-link subcommands, evidence attachment, and
-  `atelier graph impact/tree`.
+  subcommands, issue link/unlink, issue detail/status, mission work-link
+  subcommands while transitional missions remain, and evidence attachment.
 - Check committed state: prove tracked records and workflow config are usable
   for handoff. Owned by `atelier lint`; local runtime repair is admin-only and
   should appear only when a command reports degraded local state. Low-level
@@ -247,8 +244,8 @@ update <id> --status ready` does not run completion validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
-such as issue list, ready queues, search, graph impact/tree, lint, and Mission
-Control views may use SQLite after freshness checks.
+such as issue list, ready queues, search, issue detail/status, lint, and
+Mission Control views may use SQLite after freshness checks.
 Issue creation and issue detail output print the canonical Markdown path under
 `.atelier/issues/<id>.md` so large-field editing stays file-first. Human
 footers point to editing that Markdown file, `atelier lint <id>`, and focused
@@ -472,13 +469,13 @@ surface is `delete` unless it is in the core list above.
 | Export check diagnostic | Low-level diagnostic | Cache/projection state should be transparent; normal health and completion routes use `lint`, mission status/audit, and issue transition readiness. | Hidden/advanced diagnostic only; do not teach as a normal handoff command. |
 | Export diagnostic | Low-level diagnostic | Deterministic repair/render mechanics are implementation details. | Hidden/advanced diagnostic only; `doctor --fix` owns admin explicit local repair. |
 | Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns admin explicit local repair. |
-| Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, root `search`, cross-record `graph`, record-specific notes, `evidence`, and `status`. |
+| Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, root `search`, issue detail/status, record-specific notes, `evidence`, and `status`. |
 | Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and mission status as next-step sources. |
 | `mission view` | Remove | Duplicate of the richer mission detail surface. | `mission show` |
-| Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle and blockers; `graph` owns cross-record impact/tree inspection. |
-| Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers use issue commands; evidence uses evidence commands; graph inspects impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
+| Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle, blockers, links, detail, and objective status. |
+| Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `mission add-work/unlink`; issue blockers and links use issue commands; evidence uses evidence commands; issue detail/status inspect impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
 | Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `init --import-beads` and temporarily hidden/manual `import-beads` for migration. |
-| `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | `graph impact`, record-specific note commands, and lifecycle commands. |
+| `cascade` and `falsify` | Remove | Relationship-specific verbs hide the broader graph model and encourage one-off command paths. | Issue detail/status, record-specific note commands, and lifecycle commands. |
 
 Removed command surfaces:
 
@@ -495,6 +492,9 @@ Removed command surfaces:
   `init --import-beads` for the standard repo-local predecessor import.
   Standalone `import-beads` remains a hidden transitional command for explicit
   backup paths until migration cleanup removes it.
+- The retired graph impact and graph tree forms; use `issue show <id>` for
+  downstream impact and `issue status <objective-id>` for objective work
+  hierarchy.
 
 When a removed or commonly retried command is rejected, the CLI lets Clap report
 the path as unknown or invalid without a compatibility guidance shim. Examples
@@ -543,14 +543,15 @@ The Claude Code integration surface is removed rather than supported as an
 Atelier product feature. Future integrations should return as explicit product
 proposals with their own operator value, not as hidden command groups.
 
-Generic replacements should use domain language. `atelier graph impact <id>` is
-the visible cross-record impact command, and `atelier search <query>` owns text
-search. Impact follows mission work links, issue hierarchy, blocking
-relationships, and any explicitly impact-bearing relationship types that remain
-after the generic link root is removed. The inherited `cascade` and `falsify`
-commands are removed so reassessment stays an explicit operator action through
-graph, record-specific notes, and lifecycle commands instead of an
-assumption-specific command path.
+Generic replacements should use domain language. `atelier search <query>` owns
+text search; `atelier issue show <id>` owns issue-scoped downstream impact; and
+`atelier issue status <objective-id>` owns objective hierarchy and work health.
+Impact follows mission work links, issue hierarchy, blocking relationships, and
+any explicitly impact-bearing relationship types that remain after the generic
+link root is removed. The inherited `cascade` and `falsify` commands are removed
+so reassessment stays an explicit operator action through issue detail/status,
+record-specific notes, and lifecycle commands instead of an assumption-specific
+command path.
 
 ## Operator Command Map
 
@@ -565,7 +566,7 @@ generic relationship verb.
 | Add or inspect blockers | issue IDs for issue blockers; mission ID plus issue ID for mission blockers | `atelier issue block <blocked-id> <blocker-id>`, `atelier issue unblock <blocked-id> <blocker-id>`, `atelier issue blocked [<id>]`, or `atelier mission add-blocker <mission-id> <issue-id>` | Issue blockers and mission blockers are different relationships. Do not use top-level dependency commands. |
 | Record new proof | issue target, normally `issue/<id>` | `atelier evidence record --target issue/<id> --kind validation "summary"` or `atelier evidence record --target issue/<id> --kind test -- <command>` | New proof starts with `evidence record`. Direct mission targets are reserved for legacy imports or explicit completion mirroring. |
 | Reuse existing proof on another target | evidence ID plus issue target | `atelier evidence attach <evidence-id> issue <issue-id> --role validates` | Attachment reuses an existing evidence record. Evidence kind stays in `--kind`, while the relation role is `validates`. |
-| Inspect cross-record impact or hierarchy | mission or issue ID for impact; all records for tree | `atelier graph impact <mission-or-issue-id>` and `atelier graph tree --compact` | Graph commands inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
+| Inspect issue impact or objective hierarchy | issue ID or objective issue ID | `atelier issue show <issue-id>` and `atelier issue status <objective-id>` | Issue views inspect relationships. They do not create mission work links, blockers, notes, or evidence. |
 | Add durable handoff context | issue or mission ID | `atelier issue note <issue-id> "..."` or `atelier mission note <mission-id> "..."` | Notes are contextual activity. They are not a substitute for required evidence on completion claims. |
 | Reference execution plans | repository Markdown path or prose inside a mission, epic, issue, or evidence record | edit the accountable Markdown record or attach evidence that names the plan path | Plans are ordinary Markdown artifacts in v1. They are not `.atelier/plans/` records and do not replace issue blockers or mission work links. |
 | Preview or apply a one-shot graph bundle | bundle file path | `atelier bundle preview <file>` and `atelier bundle apply <file>` | Bundle apply requires its explicit confirmation flag. Bundles create graph deltas from a temporary file and stop being relevant after canonical records are written. |
@@ -578,7 +579,7 @@ Mission-vs-issue example:
 atelier mission add-work atelier-hy2i atelier-4p7q
 atelier issue block atelier-isd5 atelier-a625
 atelier evidence record --target issue/atelier-isd5 --kind validation "operator command map checked against current help"
-atelier graph impact atelier-hy2i
+atelier issue status atelier-4p7q
 atelier issue note atelier-isd5 "CLI surface examples checked against root help."
 ```
 

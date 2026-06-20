@@ -131,8 +131,8 @@ Manual `issue create`, `mission add-work`, and `issue block` remain appropriate
 for one-off edits, not for shell loops that recreate bundle behavior. Explicit
 branch commands belong in advanced repair and diagnostic guidance when Atelier
 routes the operator there.
-The manager guide should not teach `graph tree` as a routine path; mission and
-issue views should own hierarchy and impact context.
+The manager guide should not teach retired graph commands as a routine path;
+mission and issue views should own hierarchy and impact context.
 
 ## Admin Guide
 

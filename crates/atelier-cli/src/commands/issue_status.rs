@@ -70,11 +70,11 @@ fn print_ready_work(
     println!();
     println!("Ready Work");
     println!("----------");
-    if snapshot.selectable_issues.is_empty() {
+    if snapshot.ready_issues.is_empty() {
         println!("(none)");
         return Ok(());
     }
-    for issue in snapshot.selectable_issues.iter().take(5) {
+    for issue in snapshot.ready_issues.iter().take(5) {
         println!(
             "  ready {} - {} | no open blockers; {}; {}",
             issue.id,

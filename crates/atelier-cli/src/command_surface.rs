@@ -16,7 +16,6 @@ const CLI_SURFACE_DOC: &str = "docs/product/cli-surface.md";
 const COMMAND_GROUP_ROOTS: &[&str] = &[
     "diagnostics",
     "evidence",
-    "graph",
     "issue",
     "branch",
     "maintenance",

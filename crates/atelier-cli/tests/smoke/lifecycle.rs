@@ -101,37 +101,39 @@ fn test_timer_stop_not_running() {
 }
 
 // ===========================================================================
-// Issue tree with hierarchy
+// Objective status with hierarchy
 // ===========================================================================
 
 #[test]
-fn test_issue_tree_with_subissues() {
+fn test_issue_status_with_subissues() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Parent lifecycle issue"]);
+    let parent_id = h.issue_id(1);
     h.run_ok(&["issue", "subissue", "1", "Child lifecycle issue"]);
 
-    let tree = h.run_ok(&["issue", "tree"]);
-    assert!(tree.stdout.contains("Parent lifecycle issue"));
-    assert!(tree.stdout.contains("Child lifecycle issue"));
+    let status = h.run_ok(&["issue", "status", &parent_id]);
+    assert!(status.stdout.contains("Parent lifecycle issue"));
+    assert!(status.stdout.contains("Child lifecycle issue"));
 }
 
 #[test]
-fn test_issue_tree_deep_nesting() {
+fn test_issue_status_deep_nesting() {
     let h = SmokeHarness::new();
 
     h.run_ok(&["issue", "create", "Root issue"]);
+    let root_id = h.issue_id(1);
     h.run_ok(&["issue", "subissue", "1", "Child issue"]);
     h.run_ok(&["issue", "subissue", "2", "Grandchild issue"]);
 
-    let tree = h.run_ok(&["issue", "tree"]);
-    assert!(tree.stdout.contains("Root issue"));
-    assert!(tree.stdout.contains("Child issue"));
-    assert!(tree.stdout.contains("Grandchild issue"));
+    let status = h.run_ok(&["issue", "status", &root_id]);
+    assert!(status.stdout.contains("Root issue"));
+    assert!(status.stdout.contains("Child issue"));
+    assert!(status.stdout.contains("Grandchild issue"));
 }
 
 #[test]
-fn test_issue_tree_status_filter() {
+fn test_issue_status_reports_sibling_children() {
     let h = SmokeHarness::new();
 
     h.run_ok(&[
@@ -146,49 +148,17 @@ fn test_issue_tree_status_filter() {
     h.run_ok(&[
         "issue",
         "create",
-        "Done child",
+        "Sibling child",
         "--parent",
         &parent_id,
         "--issue-type",
         "spike",
     ]);
-    let done_child_id = h.issue_id(3);
-    h.run_ok(&["issue", "transition", &done_child_id, "start"]);
-    h.run_ok(&["issue", "transition", &done_child_id, "request_review"]);
-    h.run_ok(&[
-        "review",
-        "approve",
-        "--issue",
-        &done_child_id,
-        "--role",
-        "reviewer",
-        "--body",
-        "fixture approval",
-    ]);
-    h.run_ok(&[
-        "review",
-        "merge",
-        "--issue",
-        &done_child_id,
-        "--role",
-        "manager",
-    ]);
-    h.run_ok(&[
-        "issue",
-        "transition",
-        &done_child_id,
-        "close",
-        "--reason",
-        "fixture complete",
-    ]);
 
-    let tree = h.run_ok(&["issue", "tree", "-s", "todo"]);
-    assert!(tree.stdout.contains("Todo child"));
-    assert!(
-        !tree.stdout_contains("Done child"),
-        "tree --status todo should not show done issues.\nstdout: {}",
-        tree.stdout,
-    );
+    let status = h.run_ok(&["issue", "status", &parent_id]);
+    assert!(status.stdout.contains("Todo child"));
+    assert!(status.stdout_contains("Sibling child"));
+    assert!(status.stdout.contains("Ready Work"));
 }
 
 // ===========================================================================

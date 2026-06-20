@@ -1,4 +1,4 @@
-# `atelier graph`
+# Retired `atelier graph`
 
 Primary role: Manager/orchestrator.
 
@@ -9,8 +9,8 @@ views?"
 
 - Name: Weak. `graph` is implementation language; operators usually start from
   an issue, mission, blocker, or proof question.
-- Documentation: Should mark this namespace as a consolidation target rather
-  than teaching it as an ordinary manager path.
+- Documentation: This namespace is retired and should not be taught as an
+  ordinary manager path.
 - Design: Duplicative. `graph tree` overlaps with issue hierarchy and
   objective status views. `graph impact` exposed useful blast-radius logic; the
   replacement home is now `issue show`, which renders downstream impact
@@ -23,14 +23,14 @@ views?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Remove after the deletion issue. Issue-sourced impact now belongs in `issue show`; objective work health belongs in `issue status <objective-id>`. |
-| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Remove after the deletion issue. Objective hierarchy and work buckets belong in `issue status <objective-id>` and issue detail. |
+| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Removed. Issue-sourced impact now belongs in `issue show`; objective work health belongs in `issue status <objective-id>`. |
+| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Removed. Objective hierarchy and work buckets belong in `issue status <objective-id>` and issue detail. |
 | `graph tree --status <status>` | Manager/orchestrator | Filter the hierarchy by status. | Remove. It is redundant with issue list/status/category filters and currently hard-codes predecessor statuses. |
 
 ## Cutting Direction
 
-Delete the abstract `graph` namespace in the follow-up removal slice. The
-replacement views now cover the useful operator questions:
+The abstract `graph` namespace is removed. The replacement views now cover the
+useful operator questions:
 
 - `issue show <id>` renders parent/children, blockers, evidence, and downstream
   impact records that may need review before changing or closing the source.
