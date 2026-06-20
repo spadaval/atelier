@@ -522,6 +522,13 @@ shape applies to a work item. Atelier configuration and command output own that
 routing. Review commands must not start, close, or otherwise transition Atelier
 issues.
 
+The normal review decision loop is explicit: inspect the linked artifact with
+the review status and show subcommands, leave comments when useful, then use
+the review approve or request-changes subcommands to record the decision. For
+provider workflows, that approval satisfies `review.complete` so the issue can
+move to validation while the PR remains unmerged. Terminal close performs the
+final tracker commit, branch push, provider merge, and base sync.
+
 Workflow transitions may run a configured review artifact open action.
 That action is reached through the explicit issue transition that printed it,
 not by treating `atelier review` as workflow authority. Review commands remain
@@ -531,10 +538,11 @@ remains the workflow routing surface.
 Workflow validators read review state and return actionable pass/fail guidance
 through transition/status surfaces. The local facts Atelier owns are the active
 review field, configured review identity, expected source and target branches
-when workflow policy needs them, merged state, review-complete state when a
-configured transition asks for it, and unresolved review-comment counts for
-operator guidance. The configured review system remains the authority for its
-own external protection, approval, merge-method, and permission details.
+when workflow policy needs them, merged state when a fact-check validator asks
+for it, provider approval readiness for `review.complete`, and unresolved
+review-comment counts for operator guidance. The configured review system
+remains the authority for its own external protection, approval, merge-method,
+and permission details.
 
 ## Integration Or Experimental
 

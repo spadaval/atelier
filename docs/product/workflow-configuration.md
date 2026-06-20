@@ -387,9 +387,11 @@ close issues, add `pr` aliases, or replace explicit
 Merge authority is mode-specific. Provider-backed terminal workflows must use
 provider-owned actions such as `tracker.commit`, `branch.push`, `review.merge`,
 and `base.sync`; they must not perform local base integration through
-`branch_integrate`. Local review-room workflows may keep `branch_integrate`, but
-only as an explicit workflow action that records local branch integration under
-room authority.
+`branch_integrate`. Provider review artifacts must not be merged before terminal
+close when close will run `tracker.commit`; close needs to create and push the
+final tracker commit before `review.merge` asks the provider to merge. Local
+review-room workflows may keep `branch_integrate`, but only as an explicit
+workflow action that records local branch integration under room authority.
 
 Review artifact actions require parameter objects. Room-mode actions declare
 the local Atelier role:
@@ -465,7 +467,7 @@ Supported built-ins include:
 | `tracker.current` | Canonical state and local projection are current enough for the transition. |
 | `issue.sections_parseable` | Issue Markdown sections can be parsed. |
 | `evidence.attached` | Required evidence is attached; supports `min_count`. |
-| `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
+| `review.complete` | Required review artifact state is complete enough for the configured transition. In provider mode this is an approved, open, branch-matched review ready for terminal merge; in room mode this is a merged room artifact. The configured review provider remains the authority for approval rules and branch protection. |
 | `children.proof_complete` | Child work is closed with validating proof. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
@@ -536,12 +538,15 @@ top-level `pull_request` fields are migration input only: migrated records must
 render the structured `review` field, and strict validation rejects the old
 shape after migration. The starter policy requires `review.complete` for the
 epic and validation review flow, while ordinary child issues close on their own
-proof. Repositories that require an epic close to verify merged provider state
-may add `review.linked_pr_merged` to that close transition. In provider mode
-`review.linked_pr_merged` derives provider host/owner/repo from
-`.atelier/config.toml` and expected source/target branches from `branch_policy`.
-In room mode equivalent review readiness comes from the room merge event rather
-than provider PR state.
+proof. In provider mode `review.complete` means the linked provider review is
+open, branch-matched, and approved enough to proceed to validation; terminal
+close remains responsible for committing tracker state, pushing the owner
+branch, merging the provider review, and syncing the base branch. In room mode
+`review.complete` means the native room has been merged. Repositories that
+require an extra post-merge fact check may add `review.linked_pr_merged` to a
+later transition. In provider mode `review.linked_pr_merged` derives provider
+host/owner/repo from `.atelier/config.toml` and expected source/target branches
+from `branch_policy`.
 
 `review.linked_pr_merged` is deliberately a fact check, not a second
 review-provider policy engine. Atelier validates the review artifact link,

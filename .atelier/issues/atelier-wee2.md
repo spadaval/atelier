@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T13:22:59.582361530+00:00"
+status: "done"
 title: "Make review.complete gate provider approvals before terminal merge"
-updated_at: "2026-06-20T13:13:20.928125033+00:00"
+updated_at: "2026-06-20T13:22:59.582361530+00:00"
 ---
 
 ## Description

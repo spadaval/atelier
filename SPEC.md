@@ -446,7 +446,8 @@ Version 1 built-in actions include:
 - `branch.push`: push the workflow-derived owner branch to the configured
   review provider remote.
 - `review.merge`: ask the active review authority to merge or record merge
-  completion for the branch owner's review artifact.
+  completion for the branch owner's review artifact after terminal tracker
+  state has been committed and pushed.
 - `base.sync`: synchronize the local base branch after provider-owned merge
   completion.
 - `branch_integrate`: integrate the owner branch to the configured base
@@ -623,6 +624,9 @@ Version 1 built-in validators include:
 
 - `tracker.current`
 - `review.complete`
+  - In provider mode, the linked review artifact is open, branch-matched, and
+    approved enough to advance before terminal merge.
+  - In room mode, the linked room artifact is merged.
 - `review.linked_pr_merged`
 - `evidence.attached`
 - `validation.criteria_satisfied`

@@ -210,6 +210,19 @@ impl<T: ForgejoTransport> ForgejoClient<T> {
             .context("forgejo_api_error: failed to parse pull request review response")
     }
 
+    pub fn pull_reviews(&self, number: u64) -> Result<Vec<ForgejoReview>> {
+        let response = self.send(ForgejoRequest {
+            method: "GET",
+            path: self.repo_path(&format!("pulls/{number}/reviews")),
+            query: Vec::new(),
+            headers: BTreeMap::new(),
+            body: None,
+        })?;
+        serde_json::from_str::<Vec<ReviewResponse>>(&response.body)
+            .map(|reviews| reviews.into_iter().map(Into::into).collect())
+            .context("forgejo_api_error: failed to parse pull request reviews response")
+    }
+
     pub fn review_comments(&self, number: u64) -> Result<Vec<ForgejoReviewComment>> {
         let response = self.send(ForgejoRequest {
             method: "GET",
@@ -769,6 +782,27 @@ mod tests {
             Some("forge-validator")
         );
         assert!(requests[1].body.as_deref().unwrap().contains("APPROVE"));
+    }
+
+    #[test]
+    fn lists_pull_reviews() {
+        let transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: r#"[{"id":12,"state":"APPROVED","body":"Approved"}]"#.to_string(),
+        }]);
+        let client = ForgejoClient::new(config(), &transport);
+
+        let reviews = client.pull_reviews(42).unwrap();
+
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].id, 12);
+        assert_eq!(reviews[0].state, "APPROVED");
+        let requests = transport.requests();
+        assert_eq!(requests[0].method, "GET");
+        assert_eq!(
+            requests[0].path,
+            "/api/v1/repos/tools/atelier/pulls/42/reviews"
+        );
     }
 
     #[test]

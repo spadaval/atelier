@@ -120,7 +120,9 @@
   problem. Blocking findings must be resolved before room merge can succeed.
 - Approval: a review-room decision event that can satisfy merge readiness until
   it becomes stale. New commits or change-request events invalidate previous
-  approvals rather than mutating them in place.
+  approvals rather than mutating them in place. In provider mode, approval is
+  recorded on the configured provider review artifact through
+  `atelier review approve`; it gates `review.complete` before terminal merge.
 - Merge authority: the `atelier review merge` boundary. In room mode it checks
   room approvals, stale approvals, blocking findings, and expected branch state
   and records a room merge event. In provider mode it delegates merge or merge
@@ -129,7 +131,9 @@
 - Provider terminal actions: provider-backed workflow actions such as
   `tracker.commit`, `branch.push`, `review.merge`, and `base.sync` that make
   the provider review artifact and remote base branch the integration
-  authority. They are not aliases for local `branch_integrate`.
+  authority. They are not aliases for local `branch_integrate`, and they must
+  run after review approval so the final tracker commit is present before the
+  provider merge.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.

@@ -9,7 +9,9 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::agent_factory::issue_evidence_gate_status;
-use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
+use atelier_app::forgejo::{
+    ForgejoClient, ForgejoPullRequest, ForgejoReview, ForgejoTransport, UreqForgejoTransport,
+};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
 use atelier_app::review_room;
@@ -137,7 +139,7 @@ pub fn issue_transition_options(
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
         let planned_actions = plan_transition_actions(db, &issue, transition)?;
-        blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
+        blockers.extend(action_preflight_blockers(db, &repo_root, &planned_actions));
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -454,7 +456,7 @@ pub fn transition_issue(
         close_reason,
     )?;
     let planned_actions = plan_transition_actions(db, &before, transition)?;
-    blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
+    blockers.extend(action_preflight_blockers(db, &repo_root, &planned_actions));
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -641,14 +643,18 @@ struct AppliedAction {
     detail: String,
 }
 
-fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]) -> Vec<String> {
+fn action_preflight_blockers(
+    db: &Database,
+    repo_root: &Path,
+    planned_actions: &[PlannedAction],
+) -> Vec<String> {
     planned_actions
         .iter()
         .filter_map(|action| {
             match action.name.as_str() {
                 "branch_prepare" => branch_prepare_preflight(repo_root, action),
                 "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate" => {
-                    branch_post_action_preflight(repo_root, action)
+                    branch_post_action_preflight(db, repo_root, action)
                 }
                 "review.open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
@@ -691,7 +697,11 @@ fn branch_prepare_preflight(repo_root: &Path, action: &PlannedAction) -> Option<
     None
 }
 
-fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
+fn branch_post_action_preflight(
+    db: &Database,
+    repo_root: &Path,
+    action: &PlannedAction,
+) -> Option<String> {
     if let Err(error) = ensure_git_action_repo(repo_root, action) {
         return Some(error);
     }
@@ -723,7 +733,33 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
                 action.name, action.base_branch
             ))
         }
+        _ if action.name == "review.merge" && review_config_is_provider(repo_root) => {
+            provider_review_merge_preflight(db, repo_root, action)
+        }
         _ => None,
+    }
+}
+
+fn provider_review_merge_preflight(
+    db: &Database,
+    repo_root: &Path,
+    action: &PlannedAction,
+) -> Option<String> {
+    match provider_pull_request(
+        db,
+        repo_root,
+        &action.target_issue_id,
+        format!(
+            "action {} failed preflight: no linked review field; run `atelier review open --issue {}`",
+            action.name, action.target_issue_id
+        ),
+    ) {
+        Ok((pull, _client)) if pull.merged => Some(format!(
+            "action {} failed preflight: linked PR {} is already merged; terminal close must commit and push tracker state before provider merge. Inspect `atelier review status --issue {}` and reconcile the branch before retrying close.",
+            action.name, pull.number, action.target_issue_id
+        )),
+        Ok((_pull, _client)) => None,
+        Err(error) => Some(format!("action {} failed preflight: {error:#}", action.name)),
     }
 }
 
@@ -2507,65 +2543,43 @@ fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result
         ));
     }
 
-    let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
-    if field.is_none() {
-        return Ok((
-            false,
-            format!("no linked review field; run `atelier review open --issue {target_id}`"),
-        ));
-    }
     let repo_root = repo_root()?;
-    let config_path = repo_root.join(".atelier/config.toml");
-    let forgejo = match ProjectConfig::load(&repo_root)
-        .and_then(|config| config.require_forgejo(&config_path).cloned())
-    {
-        Ok(forgejo) => forgejo,
-        Err(error) => {
-            return Ok((
-                false,
-                format!(
-                    "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
-                    error,
-                    target_id,
-                    target_id
-                ),
-            ));
+    match forgejo_review_client(&repo_root) {
+        Ok(client) => {
+            let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
+            linked_pr_merged_with_client(db, &repo_root, field, &client, target_id)
         }
-    };
-    let token = match std::env::var(&forgejo.admin_token_env) {
-        Ok(token) => token,
-        Err(_) => {
-            return Ok((
-                false,
-                format!(
-                    "forgejo_config_missing_token: environment variable {} is required for review validators; run `atelier review status --issue {}` after configuring it",
-                    forgejo.admin_token_env,
-                    target_id
-                ),
-            ));
-        }
-    };
-    let client = ForgejoClient::new(
-        forgejo.clone(),
-        UreqForgejoTransport::new(&forgejo.host, token),
-    );
-    linked_pr_merged_with_client(db, &repo_root, field, &client, target_id)
+        Err(error) => Ok((
+            false,
+            format!(
+                "{}; configure Forgejo, then run `atelier review open --issue {}` or `atelier review status --issue {}`",
+                error, target_id, target_id
+            ),
+        )),
+    }
 }
 
-fn linked_pr_merged_with_client<T: ForgejoTransport>(
-    db: &Database,
-    repo_root: &Path,
-    field: Option<Value>,
-    client: &ForgejoClient<T>,
-    issue_id: &str,
-) -> Result<(bool, String)> {
+fn forgejo_review_client(repo_root: &Path) -> Result<ForgejoClient<UreqForgejoTransport>> {
+    let config_path = repo_root.join(".atelier/config.toml");
+    let forgejo = ProjectConfig::load(repo_root)
+        .and_then(|config| config.require_forgejo(&config_path).cloned())?;
+    let token = std::env::var(&forgejo.admin_token_env).with_context(|| {
+        format!(
+            "forgejo_config_missing_token: environment variable {} is required for review validators",
+            forgejo.admin_token_env
+        )
+    })?;
+    Ok(ForgejoClient::new(
+        forgejo.clone(),
+        UreqForgejoTransport::new(&forgejo.host, token),
+    ))
+}
+
+fn pull_request_number_from_field(field: Option<Value>, issue_id: &str) -> Result<u64> {
     let Some(field) = field else {
-        return Ok((
-            false,
-            format!("no linked review field; run `atelier review open --issue {issue_id}`"),
-        ));
+        bail!("no linked review field; run `atelier review open --issue {issue_id}`");
     };
-    let number = field
+    field
         .as_object()
         .filter(|object| {
             object.get("kind").and_then(Value::as_str) == Some("pull_request")
@@ -2576,7 +2590,38 @@ fn linked_pr_merged_with_client<T: ForgejoTransport>(
         .filter(|number| *number > 0)
         .ok_or_else(|| {
             anyhow!("pull_request_invalid: field review must be a provider pull_request object")
-        })?;
+        })
+}
+
+fn provider_pull_request(
+    db: &Database,
+    repo_root: &Path,
+    issue_id: &str,
+    missing_message: String,
+) -> Result<(ForgejoPullRequest, ForgejoClient<UreqForgejoTransport>)> {
+    let field = atelier_app::workflow_policy::effective_pull_request_field(db, issue_id)?;
+    if field.is_none() {
+        bail!("{missing_message}");
+    }
+    let number = pull_request_number_from_field(field, issue_id)?;
+    let client = forgejo_review_client(repo_root)?;
+    let pull = client.show_pull(number)?;
+    Ok((pull, client))
+}
+
+fn linked_pr_merged_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
+    field: Option<Value>,
+    client: &ForgejoClient<T>,
+    issue_id: &str,
+) -> Result<(bool, String)> {
+    let number = match pull_request_number_from_field(field, issue_id) {
+        Ok(number) => number,
+        Err(error) => {
+            return Ok((false, error.to_string()));
+        }
+    };
     let pull = client.show_pull(number)?;
     let policy = atelier_app::workflow_policy::load(repo_root)?;
     let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
@@ -2812,7 +2857,7 @@ fn review_complete(
                     provider: ReviewProviderKind::Forgejo(_),
                 }),
             ..
-        }) => linked_pr_merged(db, target_kind, target_id),
+        }) => linked_pr_review_complete(db, target_kind, target_id),
         Err(error) => Ok((
             false,
             format!(
@@ -2821,6 +2866,115 @@ fn review_complete(
             ),
         )),
     }
+}
+
+fn linked_pr_review_complete(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    if target_kind != "issue" {
+        return Ok((
+            true,
+            format!("review completion does not apply to {target_kind} records"),
+        ));
+    }
+
+    let repo_root = repo_root()?;
+    match forgejo_review_client(&repo_root) {
+        Ok(client) => {
+            let field = atelier_app::workflow_policy::effective_pull_request_field(db, target_id)?;
+            linked_pr_review_complete_with_client(db, &repo_root, field, &client, target_id)
+        }
+        Err(error) => Ok((
+            false,
+            format!(
+                "{}; configure Forgejo, then run `atelier review status --issue {}`",
+                error, target_id
+            ),
+        )),
+    }
+}
+
+fn linked_pr_review_complete_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
+    field: Option<Value>,
+    client: &ForgejoClient<T>,
+    issue_id: &str,
+) -> Result<(bool, String)> {
+    let number = match pull_request_number_from_field(field, issue_id) {
+        Ok(number) => number,
+        Err(error) => return Ok((false, error.to_string())),
+    };
+    let pull = client.show_pull(number)?;
+    let policy = atelier_app::workflow_policy::load(repo_root)?;
+    let resolution = atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
+        return Ok((
+            false,
+            format!(
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
+                pull.source_branch,
+                pull.target_branch,
+                resolution.owner_id,
+                resolution.expected_branch,
+                resolution.base_branch,
+                issue_id
+            ),
+        ));
+    }
+    if pull.merged {
+        return Ok((
+            false,
+            format!(
+                "linked PR {} is already merged; terminal close must commit and push tracker state before provider merge",
+                pull.number
+            ),
+        ));
+    }
+    if !pull.state.eq_ignore_ascii_case("open") {
+        return Ok((
+            false,
+            format!(
+                "linked PR {} is {} and not open; run `atelier review status --issue {}`",
+                pull.number, pull.state, issue_id
+            ),
+        ));
+    }
+    let reviews = client.pull_reviews(number)?;
+    match latest_review_decision(&reviews).map(|review| review.state.as_str()) {
+        Some(state) if state.eq_ignore_ascii_case("APPROVED") => Ok((
+            true,
+            format!("linked PR {} is approved and ready for terminal merge", pull.number),
+        )),
+        Some(state) if state.eq_ignore_ascii_case("REQUEST_CHANGES") => Ok((
+            false,
+            format!(
+                "linked PR {} has requested changes; run `atelier review status --issue {}`",
+                pull.number, issue_id
+            ),
+        )),
+        _ => Ok((
+            false,
+            format!(
+                "linked PR {} has no approving review; run `atelier review approve --issue {} --role reviewer --body \"Approved\"`",
+                pull.number, issue_id
+            ),
+        )),
+    }
+}
+
+fn latest_review_decision(reviews: &[ForgejoReview]) -> Option<&ForgejoReview> {
+    reviews
+        .iter()
+        .filter(|review| {
+            review.state.eq_ignore_ascii_case("APPROVED")
+                || review.state.eq_ignore_ascii_case("REQUEST_CHANGES")
+        })
+        .max_by_key(|review| review.id)
 }
 
 fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
@@ -3353,6 +3507,7 @@ mod tests {
         merged: bool,
         source_branch: &'static str,
         target_branch: &'static str,
+        reviews: Vec<&'static str>,
     }
 
     impl FakeForgejoTransport {
@@ -3362,6 +3517,7 @@ mod tests {
                 merged: true,
                 source_branch: "epic/atelier-hw9t",
                 target_branch: "master",
+                reviews: vec!["APPROVED"],
             }
         }
     }
@@ -3369,6 +3525,24 @@ mod tests {
     impl ForgejoTransport for FakeForgejoTransport {
         fn send(&self, request: ForgejoRequest) -> Result<ForgejoResponse> {
             assert_eq!(request.method, "GET");
+            if request.path == "/api/v1/repos/tools/atelier/pulls/42/reviews" {
+                let reviews = self
+                    .reviews
+                    .iter()
+                    .enumerate()
+                    .map(|(index, state)| {
+                        json!({
+                            "id": index as u64 + 1,
+                            "state": state,
+                            "body": state,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                return Ok(ForgejoResponse {
+                    status: 200,
+                    body: serde_json::to_string(&reviews).unwrap(),
+                });
+            }
             assert_eq!(request.path, "/api/v1/repos/tools/atelier/pulls/42");
             Ok(ForgejoResponse {
                 status: 200,
@@ -3692,11 +3866,12 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
             nested_under_epic: false,
         };
         let dir = tempdir().unwrap();
-        assert!(action_preflight_blockers(dir.path(), &[]).is_empty());
+        let db = Database::open(&dir.path().join("state.db")).unwrap();
+        assert!(action_preflight_blockers(&db, dir.path(), &[]).is_empty());
 
         let unsupported =
             plan_actions_for_resolution(&issue, &resolution, &[action("branch_integrate")]);
-        let blockers = action_preflight_blockers(dir.path(), &unsupported);
+        let blockers = action_preflight_blockers(&db, dir.path(), &unsupported);
         assert_eq!(blockers.len(), 1);
         assert!(blockers[0].contains("branch_integrate"));
         assert!(blockers[0].contains("git repository is required"));
@@ -3718,9 +3893,10 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         };
         let dir = tempdir().unwrap();
         write_provider_config_without_role_authors(&dir);
+        let db = Database::open(&dir.path().join(".atelier/runtime/state.db")).unwrap();
 
         let actions = plan_actions_for_resolution(&issue, &resolution, &[forgejo_review_action()]);
-        let blockers = action_preflight_blockers(dir.path(), &actions);
+        let blockers = action_preflight_blockers(&db, dir.path(), &actions);
 
         assert_eq!(blockers.len(), 1);
         assert!(blockers[0].contains("ATELIER_TEST_FORGEJO_TOKEN"));
@@ -3930,6 +4106,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
                 merged: false,
                 source_branch: "epic/atelier-hw9t",
                 target_branch: "master",
+                reviews: vec!["APPROVED"],
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(
@@ -3951,6 +4128,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
                 merged: false,
                 source_branch: "epic/atelier-hw9t",
                 target_branch: "master",
+                reviews: vec!["APPROVED"],
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(
@@ -3974,6 +4152,107 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         .unwrap();
         assert!(passed);
         assert_eq!(reason, "linked PR 42 is merged");
+    }
+
+    #[test]
+    fn provider_review_complete_accepts_approved_open_pr_before_merge() {
+        let (dir, db) = setup_pr_validator_repo();
+        let forgejo = forgejo_config();
+        let approved_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "open",
+                merged: false,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+                reviews: vec!["APPROVED"],
+            },
+        );
+
+        let (passed, reason) = linked_pr_review_complete_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &approved_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+
+        assert!(passed);
+        assert_eq!(
+            reason,
+            "linked PR 42 is approved and ready for terminal merge"
+        );
+    }
+
+    #[test]
+    fn provider_review_complete_blocks_unapproved_changed_or_merged_prs() {
+        let (dir, db) = setup_pr_validator_repo();
+        let forgejo = forgejo_config();
+
+        let no_review_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "open",
+                merged: false,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+                reviews: Vec::new(),
+            },
+        );
+        let (passed, reason) = linked_pr_review_complete_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &no_review_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("no approving review"));
+        assert!(reason.contains("atelier review approve --issue atelier-hw9t"));
+
+        let request_changes_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "open",
+                merged: false,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+                reviews: vec!["APPROVED", "REQUEST_CHANGES"],
+            },
+        );
+        let (passed, reason) = linked_pr_review_complete_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &request_changes_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("requested changes"));
+
+        let merged_client = ForgejoClient::new(
+            forgejo.clone(),
+            FakeForgejoTransport {
+                state: "closed",
+                merged: true,
+                source_branch: "epic/atelier-hw9t",
+                target_branch: "master",
+                reviews: vec!["APPROVED"],
+            },
+        );
+        let (passed, reason) = linked_pr_review_complete_with_client(
+            &db,
+            dir.path(),
+            Some(pull_request_field()),
+            &merged_client,
+            "atelier-hw9t",
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("already merged"));
     }
 
     #[test]
@@ -4020,6 +4299,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
                 merged: true,
                 source_branch: "epic/other",
                 target_branch: "master",
+                reviews: vec!["APPROVED"],
             },
         );
         let (passed, reason) = linked_pr_merged_with_client(

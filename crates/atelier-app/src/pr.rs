@@ -871,7 +871,11 @@ mod tests {
 
     fn write_workflow(repo_root: &Path) {
         let workflow = crate::workflow_policy::STARTER_POLICY_YAML
-            .replace("base_branch: main", "base_branch: master");
+            .replace("base_branch: main", "base_branch: master")
+            .replace(
+                "review.open: { role: worker }",
+                "review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: worker\n                reviewer: reviewer\n                validator: validator\n                manager: manager",
+            );
         std::fs::create_dir_all(repo_root.join(".atelier")).unwrap();
         std::fs::write(repo_root.join(".atelier/workflow.yaml"), workflow).unwrap();
     }
