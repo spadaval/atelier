@@ -22,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Remove workspace and retired command machinery"
-updated_at: "2026-06-20T16:48:55.597699878+00:00"
+updated_at: "2026-06-20T21:58:28.562664117+00:00"
 ---
 
 ## Description
