@@ -2661,7 +2661,7 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
 
 fn review_complete(
     db: &Database,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    _policy: &atelier_app::workflow_policy::WorkflowPolicy,
     target_kind: &str,
     target_id: &str,
     _transition: &str,
@@ -2672,22 +2672,61 @@ fn review_complete(
             format!("review completion does not apply to {target_kind}"),
         ));
     }
-    let issue = db.require_issue(target_id)?;
-    match policy.status_category(&issue.status) {
-        Some("review") | Some("validation") | Some("done") => Ok((
-            true,
-            format!(
-                "issue {} has completed review state {}",
-                issue.id, issue.status
-            ),
-        )),
-        _ => Ok((
+    let repo_root = repo_root()?;
+    match ProjectConfig::load(&repo_root) {
+        Ok(ProjectConfig {
+            review: ReviewConfig::Room,
+            ..
+        }) => room_review_complete(db, &repo_root, target_id),
+        Ok(ProjectConfig {
+            review:
+                ReviewConfig::Provider(atelier_app::project_config::ReviewProviderConfig {
+                    provider: ReviewProviderKind::Forgejo(_),
+                }),
+            ..
+        }) => linked_pr_merged(db, target_kind, target_id),
+        Err(error) => Ok((
             false,
             format!(
-                "issue {} must reach a review status before this transition; current status is {}",
-                issue.id, issue.status
+                "{}; run `atelier review status --issue {}`",
+                error, target_id
             ),
         )),
+    }
+}
+
+fn room_review_complete(db: &Database, repo_root: &Path, issue_id: &str) -> Result<(bool, String)> {
+    let state_dir = atelier_app::storage_layout::StorageLayout::new(repo_root).canonical_dir();
+    let outcome = match review_room::status(
+        db,
+        review_room::RoomStatusRequest {
+            repo_root,
+            state_dir: &state_dir,
+            issue_ref: Some(issue_id),
+        },
+    ) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Ok((
+                false,
+                format!(
+                    "{}; run `atelier review status --issue {}`",
+                    error, issue_id
+                ),
+            ))
+        }
+    };
+
+    if outcome.status == "merged" {
+        Ok((true, format!("review room {} is merged", outcome.review_id)))
+    } else {
+        Ok((
+            false,
+            format!(
+                "review room {} is {}; run `atelier review status --issue {}`",
+                outcome.review_id, outcome.status, issue_id
+            ),
+        ))
     }
 }
 
@@ -3592,6 +3631,78 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         )
         .unwrap();
         assert!(second_detail.contains("reused room"));
+    }
+
+    #[test]
+    fn room_review_complete_requires_merged_room_artifact() {
+        let dir = tempdir().unwrap();
+        write_room_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let mut issue = test_issue("atelier-epic1");
+        issue.status = "review".to_string();
+        insert_canonical_issue(&db, &state_dir, issue);
+
+        let outcome = review_room::open(
+            &db,
+            review_room::RoomOpenRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "worker",
+                title: "Review atelier-epic1",
+                body: "Please review.",
+                source_branch: "epic/atelier-epic1",
+                target_branch: "master",
+            },
+        )
+        .unwrap();
+        drop(db);
+        let db = Database::open(&db_path).unwrap();
+
+        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        assert!(!passed);
+        assert!(
+            reason.contains(&format!("review room {}", outcome.review_id)),
+            "{reason}"
+        );
+        assert!(
+            reason.contains("atelier review status --issue atelier-epic1"),
+            "{reason}"
+        );
+
+        review_room::approve(
+            &db,
+            review_room::RoomDecisionRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "reviewer",
+                body: "Approved.",
+            },
+        )
+        .unwrap();
+        review_room::merge(
+            &db,
+            review_room::RoomMergeRequest {
+                repo_root: dir.path(),
+                state_dir: &state_dir,
+                db_path: &db_path,
+                issue_ref: Some("atelier-epic1"),
+                role: "manager",
+            },
+        )
+        .unwrap();
+
+        let (passed, reason) = room_review_complete(&db, dir.path(), "atelier-epic1").unwrap();
+        assert!(passed);
+        assert_eq!(
+            reason,
+            format!("review room {} is merged", outcome.review_id)
+        );
     }
 
     #[test]
