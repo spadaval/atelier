@@ -408,21 +408,22 @@ impl<'a> ProjectionLoader<'a> {
                 }
             }
         }
-        if self
-            .issues
-            .iter()
-            .all(|issue| issue.issue.fields.is_empty())
-        {
-            return Ok(());
-        }
         let repo_root = self.state_dir.parent().ok_or_else(|| {
             anyhow!(
                 "Cannot determine repository root for {}",
                 self.state_dir.display()
             )
         })?;
-        let policy = crate::workflow_policy::load(repo_root)?;
         let policy_path = repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+        if !policy_path.exists()
+            && self
+                .issues
+                .iter()
+                .all(|issue| issue.issue.fields.is_empty())
+        {
+            return Ok(());
+        }
+        let policy = crate::workflow_policy::load(repo_root)?;
         for issue in &self.issues {
             crate::workflow_policy::validate_issue_against_policy(
                 &policy,
@@ -1590,6 +1591,14 @@ branch_policy:
   branch_templates:
     epic: epic/{{ issue.id }}
     issue: codex/{{ issue.id }}
+
+issue_types:
+  bug: { label: Bug }
+  epic: { label: Epic }
+  feature: { label: Feature }
+  spike: { label: Spike }
+  task: { label: Task }
+  validation: { label: Validation }
 
 statuses:
   todo:

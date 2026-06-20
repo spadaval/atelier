@@ -191,10 +191,10 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         if issue.title.trim().is_empty() {
             bail!("Issue {} title cannot be empty", issue.client_ref);
         }
-        validate_issue_type(&issue.issue_type)?;
+        validate_bundle_issue_type(&issue.issue_type)?;
         validate_priority(&issue.priority)?;
         if let Some(status) = &issue.status {
-            validate_bundle_issue_status(status)?;
+            validate_bundle_issue_status(&issue.issue_type, status)?;
         }
         validate_refs_exist(db, bundle, issue.parent.iter(), &issue.client_ref)?;
         validate_refs_exist(db, bundle, issue.depends_on.iter(), &issue.client_ref)?;
@@ -249,16 +249,43 @@ fn validate_operation(operation: Option<&str>, client_ref: &str) -> Result<()> {
     }
 }
 
-fn validate_bundle_issue_status(status: &str) -> Result<()> {
+fn validate_bundle_issue_type(issue_type: &str) -> Result<()> {
+    validate_issue_type(issue_type)?;
+    let repo_root = atelier_app::storage_layout::find_repo_root()?;
+    let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if policy.issue_types.contains_key(issue_type) {
+        Ok(())
+    } else {
+        bail!(
+            "Invalid issue_type '{}'. Valid values: {}",
+            issue_type,
+            policy
+                .issue_types
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+fn validate_bundle_issue_status(issue_type: &str, status: &str) -> Result<()> {
     validate_status(status)?;
     let repo_root = atelier_app::storage_layout::find_repo_root()?;
-    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
-    if !policy_path.exists() {
-        return Ok(());
-    }
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     if policy.statuses.contains_key(status) {
-        Ok(())
+        let workflow = policy.workflow_for_issue_type(issue_type)?;
+        if workflow.transitions.values().any(|transition| {
+            transition.to == status || transition.from.iter().any(|from| from == status)
+        }) || workflow.initial_status == status
+            || workflow.done_statuses.iter().any(|done| done == status)
+        {
+            Ok(())
+        } else {
+            bail!(
+                "Invalid bundle issue status '{status}'; status is not allowed for issue_type '{issue_type}'"
+            )
+        }
     } else {
         bail!(
             "Invalid bundle issue status '{status}'; status is not defined in .atelier/workflow.yaml"
