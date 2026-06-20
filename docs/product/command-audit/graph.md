@@ -11,10 +11,10 @@ views?"
   an issue, mission, blocker, or proof question.
 - Documentation: Should mark this namespace as a consolidation target rather
   than teaching it as an ordinary manager path.
-- Design: Duplicative. `graph tree` overlaps with mission and issue hierarchy
-  views. `graph impact` exposes useful blast-radius logic, but that is evidence
-  that `issue show` and `mission show` do not yet expose enough relationship
-  context.
+- Design: Duplicative. `graph tree` overlaps with issue hierarchy and
+  objective status views. `graph impact` exposed useful blast-radius logic; the
+  replacement home is now `issue show`, which renders downstream impact
+  alongside blockers, subissues, and proof context.
 - Output hierarchy: If any implementation survives temporarily, it should
   report the source record, relationship reason, affected record, and the
   domain command that should own the next drill-down.
@@ -23,16 +23,20 @@ views?"
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Consolidate. Fold issue-sourced impact into `issue show`; fold mission-sourced impact into `mission show` or `mission status`. Reconsider a domain command only after those views are stronger. |
-| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Remove or fold into `mission show` and scoped issue hierarchy output. |
+| `graph impact <id>` | Manager/orchestrator | Understand downstream consequences before mutation or terminal validation. | Remove after the deletion issue. Issue-sourced impact now belongs in `issue show`; objective work health belongs in `issue status <objective-id>`. |
+| `graph tree [--compact]` | Manager/orchestrator | Inspect mission and issue hierarchy. | Remove after the deletion issue. Objective hierarchy and work buckets belong in `issue status <objective-id>` and issue detail. |
 | `graph tree --status <status>` | Manager/orchestrator | Filter the hierarchy by status. | Remove. It is redundant with issue list/status/category filters and currently hard-codes predecessor statuses. |
 
 ## Cutting Direction
 
-Delete the abstract `graph` namespace unless a post-consolidation need remains.
-The first implementation step should strengthen `issue show` and `mission show`
-with relationship sections: parent/children, blockers, mission links, evidence
-links, and affected records that should be reviewed before changing or closing
-the source. A compact blast-radius view can return later as `issue impact` or
-`mission impact` only if the richer show views still leave a real operator
-question unanswered.
+Delete the abstract `graph` namespace in the follow-up removal slice. The
+replacement views now cover the useful operator questions:
+
+- `issue show <id>` renders parent/children, blockers, evidence, and downstream
+  impact records that may need review before changing or closing the source.
+- `issue status <objective-id>` renders objective health, linked work buckets,
+  blockers, proof gaps, terminal checks, and next actions.
+- `issue blocked [<id>]` remains the focused blocker inspection surface.
+
+A compact blast-radius command can return later as `issue impact` only if the
+strengthened issue views still leave a concrete operator question unanswered.

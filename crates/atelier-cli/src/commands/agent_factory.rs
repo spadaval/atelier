@@ -534,6 +534,7 @@ fn render_issue_show_human(
     render_dependency_section(db, "Blocked by", db.get_blockers(canonical_id)?, true)?;
     render_dependency_section(db, "Blocking", db.get_blocking(canonical_id)?, false)?;
     render_subissue_section(db, canonical_id)?;
+    render_impact_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
     Ok(())
@@ -820,6 +821,36 @@ fn render_subissue_section(db: &Database, canonical_id: &str) -> Result<()> {
             subissue.title,
             blockers
         );
+    }
+    Ok(())
+}
+
+fn render_impact_section(db: &Database, canonical_id: &str) -> Result<()> {
+    let affected = db.downstream_impact(canonical_id)?;
+    println!("\nImpact");
+    println!("------");
+    if affected.is_empty() {
+        println!("No downstream issues found.");
+        return Ok(());
+    }
+
+    println!(
+        "{} downstream issue{} may need review before changing or closing this issue.",
+        affected.len(),
+        plural_suffix(affected.len())
+    );
+    let workflow_policy = load_issue_workflow_policy()?;
+    for issue in affected.iter().take(8) {
+        println!(
+            "  {} [{}] {} - {}",
+            issue_id_for_agent(db, issue)?,
+            issue_status_label(workflow_policy.as_ref(), &issue.status),
+            issue.priority,
+            issue.title
+        );
+    }
+    if affected.len() > 8 {
+        println!("  ... and {} more", affected.len() - 8);
     }
     Ok(())
 }

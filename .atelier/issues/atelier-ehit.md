@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T19:43:35.658639937+00:00"
+status: "done"
 title: "Fold graph views into issue and objective status views"
-updated_at: "2026-06-20T16:57:19.418072621+00:00"
+updated_at: "2026-06-20T19:43:35.658639937+00:00"
 ---
 
 ## Description

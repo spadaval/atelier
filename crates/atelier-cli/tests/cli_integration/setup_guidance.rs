@@ -1270,6 +1270,13 @@ fn test_issue_status_renders_objective_work_health() {
     assert!(stdout.contains(&format!(
         "Inspect ready work transitions: atelier issue transition {blocker_id} --options"
     )));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", objective_id]);
+    assert!(success, "issue show objective failed: {stderr}");
+    assert!(stdout.contains("Impact"));
+    assert!(stdout.contains("downstream issue"));
+    assert!(stdout.contains(ready_id));
+    assert!(stdout.contains(blocked_id));
 }
 
 #[test]
