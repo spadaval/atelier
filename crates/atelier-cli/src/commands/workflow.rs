@@ -3629,6 +3629,57 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
+    fn transition_status_write_preserves_review_field_from_pre_action_reload() {
+        let dir = tempdir().unwrap();
+        write_room_config_and_workflow(&dir);
+        let state_dir = dir.path().join(".atelier");
+        let db_path = dir.path().join(".atelier/runtime/state.db");
+        let db = Database::open(&db_path).unwrap();
+        let issue = test_issue("atelier-epic1");
+        insert_canonical_issue(&db, &state_dir, issue.clone());
+        let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
+        let transition = resolve_issue_transition(&policy, &issue, "request_review").unwrap();
+        let stale_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let action = plan_actions_for_resolution(&issue, &resolution, &[review_action()]).remove(0);
+
+        open_review_artifact_action(
+            &db,
+            &state_dir,
+            &db_path,
+            dir.path(),
+            &issue,
+            "request_review",
+            &action,
+        )
+        .unwrap();
+        assert!(!stale_record.issue.fields.contains_key("review"));
+
+        let mut reloaded_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        apply_transition_record(&policy, &state_dir, &mut reloaded_record, transition, None)
+            .unwrap();
+
+        let final_record =
+            app_use_cases::load_canonical_issue(&state_dir, "atelier-epic1").unwrap();
+        assert_eq!(final_record.issue.status, "review");
+        let review = final_record.issue.fields.get("review").unwrap();
+        assert_eq!(review["kind"], "room");
+        assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
+    }
+
+    #[test]
     fn room_review_complete_requires_merged_room_artifact() {
         let dir = tempdir().unwrap();
         write_room_config_and_workflow(&dir);

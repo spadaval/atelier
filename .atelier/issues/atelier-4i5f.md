@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:05:04.211346248+00:00"
+status: "done"
 title: "Add transition lost-update regression coverage"
-updated_at: "2026-06-20T04:17:09.573358857+00:00"
+updated_at: "2026-06-20T05:05:04.211346248+00:00"
 ---
 
 ## Description
