@@ -25,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Replace effects with transition actions"
-updated_at: "2026-06-20T00:37:20.565735444+00:00"
+updated_at: "2026-06-20T00:37:41.935655107+00:00"
 ---
 
 ## Description
