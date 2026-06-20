@@ -29,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "active"
+status: "closed"
 title: "Workflow policy cleanup and custom issue types"
-updated_at: "2026-06-19T23:29:57.319600215+00:00"
+updated_at: "2026-06-20T02:35:22.759835850+00:00"
 ---
 
 ## Intent
@@ -55,3 +55,7 @@ Clean up Atelier workflow policy so repository-defined workflow state is explici
 - `atelier lint` passes after the mission records, workflow config, docs, and starter policy are updated.
 - Focused CLI integration tests prove custom issue types, namespaced validators, transition actions, review completion validation, git branch actions, and migrated status/category output work together.
 - The terminal validation issue `atelier-4xue` records evidence that maps the mission requirements to changed files, command output, tests, and remaining risks.
+
+## Terminal Notes
+
+- Close reason: All linked workflow policy cleanup issues are done; terminal validation evidence atelier-68v5 and PR 12 prove the final state
