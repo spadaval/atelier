@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:11:48.852329077+00:00"
+status: "done"
 title: "Keep local branch integration as room-only workflow action"
-updated_at: "2026-06-20T04:17:09.563653841+00:00"
+updated_at: "2026-06-20T05:11:48.852329077+00:00"
 ---
 
 ## Description
