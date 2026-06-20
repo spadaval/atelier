@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "validators"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 9
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
