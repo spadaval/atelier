@@ -258,6 +258,24 @@ fn test_issue_tree_status_filter() {
     h.run_ok(&["issue", "transition", &done_child_id, "start"]);
     h.run_ok(&["issue", "transition", &done_child_id, "request_review"]);
     h.run_ok(&[
+        "review",
+        "approve",
+        "--issue",
+        &done_child_id,
+        "--role",
+        "reviewer",
+        "--body",
+        "fixture approval",
+    ]);
+    h.run_ok(&[
+        "review",
+        "merge",
+        "--issue",
+        &done_child_id,
+        "--role",
+        "manager",
+    ]);
+    h.run_ok(&[
         "issue",
         "close",
         &done_child_id,

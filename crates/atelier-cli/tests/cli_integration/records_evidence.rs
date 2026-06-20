@@ -2182,10 +2182,10 @@ fn test_workflow_check_rejects_legacy_issue_statuses_without_migration_path() {
     )
     .unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-    assert!(!success, "workflow check should reject legacy status");
+    assert!(
+        !success,
+        "rebuild should reject legacy status before workflow check"
+    );
     assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("open"), "{stderr}");
 }
@@ -2252,7 +2252,7 @@ fn test_workflow_check_reports_policy_and_issue_record_health() {
     assert!(stdout.contains("Path:           .atelier/workflow.yaml"));
     assert!(stdout.contains("Policy:         pass"));
     assert!(stdout.contains("Applicability:"));
-    assert!(stdout.contains("Statuses:       7"));
+    assert!(stdout.contains("Statuses:       6"));
     assert!(stdout.contains("Workflows:      4"));
     assert!(stdout.contains("Record Health:  pass"));
     assert!(stdout.contains("Issues Checked: 2"));
@@ -2445,10 +2445,10 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     .unwrap();
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    let (success, stdout, stderr) = run_atelier(dir.path(), &["workflow", "check"]);
-    assert!(!success, "workflow check should reject status mismatch");
+    assert!(
+        !success,
+        "rebuild should reject status mismatch before workflow check"
+    );
     assert!(
         stderr.contains("workflow_issue_status_invalid"),
         "stderr: {stderr}"
@@ -2456,7 +2456,7 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
     assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains("allowed statuses: archived, blocked, done, in_progress, todo, validation"),
+        stderr.contains("allowed statuses: blocked, done, in_progress, todo, validation"),
         "stderr: {stderr}"
     );
 }

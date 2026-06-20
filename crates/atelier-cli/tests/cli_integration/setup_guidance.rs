@@ -1991,6 +1991,9 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
+        if args[3] == "request_review" {
+            complete_room_review(dir.path(), &issue_id);
+        }
     }
 
     let (success, stdout, stderr) =
@@ -2042,6 +2045,7 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
+    complete_room_review(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2119,6 +2123,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
+    complete_room_review(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2154,6 +2159,7 @@ fn test_issue_close_requires_to_when_done_target_is_ambiguous_and_can_archive() 
         &["issue", "transition", &archive_id, "request_review"],
     );
     assert!(success, "archive request_review failed: {stderr}");
+    complete_room_review(dir.path(), &archive_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &archive_id, "request_validation"],
@@ -2305,14 +2311,14 @@ fn test_issue_transition_rejects_unmigrated_issue_status() {
     )
     .unwrap();
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);
-    assert!(success, "rebuild failed: {stderr}");
-
-    let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
-    assert!(!success, "transition options should reject legacy status");
+    assert!(
+        !success,
+        "rebuild should reject legacy status before transition handling"
+    );
+    assert!(stderr.contains("workflow_issue_status_invalid"), "{stderr}");
     assert!(stderr.contains("status 'open'"), "{stderr}");
     assert!(
-        stderr.contains("not allowed by the workflow policy"),
+        stderr.contains("not valid for workflow 'task_delivery'"),
         "{stderr}"
     );
 }
@@ -2343,6 +2349,9 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     ] {
         let (success, stdout, stderr) = run_atelier(dir.path(), &args);
         assert!(success, "transition {:?} failed: {stderr}", args);
+        if args[3] == "request_review" {
+            complete_room_review(dir.path(), &issue_id);
+        }
     }
 
     let (success, options_out, stderr) =

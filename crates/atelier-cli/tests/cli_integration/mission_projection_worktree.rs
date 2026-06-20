@@ -418,6 +418,7 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
         &["issue", "transition", &issue_id, "request_review"],
     );
     assert!(success, "request_review failed: {stderr}");
+    complete_room_review(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &["issue", "transition", &issue_id, "request_validation"],
@@ -2409,7 +2410,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     assert_lint_rejects_issue_edit(
         "Invalid type fixture",
         |markdown, _issue_id| markdown.replace("issue_type: \"task\"", "issue_type: \"bogus\""),
-        &["Invalid issue_type", "Invalid issue_type 'bogus'"],
+        &["workflow_issue_type_unknown", "issue_type 'bogus'"],
     );
     assert_lint_rejects_issue_edit(
         "Invalid priority fixture",
