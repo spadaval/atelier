@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Rename transition effects to actions"
-updated_at: "2026-06-19T22:42:56.473630390+00:00"
+updated_at: "2026-06-19T23:56:03.411522551+00:00"
 ---
 
 ## Description

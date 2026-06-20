@@ -1644,7 +1644,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -1676,7 +1676,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]

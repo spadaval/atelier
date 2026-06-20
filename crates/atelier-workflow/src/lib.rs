@@ -74,7 +74,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -107,7 +107,7 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
+        actions:
           - review_artifact_open
       request_validation:
         from: [in_progress, review]
@@ -168,10 +168,10 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "no_blocking_lints",
     "git_worktree_clean",
 ];
-const BUILTIN_EFFECTS: &[&str] = &[
-    "issue_status_write",
-    "owner_branch_commit",
-    "owner_branch_integrate",
+const BUILTIN_ACTIONS: &[&str] = &[
+    "branch_prepare",
+    "branch_commit",
+    "branch_integrate",
     "review_artifact_open",
     "review_artifact_link",
 ];
@@ -297,7 +297,7 @@ pub struct ValidatorDefinition {
 }
 
 #[derive(Debug, Clone)]
-pub struct EffectDefinition {
+pub struct ActionDefinition {
     pub builtin: String,
 }
 
@@ -329,7 +329,7 @@ pub struct TransitionDefinition {
     pub required_fields: Vec<String>,
     pub description: Option<String>,
     pub validators: Vec<ValidatorDefinition>,
-    pub effects: Vec<EffectDefinition>,
+    pub actions: Vec<ActionDefinition>,
 }
 
 impl WorkflowPolicy {
@@ -477,7 +477,7 @@ struct TransitionDefinitionRaw {
     #[serde(default)]
     validators: Vec<Value>,
     #[serde(default)]
-    effects: Vec<Value>,
+    actions: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1131,10 +1131,10 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
-    let effects = parse_transition_effects(
+    let actions = parse_transition_actions(
         workflow_name,
         transition_name,
-        &raw.effects,
+        &raw.actions,
         &raw.to,
         display_path,
     )?;
@@ -1145,37 +1145,29 @@ fn parse_transition_definition(
         required_fields: raw.required_fields,
         description: raw.description,
         validators,
-        effects,
+        actions,
     })
 }
 
-fn parse_transition_effects(
+fn parse_transition_actions(
     workflow_name: &str,
     transition_name: &str,
     raw: &[Value],
     to_status: &str,
     display_path: &str,
-) -> Result<Vec<EffectDefinition>> {
-    let mut effects = Vec::new();
+) -> Result<Vec<ActionDefinition>> {
+    let mut actions = Vec::new();
     let mut seen = BTreeSet::new();
     for value in raw {
-        let name = value.as_str().ok_or_else(|| {
-            policy_error(
-                "workflow_config_invalid_effect",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.effects must contain built-in effect strings",
-                    workflow_name, transition_name
-                ),
-            )
-        })?;
-        validate_builtin_effect_name(workflow_name, transition_name, name, display_path)?;
+        let name =
+            parse_transition_action_name(workflow_name, transition_name, value, display_path)?;
+        validate_builtin_action_name(workflow_name, transition_name, name, display_path)?;
         if !seen.insert(name.to_string()) {
             return Err(policy_error(
-                "workflow_config_invalid_effect",
+                "workflow_config_invalid_action",
                 display_path,
                 format!(
-                    "workflows.{}.transitions.{}.effects contains duplicate effect '{}'",
+                    "workflows.{}.transitions.{}.actions contains duplicate action '{}'",
                     workflow_name, transition_name, name
                 ),
             ));
@@ -1183,39 +1175,105 @@ fn parse_transition_effects(
         if matches!(name, "review_artifact_open" | "review_artifact_link") && to_status != "review"
         {
             return Err(policy_error(
-                "workflow_config_invalid_effect",
+                "workflow_config_invalid_action",
                 display_path,
                 format!(
-                    "workflows.{}.transitions.{}.effects declares '{}' but review artifact effects are only supported on transitions to review",
+                    "workflows.{}.transitions.{}.actions declares '{}' but review artifact actions are only supported on transitions to review",
                     workflow_name, transition_name, name
                 ),
             ));
         }
-        effects.push(EffectDefinition {
+        actions.push(ActionDefinition {
             builtin: name.to_string(),
         });
     }
-    Ok(effects)
+    Ok(actions)
 }
 
-fn validate_builtin_effect_name(
+fn parse_transition_action_name<'a>(
     workflow_name: &str,
     transition_name: &str,
-    effect_name: &str,
+    value: &'a Value,
+    display_path: &str,
+) -> Result<&'a str> {
+    match value {
+        Value::String(name) => Ok(name),
+        Value::Mapping(mapping) if mapping.len() == 1 => {
+            let (key, params) = mapping.iter().next().expect("mapping has one entry");
+            let Some(name) = key.as_str() else {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.actions",
+                        workflow_name, transition_name
+                    ),
+                    "action map keys must be strings",
+                ));
+            };
+            let params = params.as_mapping().ok_or_else(|| {
+                policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.actions.{}",
+                        workflow_name, transition_name, name
+                    ),
+                    "action params must be a mapping",
+                )
+            })?;
+            if !params.is_empty() {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.actions.{}",
+                        workflow_name, transition_name, name
+                    ),
+                    format!("built-in action '{}' does not accept params", name),
+                ));
+            }
+            Ok(name)
+        }
+        Value::Mapping(_) => Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.actions",
+                workflow_name, transition_name
+            ),
+            "action maps must contain exactly one built-in action name",
+        )),
+        _ => Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.actions",
+                workflow_name, transition_name
+            ),
+            "actions must contain built-in action strings or parameter objects",
+        )),
+    }
+}
+
+fn validate_builtin_action_name(
+    workflow_name: &str,
+    transition_name: &str,
+    action_name: &str,
     display_path: &str,
 ) -> Result<()> {
-    if BUILTIN_EFFECTS.contains(&effect_name) {
+    if BUILTIN_ACTIONS.contains(&action_name) {
         return Ok(());
     }
     Err(policy_error(
-        "workflow_config_invalid_effect",
+        "workflow_config_invalid_action",
         display_path,
         format!(
-            "workflows.{}.transitions.{}.effects has unsupported built-in effect '{}'; expected {}",
+            "workflows.{}.transitions.{}.actions has unsupported built-in action '{}'; expected {}",
             workflow_name,
             transition_name,
-            effect_name,
-            BUILTIN_EFFECTS.join(", ")
+            action_name,
+            BUILTIN_ACTIONS.join(", ")
         ),
     ))
 }
@@ -2003,33 +2061,33 @@ mod tests {
             })
         );
         assert_eq!(
-            effect_names(&policy.workflows["epic_reviewed"].transitions["request_review"].effects),
+            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
             vec!["review_artifact_open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
     }
 
-    fn effect_names(effects: &[EffectDefinition]) -> Vec<&str> {
-        effects
+    fn action_names(actions: &[ActionDefinition]) -> Vec<&str> {
+        actions
             .iter()
-            .map(|effect| effect.builtin.as_str())
+            .map(|action| action.builtin.as_str())
             .collect()
     }
 
     #[test]
-    fn rejects_unknown_transition_effect() {
+    fn rejects_unknown_transition_action() {
         let policy =
             valid_policy().replace("          - review_artifact_open", "          - nope_run");
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
         assert!(error.contains("nope_run"));
     }
 
     #[test]
-    fn rejects_duplicate_transition_effect() {
+    fn rejects_duplicate_transition_action() {
         let policy = valid_policy().replace(
             "          - review_artifact_open",
             "          - review_artifact_open\n          - review_artifact_open",
@@ -2037,21 +2095,56 @@ mod tests {
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
-        assert!(error.contains("duplicate effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("duplicate action"));
     }
 
     #[test]
-    fn rejects_review_effect_on_non_review_transition() {
+    fn rejects_review_action_on_non_review_transition() {
         let policy = valid_policy().replace(
             "      close:\n        from: [in_progress, validation]",
-            "      close:\n        from: [in_progress, validation]\n        effects: [review_artifact_open]",
+            "      close:\n        from: [in_progress, validation]\n        actions: [review_artifact_open]",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
         assert!(error.contains("transitions to review"));
+    }
+
+    #[test]
+    fn rejects_legacy_transition_effects_field() {
+        let policy = valid_policy().replace("actions:", "effects:");
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("effects"));
+    }
+
+    #[test]
+    fn accepts_empty_action_param_object() {
+        let policy = valid_policy().replace(
+            "          - review_artifact_open",
+            "          - review_artifact_open: {}",
+        );
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(
+            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
+            vec!["review_artifact_open"]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_action_params() {
+        let policy = valid_policy().replace(
+            "          - review_artifact_open",
+            "          - review_artifact_open: { provider: forgejo }",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("does not accept params"));
     }
 
     #[test]

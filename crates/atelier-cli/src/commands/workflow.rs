@@ -39,13 +39,13 @@ pub struct IssueTransitionOption {
     pub allowed: bool,
     pub blockers: Vec<String>,
     pub validator_results: Vec<ValidatorResult>,
-    pub planned_effects: Vec<PlannedEffect>,
+    pub planned_actions: Vec<PlannedAction>,
     pub descriptions: Vec<String>,
     pub command: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct PlannedEffect {
+pub struct PlannedAction {
     pub order: usize,
     pub name: String,
     pub target_issue_id: String,
@@ -127,8 +127,8 @@ pub fn issue_transition_options(
         );
         let mut descriptions = transition_descriptions(transition);
         descriptions.extend(branch_context_guidance(db, &issue, name, transition)?);
-        let planned_effects = plan_transition_effects(db, &issue, transition)?;
-        blockers.extend(effect_preflight_blockers(&repo_root, &planned_effects));
+        let planned_actions = plan_transition_actions(db, &issue, transition)?;
+        blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
         options.push(IssueTransitionOption {
             name: name.to_string(),
             from: transition.from.clone(),
@@ -136,7 +136,7 @@ pub fn issue_transition_options(
             allowed: blockers.is_empty(),
             blockers,
             validator_results,
-            planned_effects,
+            planned_actions,
             descriptions,
             command: transition_command(&issue.id, name, transition),
         });
@@ -153,46 +153,46 @@ pub fn issue_transition_options(
     Ok(options)
 }
 
-fn plan_transition_effects(
+fn plan_transition_actions(
     db: &Database,
     issue: &Issue,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
-) -> Result<Vec<PlannedEffect>> {
+) -> Result<Vec<PlannedAction>> {
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-    Ok(plan_effects_for_resolution(
+    Ok(plan_actions_for_resolution(
         issue,
         &resolution,
-        &transition.effects,
+        &transition.actions,
     ))
 }
 
-fn plan_effects_for_resolution(
+fn plan_actions_for_resolution(
     issue: &Issue,
     resolution: &BranchLifecycleResolution,
-    effects: &[atelier_app::workflow_policy::EffectDefinition],
-) -> Vec<PlannedEffect> {
-    effects
+    actions: &[atelier_app::workflow_policy::ActionDefinition],
+) -> Vec<PlannedAction> {
+    actions
         .iter()
         .enumerate()
-        .map(|(index, effect)| {
+        .map(|(index, action)| {
             let review_artifact_target = if matches!(
-                effect.builtin.as_str(),
+                action.builtin.as_str(),
                 "review_artifact_open" | "review_artifact_link"
             ) {
                 Some(resolution.owner_id.clone())
             } else {
                 None
             };
-            PlannedEffect {
+            PlannedAction {
                 order: index + 1,
-                name: effect.builtin.clone(),
+                name: action.builtin.clone(),
                 target_issue_id: issue.id.clone(),
                 branch_owner_id: resolution.owner_id.clone(),
                 review_artifact_target,
-                confirmation_required: effect.builtin == "owner_branch_integrate",
+                confirmation_required: action.builtin == "branch_integrate",
                 skip_reason: None,
                 block_reason: None,
             }
@@ -401,8 +401,8 @@ pub fn transition_issue(
         transition,
         close_reason,
     )?;
-    let planned_effects = plan_transition_effects(db, &before, transition)?;
-    blockers.extend(effect_preflight_blockers(&repo_root, &planned_effects));
+    let planned_actions = plan_transition_actions(db, &before, transition)?;
+    blockers.extend(action_preflight_blockers(&repo_root, &planned_actions));
     if !blockers.is_empty() {
         report_blocked_transition(
             &policy,
@@ -411,22 +411,22 @@ pub fn transition_issue(
             transition,
             &validator_results,
             &blockers,
-            &planned_effects,
+            &planned_actions,
         )?;
     }
 
-    let effect_results = execute_transition_effects(
+    let action_results = execute_transition_actions(
         db,
         state_dir,
         db_path,
         &repo_root,
         &before,
         transition_name,
-        &planned_effects,
+        &planned_actions,
     )?;
     record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
-    record_applied_effects(&before.id, transition_name, &planned_effects)?;
+    record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
 
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
@@ -435,8 +435,8 @@ pub fn transition_issue(
     println!("Applied transition {} to {}", transition_name, issue.id);
     println!("From:     {}", before.status);
     println!("To:       {}", issue.status);
-    for result in effect_results {
-        println!("Effect:   {} {}", result.name, result.detail);
+    for result in action_results {
+        println!("Action:   {} {}", result.name, result.detail);
     }
     print_heading("Next Commands");
     println!("  atelier issue show {}", issue.id);
@@ -534,7 +534,7 @@ fn report_blocked_transition(
     transition: &atelier_app::workflow_policy::TransitionDefinition,
     validator_results: &[ValidatorResult],
     blockers: &[String],
-    planned_effects: &[PlannedEffect],
+    planned_actions: &[PlannedAction],
 ) -> Result<()> {
     let reason = blockers.join("; ");
     crate::commands::activity_log::record_transition_blocked(
@@ -550,7 +550,7 @@ fn report_blocked_transition(
         &transition.to,
         validator_results,
         blockers,
-        planned_effects,
+        planned_actions,
         &transition_descriptions(transition),
         &transition_command(&issue.id, transition_name, transition),
     );
@@ -563,31 +563,30 @@ fn report_blocked_transition(
 }
 
 #[derive(Debug, Clone)]
-struct AppliedEffect {
+struct AppliedAction {
     name: String,
     detail: String,
 }
 
-fn effect_preflight_blockers(repo_root: &Path, planned_effects: &[PlannedEffect]) -> Vec<String> {
-    planned_effects
+fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]) -> Vec<String> {
+    planned_actions
         .iter()
-        .filter_map(|effect| {
-            match effect.name.as_str() {
-                "issue_status_write" => None,
-                "review_artifact_open" => review_open_preflight(repo_root, effect),
+        .filter_map(|action| {
+            match action.name.as_str() {
+                "review_artifact_open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
-                    "effect {other} failed preflight: effect execution is not implemented yet; retry after the owning effect issue lands"
+                    "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
                 )),
             }
         })
         .collect()
 }
 
-fn review_open_preflight(repo_root: &Path, effect: &PlannedEffect) -> Option<String> {
-    if effect.review_artifact_target.is_none() {
+fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
+    if action.review_artifact_target.is_none() {
         return Some(format!(
-            "effect {} failed preflight: missing review artifact target",
-            effect.name
+            "action {} failed preflight: missing review artifact target",
+            action.name
         ));
     }
     match ProjectConfig::load(repo_root).map(|config| config.review) {
@@ -597,65 +596,61 @@ fn review_open_preflight(repo_root: &Path, effect: &PlannedEffect) -> Option<Str
                 .err()
                 .map(|_| {
                     format!(
-                        "effect {} failed preflight: environment variable {} is required for provider review open",
-                        effect.name, forgejo.admin_token_env
+                        "action {} failed preflight: environment variable {} is required for provider review open",
+                        action.name, forgejo.admin_token_env
                     )
                 }),
         },
         Err(error) => Some(format!(
-            "effect {} failed preflight: {}",
-            effect.name, error
+            "action {} failed preflight: {}",
+            action.name, error
         )),
     }
 }
 
-fn execute_transition_effects(
+fn execute_transition_actions(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
     transition_name: &str,
-    planned_effects: &[PlannedEffect],
-) -> Result<Vec<AppliedEffect>> {
+    planned_actions: &[PlannedAction],
+) -> Result<Vec<AppliedAction>> {
     let mut applied = Vec::new();
-    for effect in planned_effects {
-        match effect.name.as_str() {
-            "issue_status_write" => applied.push(AppliedEffect {
-                name: effect.name.clone(),
-                detail: "status write is handled by the transition executor".to_string(),
-            }),
+    for action in planned_actions {
+        match action.name.as_str() {
             "review_artifact_open" => {
-                let detail = open_review_artifact_effect(
+                let detail = open_review_artifact_action(
                     db,
                     state_dir,
                     db_path,
                     repo_root,
                     issue,
                     transition_name,
-                    effect,
+                    action,
                 )?;
-                applied.push(AppliedEffect {
-                    name: effect.name.clone(),
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
                     detail,
                 });
             }
             other => bail!(
-                "effect {other} failed: effect execution is not implemented; status was not changed"
+                "action {other} failed: action execution is not implemented; status was not changed"
             ),
         }
     }
     Ok(applied)
 }
 
-fn open_review_artifact_effect(
+fn open_review_artifact_action(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
     repo_root: &Path,
     issue: &Issue,
     transition_name: &str,
-    effect: &PlannedEffect,
+    action: &PlannedAction,
 ) -> Result<String> {
     let policy = atelier_app::workflow_policy::load(repo_root)?;
     let resolution =
@@ -665,8 +660,8 @@ fn open_review_artifact_effect(
     }
     let title = format!("Review {} {}", resolution.owner_id, transition_name);
     let body = format!(
-        "Opened by transition effect `{}` for issue {}.",
-        effect.name, issue.id
+        "Opened by transition action `{}` for issue {}.",
+        action.name, issue.id
     );
     match ProjectConfig::load(repo_root)?.review {
         ReviewConfig::Room => {
@@ -690,8 +685,8 @@ fn open_review_artifact_effect(
             ReviewProviderKind::Forgejo(forgejo) => {
                 let token = env::var(&forgejo.admin_token_env).with_context(|| {
                     format!(
-                        "effect {} failed: environment variable {} is required for provider review open",
-                        effect.name, forgejo.admin_token_env
+                        "action {} failed: environment variable {} is required for provider review open",
+                        action.name, forgejo.admin_token_env
                     )
                 })?;
                 let client = ForgejoClient::new(
@@ -752,22 +747,22 @@ fn existing_review_artifact_detail(state_dir: &Path, owner_id: &str) -> Result<O
     Ok(Some(detail))
 }
 
-fn record_applied_effects(
+fn record_applied_actions(
     issue_id: &str,
     transition_name: &str,
-    planned_effects: &[PlannedEffect],
+    planned_actions: &[PlannedAction],
 ) -> Result<()> {
-    for effect in planned_effects {
+    for action in planned_actions {
         crate::commands::activity_log::record_note(
             issue_id,
             &format!(
-                "transition: {}\neffect: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}",
+                "transition: {}\naction: {}\norder: {}\nstatus: applied\ntarget_issue: {}\nbranch_owner: {}\nreview_artifact_target: {}",
                 transition_name,
-                effect.name,
-                effect.order,
-                effect.target_issue_id,
-                effect.branch_owner_id,
-                effect
+                action.name,
+                action.order,
+                action.target_issue_id,
+                action.branch_owner_id,
+                action
                     .review_artifact_target
                     .as_deref()
                     .unwrap_or("(none)")
@@ -1379,8 +1374,8 @@ pub fn print_issue_transition_options(
         print_transition_detail("Validators", &option.validator_results);
         print_text_list("Blockers", &option.blockers);
         print_text_list(
-            "Planned Effects",
-            &planned_effect_lines(&option.planned_effects),
+            "Planned Actions",
+            &planned_action_lines(&option.planned_actions),
         );
         print_text_list("Description", &option.descriptions);
     }
@@ -1432,7 +1427,7 @@ fn print_transition_attempt(
     destination: &str,
     validator_results: &[ValidatorResult],
     blockers: &[String],
-    planned_effects: &[PlannedEffect],
+    planned_actions: &[PlannedAction],
     descriptions: &[String],
     command: &str,
 ) {
@@ -1444,28 +1439,28 @@ fn print_transition_attempt(
     println!("Command:    {}", command);
     print_transition_detail("Validators", validator_results);
     print_text_list("Blockers", blockers);
-    print_text_list("Planned Effects", &planned_effect_lines(planned_effects));
+    print_text_list("Planned Actions", &planned_action_lines(planned_actions));
     print_text_list("Description", descriptions);
 }
 
-fn planned_effect_lines(planned_effects: &[PlannedEffect]) -> Vec<String> {
-    planned_effects
+fn planned_action_lines(planned_actions: &[PlannedAction]) -> Vec<String> {
+    planned_actions
         .iter()
-        .map(|effect| {
+        .map(|action| {
             let mut line = format!(
                 "{}. {} target={} owner={}",
-                effect.order, effect.name, effect.target_issue_id, effect.branch_owner_id
+                action.order, action.name, action.target_issue_id, action.branch_owner_id
             );
-            if let Some(review_target) = &effect.review_artifact_target {
+            if let Some(review_target) = &action.review_artifact_target {
                 line.push_str(&format!(" review_target={review_target}"));
             }
-            if effect.confirmation_required {
+            if action.confirmation_required {
                 line.push_str(" confirmation=required");
             }
-            if let Some(skip_reason) = &effect.skip_reason {
+            if let Some(skip_reason) = &action.skip_reason {
                 line.push_str(&format!(" skip={skip_reason}"));
             }
-            if let Some(block_reason) = &effect.block_reason {
+            if let Some(block_reason) = &action.block_reason {
                 line.push_str(&format!(" block={block_reason}"));
             }
             line
@@ -2659,8 +2654,8 @@ mod tests {
         }
     }
 
-    fn effect(name: &str) -> atelier_app::workflow_policy::EffectDefinition {
-        atelier_app::workflow_policy::EffectDefinition {
+    fn action(name: &str) -> atelier_app::workflow_policy::ActionDefinition {
+        atelier_app::workflow_policy::ActionDefinition {
             builtin: name.to_string(),
         }
     }
@@ -2792,7 +2787,7 @@ mode = "room"
     }
 
     #[test]
-    fn transition_effect_plan_is_ordered_and_side_effect_free() {
+    fn transition_action_plan_is_ordered_and_side_effect_free() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2805,12 +2800,9 @@ mode = "room"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let effects = vec![
-            effect("review_artifact_open"),
-            effect("owner_branch_integrate"),
-        ];
+        let actions = vec![action("review_artifact_open"), action("branch_integrate")];
 
-        let plan = plan_effects_for_resolution(&issue, &resolution, &effects);
+        let plan = plan_actions_for_resolution(&issue, &resolution, &actions);
 
         assert_eq!(issue.status, "in_progress");
         assert_eq!(plan.len(), 2);
@@ -2824,15 +2816,15 @@ mode = "room"
         );
         assert!(!plan[0].confirmation_required);
         assert_eq!(plan[1].order, 2);
-        assert_eq!(plan[1].name, "owner_branch_integrate");
+        assert_eq!(plan[1].name, "branch_integrate");
         assert!(plan[1].review_artifact_target.is_none());
         assert!(plan[1].confirmation_required);
-        assert!(plan.iter().all(|effect| effect.skip_reason.is_none()));
-        assert!(plan.iter().all(|effect| effect.block_reason.is_none()));
+        assert!(plan.iter().all(|action| action.skip_reason.is_none()));
+        assert!(plan.iter().all(|action| action.block_reason.is_none()));
     }
 
     #[test]
-    fn effect_preflight_blocks_unsupported_effects_before_execution() {
+    fn action_preflight_blocks_unimplemented_actions_before_execution() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -2846,20 +2838,18 @@ mode = "room"
             nested_under_epic: false,
         };
         let dir = tempdir().unwrap();
-        let supported =
-            plan_effects_for_resolution(&issue, &resolution, &[effect("issue_status_write")]);
-        assert!(effect_preflight_blockers(dir.path(), &supported).is_empty());
+        assert!(action_preflight_blockers(dir.path(), &[]).is_empty());
 
         let unsupported =
-            plan_effects_for_resolution(&issue, &resolution, &[effect("owner_branch_integrate")]);
-        let blockers = effect_preflight_blockers(dir.path(), &unsupported);
+            plan_actions_for_resolution(&issue, &resolution, &[action("branch_integrate")]);
+        let blockers = action_preflight_blockers(dir.path(), &unsupported);
         assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("owner_branch_integrate"));
+        assert!(blockers[0].contains("branch_integrate"));
         assert!(blockers[0].contains("not implemented yet"));
     }
 
     #[test]
-    fn review_artifact_open_effect_persists_room_review_field() {
+    fn review_artifact_open_action_persists_room_review_field() {
         let dir = tempdir().unwrap();
         write_room_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
@@ -2878,18 +2868,18 @@ mode = "room"
             merge_owned: true,
             nested_under_epic: false,
         };
-        let effect =
-            plan_effects_for_resolution(&issue, &resolution, &[effect("review_artifact_open")])
+        let action =
+            plan_actions_for_resolution(&issue, &resolution, &[action("review_artifact_open")])
                 .remove(0);
 
-        let detail = open_review_artifact_effect(
+        let detail = open_review_artifact_action(
             &db,
             &state_dir,
             &db_path,
             dir.path(),
             &issue,
             "request_review",
-            &effect,
+            &action,
         )
         .unwrap();
 
@@ -2899,14 +2889,14 @@ mode = "room"
         assert_eq!(review["kind"], "room");
         assert!(review["id"].as_str().unwrap().starts_with("atelier-"));
 
-        let second_detail = open_review_artifact_effect(
+        let second_detail = open_review_artifact_action(
             &db,
             &state_dir,
             &db_path,
             dir.path(),
             &issue,
             "request_review",
-            &effect,
+            &action,
         )
         .unwrap();
         assert!(second_detail.contains("reused room"));
