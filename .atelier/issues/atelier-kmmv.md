@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-20T02:17:32.538316059+00:00"
+status: "done"
 title: "Epic: Migrate workflow policy to cleaned-up model"
-updated_at: "2026-06-20T02:13:57.903978776+00:00"
+updated_at: "2026-06-20T02:17:32.538316059+00:00"
 ---
 
 ## Description
