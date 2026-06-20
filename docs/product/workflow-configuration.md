@@ -29,7 +29,7 @@ selects the review backend, such as `review.mode = "provider"` with
 `review.provider = "forgejo"`, and records the provider identity needed to
 normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
 transition opens or links the branch owner's review artifact through explicit
-actions such as `review_artifact_open` or `review_artifact_link`. Provider
+actions such as `review.open` or `review.link`. Provider
 review actions declare the workflow role and any provider role-author mapping
 they use; provider secrets remain environment-only through the token variable
 named in `.atelier/config.toml`. Provider
@@ -143,7 +143,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open:
+          - review.open:
               provider: forgejo
               role: worker
               role_authors:
@@ -183,7 +183,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open: { role: worker }
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -346,8 +346,8 @@ Built-in actions are:
 | `branch_prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
 | `branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
 | `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
-| `review_artifact_open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
-| `review_artifact_link` | Normalize an existing configured provider review artifact and write the canonical `review` link. |
+| `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
+| `review.link` | Normalize an existing configured provider review artifact and write the canonical `review` link. |
 
 The workflow engine intrinsically writes the canonical issue status and
 transition activity entry for a successful transition. That status write is not
@@ -364,7 +364,7 @@ the local Atelier role:
 
 ```yaml
 actions:
-  - review_artifact_open: { role: worker }
+  - review.open: { role: worker }
 ```
 
 Forgejo-backed provider actions also declare `provider: forgejo` and the role
@@ -372,7 +372,7 @@ author mapping used by the action's provider calls:
 
 ```yaml
 actions:
-  - review_artifact_open:
+  - review.open:
       provider: forgejo
       role: worker
       role_authors:

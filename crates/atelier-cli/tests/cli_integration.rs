@@ -915,8 +915,8 @@ admin_token_env = "ATELIER_CLI_INTEGRATION_FORGEJO_TOKEN"
 
 fn write_provider_review_action_workflow(dir: &Path) {
     let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
-        "          - review_artifact_open: { role: worker }",
-        "          - review_artifact_open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
+        "          - review.open: { role: worker }",
+        "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
@@ -943,7 +943,7 @@ fn provider_review_open_action_reads_workflow_config_and_env_secret() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(stdout.contains("request_review [blocked]"), "{stdout}");
-    assert!(stdout.contains("review_artifact_open"), "{stdout}");
+    assert!(stdout.contains("review.open"), "{stdout}");
     assert!(stdout.contains("provider=forgejo"), "{stdout}");
     assert!(stdout.contains("role=worker"), "{stdout}");
     assert!(

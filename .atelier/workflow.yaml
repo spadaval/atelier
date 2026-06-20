@@ -62,7 +62,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open:
+          - review.open:
               provider: forgejo
               role: worker
               role_authors:
@@ -102,7 +102,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open:
+          - review.open:
               provider: forgejo
               role: worker
               role_authors:

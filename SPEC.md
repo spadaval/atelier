@@ -329,7 +329,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -355,7 +355,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -433,9 +433,9 @@ Version 1 built-in actions include:
   the workflow-derived owner branch.
 - `branch_integrate`: integrate the owner branch to the configured base
   branch using the configured merge strategy.
-- `review_artifact_open`: open or reuse the branch owner's configured review
+- `review.open`: open or reuse the branch owner's configured review
   artifact and write the canonical `review` link.
-- `review_artifact_link`: normalize and write an existing configured provider
+- `review.link`: normalize and write an existing configured provider
   review artifact link.
 
 The workflow engine intrinsically writes the canonical issue status and

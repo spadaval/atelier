@@ -216,10 +216,7 @@ fn review_artifact_action_plan(
     action: &atelier_app::workflow_policy::ActionDefinition,
     resolution: &BranchLifecycleResolution,
 ) -> Option<ReviewArtifactActionPlan> {
-    if !matches!(
-        action.builtin.as_str(),
-        "review_artifact_open" | "review_artifact_link"
-    ) {
+    if !matches!(action.builtin.as_str(), "review.open" | "review.link") {
         return None;
     }
     let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {
@@ -620,7 +617,7 @@ fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]
         .iter()
         .filter_map(|action| {
             match action.name.as_str() {
-                "review_artifact_open" => review_open_preflight(repo_root, action),
+                "review.open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
                     "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
                 )),
@@ -694,7 +691,7 @@ fn execute_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
-            "review_artifact_open" => {
+            "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
                     state_dir,
@@ -2773,7 +2770,7 @@ mod tests {
 
     fn review_action() -> atelier_app::workflow_policy::ActionDefinition {
         atelier_app::workflow_policy::ActionDefinition {
-            builtin: "review_artifact_open".to_string(),
+            builtin: "review.open".to_string(),
             params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
                 provider: None,
                 role: "worker".to_string(),
@@ -2784,7 +2781,7 @@ mod tests {
 
     fn forgejo_review_action() -> atelier_app::workflow_policy::ActionDefinition {
         atelier_app::workflow_policy::ActionDefinition {
-            builtin: "review_artifact_open".to_string(),
+            builtin: "review.open".to_string(),
             params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
                 provider: Some("forgejo".to_string()),
                 role: "worker".to_string(),
@@ -2973,7 +2970,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert_eq!(issue.status, "in_progress");
         assert_eq!(plan.len(), 2);
         assert_eq!(plan[0].order, 1);
-        assert_eq!(plan[0].name, "review_artifact_open");
+        assert_eq!(plan[0].name, "review.open");
         assert_eq!(plan[0].target_issue_id, "atelier-epic1");
         assert_eq!(plan[0].branch_owner_id, "atelier-epic1");
         assert_eq!(
@@ -3052,7 +3049,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn review_artifact_open_action_persists_room_review_field() {
+    fn review_open_action_persists_room_review_field() {
         let dir = tempdir().unwrap();
         write_room_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");

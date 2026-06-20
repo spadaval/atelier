@@ -75,7 +75,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open: { role: worker }
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -108,7 +108,7 @@ workflows:
         from: [in_progress]
         to: review
         actions:
-          - review_artifact_open: { role: worker }
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -172,8 +172,8 @@ const BUILTIN_ACTIONS: &[&str] = &[
     "branch_prepare",
     "branch_commit",
     "branch_integrate",
-    "review_artifact_open",
-    "review_artifact_link",
+    "review.open",
+    "review.link",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -1198,8 +1198,7 @@ fn parse_transition_actions(
                 ),
             ));
         }
-        if matches!(name, "review_artifact_open" | "review_artifact_link") && to_status != "review"
-        {
+        if matches!(name, "review.open" | "review.link") && to_status != "review" {
             return Err(policy_error(
                 "workflow_config_invalid_action",
                 display_path,
@@ -1294,7 +1293,7 @@ fn parse_transition_action_params(
         "workflows.{}.transitions.{}.actions.{}",
         workflow_name, transition_name, name
     );
-    if matches!(name, "review_artifact_open" | "review_artifact_link") {
+    if matches!(name, "review.open" | "review.link") {
         let params = params.ok_or_else(|| {
             policy_error_with_field(
                 "workflow_config_invalid_action",
@@ -2251,7 +2250,7 @@ mod tests {
         );
         assert_eq!(
             action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
-            vec!["review_artifact_open"]
+            vec!["review.open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
@@ -2265,7 +2264,7 @@ mod tests {
     }
 
     fn review_action_line() -> &'static str {
-        "          - review_artifact_open: { role: worker }"
+        "          - review.open: { role: worker }"
     }
 
     #[test]
@@ -2279,10 +2278,24 @@ mod tests {
     }
 
     #[test]
+    fn rejects_legacy_review_artifact_action_identifier() {
+        let legacy_name = ["review", "artifact", "open"].join("_");
+        let policy = valid_policy().replace(
+            review_action_line(),
+            &format!("          - {legacy_name}: {{ role: worker }}"),
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains(&legacy_name));
+    }
+
+    #[test]
     fn rejects_duplicate_transition_action() {
         let policy = valid_policy().replace(
             review_action_line(),
-            "          - review_artifact_open: { role: worker }\n          - review_artifact_open: { role: worker }",
+            "          - review.open: { role: worker }\n          - review.open: { role: worker }",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
@@ -2295,7 +2308,7 @@ mod tests {
     fn rejects_review_action_on_non_review_transition() {
         let policy = valid_policy().replace(
             "      close:\n        from: [in_progress, validation]",
-            "      close:\n        from: [in_progress, validation]\n        actions:\n          - review_artifact_open: { role: worker }",
+            "      close:\n        from: [in_progress, validation]\n        actions:\n          - review.open: { role: worker }",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
@@ -2316,7 +2329,7 @@ mod tests {
     #[test]
     fn accepts_empty_action_param_object() {
         let policy = valid_policy().replace(
-            "        actions:\n          - review_artifact_open: { role: worker }",
+            "        actions:\n          - review.open: { role: worker }",
             "        actions:\n          - branch_prepare: {}",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
@@ -2330,7 +2343,7 @@ mod tests {
     fn rejects_invalid_action_params() {
         let policy = valid_policy().replace(
             review_action_line(),
-            "          - review_artifact_open: { provider: forgejo, role: worker }",
+            "          - review.open: { provider: forgejo, role: worker }",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
@@ -2343,13 +2356,13 @@ mod tests {
     fn parses_forgejo_review_action_params() {
         let policy = valid_policy().replace(
             review_action_line(),
-            "          - review_artifact_open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
+            "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
         );
 
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         let action = &policy.workflows["epic_reviewed"].transitions["request_review"].actions[0];
 
-        assert_eq!(action.builtin, "review_artifact_open");
+        assert_eq!(action.builtin, "review.open");
         assert_eq!(
             action.params.as_ref(),
             Some(&ActionParams::ReviewArtifact(ReviewArtifactActionParams {
