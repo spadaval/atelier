@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "ready"
+status: "closed"
 title: "Make workflow transitions the sole lifecycle authority"
-updated_at: "2026-06-20T04:17:50.926059629+00:00"
+updated_at: "2026-06-20T05:36:24.759424352+00:00"
 ---
 
 ## Intent
@@ -44,3 +44,7 @@ Make configured workflow transitions the sole authority for issue lifecycle clos
 - atelier status current-work guidance is derived from transition options or routes to them without static invalid lifecycle prompts.
 - Forgejo review commands/actions share config loading, and doctor reports provider readiness failures with remediation.
 - Regression coverage proves tracker-mutating pre-actions preserve review fields across transition status writes.
+
+## Terminal Notes
+
+- Close reason: Completed all linked transition-authority work, closed parent epic atelier-41h9, merged provider PR 13, and verified terminal mission checks are ready.
