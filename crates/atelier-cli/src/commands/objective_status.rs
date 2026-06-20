@@ -330,6 +330,17 @@ pub(crate) fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTre
     for child in db.get_subissues(issue_id)? {
         collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
     }
+    for relation in db.get_typed_relations(issue_id)? {
+        if relation.relation_type != "advances" {
+            continue;
+        }
+        let linked_id = if relation.issue_id_1 == issue_id {
+            relation.issue_id_2
+        } else {
+            relation.issue_id_1
+        };
+        collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
+    }
     Ok(issue_ids)
 }
 

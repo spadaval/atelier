@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T19:40:57.499256414+00:00"
+status: "done"
 title: "Replace mission relationship commands with a general link surface"
-updated_at: "2026-06-20T16:54:46.619043460+00:00"
+updated_at: "2026-06-20T19:40:57.499256414+00:00"
 ---
 
 ## Description

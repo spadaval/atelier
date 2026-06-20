@@ -391,6 +391,28 @@ enum IssueCommands {
         kind: String,
     },
 
+    /// Add a typed link from one issue to another
+    Link {
+        /// Source issue ID
+        id: String,
+        /// Target issue ID
+        target: String,
+        /// Relationship role, such as advances or blocked_by
+        #[arg(long)]
+        role: String,
+    },
+
+    /// Remove a typed link from one issue to another
+    Unlink {
+        /// Source issue ID
+        id: String,
+        /// Target issue ID
+        target: String,
+        /// Relationship role, such as advances or blocked_by
+        #[arg(long)]
+        role: String,
+    },
+
     /// Mark an issue as blocked by another
     Block {
         /// Issue ID that is blocked
@@ -1000,6 +1022,16 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::comment::run_issue_note(&db, &id, &text, &kind)
+        }
+
+        IssueCommands::Link { id, target, role } => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::relate::link_issue(&state_dir, &db_path, &id, &target, &role)
+        }
+
+        IssueCommands::Unlink { id, target, role } => {
+            let (state_dir, db_path) = state_and_db_paths()?;
+            commands::relate::unlink_issue(&state_dir, &db_path, &id, &target, &role)
         }
 
         IssueCommands::Block { id, blocker } => {
@@ -1640,6 +1672,8 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
+            IssueCommands::Link { .. } => "issue link",
+            IssueCommands::Unlink { .. } => "issue unlink",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",

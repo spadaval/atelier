@@ -36,6 +36,7 @@ issue or mission:
 - `atelier status`
 - `atelier issue ...`
 - `atelier issue status <objective-id>`
+- `atelier issue link/unlink <objective-id> <issue-id> --role advances`
 - `atelier search <query>`
 - `atelier graph impact/tree` until relationship context is folded into
   issue/objective views

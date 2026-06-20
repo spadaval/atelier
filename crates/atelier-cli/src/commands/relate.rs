@@ -1,9 +1,13 @@
 use anyhow::Result;
+use std::path::Path;
 
 use crate::utils::format_issue_id;
+use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
 use atelier_records::RecordStore;
 use atelier_sqlite::{validate_relation_type, Database};
+
+const BLOCKED_BY_ROLE: &str = "blocked_by";
 
 #[cfg(test)]
 pub fn add_typed(
@@ -65,6 +69,34 @@ pub fn add_typed_canonical(
     Ok(())
 }
 
+pub fn link_issue(
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    target_ref: &str,
+    role: &str,
+) -> Result<()> {
+    validate_relation_type(role)?;
+    let db = Database::open(db_path)?;
+    let issue_id = crate::commands::agent_factory::resolve_id(&db, issue_ref)?;
+    let target_id = crate::commands::agent_factory::resolve_id(&db, target_ref)?;
+    let store = RecordStore::new(state_dir);
+    let changed = if role == BLOCKED_BY_ROLE {
+        store.add_issue_block(&issue_id, &target_id)?
+    } else {
+        store.add_issue_relation(&issue_id, &target_id, role)?
+    };
+    drop(db);
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    if changed {
+        println!("Linked {issue_id} -> {target_id} ({role})");
+    } else {
+        println!("Link {issue_id} -> {target_id} ({role}) already exists");
+    }
+    print_link_next_commands(&issue_id, &target_id);
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn remove_typed(
     db: &Database,
@@ -121,6 +153,42 @@ pub fn remove_typed_canonical(
     }
 
     Ok(())
+}
+
+pub fn unlink_issue(
+    state_dir: &Path,
+    db_path: &Path,
+    issue_ref: &str,
+    target_ref: &str,
+    role: &str,
+) -> Result<()> {
+    validate_relation_type(role)?;
+    let db = Database::open(db_path)?;
+    let issue_id = crate::commands::agent_factory::resolve_id(&db, issue_ref)?;
+    let target_id = crate::commands::agent_factory::resolve_id(&db, target_ref)?;
+    let store = RecordStore::new(state_dir);
+    let changed = if role == BLOCKED_BY_ROLE {
+        store.remove_issue_block(&issue_id, &target_id)?
+    } else {
+        store.remove_issue_relation(&issue_id, &target_id, role)?
+    };
+    drop(db);
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    if changed {
+        println!("Unlinked {issue_id} -> {target_id} ({role})");
+    } else {
+        println!("No link {issue_id} -> {target_id} ({role}) exists");
+    }
+    print_link_next_commands(&issue_id, &target_id);
+    Ok(())
+}
+
+fn print_link_next_commands(issue_id: &str, target_id: &str) {
+    println!("Next Commands");
+    println!("-------------");
+    println!("  atelier issue show {issue_id}");
+    println!("  atelier issue status {issue_id}");
+    println!("  atelier issue show {target_id}");
 }
 
 pub fn list(db: &Database, issue_id: &str) -> Result<()> {

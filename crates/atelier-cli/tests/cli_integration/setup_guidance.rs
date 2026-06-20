@@ -1273,6 +1273,87 @@ fn test_issue_status_renders_objective_work_health() {
 }
 
 #[test]
+fn test_issue_link_replaces_objective_relationship_mutations() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Relationship objective",
+            "--issue-type",
+            "epic",
+        ],
+    );
+    assert!(success, "objective create failed: {stderr}");
+    let objective_id = issue_id_by_title(dir.path(), "Relationship objective");
+    let objective_id = objective_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Linked work"]);
+    assert!(success, "linked work create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Linked work");
+    let work_id = work_id.as_str();
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Objective blocker"]);
+    assert!(success, "blocker create failed: {stderr}");
+    let blocker_id = issue_id_by_title(dir.path(), "Objective blocker");
+    let blocker_id = blocker_id.as_str();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", objective_id, work_id, "--role", "advances"],
+    );
+    assert!(success, "advances link failed: {stderr}");
+    assert!(stdout.contains(&format!("Linked {objective_id} -> {work_id} (advances)")));
+    assert!(stdout.contains(&format!("atelier issue status {objective_id}")));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            objective_id,
+            blocker_id,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    assert!(success, "blocked_by link failed: {stderr}");
+    assert!(stdout.contains(&format!(
+        "Linked {objective_id} -> {blocker_id} (blocked_by)"
+    )));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
+    assert!(success, "issue status failed: {stderr}");
+    assert!(stdout.contains(&format!(
+        "ready {work_id} - Linked work | no open blockers; mission-linked root; proof missing"
+    )));
+    assert!(stdout.contains("Open Blockers: 1 open"));
+    assert!(stdout.contains(blocker_id));
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            objective_id,
+            work_id,
+            "--role",
+            "advances",
+        ],
+    );
+    assert!(success, "advances unlink failed: {stderr}");
+    assert!(stdout.contains(&format!("Unlinked {objective_id} -> {work_id} (advances)")));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
+    assert!(success, "issue status after unlink failed: {stderr}");
+    assert!(!stdout.contains(&format!("ready {work_id} - Linked work")));
+    assert!(stdout.contains("Open Blockers: 1 open"));
+}
+
+#[test]
 fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
