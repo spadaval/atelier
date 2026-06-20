@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Move mission close and focus behavior into workflow decisions"
-updated_at: "2026-06-20T16:54:46.612684053+00:00"
+updated_at: "2026-06-20T20:10:43.604716923+00:00"
 ---
 
 ## Description

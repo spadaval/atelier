@@ -94,9 +94,10 @@ state is unavailable. The admin guide degrades gracefully before initialization
 or when local state is broken.
 
 `atelier status` is the root checkout signpost. It summarizes the current-work
-set, active mission focus, ready work count, tracker freshness, and the next
-mission/work/health drill-down commands. It does not replace `mission status`;
-it points operators to the scoped status surface that owns completion status.
+set, any legacy active mission record, ready work count, tracker freshness, and
+the next mission/work/health drill-down commands. It does not replace
+`mission status`; it points operators to the scoped status surface that owns
+completion status.
 
 `atelier --help` should expose the normal operator path first: orient, inspect
 missions and issues, inspect workflow options, manage blockers, record proof,
@@ -216,12 +217,11 @@ diagnostic jargon fails this check.
 
 Mission lifecycle statuses are `draft`, `ready`, `active`, `superseded`, and
 `closed`.
-Mission creation defaults to `ready`; `atelier mission start <id>` transitions
-the selected mission to `active` and transitions any previous active mission
-back to `ready` when `--switch` is supplied. Mission commands do not accept
-`open` as a mission-status alias and do not read legacy `data.active` state;
-committed mission records should be migrated directly to the lifecycle status
-they mean.
+Mission creation defaults to `ready`. Active mission focus is retained only as
+legacy committed state for existing records; there is no supported command to
+set or switch mission focus. Mission commands do not accept `open` as a
+mission-status alias and do not read legacy `data.active` state; committed
+mission records should be migrated directly to the lifecycle status they mean.
 Use `superseded` for a mission whose execution has been replaced by another
 mission; it is hidden from default current mission lists like `closed`, but
 remains visible with `atelier mission list --status superseded` or
@@ -307,7 +307,7 @@ State-specific next actions are part of the command contract:
 - `draft`: show missing readiness fields and point to record editing,
   `atelier lint <mission-id>`, or `atelier mission update <id> --status ready`.
 - `ready`: show ready work and the command to transition an issue into active
-  work or switch mission focus.
+  work or inspect mission status explicitly.
 - `active`: show active work, ready work, blockers, evidence gaps, and the next
   issue, evidence, or health command that advances the mission.
 - `blocked`: show the open blocker records first and point to the specific

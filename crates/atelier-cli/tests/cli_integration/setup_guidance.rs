@@ -1540,8 +1540,11 @@ fn test_man_manager_names_active_mission() {
     assert!(success, "mission create failed: {stderr}");
     let mission_id = record_id_by_title(dir.path(), "missions", "Man mission");
     let mission_id = mission_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id]);
-    assert!(success, "mission start failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "legacy active mission setup failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "manager"]);
     assert!(success, "man manager failed: {stderr}");

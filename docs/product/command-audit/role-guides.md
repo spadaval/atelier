@@ -114,7 +114,7 @@ Core loop:
 ```text
 atelier mission list
 atelier mission show <id>
-atelier mission start <id> --switch
+atelier mission status <id>
 atelier bundle preview <file>
 atelier bundle apply <file> --yes
 atelier issue create "..."

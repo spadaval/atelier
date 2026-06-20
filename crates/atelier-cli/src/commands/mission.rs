@@ -31,50 +31,6 @@ pub fn show(db: &Database, id: &str) -> Result<()> {
     view(db, id)
 }
 
-pub fn start(state_dir: &Path, db_path: &Path, id: &str, switch_active: bool) -> Result<()> {
-    let db = app_use_cases::open_database(db_path)?;
-    let mission = db.require_record(KIND, id)?;
-    let current_missions = current_mission_records(&db)?;
-    let active = current_missions
-        .iter()
-        .filter(|record| is_active_mission(record))
-        .collect::<Vec<_>>();
-    let other_active = active
-        .iter()
-        .find(|record| record.id != mission.id)
-        .map(|record| record.id.clone());
-    if let Some(other_active) = other_active {
-        if !switch_active {
-            bail!(
-                "Mission {} is already active. Use `atelier mission start {} --switch` to change focus.",
-                other_active,
-                mission.id
-            );
-        }
-    }
-    drop(db);
-
-    let mut changed = false;
-    for record in current_missions {
-        let mut canonical = canonical_mission_record(&record.id)?;
-        let should_be_active = canonical.header.id == mission.id;
-        if set_mission_active_state(&mut canonical, should_be_active)? {
-            canonical.header.updated_at = Utc::now();
-            app_use_cases::write_canonical_record(state_dir, &Record::Mission(canonical))?;
-            changed = true;
-        }
-    }
-    if changed {
-        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    }
-    println!("Active mission: {} - {}", mission.id, mission.title);
-    println!("Next Commands");
-    println!("-------------");
-    println!("  atelier mission status {}", mission.id);
-    println!("  atelier issue list --ready");
-    Ok(())
-}
-
 pub fn status(
     db: &Database,
     state_dir: &Path,
@@ -2021,15 +1977,6 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
 
 fn is_active_mission(record: &RecordSummary) -> bool {
     record.status == "active"
-}
-
-fn set_mission_active_state(record: &mut MissionRecord, active: bool) -> Result<bool> {
-    let target_status = if active { "active" } else { "ready" };
-    if record.header.status == target_status && (record.header.status == "active") == active {
-        return Ok(false);
-    }
-    record.header.status = target_status.to_string();
-    Ok(true)
 }
 
 fn mission_focus_label(record: &RecordSummary) -> String {

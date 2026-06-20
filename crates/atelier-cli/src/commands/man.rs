@@ -226,8 +226,10 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
                     "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
                 );
             } else {
-                println!("  1. atelier mission list - Choose mission focus.");
-                println!("  2. atelier mission start <id> --switch - Set active mission focus.");
+                println!("  1. atelier mission list - Choose a mission to inspect explicitly.");
+                println!(
+                    "  2. atelier mission status <id> - Review mission readiness and blockers."
+                );
                 println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
             }
         }

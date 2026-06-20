@@ -461,13 +461,6 @@ enum MissionCommands {
     },
     /// Show a mission with linked work, blockers, and evidence
     Show { id: String },
-    /// Focus a mission as the active orchestration context
-    Start {
-        id: String,
-        /// Replace any currently active mission focus
-        #[arg(long = "switch")]
-        switch_active: bool,
-    },
     /// Show mission-control status for one mission or all current missions
     Status {
         /// Show verbose validator detail in the status summary
@@ -1132,13 +1125,6 @@ fn run() -> Result<()> {
                 let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
                 commands::mission::show(db, &id)
             }
-            MissionCommands::Start { id, switch_active } => {
-                let storage = use_cases::mission_mutation_storage()?;
-                let db_path = storage.db_path();
-                let state_dir = storage.state_dir();
-                let id = use_cases::resolve_record_ref(&storage, "mission", &id)?;
-                commands::mission::start(&state_dir, &db_path, &id, switch_active)
-            }
             MissionCommands::Status { id, verbose } => {
                 let storage = use_cases::mission_query_storage()?;
                 let id = use_cases::resolve_optional_record_ref(&storage, "mission", id)?;
@@ -1637,7 +1623,6 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Mission { action } => match action {
             MissionCommands::Create { .. } => "mission create",
             MissionCommands::Show { .. } => "mission show",
-            MissionCommands::Start { .. } => "mission start",
             MissionCommands::Status { .. } => "mission status",
             MissionCommands::Close { .. } => "mission close",
             MissionCommands::List { .. } => "mission list",

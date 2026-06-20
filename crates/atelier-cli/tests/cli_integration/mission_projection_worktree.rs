@@ -1597,10 +1597,11 @@ fn test_active_mission_focus_guides_status_and_work() {
         run_atelier(dir.path(), &["mission", "add-work", mission_id, issue_id]);
     assert!(success, "mission add work failed: {stderr}");
 
-    let (success, start_out, stderr) = run_atelier(dir.path(), &["mission", "start", mission_id]);
-    assert!(success, "mission start failed: {stderr}");
-    assert!(start_out.contains(&format!("Active mission: {mission_id}")));
-    assert!(start_out.contains(&format!("atelier mission status {mission_id}")));
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", mission_id, "--status", "active"],
+    );
+    assert!(success, "legacy active mission setup failed: {stderr}");
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["mission", "status"]);
     assert!(success, "active mission status failed: {stderr}");
@@ -1630,57 +1631,14 @@ fn test_active_mission_focus_guides_status_and_work() {
 }
 
 #[test]
-fn test_mission_start_requires_explicit_switch_and_warns_for_outside_work() {
+fn test_mission_start_is_removed_without_compatibility_guidance() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    init_git_repo(dir.path());
-    migrate_default_issue_workflow(dir.path());
 
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "First mission"]);
-    assert!(success, "first mission create failed: {stderr}");
-    let first_id = record_id_by_title(dir.path(), "missions", "First mission");
-    let first_id = first_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "create", "Second mission"]);
-    assert!(success, "second mission create failed: {stderr}");
-    let second_id = record_id_by_title(dir.path(), "missions", "Second mission");
-    let second_id = second_id.as_str();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", first_id]);
-    assert!(success, "first mission start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", second_id]);
-    assert!(!success, "second mission start without switch should fail");
-    assert!(
-        stderr.contains("--switch"),
-        "expected switch guidance in stderr: {stderr}"
-    );
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "start", second_id, "--switch"]);
-    assert!(success, "mission switch failed: {stderr}");
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Outside work"]);
-    assert!(success, "outside issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Outside work");
-    let issue_id = issue_id.as_str();
-    let (success, _, stderr) = run_atelier(dir.path(), &["doctor", "--fix"]);
-    assert!(success, "doctor --fix failed: {stderr}");
-    migrate_default_issue_workflow(dir.path());
-    Command::new("git")
-        .current_dir(dir.path())
-        .args(["add", "."])
-        .status()
-        .unwrap();
-    Command::new("git")
-        .current_dir(dir.path())
-        .args(["commit", "-q", "-m", "switched mission"])
-        .status()
-        .unwrap();
-
-    let (success, work_out, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", issue_id, "start"]);
-    assert!(success, "outside root start failed: {stderr}");
-    assert!(work_out.contains(&format!(
-        "Warning: {issue_id} is outside active mission {second_id}"
-    )));
+    let (success, _, stderr) = run_atelier(dir.path(), &["mission", "start", "atelier-missing"]);
+    assert!(!success, "mission start should be removed");
+    assert!(stderr.contains("unrecognized subcommand"), "{stderr}");
+    assert!(!stderr.contains("--switch"), "{stderr}");
 }
 
 #[test]
@@ -2973,9 +2931,11 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
             run_atelier(dir.path(), &["mission", "add-work", &mission_id, id]);
         assert!(success, "mission add-work failed for {id}: {stderr}");
     }
-    let (success, _, stderr) =
-        run_atelier(dir.path(), &["mission", "start", &mission_id, "--switch"]);
-    assert!(success, "mission start failed: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["mission", "update", &mission_id, "--status", "active"],
+    );
+    assert!(success, "legacy active mission setup failed: {stderr}");
     commit_all(dir.path(), "initial lifecycle context tracker state");
 
     let (success, base_status, stderr) = run_atelier(dir.path(), &["status"]);
