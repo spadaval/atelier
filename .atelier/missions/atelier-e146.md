@@ -19,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.mission"
 schema_version: 1
-status: "active"
+status: "closed"
 title: "Command surface cutting pass"
-updated_at: "2026-06-20T19:20:16.364311157+00:00"
+updated_at: "2026-06-20T22:04:29.028774912+00:00"
 ---
 
 ## Intent
@@ -45,3 +45,7 @@ Reduce Atelier's product surface by consolidating duplicate commands into strong
 - Removed commands fail as unknown commands without compatibility guidance.
 - Focused integration tests cover replacement workflows, type-aware issue views,
   removed command behavior, and retained command status/help output.
+
+## Terminal Notes
+
+- Close reason: all command-surface cutting pass epics are done, merged, and terminal checks pass
