@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Validate transition-authority lifecycle behavior"
-updated_at: "2026-06-20T04:17:09.576599105+00:00"
+updated_at: "2026-06-20T05:25:17.116144400+00:00"
 ---
 
 ## Description

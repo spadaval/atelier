@@ -882,8 +882,11 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
         if !option_present {
             continue;
         }
-        let (success, _, stderr) =
-            run_atelier(dir, &["issue", "transition", &issue_id, transition]);
+        let (success, _, stderr) = if transition == "start" && dir.join(".git").exists() {
+            run_atelier(dir, &["start", &issue_id, "--no-session"])
+        } else {
+            run_atelier(dir, &["issue", "transition", &issue_id, transition])
+        };
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
             if transition == "request_review" {

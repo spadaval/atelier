@@ -3558,17 +3558,18 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
         ],
     );
     assert!(success, "child transition close failed: {stderr}");
-    assert!(close_out.contains("Close Git Integration"), "{close_out}");
-    assert!(close_out.contains(&format!("Target:        issue/{child_id}")));
-    assert!(close_out.contains(&format!("Branch owner:  epic {epic_id} (epic)")));
-    assert!(close_out.contains(&format!("Source branch: epic/{epic_id}")));
-    assert!(close_out.contains("Base branch:   main"));
-    assert!(close_out.contains("Merge strategy: squash"));
-    assert!(close_out.contains("Merge result:   deferred to epic close"));
+    assert!(
+        close_out.contains("Action:   tracker.commit"),
+        "{close_out}"
+    );
+    assert!(
+        close_out.contains("Action:   branch_integrate deferred to parent branch close"),
+        "{close_out}"
+    );
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert_eq!(git_rev_parse(dir.path(), "main"), main_before);
     assert!(git_log_oneline(dir.path(), &format!("epic/{epic_id}"), 1)
-        .contains(&format!("Close {child_id}: Child close work")));
+        .contains(&format!("Transition {child_id} close: Child close work")));
     let dirty = git_status_short(dir.path());
     assert!(dirty.trim().is_empty(), "{dirty}");
 }
@@ -3609,10 +3610,14 @@ fn test_standalone_issue_close_squash_merges_to_base() {
     );
     assert!(success, "standalone close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
-    assert!(close_out.contains(&format!("Branch owner:  issue {issue_id} (task)")));
-    assert!(close_out.contains(&format!("Source branch: codex/{issue_id}")));
-    assert!(close_out.contains("Merge strategy: squash"));
-    assert!(close_out.contains("Merge result:   squash commit"));
+    assert!(
+        close_out.contains("Action:   tracker.commit"),
+        "{close_out}"
+    );
+    assert!(
+        close_out.contains("Action:   branch_integrate squash commit"),
+        "{close_out}"
+    );
     let main_log = git_log_oneline(dir.path(), "main", 2);
     assert!(
         main_log.contains(&format!("Squash merge codex/{issue_id} into main")),
@@ -3681,9 +3686,14 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
     );
     assert!(success, "epic close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
-    assert!(close_out.contains(&format!("Branch owner:  epic {epic_id} (epic)")));
-    assert!(close_out.contains(&format!("Source branch: epic/{epic_id}")));
-    assert!(close_out.contains("Merge result:   squash commit"));
+    assert!(
+        close_out.contains("Action:   tracker.commit"),
+        "{close_out}"
+    );
+    assert!(
+        close_out.contains("Action:   branch_integrate squash commit"),
+        "{close_out}"
+    );
     let main_log = git_log_oneline(dir.path(), "main", 2);
     assert!(
         main_log.contains(&format!("Squash merge epic/{epic_id} into main")),
@@ -3746,13 +3756,11 @@ fn test_issue_close_merge_failure_rolls_back_terminal_tracker_state() {
         !success,
         "conflicting close unexpectedly succeeded:\n{stdout}"
     );
-    assert!(stdout.contains("Close Git Integration"), "{stdout}");
+    assert!(stdout.contains("Lint passed."), "{stdout}");
     assert!(
-        stderr.contains("Close Git integration failed during squash merge")
+        stderr.contains("action branch_integrate failed during squash merge")
             && stderr.contains("Recovery:")
-            && stderr.contains(&format!(
-                "atelier issue transition {issue_id} close --reason"
-            )),
+            && stderr.contains(&format!("retry the transition for {issue_id}")),
         "{stderr}"
     );
     assert_eq!(git_current_branch(dir.path()), format!("codex/{issue_id}"));
