@@ -86,9 +86,9 @@ full Atelier command or workflow contract.
 | Role assignment; one-subskill delegation; subskill selection; model routing; mutating-subagent worktree judgment; `--json` avoidance as an Agent Factory automation contract; independent-review judgment when the tracker does not carry first-class assignment metadata | Orchestration-only guidance | Agent Factory prompts, skills, and explicit assignments | Keep in Agent Factory unless Atelier gains first-class assignment metadata or explicit workflow fields that own the same decision. |
 | Mission, issue, worktree, evidence, history, and relationship command purposes | Atelier-owned product behavior | `atelier --help`, `docs/product/cli-surface.md` | The binding may name entrypoints, but the public command contract belongs to Atelier help and product docs. |
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
-| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier mission status` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
-| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier mission status`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier mission status --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
+| Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue status <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
+| Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue status <mission-id>`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue status <mission-id> --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 This means source locations and tracker shape belong in repository instructions
@@ -99,7 +99,7 @@ audit, lint, admin repair, and workflow-policy surfaces.
 ## Stale-State Preflight
 
 Before mutating workflow state, trust normal Atelier-owned health surfaces
-first. If `atelier lint`, `atelier status`, `atelier mission status`, or another
+first. If `atelier lint`, `atelier status`, `atelier issue status <mission-id>`, or another
 normal tracker read reports invalid canonical Markdown, blocked readiness, or
 unreadable tracker state, stop workflow mutation until the state is repaired.
 
@@ -111,8 +111,8 @@ Use this recovery order:
    names them.
 3. Use `atelier man admin` and the named admin repair command only when Atelier
    reports degraded local runtime, cache, or derived state.
-4. Return to `atelier status`, `atelier mission status`, or the relevant
-   `issue show`/`mission show` command after the reported check passes.
+4. Return to `atelier status`, `atelier issue status <mission-id>`, or the relevant
+   `issue show` command after the reported check passes.
 
 Do not edit `.atelier/runtime/`, `.atelier/cache/`, local locks, or identity
 files by hand as a substitute for the documented repair surfaces.
@@ -239,11 +239,10 @@ Stable claim anchors are optional and reserved for high-risk or
 automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
 
-`atelier mission status` is the normal operator surface for mission state,
-blockers, evidence gaps, next actions, and completion status. `atelier mission
-audit` is completion drill-down: it exists to report mission shell completion and
-any explicit linked validation work that supplies workflow
-approval, and may be folded into a verbose completion mode of mission status.
+`atelier issue status <mission-id>` is the normal operator surface for mission
+state, blockers, evidence gaps, next actions, and completion status. Verbose
+issue status is completion drill-down: it reports mission shell completion and
+any explicit linked validation work that supplies workflow approval.
 Hidden workflow validators are
 advanced diagnostics; use them only when the assignment or completion
 contract explicitly requires them, and attach the human-readable result to the
@@ -324,7 +323,7 @@ when the command already accepts the direct value you want to inspect.
 After the first clear unrecognized command or wrong command-family error, stop
 and consult the repository-owned command map instead of probing neighboring
 names. Use `atelier --help`, `docs/product/cli-surface.md`, `atelier man <role>`,
-`atelier status`, or `atelier mission status` to recover the correct surface
+`atelier status`, or `atelier issue status <mission-id>` to recover the correct surface
 for the current job.
 
 The stop rule exists to avoid retry loops around removed commands, hidden
