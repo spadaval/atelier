@@ -729,7 +729,7 @@ enum ForgejoRolesCommands {
     Check,
     /// Create missing role author users and grant repository access
     Provision {
-        /// Persist the role author mapping in .atelier/config.toml
+        /// Rejected legacy flag; role authors live in workflow action params
         #[arg(long)]
         write_config: bool,
     },
