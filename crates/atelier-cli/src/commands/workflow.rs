@@ -3363,9 +3363,6 @@ project_slug = "atelier-test"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 [review]
 mode = "provider"

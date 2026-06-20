@@ -241,6 +241,7 @@ fn workflow_milestones_emit_issue_attempt_metadata_without_session_records() {
         ],
     );
     assert!(success, "request_review failed: {stderr}");
+    complete_room_review(dir.path(), &issue_id);
 
     let (success, _, stderr) = run_atelier_with_env(
         dir.path(),

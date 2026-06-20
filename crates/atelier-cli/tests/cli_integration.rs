@@ -362,6 +362,28 @@ fn commit_all(dir: &Path, message: &str) {
     );
 }
 
+fn complete_room_review(dir: &Path, issue_id: &str) {
+    let (success, _, stderr) = run_atelier(
+        dir,
+        &[
+            "review",
+            "approve",
+            "--issue",
+            issue_id,
+            "--role",
+            "reviewer",
+            "--body",
+            "fixture approval",
+        ],
+    );
+    assert!(success, "review approve failed for {issue_id}: {stderr}");
+    let (success, _, stderr) = run_atelier(
+        dir,
+        &["review", "merge", "--issue", issue_id, "--role", "manager"],
+    );
+    assert!(success, "review merge failed for {issue_id}: {stderr}");
+}
+
 fn git_status_short(dir: &Path) -> String {
     let output = Command::new("git")
         .current_dir(dir)
@@ -864,6 +886,9 @@ fn move_issue_to_validation(dir: &Path, issue_ref_value: &str) -> String {
             run_atelier(dir, &["issue", "transition", &issue_id, transition]);
         if options.contains(&format!("{transition} [allowed]")) {
             assert!(success, "{transition} failed for {issue_id}: {stderr}");
+            if transition == "request_review" {
+                complete_room_review(dir, &issue_id);
+            }
         }
     }
     issue_id
@@ -895,9 +920,6 @@ project_slug = "atelier-test"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 [review]
 mode = "provider"

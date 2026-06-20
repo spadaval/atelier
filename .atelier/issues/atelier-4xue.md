@@ -5,6 +5,10 @@ issue_type: "validation"
 labels:
 - "validation"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 12
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -13,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Validate workflow policy cleanup end to end"
-updated_at: "2026-06-19T22:42:56.487995393+00:00"
+updated_at: "2026-06-20T02:33:43.287153974+00:00"
 ---
 
 ## Description
