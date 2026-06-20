@@ -22,9 +22,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-20T21:25:55.858291458+00:00"
+status: "done"
 title: "Epic: Simplify review and provider command surface"
-updated_at: "2026-06-20T21:25:42.439747683+00:00"
+updated_at: "2026-06-20T21:25:55.858291458+00:00"
 ---
 
 ## Description
