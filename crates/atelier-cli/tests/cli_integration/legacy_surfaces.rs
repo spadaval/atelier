@@ -120,7 +120,7 @@ fn test_archive_closed_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "add", "1"]);
 
     assert!(success);
@@ -154,7 +154,7 @@ fn test_archive_list() {
 
     run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
     run_atelier(dir.path(), &["issue", "create", "Open issue"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
     run_atelier(dir.path(), &["archive", "add", "1"]);
 
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "list"]);
@@ -170,7 +170,7 @@ fn test_unarchive_issue() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue to archive"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
     run_atelier(dir.path(), &["archive", "add", "1"]);
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "remove", "1"]);
 
@@ -1054,7 +1054,7 @@ fn test_archive_older_days() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Old issue"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     // Try to archive issues older than 0 days (should include our just-closed issue)
     let (success, _, _) = run_atelier(dir.path(), &["archive", "older", "0"]);
@@ -1069,7 +1069,7 @@ fn test_archive_already_archived() {
     init_atelier(dir.path());
 
     run_atelier(dir.path(), &["issue", "create", "Issue"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
     run_atelier(dir.path(), &["archive", "add", "1"]);
 
     // Try to archive again
@@ -1535,7 +1535,7 @@ fn test_import_with_labels_and_comments() {
     run_atelier(dir.path(), &["issue", "label", "1", "bug"]);
     run_atelier(dir.path(), &["issue", "label", "1", "urgent"]);
     run_atelier(dir.path(), &["issue", "comment", "1", "First comment"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     let export_path = dir.path().join("export.json");
     run_atelier(
@@ -1757,7 +1757,7 @@ fn test_archive_older_no_matches() {
 
     // Create and close an issue (just now, so not old)
     run_atelier(dir.path(), &["issue", "create", "New issue"]);
-    run_atelier(dir.path(), &["issue", "close", "1"]);
+    close_issue_with_evidence(dir.path(), "1", None);
 
     // Archive issues older than 30 days - should find none
     let (success, stdout, _) = run_atelier(dir.path(), &["archive", "older", "30"]);

@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T04:59:52.620987794+00:00"
+status: "done"
 title: "Remove special issue close command"
-updated_at: "2026-06-20T04:17:09.556975939+00:00"
+updated_at: "2026-06-20T04:59:52.620987794+00:00"
 ---
 
 ## Description

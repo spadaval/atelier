@@ -78,7 +78,7 @@ Common commands:
   atelier history --issue <id>
   atelier start <issue-id>
   atelier issue transition <issue-id> --options
-  atelier issue close <issue-id> --reason \"...\"
+  atelier issue transition <issue-id> close --reason \"...\"
   atelier prune
   atelier prune --apply
   atelier help <command>
@@ -138,7 +138,7 @@ enum Commands {
         reuse_session: Option<String>,
     },
 
-    /// Issue lifecycle commands (create, show, list, close, ...)
+    /// Issue lifecycle commands (create, show, list, transition, ...)
     Issue {
         #[command(subcommand)]
         action: IssueCommands,
@@ -410,18 +410,6 @@ enum IssueCommands {
         /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human)
         #[arg(long, default_value = "note")]
         kind: String,
-    },
-
-    /// Close an issue
-    Close {
-        /// Issue ID
-        id: String,
-        /// Explicit terminal workflow status when multiple done targets are available
-        #[arg(long)]
-        to: Option<String>,
-        /// Close reason recorded in issue activity
-        #[arg(short, long)]
-        reason: String,
     },
 
     /// Mark an issue as blocked by another
@@ -1068,18 +1056,6 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let db = canonical_mutation_db()?;
             let id = resolve_issue_arg(&db, &id)?;
             commands::comment::run_issue_note(&db, &id, &text, &kind)
-        }
-
-        IssueCommands::Close { id, to, reason } => {
-            let (state_dir, db_path) = state_and_db_paths()?;
-            let _ = quiet;
-            commands::agent_factory::close_lifecycle(
-                &state_dir,
-                &db_path,
-                &id,
-                &reason,
-                to.as_deref(),
-            )
         }
 
         IssueCommands::Block { id, blocker } => {
@@ -1776,7 +1752,6 @@ fn command_identity(command: &Commands) -> &'static str {
             IssueCommands::Transition { .. } => "issue transition",
             IssueCommands::Update { .. } => "issue update",
             IssueCommands::Note { .. } => "issue note",
-            IssueCommands::Close { .. } => "issue close",
             IssueCommands::Block { .. } => "issue block",
             IssueCommands::Unblock { .. } => "issue unblock",
             IssueCommands::Blocked { .. } => "issue blocked",

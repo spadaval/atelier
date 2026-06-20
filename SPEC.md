@@ -536,7 +536,7 @@ Desired commands:
 ```text
 atelier agent init <name>
 atelier start atelier-z1p8
-atelier issue close atelier-z1p8 --reason "done"
+atelier issue transition atelier-z1p8 close --reason "done"
 ```
 
 `atelier start <id>` owns routine branch preparation. It derives the owner
@@ -608,7 +608,8 @@ Normal tracked work uses explicit work association rather than inherited
 Chainlink lock sync. The default workflow is one mission worktree when the work
 belongs to a mission, one reviewable branch per epic, lifecycle-owned branch
 preparation through `atelier start`, lifecycle-owned close integration through
-`atelier issue close` or `atelier mission close`, and `lint`/`doctor` health
+`atelier issue transition <id> close --reason "..."` or `atelier mission close`,
+and `lint`/`doctor` health
 checks. Explicit branch commands such as `atelier branch for-epic`
 are internal, diagnostic, or advanced repair surfaces; they are not the normal
 mutating-subagent default.

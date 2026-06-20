@@ -275,7 +275,7 @@ fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
         commit_if_dirty(dir, "test fixture state before workflow options");
     }
     if matches!(args, ["issue", "close", ..]) && dir.join(".git").exists() {
-        commit_if_dirty(dir, "test fixture state before issue close");
+        commit_if_dirty(dir, "test fixture state before transition close");
     }
 }
 
@@ -833,7 +833,7 @@ fn attach_issue_pass_evidence(dir: &Path, issue_id: &str) -> String {
         dir,
         "issue",
         issue_id,
-        &format!("issue close proof for {issue_id}"),
+        &format!("transition close proof for {issue_id}"),
     )
 }
 
@@ -902,11 +902,11 @@ fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&
     if dir.join(".git").exists() {
         commit_all(dir, &format!("ready to close {issue_id}"));
     }
-    let mut args = vec!["issue", "close", issue_ref_value];
+    let mut args = vec!["issue", "transition", issue_ref_value, "close"];
     args.push("--reason");
     args.push(reason.unwrap_or("done"));
     let (success, _, stderr) = run_atelier(dir, &args);
-    assert!(success, "issue close failed: {stderr}");
+    assert!(success, "issue transition close failed: {stderr}");
     issue_id
 }
 

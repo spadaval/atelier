@@ -379,7 +379,7 @@ fn branch_context_blockers(
     }
     if is_close && context.resolution.merge_owned && !context.base_branch_exists {
         blockers.push(format!(
-            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue close {} --reason \"...\"`",
+            "branch context: configured base branch '{}' is missing; create or fetch it, then rerun `atelier issue transition {} close --reason \"...\"`",
             context.resolution.base_branch, issue.id
         ));
     }
@@ -421,7 +421,7 @@ fn branch_context_guidance(
     }
     if is_close {
         guidance.push(format!(
-            "Close lifecycle command: atelier issue close {} --reason \"...\"",
+            "Close lifecycle command: atelier issue transition {} close --reason \"...\"",
             issue.id
         ));
     }
@@ -1309,7 +1309,7 @@ pub fn close_issue(
             .collect::<BTreeSet<_>>();
         if destinations.len() > 1 {
             bail!(
-                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue close {} --to <status> --reason \"...\"` (available: {})",
+                "Issue {} has multiple terminal done targets from '{}'; rerun with `atelier issue transition {} <transition> --reason \"...\"` (available done statuses: {})",
                 issue.id,
                 issue.status,
                 issue.id,
@@ -1509,7 +1509,7 @@ impl CloseGitIntegration {
         if resolution.merge_owned {
             ensure_branch_exists(&repo_root, &resolution.base_branch).with_context(|| {
                 format!(
-                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration cannot find configured base branch '{}'.\nRecovery: create or fetch the base branch, then retry `atelier issue transition {} close --reason \"...\"`.",
                     resolution.base_branch, issue.id
                 )
             })?;
@@ -1523,7 +1523,7 @@ impl CloseGitIntegration {
             )
             .with_context(|| {
                 format!(
-                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                    "Close Git integration could not switch to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                     resolution.expected_branch, issue.id
                 )
             })?;
@@ -1576,7 +1576,7 @@ impl CloseGitIntegration {
             println!("Merge result:   deferred to epic close");
         }
         println!(
-            "Recovery:      rerun `atelier issue close {} --reason \"...\"` only if a later step reports failure",
+            "Recovery:      rerun `atelier issue transition {} close --reason \"...\"` only if a later step reports failure",
             self.issue_id
         );
         let _ = app_use_cases::open_database(db_path)?;
@@ -1605,7 +1605,7 @@ impl CloseGitIntegration {
         })
         .with_context(|| {
             format!(
-                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                "Close Git integration failed while committing tracker state for {}.\nRecovery: tracker files were restored to their pre-close state; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                 self.issue_id, self.issue_id
             )
         })?;
@@ -1638,7 +1638,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1653,7 +1653,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1676,7 +1676,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1695,7 +1695,7 @@ impl CloseGitIntegration {
                 )
                 .with_context(|| {
                     format!(
-                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue close {} --reason \"...\"`.",
+                        "Close Git integration failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and the source close commit was rolled back; inspect `git status --short --branch`, then retry `atelier issue transition {} close --reason \"...\"`.",
                         self.resolution.expected_branch, self.resolution.base_branch, self.issue_id
                     )
                 })?;
@@ -1779,7 +1779,7 @@ fn ensure_close_branch_ready(root: &Path, resolution: &BranchLifecycleResolution
     )
     .with_context(|| {
         format!(
-            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue close {} --reason \"...\"`.",
+            "Close Git integration could not create source branch '{}'.\nRecovery: run `atelier start {}` to prepare the branch, then retry `atelier issue transition {} close --reason \"...\"`.",
             resolution.expected_branch, resolution.issue_id, resolution.issue_id
         )
     })
@@ -1797,7 +1797,7 @@ fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
     let dirty = non_tracker_dirty_entries(root)?;
     if !dirty.is_empty() {
         bail!(
-            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
+            "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue transition <issue-id> close --reason \"...\"`.",
             dirty.join("\n")
         );
     }

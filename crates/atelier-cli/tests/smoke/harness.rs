@@ -99,7 +99,7 @@ impl SmokeHarness {
     /// Attach minimal validation proof to an issue fixture.
     pub fn attach_issue_pass_evidence(&self, issue_ref: &str) -> String {
         let issue_id = self.translate_issue_ref(issue_ref);
-        let summary = format!("issue close proof for {issue_id}");
+        let summary = format!("transition close proof for {issue_id}");
         let evidence = self.run_ok(&[
             "evidence",
             "record",
@@ -132,7 +132,14 @@ impl SmokeHarness {
             "fixture approval",
         ]);
         self.run_ok(&["review", "merge", "--issue", &issue_id, "--role", "manager"]);
-        self.run_ok(&["issue", "close", &issue_id, "--reason", "fixture complete"]);
+        self.run_ok(&[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "fixture complete",
+        ]);
     }
 
     /// Run an Atelier CLI command and assert it fails.

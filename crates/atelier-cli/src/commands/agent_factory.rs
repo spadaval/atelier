@@ -587,7 +587,7 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
                 crate::commands::workflow::branch_lifecycle_state_line(&context)
             );
             println!("Next:     atelier start {canonical_id}");
-            println!("Close:    atelier issue close {canonical_id} --reason \"...\"");
+            println!("Close:    atelier issue transition {canonical_id} close --reason \"...\"");
         }
         Err(error) => {
             println!("State:    unavailable - {error}");
@@ -1735,17 +1735,6 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
     println!("-------------");
     println!("  atelier issue show {}", object.id);
     Ok(())
-}
-
-pub fn close_lifecycle(
-    state_dir: &Path,
-    db_path: &Path,
-    issue_ref: &str,
-    reason: &str,
-    to_status: Option<&str>,
-) -> Result<()> {
-    let db = Database::open(db_path)?;
-    crate::commands::workflow::close_issue(&db, state_dir, db_path, issue_ref, to_status, reason)
 }
 
 pub fn delete_lifecycle(state_dir: &Path, db_path: &Path, issue_ref: &str) -> Result<String> {

@@ -1881,9 +1881,16 @@ fn test_issue_mutations_create_activity_sidecars() {
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Close reason body"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "Close reason body",
+        ],
     );
-    assert!(success, "issue close reason failed: {stderr}");
+    assert!(success, "issue transition close reason failed: {stderr}");
 
     let activities = issue_activity_texts(dir.path(), &issue_id);
     assert_activity_contains(&activities, "comment", &["Plain comment body"]);
@@ -1950,7 +1957,14 @@ fn test_issue_show_json_recovers_activity_fields_after_rebuild() {
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "Canonical close"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "Canonical close",
+        ],
     );
     assert!(success, "close failed: {stderr}");
 

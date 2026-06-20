@@ -867,7 +867,7 @@ impl MissionTerminalStatus {
             println!("Work: closed");
         } else {
             println!("Work: open - {}", compact_strings(&self.open_work));
-            println!("  Next: atelier issue close <issue-id> --reason \"...\"");
+            println!("  Next: atelier issue transition <issue-id> close --reason \"...\"");
         }
         if self.open_blockers.is_empty() {
             println!("Blockers: clear");

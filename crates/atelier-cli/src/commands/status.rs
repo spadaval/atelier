@@ -810,12 +810,24 @@ pub fn close_all_lifecycle(
 
     let mut closed_count = 0;
     for issue in &issues {
-        match commands::agent_factory::close_lifecycle(
+        let db = match app_use_cases::open_database(db_path) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to open tracker for {}: {}",
+                    format_issue_id(&issue.id),
+                    e
+                );
+                continue;
+            }
+        };
+        match commands::workflow::transition_issue(
+            &db,
             state_dir,
             db_path,
             &issue.id,
-            "bulk close",
-            None,
+            "close",
+            Some("bulk close"),
         ) {
             Ok(()) => closed_count += 1,
             Err(e) => tracing::warn!("Failed to close {}: {}", format_issue_id(&issue.id), e),

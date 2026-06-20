@@ -430,9 +430,16 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
-    assert!(!success, "issue close should refuse invalid issue");
+    assert!(!success, "transition close should refuse invalid issue");
     assert!(
         stderr.contains(&format!("issue {issue_id}"))
             && stderr.contains("section Outcome")
@@ -584,7 +591,7 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
     let dirty = git_status_short(dir.path());
     assert!(
         dirty.trim().is_empty(),
-        "issue close should commit canonical bookkeeping before mission close:\n{dirty}"
+        "transition close should commit canonical bookkeeping before mission close:\n{dirty}"
     );
 
     let (success, status_out, stderr) =
@@ -597,7 +604,7 @@ fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close()
     assert!(
         status_out.contains("Terminal: ready")
             && status_out.contains("All required terminal checks pass."),
-        "mission status should be ready after issue close commits bookkeeping:\n{status_out}"
+        "mission status should be ready after transition close commits bookkeeping:\n{status_out}"
     );
 
     let (success, close_out, stderr) = run_atelier(
@@ -957,7 +964,14 @@ fn test_orientation_commands_enter_degraded_mode_for_malformed_records() {
 
     let (close_success, _close_out, close_err) = run_atelier(
         dir.path(),
-        &["issue", "close", malformed_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            malformed_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(!close_success, "issue closeout must fail closed");
     assert!(close_err.contains("Canonical tracker Markdown is invalid"));
@@ -3105,7 +3119,7 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
         );
         assert!(
             show_out.contains(&format!(
-                "Close:    atelier issue close {id} --reason \"...\""
+                "Close:    atelier issue transition {id} close --reason \"...\""
             )),
             "{show_out}"
         );
@@ -3343,7 +3357,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &epic_id, "--reason", "done"],
+        &["issue", "transition", &epic_id, "close", "--reason", "done"],
     );
     assert!(success, "epic action close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
@@ -3454,7 +3468,14 @@ fn test_branch_integrate_action_failure_rolls_back_status_with_recovery() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(
         !success,
@@ -3514,9 +3535,16 @@ fn test_child_issue_close_commits_on_epic_branch_without_base_merge() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &child_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &child_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
-    assert!(success, "child issue close failed: {stderr}");
+    assert!(success, "child transition close failed: {stderr}");
     assert!(close_out.contains("Close Git Integration"), "{close_out}");
     assert!(close_out.contains(&format!("Target:        issue/{child_id}")));
     assert!(close_out.contains(&format!("Branch owner:  epic {epic_id} (epic)")));
@@ -3557,7 +3585,14 @@ fn test_standalone_issue_close_squash_merges_to_base() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(success, "standalone close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
@@ -3610,7 +3645,14 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
     attach_issue_pass_evidence(dir.path(), &child_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &child_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &child_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(success, "child close failed: {stderr}");
 
@@ -3622,7 +3664,7 @@ fn test_epic_close_squash_merges_to_base_after_child_proof() {
 
     let (success, close_out, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &epic_id, "--reason", "done"],
+        &["issue", "transition", &epic_id, "close", "--reason", "done"],
     );
     assert!(success, "epic close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
@@ -3678,7 +3720,14 @@ fn test_issue_close_merge_failure_rolls_back_terminal_tracker_state() {
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
-        &["issue", "close", &issue_id, "--reason", "done"],
+        &[
+            "issue",
+            "transition",
+            &issue_id,
+            "close",
+            "--reason",
+            "done",
+        ],
     );
     assert!(
         !success,
@@ -3688,7 +3737,9 @@ fn test_issue_close_merge_failure_rolls_back_terminal_tracker_state() {
     assert!(
         stderr.contains("Close Git integration failed during squash merge")
             && stderr.contains("Recovery:")
-            && stderr.contains(&format!("atelier issue close {issue_id} --reason")),
+            && stderr.contains(&format!(
+                "atelier issue transition {issue_id} close --reason"
+            )),
         "{stderr}"
     );
     assert_eq!(git_current_branch(dir.path()), format!("codex/{issue_id}"));
