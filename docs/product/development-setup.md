@@ -62,10 +62,10 @@ secrets out of committed files.
 
 ## Local Runtime And Cache
 
-Tracked `.atelier/config.toml` names the local runtime and cache paths so
-commands agree where to rebuild projections and store disposable machine-local
-state. The contents of `.atelier/runtime/`, `.atelier/cache/`, and any
-compatibility cache directories are ignored local files. They may contain
+Atelier uses implementation-owned defaults for local runtime and cache paths:
+`.atelier/runtime/` and `.atelier/cache/`. Tracked `.atelier/config.toml` does
+not name runtime database, cache, or compatibility-state paths. The contents of
+`.atelier/runtime/` and `.atelier/cache/` are ignored local files. They may contain
 SQLite projections, locks, diagnostics, identity hints, or UI caches, but they
 must not be treated as durable project policy or committed work records.
 

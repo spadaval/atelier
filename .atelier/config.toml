@@ -1,13 +1,9 @@
 schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier"
-compatibility_state_root = ".atelier-state"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 # Review provider integration uses an environment variable for the admin token;
 # the token value must not be committed.

@@ -14,16 +14,12 @@ pub const FORGEJO_ROLES: &[&str] = &["worker", "reviewer", "validator", "manager
 pub struct ProjectConfig {
     pub project_slug: String,
     pub paths: ProjectPaths,
-    pub compatibility_state_root: Option<String>,
     pub review: ReviewConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ProjectPaths {
     pub state_root: String,
-    pub runtime_dir: String,
-    pub runtime_database: String,
-    pub cache_dir: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -107,8 +103,6 @@ struct RawProjectConfig {
     project_slug: String,
     paths: RawProjectPaths,
     #[serde(default)]
-    compatibility_state_root: Option<String>,
-    #[serde(default)]
     review: Option<RawReviewConfig>,
     #[serde(default)]
     forgejo: Option<toml::Value>,
@@ -118,9 +112,6 @@ struct RawProjectConfig {
 #[serde(deny_unknown_fields)]
 struct RawProjectPaths {
     state_root: String,
-    runtime_dir: String,
-    runtime_database: String,
-    cache_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,19 +152,11 @@ fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig>
     require_non_empty(&raw.project_slug, config_path, "project_slug")?;
     let paths = ProjectPaths {
         state_root: require_owned(raw.paths.state_root, config_path, "paths.state_root")?,
-        runtime_dir: require_owned(raw.paths.runtime_dir, config_path, "paths.runtime_dir")?,
-        runtime_database: require_owned(
-            raw.paths.runtime_database,
-            config_path,
-            "paths.runtime_database",
-        )?,
-        cache_dir: require_owned(raw.paths.cache_dir, config_path, "paths.cache_dir")?,
     };
     let review = parse_review_config(raw.review, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
         paths,
-        compatibility_state_root: raw.compatibility_state_root,
         review,
     })
 }
@@ -345,13 +328,9 @@ mod tests {
         r#"schema = "atelier.project_config"
 schema_version = 1
 project_slug = "atelier"
-compatibility_state_root = ".atelier-state"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 [review]
 mode = "provider"
@@ -392,9 +371,6 @@ project_slug = "atelier"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 [review]
 mode = "room"
@@ -438,6 +414,27 @@ mode = "room"
             .to_string();
         assert!(error.contains("review.providers.forgejo.admin_token_env"));
         assert!(error.contains("FORGEJO_ADMIN_TOKEN"));
+    }
+
+    #[test]
+    fn rejects_committed_runtime_and_compatibility_path_settings() {
+        let runtime_path_config = valid_config().replace(
+            "state_root = \".atelier\"",
+            "state_root = \".atelier\"\nruntime_dir = \".atelier/runtime\"\nruntime_database = \".atelier/runtime/state.db\"\ncache_dir = \".atelier/cache\"",
+        );
+        let error = parse_project_config(&runtime_path_config, &path())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unknown field `runtime_dir`"));
+
+        let compatibility_config = valid_config().replace(
+            "project_slug = \"atelier\"\n",
+            "project_slug = \"atelier\"\ncompatibility_state_root = \".atelier-state\"\n",
+        );
+        let error = parse_project_config(&compatibility_config, &path())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unknown field `compatibility_state_root`"));
     }
 
     #[test]

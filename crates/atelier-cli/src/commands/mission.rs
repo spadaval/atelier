@@ -2344,8 +2344,8 @@ fn value_str<'a>(value: &'a Value, key: &str) -> &'a str {
 fn value_status_label(value: &Value) -> String {
     let status = value_str(value, "status");
     match value["status_category"].as_str() {
-        Some(category) => format!("{category}/{status}"),
-        None => status.to_string(),
+        Some(_) => status.to_string(),
+        None => format!("{status} (unknown category)"),
     }
 }
 

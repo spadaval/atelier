@@ -1608,26 +1608,26 @@ statuses:
   blocked:
     category: blocked
   review:
-    category: review
+    category: active
   validation:
-    category: validation
+    category: active
   done:
-    category: done
-  archived:
     category: done
 
 workflows:
-  standard:
+  task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       close:
         from: [in_progress, validation]
         to: done
@@ -1639,25 +1639,29 @@ workflows:
           - lint.none_blocking
           - tracker.current
 
-  epic_reviewed:
+  epic_delivery:
     applies_to: [epic]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators: [review.complete]
       close:
         from: [validation]
@@ -1671,25 +1675,29 @@ workflows:
           - tracker.current
           - git.worktree_clean
 
-  validation_reviewed:
+  validation_delivery:
     applies_to: [validation]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators: [review.complete]
       close:
         from: [validation]
@@ -1703,7 +1711,7 @@ workflows:
           - tracker.current
           - git.worktree_clean
 
-  spike:
+  spike_review:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -1711,19 +1719,25 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review]
         to: blocked
+        description: "Mark spike work blocked while preserving review expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this spike."
+        actions:
+          - review.open: { role: worker }
       revise:
         from: [review]
         to: in_progress
+        description: "Return a reviewed spike to active work."
       close:
         from: [review]
         to: done
-        description: "Closing requires review completion and durable tracker state."
+        description: "Closing requires complete review and current durable state."
         validators:
           - review.complete
           - tracker.current

@@ -137,9 +137,9 @@ separate canonical fields.
 
 Issue status is durable workflow state owned by `.atelier/workflow.yaml`. The
 current repository-defined values are `todo`, `in_progress`, `blocked`,
-`review`, `validation`, `done`, and `archived`. Human-ready groupings such as
-`todo`, `active`, `blocked`, `review`, `validation`, and `done` are derived
-categories, not alternate stored tokens.
+`review`, `validation`, and `done`. Human-ready groupings such as `todo`,
+`active`, `blocked`, and `done` are derived categories, not alternate stored
+tokens; `review` and `validation` are workflow statuses in the active category.
 
 ### Mission Records
 
@@ -208,8 +208,8 @@ records that share the common `title`/`status` contract.
 
 | Surface | Ownership |
 | --- | --- |
-| Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`, `runtime_dir`, `runtime_database`, and `cache_dir`. |
-| Compatibility-only config | `[paths].compatibility_state_root` remains tracked only while `.atelier-state/` compatibility flows still exist. |
+| Tracked config | `.atelier/config.toml` is the only durable config record in this scope. Required fields are the project config schema/version, `project_slug`, and `[paths].state_root`. |
+| Compatibility-only config | No compatibility-state path is tracked in project config. |
 | Local projection/cache state | `.atelier/runtime/state.db`, `.atelier/runtime/`, `.atelier/cache/`, lock files, diagnostics, and UI caches are ignored machine-local artifacts. SQLite tables under `state.db` must be rebuildable projection state, not non-Markdown tracker facts. |
 | Projection provenance | `projection_sources` rows, record identity, file size hints, mtimes, hashes, and reindex timestamps are derived SQLite metadata, not canonical Markdown fields. |
 | Forbidden durable provenance | Runtime branch names, worktree paths, session IDs, lock ownership, local diagnostic output, and cache payloads must not be promoted into canonical record front matter without a separate artifact update. |
@@ -225,7 +225,7 @@ current committed records against the target contract above.
 | `.atelier/missions/atelier-man9.md` | Mission | Pass | Uses mission required sections and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
 | `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (forbidden payload residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
 | `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |
-| `.atelier/config.toml` | Project config/runtime boundary | Pass with compatibility note | Correctly tracks canonical path ownership and local runtime/cache locations. `compatibility_state_root` remains compatibility-only until old `.atelier-state/` flows are removed. |
+| `.atelier/config.toml` | Project config/runtime boundary | Pass | Tracks canonical path ownership without committed runtime/cache or compatibility-state path settings. |
 | `.atelier/plans/` | Plan | Deferred | No active v1 plan record table exists; planning intent is ordinary Markdown or prose referenced from accountable records. |
 | `.atelier/milestones/` | Milestone | Deferred | No active v1 milestone record table exists; checkpoint intent is ordinary Markdown or prose referenced from accountable records. |
 

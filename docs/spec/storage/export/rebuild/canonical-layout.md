@@ -47,12 +47,10 @@ file into the tracked config surface.
 ## Project Config
 
 `.atelier/config.toml` is tracked project state. It identifies the Atelier
-project config schema, project slug, canonical state root, local runtime
-directory, runtime SQLite path, and cache directory. Runtime and cache paths
-named by the config remain local-only and must stay ignored; the config records
-where they live, not their contents. The current tracked config also carries
-`compatibility_state_root` as a compatibility-only path while `.atelier-state/`
-repair and migration flows still exist.
+project config schema, project slug, canonical state root, review mode, and
+review provider settings. Local runtime directory, runtime SQLite path, cache
+directory, and compatibility-state paths are implementation-owned local
+defaults, not committed project policy.
 
 Review provider integration is optional tracked project configuration. The
 current implementation ships a Forgejo provider, so repositories that use
@@ -347,9 +345,10 @@ body section.
 
 Issue `status` is the workflow-owned durable token defined by
 `.atelier/workflow.yaml`. In the current repository the allowed values are
-`todo`, `in_progress`, `blocked`, `review`, `validation`, `done`, and
-`archived`. Workflow categories such as `active` or `done` are derived
-orientation metadata, not alternate stored status fields.
+`todo`, `in_progress`, `blocked`, `review`, `validation`, and `done`. Workflow
+categories such as `active` or `done` are derived orientation metadata, not
+alternate stored status fields; `review` and `validation` are active workflow
+statuses, not separate categories.
 
 Issue bodies are structured Markdown. The only recognized top-level issue body
 headings are `## Description`, `## Outcome`, `## Evidence`, and `## Notes`.

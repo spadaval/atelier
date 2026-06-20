@@ -29,8 +29,8 @@ pub(crate) fn issue_status_label(policy: Option<&WorkflowPolicy>, status: &str) 
 
 pub(crate) fn format_status_with_category(category: Option<&str>, status: &str) -> String {
     match category {
-        Some(category) => format!("{category}/{status}"),
-        None => format!("unknown/{status}"),
+        Some(_) => status.to_string(),
+        None => format!("{status} (unknown category)"),
     }
 }
 

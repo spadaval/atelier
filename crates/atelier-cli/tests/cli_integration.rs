@@ -923,21 +923,21 @@ fn write_provider_review_action_workflow(dir: &Path) {
 
 fn write_branch_action_workflow(dir: &Path) {
     let start_without_actions =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n";
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n";
     let start_with_prepare =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        actions:\n          - branch_prepare\n";
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        actions:\n          - branch_prepare\n";
     let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
         start_without_actions,
         start_with_prepare,
         2,
     );
     workflow = workflow.replace(
-        "          - tracker.current\n\n  epic_reviewed:",
-        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
+        "          - tracker.current\n\n  epic_delivery:",
+        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_delivery:",
     );
     workflow = workflow.replace(
-        "          - git.worktree_clean\n\n  validation_reviewed:",
-        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n\n  validation_delivery:",
+        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_delivery:",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

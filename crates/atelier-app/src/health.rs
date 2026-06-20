@@ -256,11 +256,7 @@ mod tests {
             project_slug: "atelier".to_string(),
             paths: ProjectPaths {
                 state_root: ".atelier".to_string(),
-                runtime_dir: ".atelier/runtime".to_string(),
-                runtime_database: ".atelier/runtime/state.db".to_string(),
-                cache_dir: ".atelier/cache".to_string(),
             },
-            compatibility_state_root: None,
             review: ReviewConfig::Room,
         }
     }

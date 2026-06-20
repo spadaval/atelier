@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T02:03:31.424421214+00:00"
+status: "done"
 title: "Make statuses primary in user-facing output"
-updated_at: "2026-06-19T22:42:56.485552874+00:00"
+updated_at: "2026-06-20T02:03:31.424421214+00:00"
 ---
 
 ## Description

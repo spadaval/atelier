@@ -2098,7 +2098,7 @@ mod tests {
 
         assert_eq!(rows.len(), 1);
         assert!(rows[0].contains(&format_issue_id(&blocker)));
-        assert!(rows[0].contains("[todo/todo] high - Blocking issue"));
+        assert!(rows[0].contains("[todo] high - Blocking issue"));
         assert!(rows[0].contains("(open blocker)"));
     }
 

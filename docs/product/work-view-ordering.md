@@ -36,7 +36,7 @@ rows.
 
 Rows not constrained by visible open blockers use deterministic tie breakers:
 
-1. row state rank: ready, active, blocked, review, validation, done, not-ready;
+1. row state rank: ready, active, blocked, done, not-ready;
 2. priority rank: critical, high, medium, low, then unknown priorities;
 3. newest updated timestamp first;
 4. issue ID.
@@ -53,15 +53,15 @@ Work views use one readable row state label:
 - `ready`: todo-category work with no open blockers in the row state context;
 - `blocked`: work with one or more open blockers, including hidden blockers
   outside the visible set;
-- `active`: active-category work;
-- `review`: review-category work;
-- `validation`: validation-category work;
+- `active`: active-category work, including configured workflow statuses such
+  as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;
 - `not-ready`: work that is not startable and does not fit a more specific
   work-view state.
 
 Human queue rows should not print duplicate category/status tokens such as
-`todo/todo`. Exact configured workflow status belongs in detail views, summaries
-where it adds information, or explicit status filters. Blocked rows should use
-the `blocked` state plus a compact count or drill-down cue by default, while
-detail surfaces preserve exact blocker IDs for repair.
+`todo/todo` or `active/in_progress`. Exact configured workflow status is the
+primary lifecycle label; categories belong in rollups, filters, and explicit
+metadata. Blocked rows should use the `blocked` state plus a compact count or
+drill-down cue by default, while detail surfaces preserve exact blocker IDs for
+repair.

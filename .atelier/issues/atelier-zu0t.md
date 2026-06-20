@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T00:02:06.614438311+00:00"
+status: "done"
 title: "Remove runtime and compatibility paths from project config"
-updated_at: "2026-06-19T22:54:23.411264873+00:00"
+updated_at: "2026-06-20T00:02:06.614438311+00:00"
 ---
 
 ## Description

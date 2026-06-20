@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "migration"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 11
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -21,9 +25,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Migrate workflow policy to cleaned-up model"
-updated_at: "2026-06-19T22:54:25.044628200+00:00"
+updated_at: "2026-06-20T02:04:58.531224155+00:00"
 ---
 
 ## Description

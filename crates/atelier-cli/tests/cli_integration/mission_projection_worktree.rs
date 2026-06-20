@@ -104,7 +104,7 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     assert!(success, "issue show failed: {stderr}");
     assert!(
         show_out.contains(&format!(
-            "{active_id} [task] active/in_progress - Active status item"
+            "{active_id} [task] in_progress - Active status item"
         )),
         "{show_out}"
     );
@@ -121,9 +121,9 @@ fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     }
     let (success, mission_out, stderr) = run_atelier(dir.path(), &["mission", "show", &mission_id]);
     assert!(success, "mission show failed: {stderr}");
-    assert!(mission_out.contains("todo/todo"), "{mission_out}");
-    assert!(mission_out.contains("active/in_progress"), "{mission_out}");
-    assert!(mission_out.contains("done/done"), "{mission_out}");
+    assert!(mission_out.contains("[todo]"), "{mission_out}");
+    assert!(mission_out.contains("[in_progress]"), "{mission_out}");
+    assert!(mission_out.contains("[done]"), "{mission_out}");
 }
 
 #[test]

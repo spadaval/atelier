@@ -705,9 +705,6 @@ project_slug = "atelier"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/.runtime"
-runtime_database = "atelier.db"
-cache_dir = ".atelier/.cache"
 
 [review]
 mode = "room"

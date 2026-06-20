@@ -33,6 +33,13 @@ fn test_init_creates_atelier_directory() {
         .exists());
     assert!(!dir.path().join(".claude").exists());
     assert!(!dir.path().join(".mcp.json").exists());
+
+    let config = std::fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
+    assert!(config.contains("state_root = \".atelier\""));
+    assert!(!config.contains("compatibility_state_root"));
+    assert!(!config.contains("runtime_dir"));
+    assert!(!config.contains("runtime_database"));
+    assert!(!config.contains("cache_dir"));
 }
 
 #[test]

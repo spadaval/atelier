@@ -681,11 +681,12 @@ fn test_unregistered_issue_type_reports_configured_values() {
 fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    let (success, _stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Archived task"]);
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Validation task"]);
     assert!(success, "issue create failed: {stderr}");
-    let issue_id = issue_id_by_title(dir.path(), "Archived task");
+    let issue_id = issue_id_by_title(dir.path(), "Validation task");
     edit_canonical_issue(dir.path(), &issue_id, |markdown| {
-        replace_front_matter_scalar(&markdown, "status", "archived")
+        replace_front_matter_scalar(&markdown, "status", "validation")
     });
     let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
     assert!(success, "rebuild failed: {stderr}");
@@ -696,9 +697,9 @@ fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
     );
     assert!(!success, "incompatible issue type update should fail");
     assert!(
-        stderr.contains("status 'archived' that is not allowed")
+        stderr.contains("status 'validation' that is not allowed")
             || stderr.contains("not allowed by the workflow policy")
-            || stderr.contains("status 'archived' which is not valid"),
+            || stderr.contains("status 'validation' which is not valid"),
         "{stderr}"
     );
 

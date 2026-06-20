@@ -14,9 +14,6 @@ project_slug = "atelier"
 
 [paths]
 state_root = ".atelier"
-runtime_dir = ".atelier/runtime"
-runtime_database = ".atelier/runtime/state.db"
-cache_dir = ".atelier/cache"
 
 # Native room mode stores review rooms under .atelier/reviews. Provider mode
 # currently supports Forgejo.

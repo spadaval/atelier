@@ -25,10 +25,7 @@ fn calculate_progress(db: &Database, issue: &Issue) -> Result<Progress> {
     }
 
     let total = subissues.len() as i32;
-    let done = subissues
-        .iter()
-        .filter(|s| matches!(s.status.as_str(), "done" | "archived"))
-        .count() as i32;
+    let done = subissues.iter().filter(|s| s.closed_at.is_some()).count() as i32;
     Ok(Some((done, total)))
 }
 

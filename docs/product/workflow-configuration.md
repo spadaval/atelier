@@ -20,7 +20,7 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, ignored runtime/cache paths, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
 | `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
@@ -104,20 +104,21 @@ statuses:
   review: { category: active }
   validation: { category: active }
   done: { category: done }
-  archived: { category: done }
 
 workflows:
-  standard:
+  task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       close:
         from: [in_progress, validation]
         to: done
@@ -128,20 +129,23 @@ workflows:
           - lint.none_blocking
           - tracker.current
 
-  epic_reviewed:
+  epic_delivery:
     applies_to: [epic]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open:
               provider: forgejo
@@ -154,39 +158,43 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators: [review.complete]
       close:
         from: [validation]
         to: done
-        description: "Closing requires attached evidence, complete child proof, a merged pull request, and a clean worktree."
+        description: "Closing requires attached evidence, complete child proof, review completion, and a clean worktree."
         validators:
           - evidence.attached: { min_count: 1 }
           - children.proof_complete
           - blockers.none_open
           - lint.none_blocking
-          - review.linked_pr_merged
           - tracker.current
           - git.worktree_clean
 
-  validation_reviewed:
+  validation_delivery:
     applies_to: [validation]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators: [review.complete]
       close:
         from: [validation]
@@ -200,7 +208,7 @@ workflows:
           - tracker.current
           - git.worktree_clean
 
-  spike:
+  spike_review:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -208,15 +216,21 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review]
         to: blocked
+        description: "Mark spike work blocked while preserving review expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this spike."
+        actions:
+          - review.open: { role: worker }
       revise:
         from: [review]
         to: in_progress
+        description: "Return a reviewed spike to active work."
       close:
         from: [review]
         to: done
@@ -311,10 +325,10 @@ Starter workflow names are:
 
 | Workflow | Applies to |
 | --- | --- |
-| `standard` | `bug`, `feature`, `task` |
-| `epic_reviewed` | `epic` |
-| `validation_reviewed` | `validation` |
-| `spike` | `spike` |
+| `task_delivery` | `bug`, `feature`, `task` |
+| `epic_delivery` | `epic` |
+| `validation_delivery` | `validation` |
+| `spike_review` | `spike` |
 
 ## Transitions
 
@@ -501,13 +515,14 @@ inherit the nearest parent epic's `review`; defining `review` directly on a
 child issue is invalid unless the child owns its own branch by policy. Legacy
 top-level `pull_request` fields are migration input only: migrated records must
 render the structured `review` field, and strict validation rejects the old
-shape after migration. The starter policy attaches
-`review.linked_pr_merged` only to epic close, so validation issues and ordinary
-child issues can close on their own proof while the epic remains the merged
-review artifact boundary. In provider mode `review.linked_pr_merged` derives
-provider host/owner/repo from `.atelier/config.toml` and expected source/target
-branches from `branch_policy`. In room mode equivalent review readiness comes
-from the room merge event rather than provider PR state.
+shape after migration. The starter policy requires `review.complete` for the
+epic and validation review flow, while ordinary child issues close on their own
+proof. Repositories that require an epic close to verify merged provider state
+may add `review.linked_pr_merged` to that close transition. In provider mode
+`review.linked_pr_merged` derives provider host/owner/repo from
+`.atelier/config.toml` and expected source/target branches from `branch_policy`.
+In room mode equivalent review readiness comes from the room merge event rather
+than provider PR state.
 
 `review.linked_pr_merged` is deliberately a fact check, not a second
 review-provider policy engine. Atelier validates the review artifact link,

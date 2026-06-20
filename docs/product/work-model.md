@@ -476,7 +476,7 @@ transitions:
     validators:
       - validation.criteria_satisfied
       - blockers.none_open
-      - evidence.attached
+      - evidence.attached: { min_count: 1 }
 ```
 
 The validator does not define the checkpoint's meaning. It only enforces whether

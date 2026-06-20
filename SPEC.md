@@ -296,17 +296,17 @@ statuses:
   review: { category: active }
   validation: { category: active }
   done: { category: done }
-  archived: { category: done }
 
 workflows:
-  standard:
+  task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       close:
         from: [in_progress, validation]
         to: done
@@ -317,22 +317,25 @@ workflows:
           - blockers.none_open
           - tracker.current
 
-  epic_reviewed:
+  epic_delivery:
     applies_to: [epic]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
       close:
         from: [validation]
         to: done
@@ -340,25 +343,27 @@ workflows:
         validators:
           - evidence.attached: { min_count: 1 }
           - children.proof_complete
-          - review.linked_pr_merged
           - tracker.current
 
-  validation_reviewed:
+  validation_delivery:
     applies_to: [validation]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
       close:
         from: [validation]
         to: done
@@ -368,7 +373,7 @@ workflows:
           - children.proof_complete
           - tracker.current
 
-  spike:
+  spike_review:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -376,6 +381,13 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
+      request_review:
+        from: [in_progress]
+        to: review
+        description: "Open the configured review artifact for this spike."
+        actions:
+          - review.open: { role: worker }
       close:
         from: [review]
         to: done

@@ -37,26 +37,26 @@ statuses:
   blocked:
     category: blocked
   review:
-    category: review
+    category: active
   validation:
-    category: validation
+    category: active
   done:
-    category: done
-  archived:
     category: done
 
 workflows:
-  standard:
+  task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       close:
         from: [in_progress, validation]
         to: done
@@ -68,25 +68,29 @@ workflows:
           - lint.none_blocking
           - tracker.current
 
-  epic_reviewed:
+  epic_delivery:
     applies_to: [epic]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators:
           - review.complete
       close:
@@ -101,25 +105,29 @@ workflows:
           - tracker.current
           - git.worktree_clean
 
-  validation_reviewed:
+  validation_delivery:
     applies_to: [validation]
     initial_status: todo
-    done_statuses: [done, archived]
+    done_statuses: [done]
     transitions:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
+        description: "Mark work blocked while preserving current proof expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this work."
         actions:
           - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
+        description: "Move reviewed work into validation after review is complete."
         validators:
           - review.complete
       close:
@@ -134,7 +142,7 @@ workflows:
           - tracker.current
           - git.worktree_clean
 
-  spike:
+  spike_review:
     applies_to: [spike]
     initial_status: todo
     done_statuses: [done]
@@ -142,19 +150,25 @@ workflows:
       start:
         from: [todo, blocked]
         to: in_progress
+        description: "Start active work on this item."
       block:
         from: [todo, in_progress, review]
         to: blocked
+        description: "Mark spike work blocked while preserving review expectations."
       request_review:
         from: [in_progress]
         to: review
+        description: "Open the configured review artifact for this spike."
+        actions:
+          - review.open: { role: worker }
       revise:
         from: [review]
         to: in_progress
+        description: "Return a reviewed spike to active work."
       close:
         from: [review]
         to: done
-        description: "Closing requires a complete review."
+        description: "Closing requires complete review and current durable state."
         validators:
           - review.complete
           - tracker.current
@@ -163,7 +177,7 @@ workflows:
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
 const WORKFLOW_SCHEMA_VERSION: i64 = 3;
-const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "review", "validation", "done"];
+const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "tracker.current",
     "issue.sections_parseable",
@@ -2318,21 +2332,21 @@ mod tests {
                 .workflow_by_issue_type
                 .get("task")
                 .map(String::as_str),
-            Some("standard")
+            Some("task_delivery")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("epic")
                 .map(String::as_str),
-            Some("epic_reviewed")
+            Some("epic_delivery")
         );
         assert_eq!(
             policy
                 .workflow_by_issue_type
                 .get("validation")
                 .map(String::as_str),
-            Some("validation_reviewed")
+            Some("validation_delivery")
         );
         assert_eq!(
             policy
@@ -2348,7 +2362,7 @@ mod tests {
                 .map(|status| status.category.as_str()),
             Some("done")
         );
-        let close = &policy.workflows["standard"].transitions["close"];
+        let close = &policy.workflows["task_delivery"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             close.validators[0].params.as_ref(),
@@ -2358,7 +2372,7 @@ mod tests {
             })
         );
         assert_eq!(
-            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
             vec!["review.open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
@@ -2443,7 +2457,7 @@ mod tests {
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
-            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
+            action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
             vec!["branch_prepare"]
         );
     }
@@ -2469,7 +2483,7 @@ mod tests {
         );
 
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let action = &policy.workflows["epic_reviewed"].transitions["request_review"].actions[0];
+        let action = &policy.workflows["epic_delivery"].transitions["request_review"].actions[0];
 
         assert_eq!(action.builtin, "review.open");
         assert_eq!(
@@ -2759,7 +2773,7 @@ mod tests {
                 .workflow_by_issue_type
                 .get("incident")
                 .map(String::as_str),
-            Some("standard")
+            Some("task_delivery")
         );
     }
 

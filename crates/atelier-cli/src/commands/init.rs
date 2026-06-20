@@ -83,8 +83,10 @@ mod tests {
 
         let config = fs::read_to_string(dir.path().join(".atelier/config.toml")).unwrap();
         assert!(config.contains("state_root = \".atelier\""));
-        assert!(config.contains("runtime_dir = \".atelier/runtime\""));
-        assert!(config.contains("runtime_database = \".atelier/runtime/state.db\""));
+        assert!(!config.contains("compatibility_state_root"));
+        assert!(!config.contains("runtime_dir"));
+        assert!(!config.contains("runtime_database"));
+        assert!(!config.contains("cache_dir"));
         assert!(config.contains("[review]"));
         assert!(config.contains("mode = \"room\""));
 
@@ -92,10 +94,10 @@ mod tests {
         assert!(workflow.contains("schema: atelier.workflow"));
         assert!(workflow.contains("schema_version: 3"));
         assert!(workflow.contains("branch_policy:"));
-        assert!(workflow.contains("  standard:"));
-        assert!(workflow.contains("  epic_reviewed:"));
-        assert!(workflow.contains("  validation_reviewed:"));
-        assert!(workflow.contains("  spike:"));
+        assert!(workflow.contains("  task_delivery:"));
+        assert!(workflow.contains("  epic_delivery:"));
+        assert!(workflow.contains("  validation_delivery:"));
+        assert!(workflow.contains("  spike_review:"));
         assert!(workflow.contains("applies_to:"));
     }
 

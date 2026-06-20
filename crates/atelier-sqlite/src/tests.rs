@@ -412,6 +412,35 @@ fn test_blocked_becomes_ready_when_blocker_closed() {
     assert!(ready_issues.iter().any(|i| i.id == blocked));
 }
 
+#[test]
+fn test_dependency_readiness_uses_closed_at_not_literal_done_status() {
+    let (db, _dir) = setup_test_db();
+
+    let now = chrono::Utc::now();
+    let blocker = Issue {
+        id: "atelier-custom-done".to_string(),
+        title: "Custom terminal blocker".to_string(),
+        description: None,
+        status: "resolved".to_string(),
+        priority: "high".to_string(),
+        issue_type: "task".to_string(),
+        fields: Default::default(),
+        parent_id: None,
+        created_at: now,
+        updated_at: now,
+        closed_at: Some(now),
+    };
+    db.insert_issue_rebuild(&blocker).unwrap();
+    let blocked = db.create_issue("Blocked", None, "medium").unwrap();
+    db.add_dependency(&blocked, &blocker.id).unwrap();
+
+    assert!(db.list_blocked_issues().unwrap().is_empty());
+
+    let ready_issues = db.list_ready_issues().unwrap();
+    assert!(ready_issues.iter().any(|issue| issue.id == blocked));
+    assert!(!ready_issues.iter().any(|issue| issue.id == blocker.id));
+}
+
 // ==================== Search Tests ====================
 
 #[test]
