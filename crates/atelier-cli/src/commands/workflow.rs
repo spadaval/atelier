@@ -2100,46 +2100,46 @@ fn print_text_list(title: &str, values: &[String]) {
 pub fn default_validators(target_kind: &str, transition: &str) -> Vec<String> {
     let names: &[&str] = match (target_kind, transition) {
         ("issue", "start") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
         ],
         ("issue", "close") => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
-            "evidence_attached",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
+            "evidence.attached",
         ],
         ("mission", "close") => mission_terminal_validators(),
         ("mission", _) => &[
-            "durable_state_current",
-            "issue_sections_parseable",
-            "no_open_blockers",
+            "tracker.current",
+            "issue.sections_parseable",
+            "blockers.none_open",
         ],
-        ("evidence", _) => &["durable_state_current"],
+        ("evidence", _) => &["tracker.current"],
         ("tracker", "health") => &[
-            "durable_state_current",
-            "no_blocking_lints",
+            "tracker.current",
+            "lint.none_blocking",
             "command_surface_current",
             "ignored_tests_reviewed",
-            "git_worktree_clean",
+            "git.worktree_clean",
         ],
-        _ => &["durable_state_current"],
+        _ => &["tracker.current"],
     };
     names.iter().map(|name| (*name).to_string()).collect()
 }
 
 pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
     &[
-        "durable_state_current",
-        "issue_sections_parseable",
+        "tracker.current",
+        "issue.sections_parseable",
         "no_open_work",
-        "no_open_blockers",
-        "validation_criteria_satisfied",
-        "no_blocking_lints",
+        "blockers.none_open",
+        "validation.criteria_satisfied",
+        "lint.none_blocking",
         "command_surface_current",
         "ignored_tests_reviewed",
-        "git_worktree_clean",
+        "git.worktree_clean",
     ]
 }
 
@@ -2275,7 +2275,7 @@ fn evaluate_builtin_with_params(
     params: Option<&atelier_app::workflow_policy::ValidatorParams>,
 ) -> Result<(bool, String)> {
     match validator {
-        "durable_state_current" => {
+        "tracker.current" => {
             let state_dir =
                 atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
             let stale = atelier_app::export::canonical_stale_entries(db, &state_dir)?;
@@ -2288,7 +2288,7 @@ fn evaluate_builtin_with_params(
                 ))
             }
         }
-        "evidence_attached" => {
+        "evidence.attached" => {
             if target_kind == "issue" {
                 let issue = db.require_issue(target_id)?;
                 let state_dir =
@@ -2331,7 +2331,7 @@ fn evaluate_builtin_with_params(
                 Ok((false, "no validating evidence link found".to_string()))
             }
         }
-        "no_open_blockers" => {
+        "blockers.none_open" => {
             let open = open_blockers(db, policy, target_kind, target_id)?;
             if open.is_empty() {
                 Ok((true, "no open blockers".to_string()))
@@ -2347,8 +2347,8 @@ fn evaluate_builtin_with_params(
                 Ok((false, format!("open linked work: {}", open.join(", "))))
             }
         }
-        "git_worktree_clean" => git_worktree_clean(),
-        "no_blocking_lints" => {
+        "git.worktree_clean" => git_worktree_clean(),
+        "lint.none_blocking" => {
             let status = Command::new(std::env::current_exe()?)
                 .arg("lint")
                 .status()?;
@@ -2360,15 +2360,13 @@ fn evaluate_builtin_with_params(
         }
         "ignored_tests_reviewed" => ignored_tests_reviewed(),
         "command_surface_current" => command_surface_current(),
-        "issue_sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
-        "validation_criteria_satisfied" => {
+        "issue.sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
+        "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, target_kind, target_id)
         }
-        "linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
-        "review_complete" => review_complete(db, policy, target_kind, target_id, transition),
-        "epic_child_proof_complete" => {
-            epic_child_proof_complete(db, policy, target_kind, target_id)
-        }
+        "review.linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
+        "review.complete" => review_complete(db, policy, target_kind, target_id, transition),
+        "children.proof_complete" => epic_child_proof_complete(db, policy, target_kind, target_id),
         other => Ok((false, format!("unsupported builtin validator: {other}"))),
     }
 }
@@ -3408,18 +3406,18 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert_eq!(
             default_validators("issue", "start"),
             vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_blockers"
+                "tracker.current",
+                "issue.sections_parseable",
+                "blockers.none_open"
             ]
         );
         assert_eq!(
             default_validators("issue", "close"),
             vec![
-                "durable_state_current",
-                "issue_sections_parseable",
-                "no_open_blockers",
-                "evidence_attached"
+                "tracker.current",
+                "issue.sections_parseable",
+                "blockers.none_open",
+                "evidence.attached"
             ]
         );
         assert_eq!(
@@ -3431,16 +3429,16 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         );
         assert_eq!(
             default_validators("evidence", "attach"),
-            vec!["durable_state_current"]
+            vec!["tracker.current"]
         );
         assert_eq!(
             default_validators("tracker", "health"),
             vec![
-                "durable_state_current",
-                "no_blocking_lints",
+                "tracker.current",
+                "lint.none_blocking",
                 "command_surface_current",
                 "ignored_tests_reviewed",
-                "git_worktree_clean"
+                "git.worktree_clean"
             ]
         );
     }
@@ -3670,7 +3668,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let linked_pr_validators = epic_close
             .validators
             .iter()
-            .filter(|validator| validator.builtin == "linked_pr_merged")
+            .filter(|validator| validator.builtin == "review.linked_pr_merged")
             .cloned()
             .collect::<Vec<_>>();
         assert!(linked_pr_validators.is_empty());
@@ -3691,7 +3689,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert!(!validation_close
             .validators
             .iter()
-            .any(|validator| validator.builtin == "linked_pr_merged"));
+            .any(|validator| validator.builtin == "review.linked_pr_merged"));
     }
 
     #[test]

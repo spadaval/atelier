@@ -932,12 +932,12 @@ fn write_branch_action_workflow(dir: &Path) {
         2,
     );
     workflow = workflow.replace(
-        "          - durable_state_current\n\n  epic_reviewed:",
-        "          - durable_state_current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
+        "          - tracker.current\n\n  epic_reviewed:",
+        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
     );
     workflow = workflow.replace(
-        "          - git_worktree_clean\n\n  validation_reviewed:",
-        "          - git_worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n\n  validation_reviewed:",
+        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

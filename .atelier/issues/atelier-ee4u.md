@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Rename validators to namespaced policy names"
-updated_at: "2026-06-19T22:42:56.466427189+00:00"
+updated_at: "2026-06-20T00:53:25.251800887+00:00"
 ---
 
 ## Description

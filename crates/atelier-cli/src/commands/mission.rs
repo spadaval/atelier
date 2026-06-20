@@ -914,7 +914,7 @@ fn print_reliability_summary(
         println!("  Next: atelier doctor --fix");
     }
 
-    if let Some(result) = terminal_validator_result(terminal, "issue_sections_parseable") {
+    if let Some(result) = terminal_validator_result(terminal, "issue.sections_parseable") {
         if result.passed && section_gaps.malformed.is_empty() {
             println!("Malformed Work: none");
         } else {
@@ -1102,7 +1102,7 @@ fn terminal_validator_status_line(
 ) -> Option<TerminalCheckStatusLine> {
     let (label, pass_text, fail_text, next) = terminal_validator_user_text(&result.validator)?;
     if result.passed {
-        let summary = if result.validator == "git_worktree_clean"
+        let summary = if result.validator == "git.worktree_clean"
             && result.reason != "git worktree is clean"
         {
             format!("{label}: {pass_text} - {}", result.reason)
@@ -1141,16 +1141,14 @@ fn terminal_validator_user_text(
     validator: &str,
 ) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
     match validator {
-        "durable_state_current" => {
-            Some(("Tracker State", "current", "stale", "atelier doctor --fix"))
-        }
-        "issue_sections_parseable" => Some((
+        "tracker.current" => Some(("Tracker State", "current", "stale", "atelier doctor --fix")),
+        "issue.sections_parseable" => Some((
             "Linked Issue Records",
             "parseable",
             "malformed",
             "atelier lint",
         )),
-        "no_blocking_lints" => Some(("Blocking Lints", "clear", "failing", "atelier lint")),
+        "lint.none_blocking" => Some(("Blocking Lints", "clear", "failing", "atelier lint")),
         "command_surface_current" => Some((
             "Docs/Help Drift",
             "clear",
@@ -1163,19 +1161,19 @@ fn terminal_validator_user_text(
             "needed",
             "assign owners or remove stale ignored tests",
         )),
-        "validation_criteria_satisfied" => Some((
+        "validation.criteria_satisfied" => Some((
             "Validation Criteria",
             "satisfied",
             "incomplete",
             "atelier mission status {mission} --verbose",
         )),
-        "git_worktree_clean" => Some((
+        "git.worktree_clean" => Some((
             "Worktree",
             "clean",
             "dirty",
             "commit or remove untracked worktree changes",
         )),
-        "no_open_work" | "no_open_blockers" | "evidence_attached" => None,
+        "no_open_work" | "blockers.none_open" | "evidence.attached" => None,
         _ => Some((
             "Additional Terminal Check",
             "passed",

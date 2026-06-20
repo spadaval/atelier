@@ -55,10 +55,10 @@ workflows:
         required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -80,18 +80,18 @@ workflows:
         from: [in_progress, review]
         to: validation
         validators:
-          - review_complete
+          - review.complete
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   validation_reviewed:
     applies_to: [validation]
@@ -113,18 +113,18 @@ workflows:
         from: [in_progress, review]
         to: validation
         validators:
-          - review_complete
+          - review.complete
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   spike:
     applies_to: [spike]
@@ -148,8 +148,8 @@ workflows:
         to: done
         description: "Closing requires a complete review."
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -158,15 +158,16 @@ const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "review", "validation", "done"];
 const BUILTIN_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
 const BUILTIN_VALIDATORS: &[&str] = &[
-    "durable_state_current",
-    "evidence_attached",
-    "review_complete",
-    "epic_child_proof_complete",
-    "validation_criteria_satisfied",
-    "linked_pr_merged",
-    "no_open_blockers",
-    "no_blocking_lints",
-    "git_worktree_clean",
+    "tracker.current",
+    "issue.sections_parseable",
+    "evidence.attached",
+    "review.complete",
+    "children.proof_complete",
+    "validation.criteria_satisfied",
+    "review.linked_pr_merged",
+    "blockers.none_open",
+    "lint.none_blocking",
+    "git.worktree_clean",
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
     "branch_prepare",
@@ -913,13 +914,13 @@ fn parse_validator_params(
     display_path: &str,
 ) -> Result<Option<ValidatorParams>> {
     match builtin {
-        "evidence_attached" => {
+        "evidence.attached" => {
             let Some(params) = params else {
                 return Err(policy_error_with_field(
                     "workflow_config_invalid_validator",
                     display_path,
                     format!("validators.{}.params", validator_name),
-                    "evidence_attached requires params.min_count >= 1",
+                    "evidence.attached requires params.min_count >= 1",
                 ));
             };
             let mapping = params.as_mapping().ok_or_else(|| {
@@ -953,7 +954,7 @@ fn parse_validator_params(
                     "workflow_config_invalid_validator",
                     display_path,
                     format!("validators.{}.params.min_count", validator_name),
-                    "evidence_attached requires params.min_count >= 1",
+                    "evidence.attached requires params.min_count >= 1",
                 ));
             };
             let Some(min_count) = min_count_value.as_i64() else {
@@ -2394,11 +2395,11 @@ mod tests {
                         .collect::<Vec<_>>()
                 })
                 .unwrap();
-            let has_linked_pr_merged = close_validators.contains(&"linked_pr_merged");
+            let has_linked_pr_merged = close_validators.contains(&"review.linked_pr_merged");
             assert_eq!(
                 has_linked_pr_merged,
                 false,
-                "unexpected legacy linked_pr_merged close validator for {issue_type}: {close_validators:?}"
+                "unexpected review.linked_pr_merged close validator for {issue_type}: {close_validators:?}"
             );
         }
     }
@@ -2555,7 +2556,7 @@ mod tests {
     fn rejects_unknown_inline_validator() {
         let error = parse_policy_text(
             &valid_policy().replace(
-                "          - no_open_blockers\n",
+                "          - blockers.none_open\n",
                 "          - missing_validator\n",
             ),
             WORKFLOW_POLICY_PATH,
@@ -2564,6 +2565,33 @@ mod tests {
         .to_string();
         assert!(error.contains("workflow_config_invalid_validator"));
         assert!(error.contains("missing_validator"));
+    }
+
+    #[test]
+    fn rejects_obsolete_flat_validator_names() {
+        let obsolete_names = [
+            ("evidence_attached", "evidence.attached"),
+            ("review_complete", "review.complete"),
+            ("epic_child_proof_complete", "children.proof_complete"),
+            (
+                "validation_criteria_satisfied",
+                "validation.criteria_satisfied",
+            ),
+            ("linked_pr_merged", "review.linked_pr_merged"),
+            ("no_open_blockers", "blockers.none_open"),
+            ("no_blocking_lints", "lint.none_blocking"),
+            ("git_worktree_clean", "git.worktree_clean"),
+            ("durable_state_current", "tracker.current"),
+        ];
+
+        for (obsolete, _) in obsolete_names {
+            let policy = valid_policy().replacen("blockers.none_open", obsolete, 1);
+            let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("workflow_config_invalid_validator"));
+            assert!(error.contains(obsolete));
+        }
     }
 
     #[test]

@@ -1625,10 +1625,10 @@ workflows:
         required_fields: [close_reason]
         description: "Closing requires attached evidence and no open blockers."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
+          - evidence.attached: { min_count: 1 }
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
 
   epic_reviewed:
     applies_to: [epic]
@@ -1649,18 +1649,18 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_complete]
+        validators: [review.complete]
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   validation_reviewed:
     applies_to: [validation]
@@ -1681,18 +1681,18 @@ workflows:
       request_validation:
         from: [in_progress, review]
         to: validation
-        validators: [review_complete]
+        validators: [review.complete]
       close:
         from: [validation]
         to: done
         description: "Closing requires attached evidence, complete child proof, review merge, and a clean worktree."
         validators:
-          - evidence_attached: { min_count: 1 }
-          - epic_child_proof_complete
-          - no_open_blockers
-          - no_blocking_lints
-          - durable_state_current
-          - git_worktree_clean
+          - evidence.attached: { min_count: 1 }
+          - children.proof_complete
+          - blockers.none_open
+          - lint.none_blocking
+          - tracker.current
+          - git.worktree_clean
 
   spike:
     applies_to: [spike]
@@ -1716,8 +1716,8 @@ workflows:
         to: done
         description: "Closing requires review completion and durable tracker state."
         validators:
-          - review_complete
-          - durable_state_current
+          - review.complete
+          - tracker.current
 "#,
         )
         .unwrap();
