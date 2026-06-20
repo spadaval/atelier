@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-20T21:29:03.193890812+00:00"
+status: "done"
 title: "Strip visible worktree feature pending redesign"
-updated_at: "2026-06-20T21:27:07.566219445+00:00"
+updated_at: "2026-06-20T21:29:03.193890812+00:00"
 ---
 
 ## Description
