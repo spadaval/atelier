@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-20T02:34:56.624599883+00:00"
+status: "done"
 title: "Validate workflow policy cleanup end to end"
-updated_at: "2026-06-20T02:34:25.062174895+00:00"
+updated_at: "2026-06-20T02:34:56.624599883+00:00"
 ---
 
 ## Description
