@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split overloaded CLI modules after removed surfaces are gone"
-updated_at: "2026-06-20T16:48:55.397169481+00:00"
+updated_at: "2026-06-20T21:54:26.473830414+00:00"
 ---
 
 ## Description
