@@ -17,10 +17,10 @@ that record.
 
 The replacement command model is:
 
-- `atelier issue create --issue-type objective` creates mission-shaped
-  coordination records once the type exists. Until that lands, existing mission
-  records are migrated directly to typed issue records instead of being wrapped
-  by compatibility aliases.
+- `atelier issue create --issue-type mission` creates mission-shaped
+  coordination records through the general issue creation surface. Existing
+  mission records are migrated directly instead of being wrapped by
+  compatibility aliases.
 - `atelier issue show <objective-id>` is the rich objective detail view. It
   owns intent, constraints, risks, validation criteria, linked work, blockers,
   hierarchy, evidence, and affected-record context.
@@ -72,7 +72,7 @@ human explicitly asks for a compatibility window.
 
 | Form | Primary role | Operator purpose | Fit |
 | --- | --- | --- | --- |
-| `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Remove. Replacement: `issue create --issue-type objective`. |
+| `mission create` | Manager/orchestrator | Create mission purpose, constraints, risks, validation criteria. | Remove. Replacement: `issue create --issue-type mission`. |
 | `mission show` | Manager/orchestrator | Inspect rich mission state, linked records, hierarchy, and relationship context. | Remove after `issue show <objective-id>` owns typed objective sections and relationship context. |
 | `mission start --switch` | Manager/orchestrator | Set active mission focus. | Remove. Root status and canonical in-progress issue records own checkout orientation. |
 | `mission status` | Manager/orchestrator | See current mission health and next actions. | Remove after `issue status <objective-id>` owns objective health and terminal readiness. |

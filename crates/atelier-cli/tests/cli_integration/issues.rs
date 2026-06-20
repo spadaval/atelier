@@ -624,6 +624,86 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
 }
 
 #[test]
+fn test_issue_create_mission_type_writes_mission_sections_and_issue_show_reads_them() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Typed objective",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission issue create failed: {stderr}");
+    assert!(
+        stdout.contains("Created mission objective atelier-"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Type:     mission"), "{stdout}");
+    assert!(stdout.contains(".atelier/missions/"), "{stdout}");
+
+    let mission_id = record_id_by_title(dir.path(), "missions", "Typed objective");
+    let mission_text = read_canonical_record(dir.path(), "missions", &mission_id);
+    assert!(
+        mission_text.contains("schema: \"atelier.mission\""),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Intent\n\nTyped objective"),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Constraints\n\n- None."),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Risks\n\n- None."),
+        "{mission_text}"
+    );
+    assert!(
+        mission_text.contains("## Validation\n\n- Validation was not specified."),
+        "{mission_text}"
+    );
+
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    assert!(success, "issue show mission failed: {stderr}");
+    assert!(show.contains("Mission "), "{show}");
+    assert!(show.contains("Intent"), "{show}");
+    assert!(show.contains("Constraints"), "{show}");
+    assert!(show.contains("Risks"), "{show}");
+    assert!(show.contains("Validation"), "{show}");
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
+    assert!(success, "focused mission lint failed: {stderr}");
+    assert!(lint_out.contains("Lint passed."));
+
+    let (success, status, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
+    assert!(success, "issue status mission failed: {stderr}");
+    assert!(
+        status.contains(&format!("Mission Status {mission_id}")),
+        "{status}"
+    );
+
+    let mission_path = canonical_record_path(dir.path(), "missions", &mission_id);
+    let broken = std::fs::read_to_string(&mission_path)
+        .unwrap()
+        .replace("## Risks\n\n- None.\n\n", "");
+    std::fs::write(&mission_path, broken).unwrap();
+
+    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
+    assert!(!success, "focused mission lint should reject missing Risks");
+    let transcript = format!("{lint_out}\n{stderr}");
+    assert!(
+        transcript.contains("Missing required mission body section 'Risks'"),
+        "{transcript}"
+    );
+}
+
+#[test]
 fn test_bundle_apply_accepts_configured_custom_issue_type() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

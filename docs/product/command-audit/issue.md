@@ -21,7 +21,7 @@ terminal readiness, and closeout notes.
 
 New or changed issue forms needed for that target are:
 
-- `issue create --issue-type objective` for mission-shaped coordination work.
+- `issue create --issue-type mission` for mission-shaped coordination work.
 - `issue show <objective-id>` for rich objective detail, hierarchy, blockers,
   evidence, and affected-record context.
 - `issue status <objective-id>` for objective health, ready and blocked work,

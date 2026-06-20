@@ -290,7 +290,7 @@ enum IssueCommands {
         /// Add labels to the issue
         #[arg(short, long)]
         label: Vec<String>,
-        /// Explicit work type from .atelier/workflow.yaml issue_types
+        /// Explicit work type from .atelier/workflow.yaml issue_types, or built-in mission
         #[arg(long)]
         issue_type: Option<String>,
         /// Parent issue ID or imported source ID
@@ -906,8 +906,13 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         }
 
         IssueCommands::Status { id } => {
-            let db = degraded_projection_query_db()?;
-            commands::issue_status::run(&db, &id, quiet)
+            let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
+            let db = storage.db();
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, false)
+            } else {
+                commands::issue_status::run(db, &id, quiet)
+            }
         }
 
         IssueCommands::Transition {

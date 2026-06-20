@@ -10,6 +10,7 @@ use crate::commands::issue_workflow::{
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
+use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
@@ -447,6 +448,9 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
 }
 
 pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
+    if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
+        return crate::commands::mission::show(db, issue_ref);
+    }
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let (object, degraded) = match canonical_issue_detail(&id) {
@@ -1515,6 +1519,9 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
+    if input.issue_type == "mission" {
+        return create_mission_lifecycle(state_dir, db_path, input);
+    }
     validate_priority(input.priority)?;
     validate_configured_issue_type(state_dir, input.issue_type)?;
     let db = Database::open(db_path)?;
@@ -1591,6 +1598,65 @@ pub fn create_lifecycle(
             object.id
         );
     }
+    Ok(())
+}
+
+fn create_mission_lifecycle(
+    state_dir: &Path,
+    db_path: &Path,
+    input: LifecycleCreateInput<'_>,
+) -> Result<()> {
+    if input.parent.is_some() {
+        bail!("mission objective records do not support --parent; use `atelier issue link <objective-id> <issue-id> --role advances` after creation");
+    }
+    let sections = atelier_records::mission_sections_from_inputs(
+        input.title,
+        input.description,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let mut record =
+        app_use_cases::create_mission_record(state_dir, input.title, "ready", sections)?;
+    for label in input.labels {
+        push_unique(&mut record.header.labels, label.to_string());
+    }
+    if !input.labels.is_empty() {
+        record.header.updated_at = Utc::now();
+        app_use_cases::write_canonical_record(state_dir, &Record::Mission(record.clone()))?;
+    }
+    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    if input.quiet {
+        println!("{}", record.header.id);
+        return Ok(());
+    }
+
+    let file_path = state_dir
+        .join("missions")
+        .join(format!("{}.md", record.header.id));
+    println!(
+        "Created mission objective {} - {}",
+        record.header.id, record.header.title
+    );
+    println!("Type:     mission");
+    println!("Status:   {}", record.header.status);
+    println!("File:     {}", file_path.display());
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Edit mission Markdown: {}", file_path.display());
+    println!(
+        "  Validate this objective: atelier lint {}",
+        record.header.id
+    );
+    println!(
+        "  Inspect this objective: atelier issue show {}",
+        record.header.id
+    );
+    println!(
+        "  Inspect objective status: atelier issue status {}",
+        record.header.id
+    );
     Ok(())
 }
 
@@ -1933,6 +1999,11 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
 }
 
 pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
+    if let Some(issue_ref) = issue_ref {
+        if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
+            return lint_mission_record(issue_ref);
+        }
+    }
     let outcome = atelier_app::lint::lint(atelier_app::Request {
         input: atelier_app::lint::LintRequest { db, issue_ref },
     })?;
@@ -1949,6 +2020,24 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
         Ok(())
     } else {
         bail!("Lint failed with {} finding(s)", view.findings.len())
+    }
+}
+
+fn lint_mission_record(id: &str) -> Result<()> {
+    let Some(state_dir) = find_state_dir_from_cwd()? else {
+        bail!("Canonical tracker state is unavailable; run `atelier doctor`.");
+    };
+    match RecordStore::new(&state_dir).load_record_by_id("mission", id) {
+        Ok(Record::Mission(_)) => {
+            println!("Lint passed.");
+            Ok(())
+        }
+        Ok(other) => bail!("Expected mission record {id}, found {}", other.kind()),
+        Err(error) => {
+            println!("Lint found 1 issue(s):");
+            println!("  {id}: Canonical mission Markdown is invalid: {error:#}");
+            bail!("Lint failed with 1 finding(s)")
+        }
     }
 }
 
