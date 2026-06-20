@@ -224,7 +224,7 @@ fn review_artifact_action_plan(
     action: &atelier_app::workflow_policy::ActionDefinition,
     resolution: &BranchLifecycleResolution,
 ) -> Option<ReviewArtifactActionPlan> {
-    if !matches!(action.builtin.as_str(), "review.open" | "review.link") {
+    if action.builtin != "review.open" {
         return None;
     }
     let Some(ActionParams::ReviewArtifact(params)) = action.params.as_ref() else {

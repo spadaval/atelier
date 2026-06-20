@@ -42,8 +42,6 @@ are hard to preview, validate, and recover.
    - `owner_branch_integrate`: integrate the owner branch to the configured base.
    - `review.open`: open or reuse the configured review artifact and
      write the branch owner's `review` field.
-   - `review.link`: normalize and write an existing configured provider
-     review artifact link.
 
 4. Review artifact effects respect ADR 0011.
    They use the configured review mode. In room mode they create or reuse a

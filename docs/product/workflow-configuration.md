@@ -29,7 +29,7 @@ selects the review backend, such as `review.mode = "provider"` with
 `review.provider = "forgejo"`, and records the provider identity needed to
 normalize and verify review artifacts. `.atelier/workflow.yaml` decides when a
 transition opens or links the branch owner's review artifact through explicit
-actions such as `review.open` or `review.link`. Provider
+actions such as `review.open`. Provider
 review actions declare the workflow role and any provider role-author mapping
 they use; provider secrets remain environment-only through the token variable
 named in `.atelier/config.toml`. Provider
@@ -347,7 +347,6 @@ Built-in actions are:
 | `branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
 | `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
 | `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
-| `review.link` | Normalize an existing configured provider review artifact and write the canonical `review` link. |
 
 The workflow engine intrinsically writes the canonical issue status and
 transition activity entry for a successful transition. That status write is not

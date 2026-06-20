@@ -522,7 +522,7 @@ shape applies to a work item. Atelier configuration and command output own that
 routing. Review commands must not start, close, or otherwise transition Atelier
 issues.
 
-Workflow transitions may run a configured review artifact open/link action.
+Workflow transitions may run a configured review artifact open action.
 That action is reached through the explicit issue transition that printed it,
 not by treating `atelier review` as workflow authority. Review commands remain
 the artifact inspection and artifact-action surface; transition/status output

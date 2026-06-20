@@ -173,7 +173,6 @@ const BUILTIN_ACTIONS: &[&str] = &[
     "branch_commit",
     "branch_integrate",
     "review.open",
-    "review.link",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -1198,7 +1197,7 @@ fn parse_transition_actions(
                 ),
             ));
         }
-        if matches!(name, "review.open" | "review.link") && to_status != "review" {
+        if name == "review.open" && to_status != "review" {
             return Err(policy_error(
                 "workflow_config_invalid_action",
                 display_path,
@@ -1293,7 +1292,7 @@ fn parse_transition_action_params(
         "workflows.{}.transitions.{}.actions.{}",
         workflow_name, transition_name, name
     );
-    if matches!(name, "review.open" | "review.link") {
+    if name == "review.open" {
         let params = params.ok_or_else(|| {
             policy_error_with_field(
                 "workflow_config_invalid_action",

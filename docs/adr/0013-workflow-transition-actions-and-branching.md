@@ -53,8 +53,6 @@ context is computed from the work graph plus repository branch policy.
      branch using the configured merge strategy.
    - `review.open`: open or reuse the branch owner's configured review
      artifact and write the canonical `review` field.
-   - `review.link`: normalize and write an existing configured
-     provider review artifact link.
 
 5. Minimal workflow-engine behavior remains intrinsic.
    The workflow engine intrinsically loads the strict `.atelier/workflow.yaml`

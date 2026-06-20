@@ -144,16 +144,6 @@ struct RawForgejoConfig {
     owner: Option<String>,
     repo: Option<String>,
     admin_token_env: Option<String>,
-    role_authors: Option<RawForgejoRoleAuthors>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawForgejoRoleAuthors {
-    worker: Option<String>,
-    reviewer: Option<String>,
-    validator: Option<String>,
-    manager: Option<String>,
 }
 
 pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
@@ -162,50 +152,6 @@ pub fn load(repo_root: &Path) -> Result<ProjectConfig> {
     let text = fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read {}", config_path.display()))?;
     parse_project_config(&text, &config_path)
-}
-
-pub fn load_forgejo_with_default_role_authors(
-    repo_root: &Path,
-    role_authors: ForgejoRoleAuthors,
-) -> Result<ForgejoConfig> {
-    let layout = StorageLayout::new(repo_root);
-    let config_path = layout.config_path();
-    let text = fs::read_to_string(&config_path)
-        .with_context(|| format!("failed to read {}", config_path.display()))?;
-    let raw = parse_raw_project_config(&text, &config_path)?;
-    validate_schema_fields(&raw, &config_path)?;
-    require_non_empty(&raw.project_slug, &config_path, "project_slug")?;
-    reject_legacy_forgejo(&raw, &config_path)?;
-    let raw_review = raw.review.ok_or_else(|| {
-        anyhow!(
-            "review_config_missing: {} is missing [review]; configure review.mode = \"room\" or review.mode = \"provider\" with provider = \"forgejo\"",
-            config_path.display()
-        )
-    })?;
-    let raw_forgejo = provider_forgejo_config(raw_review, &config_path)?;
-    Ok(ForgejoConfig {
-        host: require_owned_option(
-            raw_forgejo.host,
-            &config_path,
-            "review.providers.forgejo.host",
-        )?,
-        owner: require_owned_option(
-            raw_forgejo.owner,
-            &config_path,
-            "review.providers.forgejo.owner",
-        )?,
-        repo: require_owned_option(
-            raw_forgejo.repo,
-            &config_path,
-            "review.providers.forgejo.repo",
-        )?,
-        admin_token_env: require_env_var_name(
-            raw_forgejo.admin_token_env,
-            &config_path,
-            "review.providers.forgejo.admin_token_env",
-        )?,
-        role_authors: Some(role_authors),
-    })
 }
 
 fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectConfig> {
@@ -329,10 +275,6 @@ fn provider_forgejo_config(raw: RawReviewConfig, config_path: &Path) -> Result<R
 }
 
 fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<ForgejoConfig> {
-    let role_authors = raw
-        .role_authors
-        .map(|role_authors| parse_forgejo_role_authors(role_authors, config_path))
-        .transpose()?;
     let config = ForgejoConfig {
         host: require_owned_option(raw.host, config_path, "review.providers.forgejo.host")?,
         owner: require_owned_option(raw.owner, config_path, "review.providers.forgejo.owner")?,
@@ -342,37 +284,9 @@ fn parse_forgejo_config(raw: RawForgejoConfig, config_path: &Path) -> Result<For
             config_path,
             "review.providers.forgejo.admin_token_env",
         )?,
-        role_authors,
+        role_authors: None,
     };
     Ok(config)
-}
-
-fn parse_forgejo_role_authors(
-    role_authors: RawForgejoRoleAuthors,
-    config_path: &Path,
-) -> Result<ForgejoRoleAuthors> {
-    Ok(ForgejoRoleAuthors {
-        worker: require_owned_option(
-            role_authors.worker,
-            config_path,
-            "review.providers.forgejo.role_authors.worker",
-        )?,
-        reviewer: require_owned_option(
-            role_authors.reviewer,
-            config_path,
-            "review.providers.forgejo.role_authors.reviewer",
-        )?,
-        validator: require_owned_option(
-            role_authors.validator,
-            config_path,
-            "review.providers.forgejo.role_authors.validator",
-        )?,
-        manager: require_owned_option(
-            role_authors.manager,
-            config_path,
-            "review.providers.forgejo.role_authors.manager",
-        )?,
-    })
 }
 
 fn require_owned(value: String, config_path: &Path, field: &str) -> Result<String> {
@@ -448,17 +362,11 @@ host = "forge.example.test"
 owner = "tools"
 repo = "atelier"
 admin_token_env = "FORGEJO_ADMIN_TOKEN"
-
-[review.providers.forgejo.role_authors]
-worker = "atelier-worker"
-reviewer = "atelier-reviewer"
-validator = "atelier-validator"
-manager = "atelier-manager"
 "#
     }
 
     #[test]
-    fn parses_valid_forgejo_config_and_role_authors() {
+    fn parses_valid_forgejo_config_without_role_authors() {
         let config = parse_project_config(valid_config(), &path()).unwrap();
         let forgejo = config.require_forgejo(&path()).unwrap();
 
@@ -466,14 +374,12 @@ manager = "atelier-manager"
         assert_eq!(forgejo.owner, "tools");
         assert_eq!(forgejo.repo, "atelier");
         assert_eq!(forgejo.admin_token_env, "FORGEJO_ADMIN_TOKEN");
-        assert_eq!(
-            forgejo.role_author_for_role("worker").unwrap(),
-            "atelier-worker"
-        );
-        assert_eq!(
-            forgejo.role_author_for_role("validator").unwrap(),
-            "atelier-validator"
-        );
+        assert_eq!(forgejo.role_authors, None);
+        assert!(forgejo
+            .role_author_for_role("worker")
+            .unwrap_err()
+            .to_string()
+            .contains("workflow action params"));
         assert!(forgejo.role_author_for_role("admin").is_err());
     }
 
@@ -504,29 +410,20 @@ mode = "room"
     }
 
     #[test]
-    fn invalid_forgejo_config_names_missing_role_and_token() {
-        let missing_role = valid_config().replace("validator = \"atelier-validator\"\n", "");
-        let error = parse_project_config(&missing_role, &path())
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("review.providers.forgejo.role_authors.validator"));
-
-        let missing_role_authors = valid_config().replace(
-            "\n[review.providers.forgejo.role_authors]\nworker = \"atelier-worker\"\nreviewer = \"atelier-reviewer\"\nvalidator = \"atelier-validator\"\nmanager = \"atelier-manager\"\n",
-            "\n",
+    fn invalid_forgejo_config_names_and_legacy_role_authors() {
+        let old_role_authors = format!(
+            "{}\n[review.providers.forgejo.role_authors]\nworker = \"atelier-worker\"\nreviewer = \"atelier-reviewer\"\nvalidator = \"atelier-validator\"\nmanager = \"atelier-manager\"\n",
+            valid_config()
         );
-        let config = parse_project_config(&missing_role_authors, &path()).unwrap();
-        let forgejo = config.require_forgejo(&path()).unwrap();
-        let error = forgejo
-            .role_author_for_role("worker")
+        let error = parse_project_config(&old_role_authors, &path())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("forgejo_config_missing_role_authors"));
+        assert!(error.contains("unknown field `role_authors`"));
 
         let old_sudo_users = valid_config().replace(
-            "[review.providers.forgejo.role_authors]",
+            "[review.providers.forgejo]",
             "[review.providers.forgejo.sudo_users]",
-        ) + "admin = \"atelier-admin\"\n";
+        );
         let error = parse_project_config(&old_sudo_users, &path())
             .unwrap_err()
             .to_string();

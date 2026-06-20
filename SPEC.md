@@ -435,14 +435,12 @@ Version 1 built-in actions include:
   branch using the configured merge strategy.
 - `review.open`: open or reuse the branch owner's configured review
   artifact and write the canonical `review` link.
-- `review.link`: normalize and write an existing configured provider
-  review artifact link.
 
 The workflow engine intrinsically writes the canonical issue status and
 transition activity entry for a successful transition. That status write is not
 a configurable action.
 
-The review artifact actions are intentionally narrow. They may create or link
+The review artifact actions are intentionally narrow. They may create
 the artifact that an epic, standalone issue, or exceptional branch-owning child
 issue will use for review. They do not approve, comment on, request changes,
 resolve findings, merge review artifacts, hide issue close, or replace
