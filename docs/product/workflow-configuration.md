@@ -358,19 +358,38 @@ Built-in actions are:
 | Action | Purpose |
 | --- | --- |
 | `branch_prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
-| `branch_commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
-| `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy`. |
+| `tracker.commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
+| `branch.push` | Push the workflow-derived owner branch to the configured review provider remote. |
+| `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
+| `base.sync` | Synchronize the local base branch after provider-owned merge completion. |
+| `branch_integrate` | Integrate the owner branch to the configured base branch using `branch_policy.merge_strategy` for local review-room workflows only. |
 | `review.open` | Open or reuse the branch owner's configured review artifact and write the canonical `review` link. |
 
 The workflow engine intrinsically writes the canonical issue status and
 transition activity entry for a successful transition. That status write is not
-a configurable action.
+a configurable action. The execution order for a transition is: load strict
+workflow policy, select the issue workflow, validate source status and required
+fields, evaluate read-only validators, compute branch context, plan actions in
+declaration order, run those actions, reload the canonical issue after any
+tracker-mutating action, then write the final status and transition activity.
+Reload-after-action is the v1 consistency policy for actions such as
+`review.open` or `tracker.commit` that may change canonical tracker fields; it
+avoids stale whole-record writes without introducing an issue ORM or session
+layer.
 
 Review artifact actions use the configured review mode from `.atelier/config.toml`.
-In room mode they create or reuse a native review room. In provider mode they
-create, fetch, or link the configured provider artifact. They do not approve,
-comment, request changes, resolve findings, merge review artifacts, close
-issues, add `pr` aliases, or replace explicit `atelier issue transition`.
+In room mode `review.open` creates or reuses a native review room. In provider
+mode it creates, fetches, or links the configured provider artifact. It does not
+approve, comment, request changes, resolve findings, merge review artifacts,
+close issues, add `pr` aliases, or replace explicit
+`atelier issue transition`.
+
+Merge authority is mode-specific. Provider-backed terminal workflows must use
+provider-owned actions such as `tracker.commit`, `branch.push`, `review.merge`,
+and `base.sync`; they must not perform local base integration through
+`branch_integrate`. Local review-room workflows may keep `branch_integrate`, but
+only as an explicit workflow action that records local branch integration under
+room authority.
 
 Review artifact actions require parameter objects. Room-mode actions declare
 the local Atelier role:
@@ -410,7 +429,7 @@ Failure behavior is part of the action contract:
   when retry is idempotent or the command can provide an explicit repair path.
 - Idempotent retry must tolerate an already-created review artifact,
   already-written review link, already-applied activity entry, or already-made
-  owner-branch commit.
+  owner-branch tracker commit.
 - Recovery text must name the failed action, what state was preserved, and next
   commands such as `atelier issue show <id>`, `atelier issue transition <id>
   --options`, `atelier review status --issue <id>`, or `atelier lint <id>`.

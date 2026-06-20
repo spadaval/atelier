@@ -65,9 +65,9 @@
   status to another after required fields, evidence, and validators succeed.
 - Transition action: configured work run by an explicit issue transition after
   required fields and validators succeed. Actions may write canonical tracker
-  records, local branch commits, review artifact links, or provider requests,
-  but they are scoped to the transition that declares them and are not hidden
-  automation hooks.
+  records, local branch commits, review artifact links, provider requests, or
+  provider-owned merge/sync operations, but they are scoped to the transition
+  that declares them and are not hidden automation hooks.
 - Validator: a machine-readable workflow transition check that controls whether
   a transition can proceed and returns an actionable failure reason.
 - Transition description: static workflow text rendered near an action, status,
@@ -126,6 +126,10 @@
   and records a room merge event. In provider mode it delegates merge or merge
   confirmation to the configured provider. In both modes it does not transition
   Atelier issue workflow.
+- Provider terminal actions: provider-backed workflow actions such as
+  `tracker.commit`, `branch.push`, `review.merge`, and `base.sync` that make
+  the provider review artifact and remote base branch the integration
+  authority. They are not aliases for local `branch_integrate`.
 - Plan: execution intent that matters beyond ephemeral context. In v1, plans are
   ordinary Markdown artifacts or prose referenced from accountable work or
   evidence; they are not first-class `.atelier/plans/` records.
@@ -215,11 +219,12 @@
 - Branch policy is workflow-owned rather than a separate routine setup step.
   `atelier start <id>` prepares the owner branch from the work graph: child
   issues use the nearest parent epic branch, standalone issues use an issue
-  branch, and epics use an epic branch. `atelier issue close <id>` commits the
-  close state on the owner branch; child issues stop there, while standalone
-  issues and epics merge that owner branch to the configured base branch.
-  Squash merge is the default integration strategy, with repository policy able
-  to select alternatives and branch naming templates. A failed close-time
+  branch, and epics use an epic branch. Terminal transitions commit tracker
+  state through explicit workflow actions. Child issues normally stop at the
+  owner branch; standalone issues and epics use provider terminal actions in
+  provider mode or explicit `branch_integrate` in local room mode. Squash merge
+  is the default local integration strategy, with repository policy able to
+  select alternatives and branch naming templates. A failed close-time
   commit or merge must not leave the item closed in the integration branch.
 - The layered Cargo workspace is the target architecture, not a parallel
   scaffold. The repository root is a virtual workspace; remaining monolithic

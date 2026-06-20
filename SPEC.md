@@ -441,16 +441,30 @@ Version 1 built-in actions include:
 
 - `branch_prepare`: create or check out the workflow-derived owner branch when
   the transition needs branch preparation.
-- `branch_commit`: commit the transition's canonical tracker changes on
+- `tracker.commit`: commit the transition's canonical tracker changes on
   the workflow-derived owner branch.
+- `branch.push`: push the workflow-derived owner branch to the configured
+  review provider remote.
+- `review.merge`: ask the active review authority to merge or record merge
+  completion for the branch owner's review artifact.
+- `base.sync`: synchronize the local base branch after provider-owned merge
+  completion.
 - `branch_integrate`: integrate the owner branch to the configured base
-  branch using the configured merge strategy.
+  branch using the configured merge strategy for local review-room workflows
+  only.
 - `review.open`: open or reuse the branch owner's configured review
   artifact and write the canonical `review` link.
 
 The workflow engine intrinsically writes the canonical issue status and
 transition activity entry for a successful transition. That status write is not
-a configurable action.
+a configurable action. Transition execution order is fixed: load strict policy,
+select the issue workflow, check source status and required fields, evaluate
+read-only validators, compute branch context, plan declared actions in order,
+run the actions, reload the canonical issue after any tracker-mutating action,
+then write final status and transition activity. The reload-after-action rule is
+the v1 consistency policy for tracker-mutating actions such as `review.open` and
+`tracker.commit`; it avoids stale whole-record writes without introducing an
+issue ORM or session layer.
 
 The review artifact actions are intentionally narrow. They may create
 the artifact that an epic, standalone issue, or exceptional branch-owning child
@@ -458,6 +472,12 @@ issue will use for review. They do not approve, comment on, request changes,
 resolve findings, merge review artifacts, hide issue close, or replace
 `atelier issue transition`. PR aliases and broad automation hooks are non-goals
 for v1.
+
+Terminal merge behavior follows the review mode. Provider-backed workflows use
+provider-owned actions such as `tracker.commit`, `branch.push`, `review.merge`,
+and `base.sync`; they do not use local `branch_integrate` as a substitute for
+provider merge authority. Local review-room workflows may still declare
+`branch_integrate`, but only as an explicit local integration action.
 
 Failure semantics are explicit:
 
@@ -474,7 +494,7 @@ Failure semantics are explicit:
   failed and the next inspection command.
 - Idempotent retry: actions must detect an already-created review artifact,
   already-written review link, already-applied activity entry, or already-made
-  branch commit and continue without duplicating records.
+  tracker commit and continue without duplicating records.
 - Recovery text: blocked or failed transitions name the failed action,
   preserved state, and next commands such as `atelier issue show <id>`,
   `atelier issue transition <id> --options`, `atelier review status <id>`, or

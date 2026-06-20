@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T04:49:34.961430459+00:00"
+status: "done"
 title: "Define transition action contract and merge authority"
-updated_at: "2026-06-20T04:17:09.553582228+00:00"
+updated_at: "2026-06-20T04:49:34.961430459+00:00"
 ---
 
 ## Description
