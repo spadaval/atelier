@@ -36,9 +36,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:35:24.544215908+00:00"
+status: "done"
 title: "Epic: Workflow transition authority and merge integration"
-updated_at: "2026-06-20T04:31:19.744976414+00:00"
+updated_at: "2026-06-20T05:35:24.544215908+00:00"
 ---
 
 ## Description
