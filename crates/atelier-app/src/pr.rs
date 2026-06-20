@@ -503,6 +503,51 @@ pub fn confirm_pull_request_merged(
     Ok(owner_id)
 }
 
+pub fn linked_pull_request_merge_status_with_client<T: ForgejoTransport>(
+    db: &Database,
+    repo_root: &Path,
+    issue_id: &str,
+    client: &ForgejoClient<T>,
+) -> Result<(bool, String)> {
+    let Some(field) = workflow_policy::effective_pull_request_field(db, issue_id)? else {
+        return Ok((
+            false,
+            format!("no linked review field; run `atelier review open --issue {issue_id}`"),
+        ));
+    };
+    let number = pull_request_number(&field)?;
+    let pull = client.show_pull(number)?;
+    let policy = workflow_policy::load(repo_root)?;
+    let resolution = workflow_policy::resolve_branch_lifecycle(&policy, db, issue_id)?;
+    if pull.source_branch != resolution.expected_branch
+        || pull.target_branch != resolution.base_branch
+    {
+        return Ok((
+            false,
+            format!(
+                "linked PR branches are {} -> {}, but issue {} expects {} -> {}; run `atelier review status --issue {}`",
+                pull.source_branch,
+                pull.target_branch,
+                resolution.owner_id,
+                resolution.expected_branch,
+                resolution.base_branch,
+                issue_id
+            ),
+        ));
+    }
+    if pull.merged {
+        Ok((true, format!("linked PR {} is merged", pull.number)))
+    } else {
+        Ok((
+            false,
+            format!(
+                "linked PR {} is {} and not merged; run `atelier review status --issue {}`",
+                pull.number, pull.state, issue_id
+            ),
+        ))
+    }
+}
+
 fn linked_pull_request(db: &Database, issue_id: &str) -> Result<Value> {
     workflow_policy::effective_pull_request_field(db, issue_id)?.ok_or_else(|| {
         anyhow!(
@@ -1584,6 +1629,125 @@ admin_token_env = "FORGEJO_ADMIN_TOKEN"
         assert!(mismatch.contains("pull_request_mismatch"));
         assert!(mismatch.contains("codex/other -> master"));
         assert_eq!(transport.requests().len(), 1);
+    }
+
+    #[test]
+    fn linked_pull_request_merge_status_reports_required_states() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
+        let db = Database::open(&db_path).unwrap();
+        insert_issue(
+            &db,
+            "atelier-hw9t",
+            "epic",
+            "validation",
+            None,
+            BTreeMap::new(),
+        );
+        crate::export::run_canonical(&db, &state_dir, false).unwrap();
+        let empty_transport = MockTransport::new(Vec::new());
+        let empty_client = ForgejoClient::new(forgejo_config(), &empty_transport);
+
+        let (passed, reason) = linked_pull_request_merge_status_with_client(
+            &db,
+            dir.path(),
+            "atelier-hw9t",
+            &empty_client,
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("atelier review open --issue atelier-hw9t"));
+
+        insert_issue(
+            &db,
+            "atelier-linked",
+            "epic",
+            "validation",
+            None,
+            pull_request_fields(42),
+        );
+        crate::export::run_canonical(&db, &state_dir, false).unwrap();
+
+        let open_transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: pull_response(42, "open", false, "epic/atelier-linked"),
+        }]);
+        let open_client = ForgejoClient::new(forgejo_config(), &open_transport);
+        let (passed, reason) = linked_pull_request_merge_status_with_client(
+            &db,
+            dir.path(),
+            "atelier-linked",
+            &open_client,
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("not merged"));
+        assert!(reason.contains("atelier review status --issue atelier-linked"));
+
+        let closed_transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: pull_response(42, "closed", false, "epic/atelier-linked"),
+        }]);
+        let closed_client = ForgejoClient::new(forgejo_config(), &closed_transport);
+        let (passed, reason) = linked_pull_request_merge_status_with_client(
+            &db,
+            dir.path(),
+            "atelier-linked",
+            &closed_client,
+        )
+        .unwrap();
+        assert!(!passed);
+        assert!(reason.contains("closed and not merged"));
+
+        let merged_transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: pull_response(42, "closed", true, "epic/atelier-linked"),
+        }]);
+        let merged_client = ForgejoClient::new(forgejo_config(), &merged_transport);
+        let (passed, reason) = linked_pull_request_merge_status_with_client(
+            &db,
+            dir.path(),
+            "atelier-linked",
+            &merged_client,
+        )
+        .unwrap();
+        assert!(passed);
+        assert_eq!(reason, "linked PR 42 is merged");
+    }
+
+    #[test]
+    fn linked_pull_request_merge_status_rejects_branch_mismatch() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path().join(".atelier");
+        let db_path = state_dir.join("runtime/state.db");
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        write_workflow(dir.path());
+        let db = Database::open(&db_path).unwrap();
+        insert_issue(
+            &db,
+            "atelier-hw9t",
+            "epic",
+            "validation",
+            None,
+            pull_request_fields(42),
+        );
+        crate::export::run_canonical(&db, &state_dir, false).unwrap();
+        let transport = MockTransport::new(vec![ForgejoResponse {
+            status: 200,
+            body: pull_response(42, "closed", true, "epic/other"),
+        }]);
+        let client = ForgejoClient::new(forgejo_config(), &transport);
+
+        let (passed, reason) =
+            linked_pull_request_merge_status_with_client(&db, dir.path(), "atelier-hw9t", &client)
+                .unwrap();
+
+        assert!(!passed);
+        assert!(reason.contains("linked PR branches"));
+        assert!(reason.contains("atelier review status --issue atelier-hw9t"));
     }
 
     #[test]

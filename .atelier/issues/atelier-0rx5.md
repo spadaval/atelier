@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Move review-link validation into one app-layer contract"
-updated_at: "2026-06-20T16:49:00.525133989+00:00"
+updated_at: "2026-06-20T21:20:11.691557920+00:00"
 ---
 
 ## Description
