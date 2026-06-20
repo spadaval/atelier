@@ -921,6 +921,27 @@ fn write_provider_review_action_workflow(dir: &Path) {
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
 
+fn write_branch_action_workflow(dir: &Path) {
+    let start_without_actions =
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n";
+    let start_with_prepare =
+        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        actions:\n          - branch_prepare\n";
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
+        start_without_actions,
+        start_with_prepare,
+        2,
+    );
+    workflow = workflow.replace(
+        "          - durable_state_current\n\n  epic_reviewed:",
+        "          - durable_state_current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_reviewed:",
+    );
+    workflow = workflow.replace(
+        "          - git_worktree_clean\n\n  validation_reviewed:",
+        "          - git_worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_reviewed:",
+    );
+    fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
+}
+
 #[test]
 fn provider_review_open_action_reads_workflow_config_and_env_secret() {
     let dir = tempdir().unwrap();

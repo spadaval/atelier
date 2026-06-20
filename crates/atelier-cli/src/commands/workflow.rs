@@ -52,6 +52,10 @@ pub struct PlannedAction {
     pub name: String,
     pub target_issue_id: String,
     pub branch_owner_id: String,
+    pub expected_branch: String,
+    pub base_branch: String,
+    pub merge_strategy: MergeStrategy,
+    pub merge_owned: bool,
     pub review_artifact_target: Option<String>,
     pub review_artifact_provider: Option<String>,
     pub review_artifact_role: Option<String>,
@@ -189,6 +193,10 @@ fn plan_actions_for_resolution(
                 name: action.builtin.clone(),
                 target_issue_id: issue.id.clone(),
                 branch_owner_id: resolution.owner_id.clone(),
+                expected_branch: resolution.expected_branch.clone(),
+                base_branch: resolution.base_branch.clone(),
+                merge_strategy: resolution.merge_strategy,
+                merge_owned: resolution.merge_owned,
                 review_artifact_target: review_artifact
                     .as_ref()
                     .map(|review| review.target_issue_id.clone()),
@@ -459,7 +467,13 @@ pub fn transition_issue(
         )?;
     }
 
-    let action_results = execute_transition_actions(
+    let git_rollback = TransitionGitRollback::snapshot_if_needed(
+        &repo_root,
+        &before,
+        transition_name,
+        &planned_actions,
+    )?;
+    let mut action_results = execute_pre_transition_actions(
         db,
         state_dir,
         db_path,
@@ -468,12 +482,19 @@ pub fn transition_issue(
         transition_name,
         &planned_actions,
     )?;
-    record = app_use_cases::load_canonical_issue(state_dir, &before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
     record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
-
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+    match execute_post_transition_actions(&repo_root, &before, transition_name, &planned_actions) {
+        Ok(mut results) => action_results.append(&mut results),
+        Err(error) => {
+            if let Some(rollback) = git_rollback {
+                rollback.rollback_after_post_action_failure(state_dir, db_path)?;
+            }
+            bail!("{error:#}");
+        }
+    }
     let refreshed = app_use_cases::open_database(db_path)?;
     let issue = refreshed.require_issue(&before.id)?;
     println!("Applied transition {} to {}", transition_name, issue.id);
@@ -617,6 +638,8 @@ fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]
         .iter()
         .filter_map(|action| {
             match action.name.as_str() {
+                "branch_prepare" => branch_prepare_preflight(repo_root, action),
+                "branch_commit" | "branch_integrate" => branch_post_action_preflight(repo_root, action),
                 "review.open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
                     "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
@@ -624,6 +647,76 @@ fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]
             }
         })
         .collect()
+}
+
+fn branch_prepare_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
+    if let Err(error) = ensure_git_action_repo(repo_root, action) {
+        return Some(error);
+    }
+    match non_tracker_dirty_entries(repo_root) {
+        Ok(dirty) if !dirty.is_empty() => {
+            return Some(format!(
+                "action {} failed preflight: worktree has uncommitted non-tracker changes:\n{}",
+                action.name,
+                dirty.join("\n")
+            ));
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return Some(format!(
+                "action {} failed preflight: {error:#}",
+                action.name
+            ))
+        }
+    }
+    if git_current_branch(repo_root).ok().as_deref() != Some(action.expected_branch.as_str())
+        && !branch_exists_at(repo_root, &action.expected_branch).unwrap_or(false)
+        && !branch_exists_at(repo_root, &action.base_branch).unwrap_or(false)
+    {
+        return Some(format!(
+            "action {} failed preflight: configured base branch '{}' is missing; create or fetch it, then retry `atelier issue transition {} start`",
+            action.name, action.base_branch, action.target_issue_id
+        ));
+    }
+    None
+}
+
+fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
+    if let Err(error) = ensure_git_action_repo(repo_root, action) {
+        return Some(error);
+    }
+    match non_tracker_dirty_entries(repo_root) {
+        Ok(dirty) if !dirty.is_empty() => Some(format!(
+            "action {} failed preflight: worktree has uncommitted non-tracker changes:\n{}",
+            action.name,
+            dirty.join("\n")
+        )),
+        Err(error) => Some(format!("action {} failed preflight: {error:#}", action.name)),
+        _ if action.name == "branch_integrate"
+            && action.merge_owned
+            && !branch_exists_at(repo_root, &action.base_branch).unwrap_or(false) =>
+        {
+            Some(format!(
+                "action {} failed preflight: configured base branch '{}' is missing; create or fetch it, then retry the transition",
+                action.name, action.base_branch
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<(), String> {
+    match is_git_repo(repo_root) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!(
+            "action {} failed preflight: git repository is required",
+            action.name
+        )),
+        Err(error) => Err(format!(
+            "action {} failed preflight: {error:#}",
+            action.name
+        )),
+    }
 }
 
 fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<String> {
@@ -679,7 +772,7 @@ fn review_open_preflight(repo_root: &Path, action: &PlannedAction) -> Option<Str
     }
 }
 
-fn execute_transition_actions(
+fn execute_pre_transition_actions(
     db: &Database,
     state_dir: &Path,
     db_path: &Path,
@@ -691,6 +784,14 @@ fn execute_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
+            "branch_prepare" => {
+                let detail = prepare_branch_action(repo_root, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "branch_commit" | "branch_integrate" => {}
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -712,6 +813,253 @@ fn execute_transition_actions(
         }
     }
     Ok(applied)
+}
+
+fn execute_post_transition_actions(
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    planned_actions: &[PlannedAction],
+) -> Result<Vec<AppliedAction>> {
+    let mut applied = Vec::new();
+    for action in planned_actions {
+        match action.name.as_str() {
+            "branch_commit" => {
+                let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "branch_integrate" => {
+                let detail = integrate_branch_action(repo_root, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(applied)
+}
+
+fn prepare_branch_action(
+    repo_root: &Path,
+    issue: &Issue,
+    action: &PlannedAction,
+) -> Result<String> {
+    ensure_non_tracker_clean_for_action(repo_root, action, issue, "before workflow transition")?;
+    let current = git_current_branch(repo_root).unwrap_or_default();
+    if current == action.expected_branch {
+        return Ok(format!("already on branch {}", action.expected_branch));
+    }
+    if branch_exists_at(repo_root, &action.expected_branch)? {
+        git_checked(repo_root, &["switch", &action.expected_branch], "checkout action branch")
+            .with_context(|| {
+                format!(
+                    "action {} failed while switching to branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} start`.",
+                    action.name, action.expected_branch, issue.id
+                )
+            })?;
+        return Ok(format!("checked out branch {}", action.expected_branch));
+    }
+    ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
+        format!(
+            "action {} failed because configured base branch '{}' is missing.\nRecovery: create or fetch the base branch, then retry `atelier issue transition {} start`.",
+            action.name, action.base_branch, issue.id
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["switch", "-c", &action.expected_branch, &action.base_branch],
+        "create action branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while creating branch '{}' from '{}'.\nRecovery: inspect `git status --short --branch`, then retry `atelier issue transition {} start`.",
+            action.name, action.expected_branch, action.base_branch, issue.id
+        )
+    })?;
+    Ok(format!(
+        "created branch {} from {}",
+        action.expected_branch, action.base_branch
+    ))
+}
+
+fn commit_branch_action(
+    repo_root: &Path,
+    issue: &Issue,
+    transition_name: &str,
+    action: &PlannedAction,
+) -> Result<String> {
+    ensure_expected_branch_checked_out(repo_root, issue, action)?;
+    git_checked(repo_root, &["add", "-A", ".atelier"], "stage transition tracker state")
+        .with_context(|| {
+            format!(
+                "action {} failed while staging tracker state.\nRecovery: tracker state was restored when possible; inspect `git status --short --branch`, then retry `atelier issue transition {} {}`.",
+                action.name, issue.id, transition_name
+            )
+        })?;
+    if git_checked(
+        repo_root,
+        &["diff", "--cached", "--quiet"],
+        "inspect staged tracker state",
+    )
+    .is_ok()
+    {
+        return Ok("no tracker changes to commit".to_string());
+    }
+    let message = format!(
+        "Transition {} {}: {}",
+        issue.id, transition_name, issue.title
+    );
+    git_checked(
+        repo_root,
+        &["commit", "-m", &message],
+        "commit transition tracker state",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while committing tracker state.\nRecovery: tracker state was restored when possible; inspect `git status --short --branch`, then retry `atelier issue transition {} {}`.",
+            action.name, issue.id, transition_name
+        )
+    })?;
+    let sha = git_stdout(
+        repo_root,
+        &["rev-parse", "--short", "HEAD"],
+        "read action commit",
+    )?;
+    Ok(format!("committed tracker state {}", sha.trim()))
+}
+
+fn integrate_branch_action(
+    repo_root: &Path,
+    issue: &Issue,
+    action: &PlannedAction,
+) -> Result<String> {
+    if !action.merge_owned {
+        return Ok("deferred to parent branch close".to_string());
+    }
+    ensure_branch_exists(repo_root, &action.base_branch).with_context(|| {
+        format!(
+            "action {} failed because configured base branch '{}' is missing.\nRecovery: create or fetch the base branch, then retry the transition for {}.",
+            action.name, action.base_branch, issue.id
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["switch", &action.base_branch],
+        "checkout action integration target",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while switching to base branch '{}'.\nRecovery: source branch '{}' contains transition work; inspect `git status --short --branch`, switch to the base branch, and retry integration or the transition after repair.",
+            action.name, action.base_branch, action.expected_branch
+        )
+    })?;
+    match action.merge_strategy {
+        MergeStrategy::Squash => {
+            git_checked(
+                repo_root,
+                &["merge", "--squash", &action.expected_branch],
+                "squash merge action branch",
+            )
+            .with_context(|| {
+                format!(
+                    "action {} failed during squash merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and issue status was restored; inspect `git status --short --branch`, then retry the transition for {}.",
+                    action.name, action.expected_branch, action.base_branch, issue.id
+                )
+            })?;
+            let message = format!(
+                "Squash merge {} into {}",
+                action.expected_branch, action.base_branch
+            );
+            git_checked(repo_root, &["commit", "-m", &message], "commit action squash merge")
+                .with_context(|| {
+                    format!(
+                        "action {} failed while committing squash merge on '{}'.\nRecovery: merge state was aborted when possible and issue status was restored; inspect `git status --short --branch`, then retry the transition for {}.",
+                        action.name, action.base_branch, issue.id
+                    )
+                })?;
+            let sha = git_stdout(
+                repo_root,
+                &["rev-parse", "--short", "HEAD"],
+                "read squash commit",
+            )?;
+            Ok(format!("squash commit {}", sha.trim()))
+        }
+        MergeStrategy::MergeCommit => {
+            let message = format!(
+                "Merge {} into {}",
+                action.expected_branch, action.base_branch
+            );
+            git_checked(
+                repo_root,
+                &["merge", "--no-ff", &action.expected_branch, "-m", &message],
+                "merge action branch",
+            )
+            .with_context(|| {
+                format!(
+                    "action {} failed during merge from '{}' to '{}'.\nRecovery: merge state was aborted when possible and issue status was restored; inspect `git status --short --branch`, then retry the transition for {}.",
+                    action.name, action.expected_branch, action.base_branch, issue.id
+                )
+            })?;
+            let sha = git_stdout(
+                repo_root,
+                &["rev-parse", "--short", "HEAD"],
+                "read merge commit",
+            )?;
+            Ok(format!("merge commit {}", sha.trim()))
+        }
+        MergeStrategy::FastForwardOnly => {
+            git_checked(
+                repo_root,
+                &["merge", "--ff-only", &action.expected_branch],
+                "fast-forward action branch",
+            )
+            .with_context(|| {
+                format!(
+                    "action {} failed during fast-forward from '{}' to '{}'.\nRecovery: merge state was aborted when possible and issue status was restored; inspect `git status --short --branch`, then retry the transition for {}.",
+                    action.name, action.expected_branch, action.base_branch, issue.id
+                )
+            })?;
+            let sha = git_stdout(
+                repo_root,
+                &["rev-parse", "--short", "HEAD"],
+                "read fast-forward head",
+            )?;
+            Ok(format!("fast-forward to {}", sha.trim()))
+        }
+    }
+}
+
+fn ensure_expected_branch_checked_out(
+    repo_root: &Path,
+    issue: &Issue,
+    action: &PlannedAction,
+) -> Result<()> {
+    let current = git_current_branch(repo_root).unwrap_or_default();
+    if current == action.expected_branch {
+        return Ok(());
+    }
+    ensure_branch_exists(repo_root, &action.expected_branch).with_context(|| {
+        format!(
+            "action {} failed because source branch '{}' is missing.\nRecovery: run the transition with `branch_prepare` first, then retry the transition for {}.",
+            action.name, action.expected_branch, issue.id
+        )
+    })?;
+    git_checked(
+        repo_root,
+        &["switch", &action.expected_branch],
+        "checkout action source branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while switching to source branch '{}'.\nRecovery: inspect `git status --short --branch`, then retry the transition for {}.",
+            action.name, action.expected_branch, issue.id
+        )
+    })
 }
 
 fn open_review_artifact_action(
@@ -984,7 +1332,12 @@ pub fn close_issue(
         );
     }
 
-    let close_git = CloseGitIntegration::prepare(db, &policy, &issue)?;
+    let transition = resolve_issue_transition(&policy, &issue, candidates[0].0)?;
+    let close_git = if transition_declares_branch_git_actions(transition) {
+        None
+    } else {
+        CloseGitIntegration::prepare(db, &policy, &issue)?
+    };
     transition_issue(
         db,
         state_dir,
@@ -1004,6 +1357,17 @@ pub fn close_issue(
     Ok(())
 }
 
+fn transition_declares_branch_git_actions(
+    transition: &atelier_app::workflow_policy::TransitionDefinition,
+) -> bool {
+    transition.actions.iter().any(|action| {
+        matches!(
+            action.builtin.as_str(),
+            "branch_commit" | "branch_integrate"
+        )
+    })
+}
+
 struct CloseGitIntegration {
     repo_root: PathBuf,
     issue_id: String,
@@ -1011,6 +1375,116 @@ struct CloseGitIntegration {
     resolution: BranchLifecycleResolution,
     source_pre_head: String,
     tracker_patch_before_close: Vec<u8>,
+}
+
+struct TransitionGitRollback {
+    repo_root: PathBuf,
+    issue_id: String,
+    transition_name: String,
+    expected_branch: String,
+    source_pre_head: String,
+    tracker_patch_before_transition: Vec<u8>,
+}
+
+impl TransitionGitRollback {
+    fn snapshot_if_needed(
+        repo_root: &Path,
+        issue: &Issue,
+        transition_name: &str,
+        planned_actions: &[PlannedAction],
+    ) -> Result<Option<Self>> {
+        if !planned_actions
+            .iter()
+            .any(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+        {
+            return Ok(None);
+        }
+        if !is_git_repo(repo_root)? {
+            return Ok(None);
+        }
+        let Some(action) = planned_actions
+            .iter()
+            .find(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+        else {
+            return Ok(None);
+        };
+        let source_pre_head = git_stdout(
+            repo_root,
+            &["rev-parse", "HEAD"],
+            "read pre-transition HEAD",
+        )?;
+        let tracker_patch_before_transition = git_binary_stdout(
+            repo_root,
+            &["diff", "--binary", "--", ".atelier"],
+            "snapshot tracker changes before transition action",
+        )?;
+        Ok(Some(Self {
+            repo_root: repo_root.to_path_buf(),
+            issue_id: issue.id.clone(),
+            transition_name: transition_name.to_string(),
+            expected_branch: action.expected_branch.clone(),
+            source_pre_head: source_pre_head.trim().to_string(),
+            tracker_patch_before_transition,
+        }))
+    }
+
+    fn rollback_after_post_action_failure(&self, state_dir: &Path, db_path: &Path) -> Result<()> {
+        if git_checked(
+            &self.repo_root,
+            &["merge", "--abort"],
+            "abort failed action merge",
+        )
+        .is_err()
+        {
+            git_checked(
+                &self.repo_root,
+                &["reset", "--hard", "HEAD"],
+                "reset failed action merge state",
+            )?;
+        }
+        if branch_exists_at(&self.repo_root, &self.expected_branch)? {
+            git_checked(
+                &self.repo_root,
+                &["switch", &self.expected_branch],
+                "return to action source branch for rollback",
+            )?;
+        }
+        git_checked(
+            &self.repo_root,
+            &["reset", "--hard", &self.source_pre_head],
+            "restore pre-transition action HEAD",
+        )
+        .with_context(|| {
+            format!(
+                "action rollback failed for {} {} while restoring git HEAD.\nRecovery: inspect `git status --short --branch` before retrying.",
+                self.issue_id, self.transition_name
+            )
+        })?;
+        if !self.tracker_patch_before_transition.is_empty() {
+            let mut child = Command::new("git")
+                .current_dir(&self.repo_root)
+                .args(["apply", "--binary", "--whitespace=nowarn"])
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .context(
+                    "failed to run git apply while restoring pre-transition tracker changes",
+                )?;
+            {
+                let stdin = child
+                    .stdin
+                    .as_mut()
+                    .context("failed to open git apply stdin")?;
+                use std::io::Write;
+                stdin.write_all(&self.tracker_patch_before_transition)?;
+            }
+            let status = child.wait().context("failed to wait for git apply")?;
+            if !status.success() {
+                bail!("failed to restore pre-transition tracker changes after action rollback");
+            }
+        }
+        app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
+        Ok(())
+    }
 }
 
 impl CloseGitIntegration {
@@ -1319,16 +1793,7 @@ fn ensure_branch_exists(root: &Path, branch: &str) -> Result<()> {
 }
 
 fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
-    let status = git_stdout(
-        root,
-        &["status", "--porcelain"],
-        "inspect worktree dirtiness",
-    )?;
-    let dirty = status
-        .lines()
-        .filter_map(git_status_path)
-        .filter(|path| !path.starts_with(".atelier/"))
-        .collect::<Vec<_>>();
+    let dirty = non_tracker_dirty_entries(root)?;
     if !dirty.is_empty() {
         bail!(
             "Close Git integration requires non-tracker files to be clean before close:\n{}\nRecovery: commit or stash these paths, then retry `atelier issue close <issue-id> --reason \"...\"`.",
@@ -1336,6 +1801,37 @@ fn ensure_no_non_tracker_dirty(root: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn ensure_non_tracker_clean_for_action(
+    root: &Path,
+    action: &PlannedAction,
+    issue: &Issue,
+    phase: &str,
+) -> Result<()> {
+    let dirty = non_tracker_dirty_entries(root)?;
+    if !dirty.is_empty() {
+        bail!(
+            "action {} failed {phase}: worktree has uncommitted non-tracker changes:\n{}\nRecovery: commit or stash these paths, then retry the transition for {}.",
+            action.name,
+            dirty.join("\n"),
+            issue.id
+        );
+    }
+    Ok(())
+}
+
+fn non_tracker_dirty_entries(root: &Path) -> Result<Vec<String>> {
+    let status = git_stdout(
+        root,
+        &["status", "--porcelain"],
+        "inspect worktree dirtiness",
+    )?;
+    Ok(status
+        .lines()
+        .filter_map(git_status_path)
+        .filter(|path| !path.starts_with(".atelier/"))
+        .collect::<Vec<_>>())
 }
 
 fn git_status_path(line: &str) -> Option<String> {
@@ -2990,7 +3486,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
     }
 
     #[test]
-    fn action_preflight_blocks_unimplemented_actions_before_execution() {
+    fn action_preflight_checks_git_actions_before_execution() {
         let issue = test_issue("atelier-epic1");
         let resolution = BranchLifecycleResolution {
             issue_id: "atelier-epic1".to_string(),
@@ -3011,7 +3507,7 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         let blockers = action_preflight_blockers(dir.path(), &unsupported);
         assert_eq!(blockers.len(), 1);
         assert!(blockers[0].contains("branch_integrate"));
-        assert!(blockers[0].contains("not implemented yet"));
+        assert!(blockers[0].contains("git repository is required"));
     }
 
     #[test]
