@@ -590,6 +590,149 @@ fn test_bundle_apply_accepts_partial_issue_key_refs() {
 }
 
 #[test]
+fn test_issue_create_update_and_transition_use_custom_issue_type() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_incident_issue_type_workflow(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Incident response",
+            "--issue-type",
+            "incident",
+        ],
+    );
+    assert!(success, "custom issue create failed: {stderr}");
+    assert!(stdout.contains("Type:     incident"), "{stdout}");
+    let issue_id = issue_id_by_title(dir.path(), "Incident response");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "custom issue transition failed: {stderr}");
+    assert!(stdout.contains("To:       in_progress"), "{stdout}");
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "custom issue show failed: {stderr}");
+    assert!(stdout.contains("Type:     incident"), "{stdout}");
+    assert!(stdout.contains("Status:   in_progress"), "{stdout}");
+
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "custom issue rebuild failed: {stderr}");
+}
+
+#[test]
+fn test_bundle_apply_accepts_configured_custom_issue_type() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_incident_issue_type_workflow(dir.path());
+    let bundle_path = dir.path().join("custom-type-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Custom type bundle",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.incident",
+        "title": "Bundled incident",
+        "issue_type": "incident",
+        "priority": "high"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "custom bundle apply failed: {stderr}");
+    assert!(stdout.contains("Bundle applied."));
+
+    let issue_id = issue_id_by_title(dir.path(), "Bundled incident");
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "custom bundled issue show failed: {stderr}");
+    assert!(stdout.contains("Type:     incident"), "{stdout}");
+}
+
+#[test]
+fn test_unregistered_issue_type_reports_configured_values() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_incident_issue_type_workflow(dir.path());
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Nope", "--issue-type", "ghost"],
+    );
+    assert!(!success, "unregistered issue type should fail");
+    assert!(stderr.contains("Invalid issue_type 'ghost'"), "{stderr}");
+    assert!(stderr.contains("incident"), "{stderr}");
+    assert!(!stderr.contains("decision"), "{stderr}");
+}
+
+#[test]
+fn test_issue_type_update_rejects_incompatible_existing_status_atomically() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "Archived task"]);
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Archived task");
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "archived")
+    });
+    let (success, _stdout, stderr) = run_atelier(dir.path(), &["rebuild"]);
+    assert!(success, "rebuild failed: {stderr}");
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &issue_id, "--issue-type", "spike"],
+    );
+    assert!(!success, "incompatible issue type update should fail");
+    assert!(
+        stderr.contains("status 'archived' that is not allowed")
+            || stderr.contains("not allowed by the workflow policy")
+            || stderr.contains("status 'archived' which is not valid"),
+        "{stderr}"
+    );
+
+    let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
+    assert!(issue_text.contains("issue_type: \"task\""), "{issue_text}");
+    assert!(
+        !issue_text.contains("issue_type: \"spike\""),
+        "{issue_text}"
+    );
+}
+
+#[test]
+fn test_issue_type_help_uses_workflow_policy_wording() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "create", "--help"]);
+    assert!(success, "issue create help failed: {stderr}");
+    assert!(
+        stdout.contains(".atelier/workflow.yaml issue_types"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("bug, epic, feature, spike, task, validation"));
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "update", "--help"]);
+    assert!(success, "issue update help failed: {stderr}");
+    assert!(
+        stdout.contains(".atelier/workflow.yaml issue_types"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("bug, epic, feature, spike, task, validation"));
+}
+
+#[test]
 fn test_plan_apply_command_is_removed() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -2254,6 +2397,21 @@ fn test_removed_issue_type_is_rejected() {
         );
         assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
     }
+}
+
+fn write_incident_issue_type_workflow(dir: &std::path::Path) {
+    let workflow_path = dir.join(".atelier/workflow.yaml");
+    let workflow = std::fs::read_to_string(&workflow_path)
+        .expect("failed to read workflow policy")
+        .replace(
+            "  task: { label: Task }\n  validation: { label: Validation }",
+            "  task: { label: Task }\n  incident: { label: Incident }\n  validation: { label: Validation }",
+        )
+        .replace(
+            "applies_to: [bug, feature, task]",
+            "applies_to: [bug, feature, incident, task]",
+        );
+    std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
 
 // ==================== Session Tests ====================

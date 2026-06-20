@@ -143,13 +143,15 @@ pub fn validate_priority(priority: &str) -> Result<()> {
 }
 
 pub fn validate_issue_type(issue_type: &str) -> Result<()> {
-    if VALID_ISSUE_TYPES.contains(&issue_type) {
+    let mut chars = issue_type.chars();
+    if matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
+        && chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
         Ok(())
     } else {
         bail!(
-            "Invalid issue_type '{}'. Valid values: {}",
+            "Invalid issue_type '{}'. Issue type values must match ^[a-z][a-z0-9_]*$",
             issue_type,
-            VALID_ISSUE_TYPES.join(", ")
         )
     }
 }

@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T01:26:53.422521432+00:00"
+status: "done"
 title: "Add workflow issue_types registry"
-updated_at: "2026-06-19T22:42:56.459230718+00:00"
+updated_at: "2026-06-20T01:26:53.422521432+00:00"
 ---
 
 ## Description

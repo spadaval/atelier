@@ -1485,7 +1485,7 @@ pub fn create_lifecycle(
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
     validate_priority(input.priority)?;
-    validate_issue_type(input.issue_type)?;
+    validate_configured_issue_type(state_dir, input.issue_type)?;
     let db = Database::open(db_path)?;
     let parent_id = input
         .parent
@@ -1557,6 +1557,46 @@ pub fn create_lifecycle(
     Ok(())
 }
 
+fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {
+    validate_issue_type(issue_type)?;
+    let policy = load_repo_policy(state_dir)?;
+    if policy.issue_types.contains_key(issue_type) {
+        Ok(())
+    } else {
+        bail!(
+            "Invalid issue_type '{}'. Valid values: {}",
+            issue_type,
+            configured_issue_type_names(&policy).join(", ")
+        )
+    }
+}
+
+fn validate_issue_record_against_workflow(state_dir: &Path, issue: &Issue) -> Result<()> {
+    let policy = load_repo_policy(state_dir)?;
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    let policy_path = repo_root.join(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    atelier_app::workflow_policy::validate_issue_against_policy(&policy, issue, &policy_path)
+}
+
+fn load_repo_policy(state_dir: &Path) -> Result<WorkflowPolicy> {
+    let repo_root = state_dir.parent().ok_or_else(|| {
+        anyhow!(
+            "cannot determine repository root from {}",
+            state_dir.display()
+        )
+    })?;
+    atelier_app::workflow_policy::load(repo_root)
+}
+
+fn configured_issue_type_names(policy: &WorkflowPolicy) -> Vec<String> {
+    policy.issue_types.keys().cloned().collect()
+}
+
 fn lifecycle_initial_status(state_dir: &Path, issue_type: &str) -> Result<String> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
@@ -1621,7 +1661,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         )?;
     }
     if let Some(issue_type) = input.issue_type {
-        validate_issue_type(issue_type)?;
+        validate_configured_issue_type(state_dir, issue_type)?;
         record.issue.issue_type = issue_type.to_string();
         changed_fields.push("issue_type");
         crate::commands::activity_log::record_field_changed(
@@ -1667,6 +1707,7 @@ pub fn update_lifecycle(state_dir: &Path, db_path: &Path, input: UpdateInput<'_>
         bail!("Nothing to update. Use --title, --priority, --issue-type, --label, --remove-label, or --parent. Use `atelier issue note <id> \"...\"` for notes or `atelier issue transition <id> <transition>` for status changes");
     }
     record.issue.updated_at = now;
+    validate_issue_record_against_workflow(state_dir, &record.issue)?;
     store.write_issue_atomic(&record)?;
 
     atelier_app::projection::refresh_after_canonical_write(state_dir, db_path)?;

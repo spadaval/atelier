@@ -83,6 +83,17 @@ pub fn lint(
         input.db.list_issues(Some("all"), None, None)?
     };
     let canonical_state_dir = crate::storage_layout::find_canonical_dir_from_cwd()?;
+    let workflow_policy = canonical_state_dir
+        .as_ref()
+        .and_then(|state_dir| state_dir.parent())
+        .and_then(|repo_root| {
+            crate::workflow_policy::load(repo_root).ok().map(|policy| {
+                (
+                    policy,
+                    repo_root.join(crate::workflow_policy::WORKFLOW_POLICY_PATH),
+                )
+            })
+        });
     let (canonical_issues, canonical_findings) = if let Some(state_dir) = &canonical_state_dir {
         let store = RecordStore::new(&state_dir);
         let mut records = BTreeMap::new();
@@ -140,11 +151,15 @@ pub fn lint(
                 message: "Issue title must not be empty".to_string(),
             });
         }
-        if !atelier_sqlite::VALID_ISSUE_TYPES.contains(&issue.issue_type.as_str()) {
-            findings.push(LintFinding {
-                id: issue_id_for_agent(&issue),
-                message: format!("Issue type '{}' is not valid", issue.issue_type),
-            });
+        if let Some((policy, policy_path)) = &workflow_policy {
+            if let Err(error) =
+                crate::workflow_policy::validate_issue_against_policy(policy, &issue, policy_path)
+            {
+                findings.push(LintFinding {
+                    id: issue_id_for_agent(&issue),
+                    message: error.to_string(),
+                });
+            }
         }
         for blocker_id in input.db.get_blockers(&issue.id)? {
             if input.db.get_issue(&blocker_id)?.is_none() {

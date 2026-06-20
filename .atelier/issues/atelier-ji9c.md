@@ -6,6 +6,10 @@ labels:
 - "implementation"
 - "issue-types"
 - "workflow-policy"
+review:
+  kind: pull_request
+  number: 10
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks:
@@ -22,9 +26,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Implement custom issue types"
-updated_at: "2026-06-19T22:42:57.218146883+00:00"
+updated_at: "2026-06-20T01:36:05.824729976+00:00"
 ---
 
 ## Description

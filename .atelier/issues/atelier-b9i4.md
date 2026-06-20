@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T01:35:19.605654445+00:00"
+status: "done"
 title: "Use repo-defined issue types across CLI surfaces"
-updated_at: "2026-06-19T22:42:56.461594169+00:00"
+updated_at: "2026-06-20T01:35:19.605654445+00:00"
 ---
 
 ## Description
