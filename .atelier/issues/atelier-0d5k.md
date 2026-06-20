@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-20T00:24:58.447770796+00:00"
+status: "done"
 title: "Migrate review artifact behavior to review actions"
-updated_at: "2026-06-20T00:19:58.241129890+00:00"
+updated_at: "2026-06-20T00:24:58.447770796+00:00"
 ---
 
 ## Description
