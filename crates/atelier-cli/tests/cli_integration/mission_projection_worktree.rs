@@ -3361,7 +3361,10 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     );
     assert!(success, "epic action close failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), "main");
-    assert!(close_out.contains("Action:   branch_commit"), "{close_out}");
+    assert!(
+        close_out.contains("Action:   tracker.commit"),
+        "{close_out}"
+    );
     assert!(
         close_out.contains("Action:   branch_integrate squash commit"),
         "{close_out}"

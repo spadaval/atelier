@@ -955,11 +955,11 @@ fn write_branch_action_workflow(dir: &Path) {
     );
     workflow = workflow.replace(
         "          - tracker.current\n\n  epic_delivery:",
-        "          - tracker.current\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  epic_delivery:",
+        "          - tracker.current\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",
     );
     workflow = workflow.replace(
-        "          - git.worktree_clean\n\n  validation_delivery:",
-        "          - git.worktree_clean\n        actions:\n          - branch_commit\n          - branch_integrate\n\n  validation_delivery:",
+        "          - tracker.commit\n          - branch.push\n          - review.merge\n          - base.sync",
+        "          - tracker.commit\n          - branch_integrate",
     );
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }

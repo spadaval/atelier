@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:11:16.173224031+00:00"
+status: "done"
 title: "Implement provider-owned terminal transition actions"
-updated_at: "2026-06-20T04:17:09.560361660+00:00"
+updated_at: "2026-06-20T05:11:16.173224031+00:00"
 ---
 
 ## Description

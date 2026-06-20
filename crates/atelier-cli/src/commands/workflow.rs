@@ -487,7 +487,14 @@ pub fn transition_issue(
     record_applied_actions(&before.id, transition_name, &planned_actions)?;
     record_applied_transition(&before, transition_name, transition)?;
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    match execute_post_transition_actions(&repo_root, &before, transition_name, &planned_actions) {
+    match execute_post_transition_actions(
+        &repo_root,
+        state_dir,
+        db_path,
+        &before,
+        transition_name,
+        &planned_actions,
+    ) {
         Ok(mut results) => action_results.append(&mut results),
         Err(error) => {
             if let Some(rollback) = git_rollback {
@@ -640,7 +647,9 @@ fn action_preflight_blockers(repo_root: &Path, planned_actions: &[PlannedAction]
         .filter_map(|action| {
             match action.name.as_str() {
                 "branch_prepare" => branch_prepare_preflight(repo_root, action),
-                "branch_commit" | "branch_integrate" => branch_post_action_preflight(repo_root, action),
+                "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate" => {
+                    branch_post_action_preflight(repo_root, action)
+                }
                 "review.open" => review_open_preflight(repo_root, action),
                 other => Some(format!(
                     "action {other} failed preflight: action execution is not implemented yet; retry after the owning action issue lands"
@@ -693,6 +702,18 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
             dirty.join("\n")
         )),
         Err(error) => Some(format!("action {} failed preflight: {error:#}", action.name)),
+        _ if provider_action_names(action.name.as_str()) && !review_config_is_provider(repo_root) => {
+            Some(format!(
+                "action {} failed preflight: provider terminal action requires review.mode = \"provider\"",
+                action.name
+            ))
+        }
+        _ if action.name == "branch_integrate" && review_config_is_provider(repo_root) => {
+            Some(
+                "action branch_integrate failed preflight: local branch integration is only valid for room review workflows"
+                    .to_string(),
+            )
+        }
         _ if action.name == "branch_integrate"
             && action.merge_owned
             && !branch_exists_at(repo_root, &action.base_branch).unwrap_or(false) =>
@@ -704,6 +725,24 @@ fn branch_post_action_preflight(repo_root: &Path, action: &PlannedAction) -> Opt
         }
         _ => None,
     }
+}
+
+fn provider_action_names(name: &str) -> bool {
+    matches!(name, "branch.push" | "review.merge" | "base.sync")
+}
+
+fn transition_git_action_names(name: &str) -> bool {
+    matches!(
+        name,
+        "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
+    )
+}
+
+fn review_config_is_provider(repo_root: &Path) -> bool {
+    matches!(
+        ProjectConfig::load(repo_root).map(|config| config.review),
+        Ok(ReviewConfig::Provider(_))
+    )
 }
 
 fn ensure_git_action_repo(repo_root: &Path, action: &PlannedAction) -> Result<(), String> {
@@ -792,7 +831,8 @@ fn execute_pre_transition_actions(
                     detail,
                 });
             }
-            "branch_commit" | "branch_integrate" => {}
+            "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
+            | "branch_integrate" => {}
             "review.open" => {
                 let detail = open_review_artifact_action(
                     db,
@@ -818,6 +858,8 @@ fn execute_pre_transition_actions(
 
 fn execute_post_transition_actions(
     repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
     issue: &Issue,
     transition_name: &str,
     planned_actions: &[PlannedAction],
@@ -825,8 +867,29 @@ fn execute_post_transition_actions(
     let mut applied = Vec::new();
     for action in planned_actions {
         match action.name.as_str() {
-            "branch_commit" => {
+            "tracker.commit" => {
                 let detail = commit_branch_action(repo_root, issue, transition_name, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "branch.push" => {
+                let detail = push_branch_action(repo_root, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "review.merge" => {
+                let detail = merge_review_action(repo_root, state_dir, db_path, issue, action)?;
+                applied.push(AppliedAction {
+                    name: action.name.clone(),
+                    detail,
+                });
+            }
+            "base.sync" => {
+                let detail = sync_base_action(repo_root, action)?;
                 applied.push(AppliedAction {
                     name: action.name.clone(),
                     detail,
@@ -1033,6 +1096,70 @@ fn integrate_branch_action(
             Ok(format!("fast-forward to {}", sha.trim()))
         }
     }
+}
+
+fn push_branch_action(repo_root: &Path, issue: &Issue, action: &PlannedAction) -> Result<String> {
+    ensure_expected_branch_checked_out(repo_root, issue, action)?;
+    git_checked(
+        repo_root,
+        &["push", "origin", &action.expected_branch],
+        "push action branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while pushing branch '{}'.\nRecovery: inspect `git status --short --branch`, provider remote configuration, and retry the transition for {}.",
+            action.name, action.expected_branch, issue.id
+        )
+    })?;
+    Ok(format!("pushed {}", action.expected_branch))
+}
+
+fn merge_review_action(
+    repo_root: &Path,
+    state_dir: &Path,
+    db_path: &Path,
+    issue: &Issue,
+    _action: &PlannedAction,
+) -> Result<String> {
+    let db = app_use_cases::open_database(db_path)?;
+    crate::commands::pr::merge(
+        &db,
+        repo_root,
+        &state_dir,
+        &db_path,
+        Some(&issue.id),
+        "manager",
+    )?;
+    Ok("provider review merged".to_string())
+}
+
+fn sync_base_action(repo_root: &Path, action: &PlannedAction) -> Result<String> {
+    git_checked(repo_root, &["fetch", "origin", &action.base_branch], "fetch base branch")
+        .with_context(|| {
+            format!(
+                "action {} failed while fetching base branch '{}'.\nRecovery: inspect the configured provider remote and retry the transition.",
+                action.name, action.base_branch
+            )
+        })?;
+    git_checked(repo_root, &["switch", &action.base_branch], "checkout base branch")
+        .with_context(|| {
+            format!(
+                "action {} failed while switching to base branch '{}'.\nRecovery: inspect `git status --short --branch` before retrying.",
+                action.name, action.base_branch
+            )
+        })?;
+    git_checked(
+        repo_root,
+        &["merge", "--ff-only", &format!("origin/{}", action.base_branch)],
+        "fast-forward base branch",
+    )
+    .with_context(|| {
+        format!(
+            "action {} failed while syncing base branch '{}'.\nRecovery: inspect local/base divergence before retrying.",
+            action.name, action.base_branch
+        )
+    })?;
+    Ok(format!("synced {}", action.base_branch))
 }
 
 fn ensure_expected_branch_checked_out(
@@ -1364,7 +1491,7 @@ fn transition_declares_branch_git_actions(
     transition.actions.iter().any(|action| {
         matches!(
             action.builtin.as_str(),
-            "branch_commit" | "branch_integrate"
+            "tracker.commit" | "branch.push" | "review.merge" | "base.sync" | "branch_integrate"
         )
     })
 }
@@ -1396,7 +1523,7 @@ impl TransitionGitRollback {
     ) -> Result<Option<Self>> {
         if !planned_actions
             .iter()
-            .any(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+            .any(|action| transition_git_action_names(action.name.as_str()))
         {
             return Ok(None);
         }
@@ -1405,7 +1532,7 @@ impl TransitionGitRollback {
         }
         let Some(action) = planned_actions
             .iter()
-            .find(|action| matches!(action.name.as_str(), "branch_commit" | "branch_integrate"))
+            .find(|action| transition_git_action_names(action.name.as_str()))
         else {
             return Ok(None);
         };
@@ -3515,6 +3642,39 @@ admin_token_env = "ATELIER_TEST_FORGEJO_TOKEN"
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|action| action.skip_reason.is_none()));
         assert!(plan.iter().all(|action| action.block_reason.is_none()));
+    }
+
+    #[test]
+    fn provider_terminal_actions_plan_without_local_branch_integrate() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: atelier_app::workflow_policy::BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+        let actions = vec![
+            action("tracker.commit"),
+            action("branch.push"),
+            action("review.merge"),
+            action("base.sync"),
+        ];
+
+        let plan = plan_actions_for_resolution(&issue, &resolution, &actions);
+
+        assert_eq!(
+            plan.iter()
+                .map(|action| action.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tracker.commit", "branch.push", "review.merge", "base.sync"]
+        );
+        assert!(plan.iter().all(|action| !action.confirmation_required));
+        assert!(plan.iter().all(|action| action.name != "branch_integrate"));
     }
 
     #[test]

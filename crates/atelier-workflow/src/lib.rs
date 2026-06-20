@@ -104,6 +104,11 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch.push
+          - review.merge
+          - base.sync
 
   validation_delivery:
     applies_to: [validation]
@@ -141,6 +146,11 @@ workflows:
           - lint.none_blocking
           - tracker.current
           - git.worktree_clean
+        actions:
+          - tracker.commit
+          - branch.push
+          - review.merge
+          - base.sync
 
   spike_review:
     applies_to: [spike]
@@ -192,7 +202,10 @@ const BUILTIN_VALIDATORS: &[&str] = &[
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
     "branch_prepare",
-    "branch_commit",
+    "tracker.commit",
+    "branch.push",
+    "review.merge",
+    "base.sync",
     "branch_integrate",
     "review.open",
 ];
