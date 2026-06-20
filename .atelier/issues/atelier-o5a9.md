@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T05:03:05.581385891+00:00"
+status: "done"
 title: "Remove validator attempts from session tracking"
-updated_at: "2026-06-20T04:31:19.739896981+00:00"
+updated_at: "2026-06-20T05:03:05.581385891+00:00"
 ---
 
 ## Description
