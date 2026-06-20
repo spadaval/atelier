@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-20T00:34:37.911090622+00:00"
+status: "done"
 title: "Implement git transition actions"
-updated_at: "2026-06-19T22:42:56.476008420+00:00"
+updated_at: "2026-06-20T00:34:37.911090622+00:00"
 ---
 
 ## Description

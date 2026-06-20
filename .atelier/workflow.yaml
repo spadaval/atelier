@@ -61,8 +61,15 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
-          - review_artifact_open
+        actions:
+          - review.open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -94,8 +101,15 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
-          - review_artifact_open
+        actions:
+          - review.open:
+              provider: forgejo
+              role: worker
+              role_authors:
+                worker: atelier-worker
+                reviewer: atelier-reviewer
+                validator: atelier-validator
+                manager: atelier-manager
       request_validation:
         from: [in_progress, review]
         to: validation

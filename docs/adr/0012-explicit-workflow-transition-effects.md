@@ -40,10 +40,8 @@ are hard to preview, validate, and recover.
    - `issue_status_write`: write canonical issue status and transition activity.
    - `owner_branch_commit`: commit tracker state on the workflow-derived owner branch.
    - `owner_branch_integrate`: integrate the owner branch to the configured base.
-   - `review_artifact_open`: open or reuse the configured review artifact and
+   - `review.open`: open or reuse the configured review artifact and
      write the branch owner's `review` field.
-   - `review_artifact_link`: normalize and write an existing configured provider
-     review artifact link.
 
 4. Review artifact effects respect ADR 0011.
    They use the configured review mode. In room mode they create or reuse a

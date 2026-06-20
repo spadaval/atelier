@@ -1477,6 +1477,14 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         transition_out.contains("block [allowed]"),
         "{transition_out}"
     );
+    assert!(
+        transition_out.contains("Planned Actions"),
+        "{transition_out}"
+    );
+    assert!(
+        !transition_out.contains("Planned Effects"),
+        "{transition_out}"
+    );
     assert!(transition_out.contains(&format!("atelier issue transition {issue_id} start")));
     let git_after = git_status_short(dir.path());
     assert_eq!(

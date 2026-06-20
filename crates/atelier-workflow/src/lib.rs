@@ -74,8 +74,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
-          - review_artifact_open
+        actions:
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -107,8 +107,8 @@ workflows:
       request_review:
         from: [in_progress]
         to: review
-        effects:
-          - review_artifact_open
+        actions:
+          - review.open: { role: worker }
       request_validation:
         from: [in_progress, review]
         to: validation
@@ -168,12 +168,11 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "no_blocking_lints",
     "git_worktree_clean",
 ];
-const BUILTIN_EFFECTS: &[&str] = &[
-    "issue_status_write",
-    "owner_branch_commit",
-    "owner_branch_integrate",
-    "review_artifact_open",
-    "review_artifact_link",
+const BUILTIN_ACTIONS: &[&str] = &[
+    "branch_prepare",
+    "branch_commit",
+    "branch_integrate",
+    "review.open",
 ];
 const ALLOWED_REQUIRED_FIELDS: &[&str] = &["close_reason"];
 const DEFERRED_TOP_LEVEL_FIELDS: &[&str] = &[
@@ -297,8 +296,9 @@ pub struct ValidatorDefinition {
 }
 
 #[derive(Debug, Clone)]
-pub struct EffectDefinition {
+pub struct ActionDefinition {
     pub builtin: String,
+    pub params: Option<ActionParams>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,6 +307,26 @@ pub enum ValidatorParams {
         min_count: i64,
         kind: Option<String>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActionParams {
+    ReviewArtifact(ReviewArtifactActionParams),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewArtifactActionParams {
+    pub provider: Option<String>,
+    pub role: String,
+    pub role_authors: Option<WorkflowForgejoRoleAuthors>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowForgejoRoleAuthors {
+    pub worker: String,
+    pub reviewer: String,
+    pub validator: String,
+    pub manager: String,
 }
 
 #[derive(Debug, Clone)]
@@ -329,7 +349,7 @@ pub struct TransitionDefinition {
     pub required_fields: Vec<String>,
     pub description: Option<String>,
     pub validators: Vec<ValidatorDefinition>,
-    pub effects: Vec<EffectDefinition>,
+    pub actions: Vec<ActionDefinition>,
 }
 
 impl WorkflowPolicy {
@@ -477,7 +497,7 @@ struct TransitionDefinitionRaw {
     #[serde(default)]
     validators: Vec<Value>,
     #[serde(default)]
-    effects: Vec<Value>,
+    actions: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1131,10 +1151,10 @@ fn parse_transition_definition(
         &raw.validators,
         display_path,
     )?;
-    let effects = parse_transition_effects(
+    let actions = parse_transition_actions(
         workflow_name,
         transition_name,
-        &raw.effects,
+        &raw.actions,
         &raw.to,
         display_path,
     )?;
@@ -1145,77 +1165,302 @@ fn parse_transition_definition(
         required_fields: raw.required_fields,
         description: raw.description,
         validators,
-        effects,
+        actions,
     })
 }
 
-fn parse_transition_effects(
+fn parse_transition_actions(
     workflow_name: &str,
     transition_name: &str,
     raw: &[Value],
     to_status: &str,
     display_path: &str,
-) -> Result<Vec<EffectDefinition>> {
-    let mut effects = Vec::new();
+) -> Result<Vec<ActionDefinition>> {
+    let mut actions = Vec::new();
     let mut seen = BTreeSet::new();
     for value in raw {
-        let name = value.as_str().ok_or_else(|| {
-            policy_error(
-                "workflow_config_invalid_effect",
-                display_path,
-                format!(
-                    "workflows.{}.transitions.{}.effects must contain built-in effect strings",
-                    workflow_name, transition_name
-                ),
-            )
-        })?;
-        validate_builtin_effect_name(workflow_name, transition_name, name, display_path)?;
+        let action = parse_transition_action_definition(
+            workflow_name,
+            transition_name,
+            value,
+            display_path,
+        )?;
+        let name = action.builtin.as_str();
+        validate_builtin_action_name(workflow_name, transition_name, name, display_path)?;
         if !seen.insert(name.to_string()) {
             return Err(policy_error(
-                "workflow_config_invalid_effect",
+                "workflow_config_invalid_action",
                 display_path,
                 format!(
-                    "workflows.{}.transitions.{}.effects contains duplicate effect '{}'",
+                    "workflows.{}.transitions.{}.actions contains duplicate action '{}'",
                     workflow_name, transition_name, name
                 ),
             ));
         }
-        if matches!(name, "review_artifact_open" | "review_artifact_link") && to_status != "review"
-        {
+        if name == "review.open" && to_status != "review" {
             return Err(policy_error(
-                "workflow_config_invalid_effect",
+                "workflow_config_invalid_action",
                 display_path,
                 format!(
-                    "workflows.{}.transitions.{}.effects declares '{}' but review artifact effects are only supported on transitions to review",
+                    "workflows.{}.transitions.{}.actions declares '{}' but review artifact actions are only supported on transitions to review",
                     workflow_name, transition_name, name
                 ),
             ));
         }
-        effects.push(EffectDefinition {
-            builtin: name.to_string(),
-        });
+        actions.push(action);
     }
-    Ok(effects)
+    Ok(actions)
 }
 
-fn validate_builtin_effect_name(
+fn parse_transition_action_definition(
     workflow_name: &str,
     transition_name: &str,
-    effect_name: &str,
+    value: &Value,
+    display_path: &str,
+) -> Result<ActionDefinition> {
+    match value {
+        Value::String(name) => {
+            parse_transition_action_params(workflow_name, transition_name, name, None, display_path)
+        }
+        Value::Mapping(mapping) if mapping.len() == 1 => {
+            let (key, params) = mapping.iter().next().expect("mapping has one entry");
+            let Some(name) = key.as_str() else {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    format!(
+                        "workflows.{}.transitions.{}.actions",
+                        workflow_name, transition_name
+                    ),
+                    "action map keys must be strings",
+                ));
+            };
+            parse_transition_action_params(
+                workflow_name,
+                transition_name,
+                name,
+                Some(params),
+                display_path,
+            )
+        }
+        Value::Mapping(_) => Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.actions",
+                workflow_name, transition_name
+            ),
+            "action maps must contain exactly one built-in action name",
+        )),
+        _ => Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!(
+                "workflows.{}.transitions.{}.actions",
+                workflow_name, transition_name
+            ),
+            "actions must contain built-in action strings or parameter objects",
+        )),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReviewArtifactActionParamsRaw {
+    provider: Option<String>,
+    role: Option<String>,
+    role_authors: Option<WorkflowForgejoRoleAuthorsRaw>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowForgejoRoleAuthorsRaw {
+    worker: Option<String>,
+    reviewer: Option<String>,
+    validator: Option<String>,
+    manager: Option<String>,
+}
+
+fn parse_transition_action_params(
+    workflow_name: &str,
+    transition_name: &str,
+    name: &str,
+    params: Option<&Value>,
+    display_path: &str,
+) -> Result<ActionDefinition> {
+    let field = format!(
+        "workflows.{}.transitions.{}.actions.{}",
+        workflow_name, transition_name, name
+    );
+    if name == "review.open" {
+        let params = params.ok_or_else(|| {
+            policy_error_with_field(
+                "workflow_config_invalid_action",
+                display_path,
+                &field,
+                format!("built-in action '{}' requires params", name),
+            )
+        })?;
+        let raw = deserialize_entry::<ReviewArtifactActionParamsRaw>(
+            params,
+            display_path,
+            &field,
+            "workflow_config_invalid_action",
+        )?;
+        let role = raw.role.ok_or_else(|| {
+            policy_error_with_field(
+                "workflow_config_invalid_action",
+                display_path,
+                format!("{field}.role"),
+                format!("built-in action '{}' requires role", name),
+            )
+        })?;
+        validate_workflow_role(&role, display_path, &format!("{field}.role"))?;
+        let role_authors = parse_workflow_forgejo_role_authors(
+            raw.role_authors,
+            raw.provider.as_deref(),
+            display_path,
+            &field,
+        )?;
+        if let Some(provider) = &raw.provider {
+            if provider != "forgejo" {
+                return Err(policy_error_with_field(
+                    "workflow_config_invalid_action",
+                    display_path,
+                    format!("{field}.provider"),
+                    format!(
+                        "built-in action '{}' provider must be 'forgejo', got '{}'",
+                        name, provider
+                    ),
+                ));
+            }
+        }
+        return Ok(ActionDefinition {
+            builtin: name.to_string(),
+            params: Some(ActionParams::ReviewArtifact(ReviewArtifactActionParams {
+                provider: raw.provider,
+                role,
+                role_authors,
+            })),
+        });
+    }
+
+    if let Some(params) = params {
+        let params = params.as_mapping().ok_or_else(|| {
+            policy_error_with_field(
+                "workflow_config_invalid_action",
+                display_path,
+                &field,
+                "action params must be a mapping",
+            )
+        })?;
+        if !params.is_empty() {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_action",
+                display_path,
+                &field,
+                format!("built-in action '{}' does not accept params", name),
+            ));
+        }
+    }
+
+    Ok(ActionDefinition {
+        builtin: name.to_string(),
+        params: None,
+    })
+}
+
+fn validate_workflow_role(role: &str, display_path: &str, field: &str) -> Result<()> {
+    if ["worker", "reviewer", "validator", "manager"].contains(&role) {
+        return Ok(());
+    }
+    Err(policy_error_with_field(
+        "workflow_config_invalid_action",
+        display_path,
+        field,
+        format!(
+            "role must be worker, reviewer, validator, or manager, got '{}'",
+            role
+        ),
+    ))
+}
+
+fn parse_workflow_forgejo_role_authors(
+    raw: Option<WorkflowForgejoRoleAuthorsRaw>,
+    provider: Option<&str>,
+    display_path: &str,
+    field: &str,
+) -> Result<Option<WorkflowForgejoRoleAuthors>> {
+    let Some(raw) = raw else {
+        if provider == Some("forgejo") {
+            return Err(policy_error_with_field(
+                "workflow_config_invalid_action",
+                display_path,
+                format!("{field}.role_authors"),
+                "Forgejo review artifact actions require role_authors",
+            ));
+        }
+        return Ok(None);
+    };
+    if provider != Some("forgejo") {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!("{field}.role_authors"),
+            "role_authors is only supported with provider: forgejo",
+        ));
+    }
+    Ok(Some(WorkflowForgejoRoleAuthors {
+        worker: require_workflow_role_author(raw.worker, display_path, field, "worker")?,
+        reviewer: require_workflow_role_author(raw.reviewer, display_path, field, "reviewer")?,
+        validator: require_workflow_role_author(raw.validator, display_path, field, "validator")?,
+        manager: require_workflow_role_author(raw.manager, display_path, field, "manager")?,
+    }))
+}
+
+fn require_workflow_role_author(
+    value: Option<String>,
+    display_path: &str,
+    field: &str,
+    role: &str,
+) -> Result<String> {
+    let value = value.ok_or_else(|| {
+        policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!("{field}.role_authors.{role}"),
+            format!("Forgejo role author '{}' is required", role),
+        )
+    })?;
+    if value.trim().is_empty() {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_action",
+            display_path,
+            format!("{field}.role_authors.{role}"),
+            format!("Forgejo role author '{}' must not be empty", role),
+        ));
+    }
+    Ok(value)
+}
+
+fn validate_builtin_action_name(
+    workflow_name: &str,
+    transition_name: &str,
+    action_name: &str,
     display_path: &str,
 ) -> Result<()> {
-    if BUILTIN_EFFECTS.contains(&effect_name) {
+    if BUILTIN_ACTIONS.contains(&action_name) {
         return Ok(());
     }
     Err(policy_error(
-        "workflow_config_invalid_effect",
+        "workflow_config_invalid_action",
         display_path,
         format!(
-            "workflows.{}.transitions.{}.effects has unsupported built-in effect '{}'; expected {}",
+            "workflows.{}.transitions.{}.actions has unsupported built-in action '{}'; expected {}",
             workflow_name,
             transition_name,
-            effect_name,
-            BUILTIN_EFFECTS.join(", ")
+            action_name,
+            BUILTIN_ACTIONS.join(", ")
         ),
     ))
 }
@@ -2003,55 +2248,133 @@ mod tests {
             })
         );
         assert_eq!(
-            effect_names(&policy.workflows["epic_reviewed"].transitions["request_review"].effects),
-            vec!["review_artifact_open"]
+            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
+            vec!["review.open"]
         );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
     }
 
-    fn effect_names(effects: &[EffectDefinition]) -> Vec<&str> {
-        effects
+    fn action_names(actions: &[ActionDefinition]) -> Vec<&str> {
+        actions
             .iter()
-            .map(|effect| effect.builtin.as_str())
+            .map(|action| action.builtin.as_str())
             .collect()
     }
 
+    fn review_action_line() -> &'static str {
+        "          - review.open: { role: worker }"
+    }
+
     #[test]
-    fn rejects_unknown_transition_effect() {
-        let policy =
-            valid_policy().replace("          - review_artifact_open", "          - nope_run");
+    fn rejects_unknown_transition_action() {
+        let policy = valid_policy().replace(review_action_line(), "          - nope_run");
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
         assert!(error.contains("nope_run"));
     }
 
     #[test]
-    fn rejects_duplicate_transition_effect() {
+    fn rejects_legacy_review_artifact_action_identifier() {
+        let legacy_name = ["review", "artifact", "open"].join("_");
         let policy = valid_policy().replace(
-            "          - review_artifact_open",
-            "          - review_artifact_open\n          - review_artifact_open",
+            review_action_line(),
+            &format!("          - {legacy_name}: {{ role: worker }}"),
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
-        assert!(error.contains("duplicate effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains(&legacy_name));
     }
 
     #[test]
-    fn rejects_review_effect_on_non_review_transition() {
+    fn rejects_duplicate_transition_action() {
         let policy = valid_policy().replace(
-            "      close:\n        from: [in_progress, validation]",
-            "      close:\n        from: [in_progress, validation]\n        effects: [review_artifact_open]",
+            review_action_line(),
+            "          - review.open: { role: worker }\n          - review.open: { role: worker }",
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("workflow_config_invalid_effect"));
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("duplicate action"));
+    }
+
+    #[test]
+    fn rejects_review_action_on_non_review_transition() {
+        let policy = valid_policy().replace(
+            "      close:\n        from: [in_progress, validation]",
+            "      close:\n        from: [in_progress, validation]\n        actions:\n          - review.open: { role: worker }",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_action"));
         assert!(error.contains("transitions to review"));
+    }
+
+    #[test]
+    fn rejects_legacy_transition_effects_field() {
+        let policy = valid_policy().replace("actions:", "effects:");
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("effects"));
+    }
+
+    #[test]
+    fn accepts_empty_action_param_object() {
+        let policy = valid_policy().replace(
+            "        actions:\n          - review.open: { role: worker }",
+            "        actions:\n          - branch_prepare: {}",
+        );
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(
+            action_names(&policy.workflows["epic_reviewed"].transitions["request_review"].actions),
+            vec!["branch_prepare"]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_action_params() {
+        let policy = valid_policy().replace(
+            review_action_line(),
+            "          - review.open: { provider: forgejo, role: worker }",
+        );
+        let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("workflow_config_invalid_action"));
+        assert!(error.contains("role_authors"));
+    }
+
+    #[test]
+    fn parses_forgejo_review_action_params() {
+        let policy = valid_policy().replace(
+            review_action_line(),
+            "          - review.open:\n              provider: forgejo\n              role: worker\n              role_authors:\n                worker: forge-worker\n                reviewer: forge-reviewer\n                validator: forge-validator\n                manager: forge-manager",
+        );
+
+        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+        let action = &policy.workflows["epic_reviewed"].transitions["request_review"].actions[0];
+
+        assert_eq!(action.builtin, "review.open");
+        assert_eq!(
+            action.params.as_ref(),
+            Some(&ActionParams::ReviewArtifact(ReviewArtifactActionParams {
+                provider: Some("forgejo".to_string()),
+                role: "worker".to_string(),
+                role_authors: Some(WorkflowForgejoRoleAuthors {
+                    worker: "forge-worker".to_string(),
+                    reviewer: "forge-reviewer".to_string(),
+                    validator: "forge-validator".to_string(),
+                    manager: "forge-manager".to_string(),
+                }),
+            }))
+        );
     }
 
     #[test]

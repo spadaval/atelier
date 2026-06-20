@@ -51,10 +51,8 @@ context is computed from the work graph plus repository branch policy.
      workflow-derived owner branch.
    - `branch_integrate`: integrate the owner branch to the configured base
      branch using the configured merge strategy.
-   - `review_artifact_open`: open or reuse the branch owner's configured review
+   - `review.open`: open or reuse the branch owner's configured review
      artifact and write the canonical `review` field.
-   - `review_artifact_link`: normalize and write an existing configured
-     provider review artifact link.
 
 5. Minimal workflow-engine behavior remains intrinsic.
    The workflow engine intrinsically loads the strict `.atelier/workflow.yaml`
