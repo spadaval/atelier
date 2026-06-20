@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-use crate::commands::agent_factory::issue_evidence_gate_status;
+use crate::commands::issue::issue_evidence_gate_status;
 use atelier_app::forgejo::{ForgejoClient, ForgejoTransport, UreqForgejoTransport};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
@@ -77,7 +77,7 @@ pub fn transition_issue(
     transition_name: &str,
     close_reason: Option<&str>,
 ) -> Result<()> {
-    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let before = db.require_issue(&issue_id)?;
@@ -940,7 +940,7 @@ pub fn close_issue(
     to_status: Option<&str>,
     close_reason: &str,
 ) -> Result<()> {
-    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
     let repo_root = repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;

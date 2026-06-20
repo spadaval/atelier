@@ -772,7 +772,7 @@ fn template_default_issue_type(template: &str) -> &'static str {
 }
 
 fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
-    match commands::agent_factory::resolve_id(db, issue_ref) {
+    match commands::issue::resolve_id(db, issue_ref) {
         Ok(id) => Ok(id),
         Err(error) => match db.record_kind_for_id(issue_ref)? {
             Some(actual_kind) if actual_kind != "issue" => {
@@ -855,10 +855,10 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 &label,
                 issue_type.as_deref(),
             )?;
-            commands::agent_factory::create_lifecycle(
+            commands::issue::create_lifecycle(
                 &state_dir,
                 &db_path,
-                commands::agent_factory::LifecycleCreateInput {
+                commands::issue::LifecycleCreateInput {
                     title: &title,
                     description: final_description.as_deref(),
                     priority: &final_priority,
@@ -888,7 +888,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                 }
                 commands::deps::list_blocked(&db, quiet)
             } else {
-                commands::agent_factory::list(
+                commands::issue::list(
                     &db,
                     Some(&status),
                     category.as_deref(),
@@ -902,7 +902,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
 
         IssueCommands::Show { id } => {
             let db = degraded_projection_query_db()?;
-            commands::agent_factory::show(&db, &id)
+            commands::issue::show(&db, &id)
         }
 
         IssueCommands::Status { id } => {
@@ -921,7 +921,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
                     bail!("--options cannot be combined with a transition name");
                 }
                 let db = degraded_projection_query_db()?;
-                commands::agent_factory::transition_options(&db, &id)
+                commands::issue::transition_options(&db, &id)
             } else {
                 let transition = transition.ok_or_else(|| {
                     anyhow::anyhow!(
@@ -953,10 +953,10 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             no_parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            commands::agent_factory::update_lifecycle(
+            commands::issue::update_lifecycle(
                 &state_dir,
                 &db_path,
-                commands::agent_factory::UpdateInput {
+                commands::issue::UpdateInput {
                     issue_ref: &id,
                     title: title.as_deref(),
                     priority: priority.as_deref(),
@@ -993,7 +993,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_add_canonical(&db, &store, &id, &blocker)?;
+            commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1002,7 +1002,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
             let store = RecordStore::new(&state_dir);
-            commands::agent_factory::dep_remove_canonical(&db, &store, &id, &blocker)?;
+            commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -1010,7 +1010,7 @@ fn dispatch_issue(action: IssueCommands, quiet: bool) -> Result<()> {
         IssueCommands::Blocked { id } => {
             let db = projection_query_db()?;
             if let Some(id) = id {
-                commands::agent_factory::dep_list(&db, Some(&id))
+                commands::issue::dep_list(&db, Some(&id))
             } else {
                 commands::deps::list_blocked(&db, quiet)
             }
@@ -1063,7 +1063,7 @@ fn run() -> Result<()> {
 
         Commands::Search { query } => {
             let db = degraded_projection_query_db()?;
-            commands::agent_factory::search(&db, &query, quiet)
+            commands::issue::search(&db, &query, quiet)
         }
 
         Commands::Export { output, check } => {
@@ -1072,7 +1072,7 @@ fn run() -> Result<()> {
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
-            commands::agent_factory::export_canonical(storage.db(), &state_dir, check)
+            commands::issue::export_canonical(storage.db(), &state_dir, check)
         }
 
         Commands::Rebuild { input } => {
@@ -1082,7 +1082,7 @@ fn run() -> Result<()> {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| storage.state_dir());
             let db_path = storage.db_path();
-            commands::agent_factory::rebuild(&state_dir, &db_path)
+            commands::issue::rebuild(&state_dir, &db_path)
         }
 
         Commands::ImportBeads { input, output } => {
@@ -1551,12 +1551,12 @@ fn run() -> Result<()> {
 
         Commands::Lint { id } => {
             let db = lint_db()?;
-            commands::agent_factory::lint(&db, id.as_deref())
+            commands::issue::lint(&db, id.as_deref())
         }
 
         Commands::Doctor { fix } => {
             let storage = command_storage(CommandStorageAccess::HealthRepair)?;
-            commands::agent_factory::doctor(
+            commands::issue::doctor(
                 storage.db(),
                 storage.repo_root(),
                 &storage.state_dir(),

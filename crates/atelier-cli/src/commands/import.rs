@@ -516,7 +516,7 @@ mod tests {
         .unwrap();
         import_beads_jsonl(&db, &import_path).unwrap();
 
-        super::super::agent_factory::show(&db, &record_id::legacy_issue_id(2)).unwrap();
+        super::super::issue::show(&db, &record_id::legacy_issue_id(2)).unwrap();
         assert!(db
             .update_issue(
                 record_id::legacy_issue_id(2),

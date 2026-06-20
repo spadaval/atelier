@@ -77,8 +77,8 @@ pub fn link_issue(
 ) -> Result<()> {
     validate_relation_type(role)?;
     let db = Database::open(db_path)?;
-    let issue_id = crate::commands::agent_factory::resolve_id(&db, issue_ref)?;
-    let target_id = crate::commands::agent_factory::resolve_id(&db, target_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(&db, issue_ref)?;
+    let target_id = crate::commands::issue::resolve_id(&db, target_ref)?;
     let store = RecordStore::new(state_dir);
     let changed = if role == BLOCKED_BY_ROLE {
         store.add_issue_block(&issue_id, &target_id)?
@@ -163,8 +163,8 @@ pub fn unlink_issue(
 ) -> Result<()> {
     validate_relation_type(role)?;
     let db = Database::open(db_path)?;
-    let issue_id = crate::commands::agent_factory::resolve_id(&db, issue_ref)?;
-    let target_id = crate::commands::agent_factory::resolve_id(&db, target_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(&db, issue_ref)?;
+    let target_id = crate::commands::issue::resolve_id(&db, target_ref)?;
     let store = RecordStore::new(state_dir);
     let changed = if role == BLOCKED_BY_ROLE {
         store.remove_issue_block(&issue_id, &target_id)?

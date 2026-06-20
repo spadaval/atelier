@@ -53,7 +53,7 @@ pub fn issue_transition_options(
     db: &Database,
     issue_ref: &str,
 ) -> Result<Vec<IssueTransitionOption>> {
-    let issue_id = crate::commands::agent_factory::resolve_id(db, issue_ref)?;
+    let issue_id = crate::commands::issue::resolve_id(db, issue_ref)?;
     let repo_root = crate::commands::workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let issue = db.require_issue(&issue_id)?;

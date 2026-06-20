@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split issue command implementation out of agent_factory.rs"
-updated_at: "2026-06-20T17:02:11.230262584+00:00"
+updated_at: "2026-06-20T20:17:17.560298816+00:00"
 ---
 
 ## Description

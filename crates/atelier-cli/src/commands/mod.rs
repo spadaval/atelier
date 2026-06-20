@@ -1,5 +1,4 @@
 pub mod activity_log;
-pub mod agent_factory;
 pub mod bundle;
 pub mod comment;
 pub mod create;
@@ -10,6 +9,7 @@ pub mod forgejo;
 pub mod history;
 pub mod import;
 pub mod init;
+pub mod issue;
 pub mod issue_status;
 pub mod issue_workflow;
 pub mod label;
