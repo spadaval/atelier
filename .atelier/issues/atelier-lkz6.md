@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "blocked"
+status: "in_progress"
 title: "Validate workflow-driven evidence behavior end to end"
-updated_at: "2026-06-21T19:55:52.310583087+00:00"
+updated_at: "2026-06-21T19:57:09.017341293+00:00"
 ---
 
 ## Description
