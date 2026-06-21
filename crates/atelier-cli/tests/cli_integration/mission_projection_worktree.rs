@@ -598,6 +598,33 @@ fn test_mission_close_uses_configured_objective_validators() {
 }
 
 #[test]
+fn test_root_status_reports_current_mission_counts_without_active_focus() {
+    let zero = tempdir().unwrap();
+    init_atelier(zero.path());
+    let (success, zero_out, stderr) = run_atelier(zero.path(), &["status"]);
+    assert!(success, "zero mission status failed: {stderr}");
+    assert!(zero_out.contains("Current missions: 0"), "{zero_out}");
+    assert!(!zero_out.contains("Active mission:"), "{zero_out}");
+
+    let one = tempdir().unwrap();
+    init_atelier(one.path());
+    create_mission_fixture(one.path(), "One current objective");
+    let (success, one_out, stderr) = run_atelier(one.path(), &["status"]);
+    assert!(success, "one mission status failed: {stderr}");
+    assert!(one_out.contains("Current missions: 1"), "{one_out}");
+    assert!(!one_out.contains("Active mission:"), "{one_out}");
+
+    let many = tempdir().unwrap();
+    init_atelier(many.path());
+    create_mission_fixture(many.path(), "First current objective");
+    create_mission_fixture(many.path(), "Second current objective");
+    let (success, many_out, stderr) = run_atelier(many.path(), &["status"]);
+    assert!(success, "many mission status failed: {stderr}");
+    assert!(many_out.contains("Current missions: 2"), "{many_out}");
+    assert!(!many_out.contains("Active mission:"), "{many_out}");
+}
+
+#[test]
 fn test_mission_closeout_enforces_gates_and_reopen_skips_close_validators() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());

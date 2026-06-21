@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove mission-specific lifecycle and focus code"
-updated_at: "2026-06-21T16:37:30.764931023+00:00"
+updated_at: "2026-06-21T18:56:33.429698789+00:00"
 ---
 
 ## Description

@@ -200,16 +200,8 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
 }
 
 fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
-    let Some(mission) = crate::commands::mission::active_mission(db)? else {
-        return Ok(());
-    };
-    if crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)? {
-        println!("Mission: {} (active)", mission.id);
-    } else {
-        println!(
-            "Warning: {issue_id} is outside active mission {}; non-mission work remains allowed.",
-            mission.id
-        );
+    if let Some(mission_id) = containing_mission(db, issue_id)? {
+        println!("Mission: {mission_id} (linked)");
     }
     Ok(())
 }

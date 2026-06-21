@@ -40,10 +40,7 @@ pub fn status(
 ) -> Result<()> {
     match id {
         Some(id) => status_one(db, state_dir, id, quiet, verbose),
-        None => match active_mission(db)? {
-            Some(record) => status_one(db, state_dir, &record.id, quiet, verbose),
-            None => status_dashboard(db, state_dir, quiet),
-        },
+        None => status_dashboard(db, state_dir, quiet),
     }
 }
 
@@ -165,7 +162,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
                 "  {} [{}] {} - {} | {} | evidence gaps {} | terminal {}",
                 row.record.id,
                 health,
-                mission_focus_label(&row.record),
+                mission_lifecycle_status(&row.record),
                 row.record.title,
                 work.to_compact_text(),
                 row.summary.evidence_gap_count(),
@@ -227,7 +224,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     let identity = format!(
         "Mission Status {} [{}] - {}",
         mission.id,
-        mission_focus_label(&mission),
+        mission_lifecycle_status(&mission),
         mission_title
     );
     println!("{identity}");
@@ -612,24 +609,6 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
         bail!("Cannot locate canonical Atelier state directory");
     };
     app_use_cases::load_canonical_mission(&state_dir, id)
-}
-
-pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
-    let active = current_mission_records(db)?
-        .into_iter()
-        .filter(is_active_mission)
-        .collect::<Vec<_>>();
-    if active.len() > 1 {
-        bail!(
-            "Multiple active missions found: {}. Run `atelier lint` and switch one mission focus.",
-            active
-                .iter()
-                .map(|record| record.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-    Ok(active.into_iter().next())
 }
 
 fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
@@ -2033,14 +2012,6 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
         })
         .collect::<Vec<_>>();
     crate::commands::objective_status::order_issues_by_work_with_default(db, issues)
-}
-
-fn is_active_mission(record: &RecordSummary) -> bool {
-    record.status == "active"
-}
-
-fn mission_focus_label(record: &RecordSummary) -> String {
-    mission_lifecycle_status(record)
 }
 
 fn count_label(count: usize, label: &str) -> String {
