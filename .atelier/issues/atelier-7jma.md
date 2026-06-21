@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "artifact-update"
 - "mission-rework"
+review:
+  kind: pull_request
+  number: 17
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Define minimal mission contract"
-updated_at: "2026-06-21T18:33:07.193809853+00:00"
+updated_at: "2026-06-21T18:34:01.666793146+00:00"
 ---
 
 ## Description
