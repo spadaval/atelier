@@ -18,9 +18,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T18:44:23.027740609+00:00"
+status: "done"
 title: "Require mission type declaration and workflow coverage"
-updated_at: "2026-06-21T18:38:30.484118076+00:00"
+updated_at: "2026-06-21T18:44:23.027740609+00:00"
 ---
 
 ## Description
