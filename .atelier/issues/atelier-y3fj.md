@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Validate docs help and Agent Factory guidance after mission rework"
-updated_at: "2026-06-21T20:10:43.597042148+00:00"
+updated_at: "2026-06-21T20:11:02.837379086+00:00"
 ---
 
 ## Description
