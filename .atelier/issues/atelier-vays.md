@@ -20,9 +20,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Collapse mission command surface into issue commands"
-updated_at: "2026-06-21T17:24:17.004976255+00:00"
+updated_at: "2026-06-21T19:17:33.468797877+00:00"
 ---
 
 ## Description
