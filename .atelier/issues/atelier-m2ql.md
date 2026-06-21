@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T18:56:07.128933519+00:00"
+status: "done"
 title: "Replace hardcoded mission terminal checks with configured validators"
-updated_at: "2026-06-21T18:44:44.166315137+00:00"
+updated_at: "2026-06-21T18:56:07.128933519+00:00"
 ---
 
 ## Description
