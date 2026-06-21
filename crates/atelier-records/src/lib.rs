@@ -840,11 +840,14 @@ fn canonical_issue_record_from_record(record: &Record) -> Result<CanonicalIssueR
 
 fn render_issue_sections(sections: &IssueSections) -> String {
     let mut body = format!(
-        "## Description\n\n{}\n\n## Outcome\n\n{}\n\n## Evidence\n\n{}",
+        "## Description\n\n{}\n\n## Outcome\n\n{}",
         sections.description.trim(),
-        sections.outcome.trim(),
-        sections.evidence.trim()
+        sections.outcome.trim()
     );
+    if let Some(evidence) = sections.section(IssueSectionName::Evidence) {
+        body.push_str("\n\n## Evidence\n\n");
+        body.push_str(evidence.trim());
+    }
     if let Some(notes) = sections
         .notes
         .as_deref()
@@ -2292,12 +2295,10 @@ pub fn parse_issue_sections(body: &str, relative: &Path) -> Result<IssueSections
         relative,
         issue_id.as_deref(),
     )?;
-    let evidence = required_issue_section(
-        &sections,
-        IssueSectionName::Evidence,
-        relative,
-        issue_id.as_deref(),
-    )?;
+    let evidence = sections
+        .get(IssueSectionName::Evidence.title())
+        .cloned()
+        .unwrap_or_default();
     let notes = sections.get(IssueSectionName::Notes.title()).cloned();
 
     Ok(IssueSections {
@@ -3645,8 +3646,14 @@ Legacy missions used free-form body headings.
                 .iter()
                 .filter(|state| state.required && state.present && !state.empty)
                 .count(),
-            3
+            2
         );
+        assert!(states.iter().any(|state| {
+            state.name == IssueSectionName::Evidence
+                && !state.required
+                && state.present
+                && !state.empty
+        }));
         assert!(states.iter().any(|state| {
             state.name == IssueSectionName::Notes
                 && !state.required
@@ -3680,6 +3687,23 @@ Legacy missions used free-form body headings.
 
         let error = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap_err();
         assert!(error.to_string().contains("Invalid priority"));
+    }
+
+    #[test]
+    fn issue_parser_contract_accepts_missing_evidence_section() {
+        let body = "## Description\n\nCanonical problem statement.\n\n## Outcome\n\nThe desired finished world is observable.";
+        let text = sectioned_issue_text("atelier-abcd", body);
+
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-abcd")).unwrap();
+
+        assert_eq!(
+            parsed.sections.outcome,
+            "The desired finished world is observable."
+        );
+        assert_eq!(parsed.sections.section(IssueSectionName::Evidence), None);
+        assert!(!render_issue_record(&parsed)
+            .unwrap()
+            .contains("## Evidence"));
     }
 
     #[test]

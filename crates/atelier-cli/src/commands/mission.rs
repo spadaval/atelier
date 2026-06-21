@@ -845,7 +845,6 @@ impl MissionTerminalStatus {
 struct IssueSectionGapSummary {
     malformed: Vec<String>,
     missing_outcome: Vec<String>,
-    missing_evidence: Vec<String>,
 }
 
 fn print_reliability_summary(
@@ -884,7 +883,6 @@ fn print_reliability_summary(
     }
 
     print_section_gap_signal("Missing Outcome Sections", &section_gaps.missing_outcome);
-    print_section_gap_signal("Missing Evidence Sections", &section_gaps.missing_evidence);
     print_graph_hygiene_signal(summary);
 
     if issue_proof_gaps.is_empty() {
@@ -894,6 +892,7 @@ fn print_reliability_summary(
             "Attached Proof: missing - issue proof gaps: {}",
             compact_strings(&issue_proof_gaps)
         );
+        println!("  Hint: {}", crate::commands::issue::evidence_help_hint());
         println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
         println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
     }
@@ -1006,8 +1005,6 @@ fn mission_issue_section_gaps(
                     }
                     if state.name == record_store::IssueSectionName::Outcome {
                         gaps.missing_outcome.push(issue_id.clone());
-                    } else if state.name == record_store::IssueSectionName::Evidence {
-                        gaps.missing_evidence.push(issue_id.clone());
                     }
                 }
             }
@@ -1019,19 +1016,12 @@ fn mission_issue_section_gaps(
                 {
                     gaps.missing_outcome.push(issue_id.clone());
                 }
-                if diagnostic.contains("section 'Evidence'")
-                    || diagnostic.contains("section Evidence")
-                    || diagnostic.contains("section `Evidence`")
-                {
-                    gaps.missing_evidence.push(issue_id.clone());
-                }
                 gaps.malformed.push(format!("{issue_id}: {diagnostic}"));
             }
         }
     }
     gaps.malformed.sort();
     gaps.missing_outcome.sort();
-    gaps.missing_evidence.sort();
     Ok(gaps)
 }
 
@@ -1327,6 +1317,7 @@ fn mission_terminal_status(
             validator: "workflow_policy".to_string(),
             passed: false,
             reason: format!("{error:#}; run `atelier lint` for workflow/config diagnostics"),
+            help: None,
             elapsed_ms: 0,
         }],
     };

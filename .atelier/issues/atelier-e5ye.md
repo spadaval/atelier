@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Stop parser and lint from requiring evidence prose by default"
-updated_at: "2026-06-21T17:40:57.628685239+00:00"
+updated_at: "2026-06-21T18:38:00.114849954+00:00"
 ---
 
 ## Description

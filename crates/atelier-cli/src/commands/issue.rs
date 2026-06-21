@@ -557,6 +557,9 @@ fn render_issue_evidence_status(
         println!("Attached Proof: attached - {}", gate.reason);
     } else {
         println!("Attached Proof: missing - {}", gate.reason);
+        if let Some(help) = &gate.help {
+            println!("  Hint: {help}");
+        }
         println!(
             "  Next: atelier evidence record --target issue/{canonical_id} --kind validation \"...\""
         );
@@ -674,6 +677,7 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Evide
 pub(crate) struct EvidenceGateStatus {
     pub passed: bool,
     pub reason: String,
+    pub help: Option<String>,
 }
 
 pub(crate) fn issue_evidence_gate_status(
@@ -693,7 +697,11 @@ fn issue_evidence_gate_status_from_records(
     evidence: &[EvidenceRecord],
 ) -> EvidenceGateStatus {
     if evidence.is_empty() {
-        return evidence_gate(false, "no validating evidence link found");
+        return evidence_gate(
+            false,
+            "no validating evidence link found",
+            Some(evidence_help_hint()),
+        );
     }
 
     let _ = issue;
@@ -704,9 +712,13 @@ fn issue_evidence_gate_status_from_records(
         })
     });
     if passing {
-        evidence_gate(true, "passing validating evidence is linked")
+        evidence_gate(true, "passing validating evidence is linked", None)
     } else {
-        evidence_gate(false, "expected at least 1 passing evidence record")
+        evidence_gate(
+            false,
+            "expected at least 1 passing evidence record",
+            Some(evidence_help_hint()),
+        )
     }
 }
 
@@ -721,10 +733,19 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
     })
 }
 
-fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {
+pub(crate) fn evidence_help_hint() -> String {
+    "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
+}
+
+fn evidence_gate(
+    passed: bool,
+    reason: impl Into<String>,
+    help: Option<String>,
+) -> EvidenceGateStatus {
     EvidenceGateStatus {
         passed,
         reason: reason.into(),
+        help,
     }
 }
 

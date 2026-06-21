@@ -232,7 +232,7 @@ fn test_lint_rejects_empty_required_issue_section() {
 }
 
 #[test]
-fn test_lint_rejects_missing_evidence_section() {
+fn test_lint_accepts_missing_evidence_section() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -243,17 +243,24 @@ fn test_lint_rejects_missing_evidence_section() {
     let issue_id = issue_id_by_title(dir.path(), "Missing evidence lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    std::fs::write(&issue_path, remove_issue_section(&markdown, "Evidence")).unwrap();
+    let markdown = markdown
+        .replace("No description provided.", "Ordinary issue description.")
+        .replace(
+            "Outcome was not specified.",
+            "Ordinary issue outcome is observable.",
+        );
+    std::fs::write(&issue_path, markdown).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
-    assert!(!success, "lint should fail for missing Evidence");
     assert!(
-        stdout.contains(&format!("issue {issue_id}"))
-            && stdout.contains("section Evidence")
-            && stdout.contains(&format!(".atelier/issues/{issue_id}.md")),
-        "missing Evidence diagnostic in stdout:\n{stdout}\nstderr:\n{stderr}"
+        success,
+        "lint should accept missing Evidence for ordinary issues:\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert!(stderr.contains("Lint failed"));
+    assert!(stdout.contains("Lint passed."));
+    assert!(
+        !stdout.contains("section Evidence") && !stderr.contains("section Evidence"),
+        "missing Evidence should not produce a lint diagnostic:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
 }
 
 #[test]
@@ -268,10 +275,12 @@ fn test_lint_rejects_empty_evidence_section() {
     let issue_id = issue_id_by_title(dir.path(), "Empty evidence lint");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
-    let invalid = markdown.replace(
-        "## Evidence\n\nEvidence was not specified.",
-        "## Evidence\n\n",
-    );
+    let invalid = markdown
+        .replace("No description provided.", "Description.")
+        .replace(
+            "Outcome was not specified.",
+            "Outcome is present.\n\n## Evidence\n\n",
+        );
     std::fs::write(&issue_path, invalid).unwrap();
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
@@ -928,7 +937,7 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     std::fs::write(&issue_path, malformed).unwrap();
     let evidence_markdown = std::fs::read_to_string(&evidence_issue_path).unwrap();
     let malformed_evidence =
-        evidence_markdown.replace("\n## Evidence\n\nEvidence was not specified.\n", "\n");
+        evidence_markdown.replace("\n## Outcome\n\nOutcome was not specified.\n", "\n");
     std::fs::write(&evidence_issue_path, malformed_evidence).unwrap();
     let conn = rusqlite::Connection::open(dir.path().join(".atelier/runtime/state.db")).unwrap();
     for (path, id) in [
@@ -958,11 +967,10 @@ fn test_mission_status_names_stale_and_malformed_record_blockers() {
     assert!(success, "malformed mission status failed: {stderr}");
     assert!(malformed_status.contains("Reliability"));
     assert!(malformed_status.contains("Malformed Work: found"));
-    assert!(malformed_status.contains("Missing Outcome Sections: 1 issue(s)"));
-    assert!(malformed_status.contains("Missing Evidence Sections: 1 issue(s)"));
+    assert!(malformed_status.contains("Missing Outcome Sections: 2 issue(s)"));
     assert!(malformed_status.contains("Linked Issue Records: malformed"));
     assert!(malformed_status.contains("Missing required issue body section 'Outcome'"));
-    assert!(malformed_status.contains("Missing required issue body section 'Evidence'"));
+    assert!(!malformed_status.contains("Missing required issue body section 'Evidence'"));
     assert!(malformed_status.contains("atelier lint"));
 }
 
@@ -1436,11 +1444,7 @@ fn test_mission_status_cli_reports_control_state() {
         text.replace("No description provided.", "Ready status body.")
             .replace(
                 "Outcome was not specified.",
-                "Mission status reports ready linked work.",
-            )
-            .replace(
-                "Evidence was not specified.",
-                "- Manual check: `atelier issue status <mission-id>` lists this work as ready.",
+                "Mission status reports ready linked work.\n\n## Evidence\n\n- Manual check: `atelier issue status <mission-id>` lists this work as ready.",
             )
     });
 
@@ -1462,11 +1466,7 @@ fn test_mission_status_cli_reports_control_state() {
         text.replace("No description provided.", "Blocked status body.")
             .replace(
                 "Outcome was not specified.",
-                "Mission status reports blocked linked work.",
-            )
-            .replace(
-                "Evidence was not specified.",
-                "- Manual check: `atelier issue status <mission-id>` lists this work as blocked.",
+                "Mission status reports blocked linked work.\n\n## Evidence\n\n- Manual check: `atelier issue status <mission-id>` lists this work as blocked.",
             )
     });
 
@@ -1480,11 +1480,7 @@ fn test_mission_status_cli_reports_control_state() {
         text.replace("No description provided.", "Status blocker body.")
             .replace(
                 "Outcome was not specified.",
-                "Mission status reports this issue as an open blocker.",
-            )
-            .replace(
-                "Evidence was not specified.",
-                "- Manual check: `atelier issue status <mission-id>` lists this blocker.",
+                "Mission status reports this issue as an open blocker.\n\n## Evidence\n\n- Manual check: `atelier issue status <mission-id>` lists this blocker.",
             )
     });
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "block", blocked_id, blocker_id]);
@@ -1519,7 +1515,6 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Projection Freshness: current"));
     assert!(status_out.contains("Malformed Work: none"));
     assert!(status_out.contains("Missing Outcome Sections: none"));
-    assert!(status_out.contains("Missing Evidence Sections: none"));
     assert!(status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
     assert!(status_out.contains(&format!("atelier issue status {mission_id} --verbose")));

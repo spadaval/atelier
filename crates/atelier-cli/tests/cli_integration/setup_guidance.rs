@@ -1169,6 +1169,10 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains(&format!("  Missing: {blocker_id}")));
     assert!(stdout.contains(&format!("  Missing: {ready_id}")));
     assert!(
+        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        "{stdout}"
+    );
+    assert!(
         stdout.contains("atelier evidence record --target issue/<id> --kind validation \"...\"")
     );
     assert!(stdout.contains("atelier evidence attach <evidence-id> issue <issue-id>"));
@@ -1991,18 +1995,40 @@ fn test_root_start_reports_workflow_validator_failure() {
     let policy = std::fs::read_to_string(&policy_path).unwrap();
     std::fs::write(
         &policy_path,
-        policy.replace(
+        policy.replacen(
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n",
             "      start:\n        from: [todo, blocked]\n        to: in_progress\n        validators: [evidence.attached]\n",
+            1,
         ),
     )
     .unwrap();
     commit_all(dir.path(), "validator-gated start policy");
 
+    let (success, options_out, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
+    assert!(success, "transition options failed: {stderr}");
+    assert!(options_out.contains("start [blocked]"), "{options_out}");
+    assert!(
+        options_out.contains("no validating evidence link found"),
+        "{options_out}"
+    );
+    assert!(
+        options_out.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        "{options_out}"
+    );
+
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(
+        stdout.contains("no validating evidence link found"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        "{stdout}"
+    );
     assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
@@ -2138,6 +2164,14 @@ fn test_issue_transition_close_reports_blockers_and_records_blocked_activity() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
     assert!(!success, "close should be blocked without reason and proof");
     assert!(stdout.contains("Blockers"), "{stdout}");
+    assert!(
+        stdout.contains("expected at least 1 validating evidence record(s); found 0"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        "{stdout}"
+    );
     assert!(stderr.contains("evidence.attached"), "{stderr}");
     assert!(stderr.contains("git.worktree_clean"), "{stderr}");
 

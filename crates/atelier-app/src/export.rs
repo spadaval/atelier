@@ -521,7 +521,7 @@ mod tests {
         assert!(first_issue.contains("title: \"Original title\""));
         assert!(first_issue.contains("## Description\n\nOriginal body"));
         assert!(first_issue.contains("## Outcome\n\nOutcome was not specified."));
-        assert!(first_issue.contains("## Evidence\n\nEvidence was not specified."));
+        assert!(!first_issue.contains("## Evidence"));
 
         db.update_issue(&id, Some("Changed title"), Some("Changed body"), None)
             .unwrap();
@@ -532,7 +532,7 @@ mod tests {
         assert!(second_issue.contains("title: \"Changed title\""));
         assert!(second_issue.contains("## Description\n\nChanged body"));
         assert!(second_issue.contains("## Outcome\n\nOutcome was not specified."));
-        assert!(second_issue.contains("## Evidence\n\nEvidence was not specified."));
+        assert!(!second_issue.contains("## Evidence"));
     }
 
     #[test]
@@ -681,7 +681,7 @@ mod tests {
         assert!(issue_text.contains("labels:\n- \"alpha\"\n- \"zeta\"\n"));
         assert!(issue_text.contains("## Description\n\nChild body"));
         assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
-        assert!(issue_text.contains("## Evidence\n\nEvidence was not specified."));
+        assert!(!issue_text.contains("## Evidence"));
 
         let parent_text = String::from_utf8(parent_issue.bytes.clone()).unwrap();
         assert!(parent_text.contains(&format!(

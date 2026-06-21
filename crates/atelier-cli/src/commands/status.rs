@@ -407,6 +407,7 @@ fn print_evidence_status(
         if missing.len() > 3 {
             println!("  Missing: {} more issue(s)", missing.len() - 3);
         }
+        println!("  Hint: {}", commands::issue::evidence_help_hint());
         println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
         println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
     }

@@ -188,10 +188,6 @@ pub fn lint(
                         record.sections.description.as_str(),
                     ),
                     (IssueSectionName::Outcome, record.sections.outcome.as_str()),
-                    (
-                        IssueSectionName::Evidence,
-                        record.sections.evidence.as_str(),
-                    ),
                 ] {
                     if issue_section_placeholder(name, value) {
                         findings.push(LintFinding {
@@ -204,27 +200,29 @@ pub fn lint(
                     }
                 }
             }
-            if issue_requires_concrete_evidence(&issue) {
-                for (index, entry) in evidence_entries(&record.sections.evidence)
-                    .iter()
-                    .enumerate()
-                {
-                    if !evidence_entry_names_observable_target(entry) {
-                        let relative = issue_record_path(&issue.id);
-                        let message = issue_section_diagnostic(
-                            Some(&issue.id),
-                            IssueSectionName::Evidence.title(),
-                            &relative,
-                            &format!(
-                                "Issue section Evidence entry {} must name an observable proof target ({})",
-                                index + 1,
-                                EVIDENCE_PROOF_TARGET_HINT
-                            ),
-                        );
-                        findings.push(LintFinding {
-                            id: issue_id_for_agent(&issue),
-                            message,
-                        });
+            if input.issue_ref.is_some() {
+                if let Some(evidence) = record.sections.section(IssueSectionName::Evidence) {
+                    if issue_section_placeholder(IssueSectionName::Evidence, evidence) {
+                        continue;
+                    }
+                    for (index, entry) in evidence_entries(evidence).iter().enumerate() {
+                        if !evidence_entry_names_observable_target(entry) {
+                            let relative = issue_record_path(&issue.id);
+                            let message = issue_section_diagnostic(
+                                Some(&issue.id),
+                                IssueSectionName::Evidence.title(),
+                                &relative,
+                                &format!(
+                                    "Issue section Evidence entry {} must name an observable proof target ({})",
+                                    index + 1,
+                                    EVIDENCE_PROOF_TARGET_HINT
+                                ),
+                            );
+                            findings.push(LintFinding {
+                                id: issue_id_for_agent(&issue),
+                                message,
+                            });
+                        }
                     }
                 }
             }
@@ -274,10 +272,6 @@ fn show_command_for_kind(kind: &str, id: &str) -> String {
 
 fn issue_id_for_agent(issue: &Issue) -> String {
     issue.id.clone()
-}
-
-fn issue_requires_concrete_evidence(issue: &Issue) -> bool {
-    !matches!(issue.status.as_str(), "done" | "archived") && issue.issue_type != "epic"
 }
 
 fn evidence_entries(evidence: &str) -> Vec<String> {

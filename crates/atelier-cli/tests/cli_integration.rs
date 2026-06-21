@@ -691,7 +691,10 @@ fn ensure_issue_completion_sections(dir: &Path, issue_id: &str) {
     edit_canonical_issue(dir, issue_id, |mut markdown| {
         markdown = markdown.replace(
             "Outcome was not specified.",
-            "The issue outcome is complete and ready for terminal checks.",
+            &format!(
+                "The issue outcome is complete and ready for terminal checks.\n\n## Evidence\n\n{}",
+                format!("- Evidence record attached to issue/{issue_id} validates completion.")
+            ),
         );
         markdown.replace(
             "Evidence was not specified.",

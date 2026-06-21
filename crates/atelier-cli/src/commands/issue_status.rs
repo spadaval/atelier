@@ -138,6 +138,7 @@ fn print_evidence(evidence_gaps: &[String]) {
             "Attached Proof: missing - issue proof gaps: {}",
             compact_strings(evidence_gaps)
         );
+        println!("  Hint: {}", commands::issue::evidence_help_hint());
         println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
         println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
     }
@@ -176,6 +177,7 @@ fn print_terminal(
             "Attached Proof: missing - issue proof gaps: {}",
             compact_strings(evidence_gaps)
         );
+        println!("  Hint: {}", commands::issue::evidence_help_hint());
         println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
     }
 }

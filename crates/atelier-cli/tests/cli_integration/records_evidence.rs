@@ -2018,11 +2018,7 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
         text.replace("No description provided.", "Validation item body.")
             .replace(
                 "Outcome was not specified.",
-                "Mission approval is represented as linked workflow state.",
-            )
-            .replace(
-                "Evidence was not specified.",
-                "- Manual check: `atelier evidence show <id>` displays the approval record attached to this issue.",
+                "Mission approval is represented as linked workflow state.\n\n## Evidence\n\n- Manual check: `atelier evidence show <id>` displays the approval record attached to this issue.",
             )
     });
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", mission_id, approval_id]);
