@@ -25,9 +25,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-21T20:02:01.342007446+00:00"
+status: "done"
 title: "Epic: Make evidence requirements workflow-driven"
-updated_at: "2026-06-21T17:40:57.629614757+00:00"
+updated_at: "2026-06-21T20:02:01.342007446+00:00"
 ---
 
 ## Description
