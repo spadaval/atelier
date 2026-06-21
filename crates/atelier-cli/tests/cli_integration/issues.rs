@@ -651,9 +651,55 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
 }
 
 #[test]
-fn test_issue_create_mission_type_writes_mission_sections_and_issue_show_reads_them() {
+fn test_issue_create_mission_type_requires_workflow_policy_declaration() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+
+    let (success, stdout, stderr) = run_atelier_raw(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Typed objective",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(
+        !success,
+        "undeclared mission issue create should fail: {stdout}"
+    );
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        transcript.contains(".atelier/workflow.yaml"),
+        "{transcript}"
+    );
+    assert!(transcript.contains("issue_types"), "{transcript}");
+    assert!(transcript.contains("mission"), "{transcript}");
+    let mission_dir = dir.path().join(".atelier").join("missions");
+    if mission_dir.exists() {
+        let has_mission_record = std::fs::read_dir(&mission_dir)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", mission_dir.display()))
+            .any(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    == Some("md")
+            });
+        assert!(
+            !has_mission_record,
+            "mission type creation must not write first-class mission records"
+        );
+    }
+}
+
+#[test]
+fn test_issue_create_mission_type_uses_declared_workflow_policy() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    write_mission_issue_type_workflow(dir.path());
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -665,68 +711,29 @@ fn test_issue_create_mission_type_writes_mission_sections_and_issue_show_reads_t
             "mission",
         ],
     );
-    assert!(success, "mission issue create failed: {stderr}");
-    assert!(
-        stdout.contains("Created mission objective atelier-"),
-        "{stdout}"
-    );
+    assert!(success, "declared mission issue create failed: {stderr}");
+    assert!(stdout.contains("Created issue atelier-"), "{stdout}");
     assert!(stdout.contains("Type:     mission"), "{stdout}");
-    assert!(stdout.contains(".atelier/missions/"), "{stdout}");
+    assert!(stdout.contains(".atelier/issues/"), "{stdout}");
+    assert!(!stdout.contains(".atelier/missions/"), "{stdout}");
 
-    let mission_id = record_id_by_title(dir.path(), "missions", "Typed objective");
-    let mission_text = read_canonical_record(dir.path(), "missions", &mission_id);
+    let issue_id = issue_id_by_title(dir.path(), "Typed objective");
+    let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
     assert!(
-        mission_text.contains("schema: \"atelier.mission\""),
-        "{mission_text}"
+        issue_text.contains("schema: \"atelier.issue\""),
+        "{issue_text}"
     );
     assert!(
-        mission_text.contains("## Intent\n\nTyped objective"),
-        "{mission_text}"
-    );
-    assert!(
-        mission_text.contains("## Constraints\n\n- None."),
-        "{mission_text}"
-    );
-    assert!(
-        mission_text.contains("## Risks\n\n- None."),
-        "{mission_text}"
-    );
-    assert!(
-        mission_text.contains("## Validation\n\n- Validation was not specified."),
-        "{mission_text}"
+        issue_text.contains("issue_type: \"mission\""),
+        "{issue_text}"
     );
 
-    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
-    assert!(success, "issue show mission failed: {stderr}");
-    assert!(show.contains("Mission "), "{show}");
-    assert!(show.contains("Intent"), "{show}");
-    assert!(show.contains("Constraints"), "{show}");
-    assert!(show.contains("Risks"), "{show}");
-    assert!(show.contains("Validation"), "{show}");
-
-    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
-    assert!(success, "focused mission lint failed: {stderr}");
-    assert!(lint_out.contains("Lint passed."));
-
-    let (success, status, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
-    assert!(success, "issue status mission failed: {stderr}");
+    let (success, show, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
+    assert!(success, "declared mission issue show failed: {stderr}");
+    assert!(show.contains("Type:     mission"), "{show}");
     assert!(
-        status.contains(&format!("Mission Status {mission_id}")),
-        "{status}"
-    );
-
-    let mission_path = canonical_record_path(dir.path(), "missions", &mission_id);
-    let broken = std::fs::read_to_string(&mission_path)
-        .unwrap()
-        .replace("## Risks\n\n- None.\n\n", "");
-    std::fs::write(&mission_path, broken).unwrap();
-
-    let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
-    assert!(!success, "focused mission lint should reject missing Risks");
-    let transcript = format!("{lint_out}\n{stderr}");
-    assert!(
-        transcript.contains("Missing required mission body section 'Risks'"),
-        "{transcript}"
+        show.contains("Status:   todo"),
+        "declared mission should use its configured initial status: {show}"
     );
 }
 
@@ -2543,6 +2550,21 @@ fn write_incident_issue_type_workflow(dir: &std::path::Path) {
         .replace(
             "applies_to: [bug, feature, task]",
             "applies_to: [bug, feature, incident, task]",
+        );
+    std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
+}
+
+fn write_mission_issue_type_workflow(dir: &std::path::Path) {
+    let workflow_path = dir.join(".atelier/workflow.yaml");
+    let workflow = std::fs::read_to_string(&workflow_path)
+        .expect("failed to read workflow policy")
+        .replace(
+            "  task: { label: Task }\n  validation: { label: Validation }",
+            "  task: { label: Task }\n  mission: { label: Mission }\n  validation: { label: Validation }",
+        )
+        .replace(
+            "applies_to: [bug, feature, task]",
+            "applies_to: [bug, feature, mission, task]",
         );
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
