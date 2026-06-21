@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Remove mission-specific projection and storage branches"
-updated_at: "2026-06-21T16:37:30.770057010+00:00"
+updated_at: "2026-06-21T19:33:44.488854739+00:00"
 ---
 
 ## Description

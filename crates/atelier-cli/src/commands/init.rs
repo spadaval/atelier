@@ -58,7 +58,7 @@ mod tests {
         assert!(dir.path().join(".atelier").exists());
         assert!(dir.path().join(".atelier/config.toml").exists());
         assert!(dir.path().join(".atelier/issues").exists());
-        assert!(dir.path().join(".atelier/missions").exists());
+        assert!(!dir.path().join(".atelier/missions").exists());
         assert!(!dir.path().join(".atelier/milestones").exists());
         assert!(!dir.path().join(".atelier/plans").exists());
         assert!(dir.path().join(".atelier/evidence").exists());
