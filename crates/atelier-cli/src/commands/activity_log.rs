@@ -3,8 +3,7 @@ use chrono::Utc;
 use std::path::{Path, PathBuf};
 
 use atelier_records::activity::{
-    create_issue_activity_with_metadata, create_mission_activity, ActivityEventType,
-    ActivityPrAttribution,
+    create_issue_activity_with_metadata, ActivityEventType, ActivityPrAttribution,
 };
 
 pub fn record_comment(issue_id: &str, kind: &str, body: &str) -> Result<()> {
@@ -197,31 +196,13 @@ fn record_mission(
     summary: &str,
     body: &str,
 ) -> Result<()> {
-    let Some(state_dir) = current_state_dir_for_mission(mission_id) else {
-        return Ok(());
-    };
-    create_mission_activity(
-        &state_dir,
-        mission_id,
-        event_type,
-        &current_actor(),
-        Utc::now(),
-        summary,
-        body,
-    )?;
-    Ok(())
+    record(mission_id, event_type, summary, body)
 }
 
 fn current_state_dir_for_issue(issue_id: &str) -> Option<PathBuf> {
     let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;
     let issue_file = state_dir.join("issues").join(format!("{issue_id}.md"));
     issue_file.is_file().then_some(state_dir)
-}
-
-fn current_state_dir_for_mission(mission_id: &str) -> Option<PathBuf> {
-    let state_dir = atelier_app::storage_layout::find_canonical_dir_from_cwd().ok()??;
-    let mission_file = state_dir.join("missions").join(format!("{mission_id}.md"));
-    mission_file.is_file().then_some(state_dir)
 }
 
 fn current_actor() -> String {

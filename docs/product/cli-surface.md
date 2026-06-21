@@ -168,7 +168,8 @@ time pressure:
 
 - Orient: answer what is active, ready, blocked, stale, or unsafe to change.
   Owned by `atelier status`, `atelier issue show/list`, `atelier issue show`,
-  `atelier issue status`, `atelier history`, and `atelier search`.
+  `atelier issue table`, focused `atelier issue status <id>`, `atelier history`,
+  and `atelier search`.
 - Select and run work: choose a clear slice, inspect workflow state, leave notes
   and proof, and follow the lifecycle or recovery command Atelier prints for
   the current item. Owned by `atelier status`, `atelier issue ...`, `atelier
@@ -382,9 +383,9 @@ operator to infer branch or review policy from static docs.
 There is no target-state rule that one checkout may hold only one current issue.
 Repeated starts of the same issue are harmless, and starting a second issue in
 the same checkout should extend the current-work set when the workflow allows
-it. `atelier status` and `atelier issue status` should render all
+it. `atelier status` and focused `atelier issue status <objective-id>` should render all
 `in_progress` issues visible in the checkout rather than promote one hidden
-"active issue". Use issue and issue status <objective-id> to render all current work in the
+"active issue". Use issue views and `issue status <objective-id>` to render all current work in the
 checkout, and use the epic branch as the review boundary.
 
 Different Git checkouts or branches may legitimately show different
@@ -394,7 +395,7 @@ Markdown records. Legacy root `abandon` and `repair` commands have been removed:
 stopping work without a durable status change does not need a cleanup command,
 and stale checkout recovery should use normal status inspection plus canonical
 issue transitions rather than hidden active-pointer repair.
-Root `atelier status`, `atelier issue status`, and `atelier issue transition
+Root `atelier status`, focused `atelier issue status <id>`, and `atelier issue transition
 <id> --options` expose current-work orientation, so operators should not need
 the removed work-status helper or any legacy work-start path for
 normal workflow.

@@ -20,13 +20,6 @@ pub const ISSUE_KIND: RecordKindSpec = RecordKindSpec {
 
 pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
     RecordKindSpec {
-        kind: "mission",
-        schema: "atelier.mission",
-        schema_version: 1,
-        canonical_dir: Some("missions"),
-        extension: "md",
-    },
-    RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",
         schema_version: 1,
@@ -44,13 +37,6 @@ pub const FIRST_CLASS_RECORD_KINDS: &[RecordKindSpec] = &[
 
 pub const CANONICAL_RECORD_KINDS: &[RecordKindSpec] = &[
     ISSUE_KIND,
-    RecordKindSpec {
-        kind: "mission",
-        schema: "atelier.mission",
-        schema_version: 1,
-        canonical_dir: Some("missions"),
-        extension: "md",
-    },
     RecordKindSpec {
         kind: "evidence",
         schema: "atelier.evidence",

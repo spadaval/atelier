@@ -805,7 +805,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
-        "atelier issue status",
+        "atelier issue table --kind mission",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
         "atelier history --mission <id>",
@@ -1083,9 +1083,9 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Active mission:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(
-        stdout.contains("Inspect mission readiness (no mission is active): atelier issue status")
-    );
+    assert!(stdout.contains(
+        "Inspect mission inventory (no mission is active): atelier issue table --kind mission"
+    ));
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
     assert!(stdout.contains(
@@ -1552,7 +1552,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
 }
 
 #[test]
-fn test_man_manager_names_active_mission() {
+fn test_man_manager_routes_to_mission_inventory_without_focus() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1561,19 +1561,13 @@ fn test_man_manager_names_active_mission() {
         &["issue", "create", "Man mission", "--issue-type", "mission"],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Man mission");
-    let mission_id = mission_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", mission_id, "--status", "active"],
-    );
-    assert!(success, "legacy active mission setup failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "manager"]);
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
-    assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
-    assert!(stdout.contains("atelier issue status"));
+    assert!(!stdout.contains("Active mission:"), "{stdout}");
+    assert!(stdout.contains("atelier issue table --kind mission"));
+    assert!(stdout.contains("atelier issue status <id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));
     assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier issue link <mission-id> <issue-id> --role advances"));

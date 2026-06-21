@@ -40,11 +40,70 @@ pub fn status(
 ) -> Result<()> {
     match id {
         Some(id) => status_one(db, state_dir, id, quiet, verbose),
-        None => match active_mission(db)? {
-            Some(record) => status_one(db, state_dir, &record.id, quiet, verbose),
-            None => status_dashboard(db, state_dir, quiet),
-        },
+        None => status_dashboard(db, state_dir, quiet),
     }
+}
+
+pub fn transition_options(db: &Database, id: &str) -> Result<()> {
+    let state_dir =
+        atelier_app::storage_layout::StorageLayout::new(crate::commands::workflow::repo_root()?)
+            .canonical_dir();
+    let mission = db.require_record(KIND, id)?;
+    let summary = mission_list_summary(db, id)?;
+    let terminal = mission_terminal_status(db, &state_dir, &mission, &summary)?;
+    let mut blockers = vec![format!(
+        "missing required field close_reason; rerun with `atelier issue transition {id} close --reason \"...\"`"
+    )];
+    blockers.extend(terminal.blocking_messages());
+
+    println!("Mission Transitions {} - {}", mission.id, mission.title);
+    println!(
+        "{}",
+        "=".repeat(mission.id.len() + mission.title.len() + 23)
+    );
+    println!("State");
+    println!("-----");
+    println!("Status:   {}", mission.status);
+    println!("Type:     mission");
+    println!("Options:  1");
+    println!();
+    println!(
+        "close [{}]",
+        if blockers.is_empty() {
+            "allowed"
+        } else {
+            "blocked"
+        }
+    );
+    println!("  From: ready, active");
+    println!("  To:   closed");
+    println!("  Command: atelier issue transition {id} close --reason \"...\"");
+    println!("Validators");
+    println!("----------");
+    if terminal.validator_results.is_empty() {
+        println!("(none)");
+    } else {
+        for result in &terminal.validator_results {
+            println!(
+                "  {}  {}",
+                if result.passed { "pass" } else { "fail" },
+                result.validator
+            );
+            println!("      {}", result.reason);
+        }
+    }
+    println!("Blockers");
+    println!("--------");
+    for blocker in blockers {
+        println!("  {blocker}");
+    }
+    println!("Planned Actions");
+    println!("---------------");
+    println!("(none)");
+    println!("Description");
+    println!("-----------");
+    println!("  Closing requires configured workflow validators to pass.");
+    Ok(())
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -103,7 +162,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
                 "  {} [{}] {} - {} | {} | terminal {}",
                 row.record.id,
                 health,
-                mission_focus_label(&row.record),
+                mission_lifecycle_status(&row.record),
                 row.record.title,
                 work.to_compact_text(),
                 if row.summary.terminal_ready() {
@@ -124,12 +183,8 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
 }
 
 fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: bool) -> Result<()> {
-    let mission = db.require_record(KIND, id)?;
-    let canonical_mission = canonical_mission_record(id).ok();
-    let mission_title = canonical_mission
-        .as_ref()
-        .map(|record| record.header.title.as_str())
-        .unwrap_or(mission.title.as_str());
+    let mission = mission_objective_summary(db, id)?;
+    let mission_title = mission.title.as_str();
     let summary = mission_list_summary(db, &mission.id)?;
     let tracker = tracker_health(db, state_dir);
     let active_work = active_work_for_mission(db, &mission.id)?;
@@ -163,7 +218,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     let identity = format!(
         "Mission Status {} [{}] - {}",
         mission.id,
-        mission_focus_label(&mission),
+        mission_lifecycle_status(&mission),
         mission_title
     );
     println!("{identity}");
@@ -544,22 +599,9 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
-pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
-    let active = current_mission_records(db)?
-        .into_iter()
-        .filter(is_active_mission)
-        .collect::<Vec<_>>();
-    if active.len() > 1 {
-        bail!(
-            "Multiple active missions found: {}. Run `atelier lint` and switch one mission focus.",
-            active
-                .iter()
-                .map(|record| record.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-    Ok(active.into_iter().next())
+fn canonical_mission_path(id: &str) -> Result<Option<PathBuf>> {
+    Ok(find_state_dir_from_cwd()?
+        .map(|state_dir| state_dir.join("missions").join(format!("{id}.md"))))
 }
 
 fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
@@ -567,7 +609,12 @@ fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
 }
 
 fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec<RecordSummary>> {
-    let records = db.list_records(KIND, None)?;
+    let records = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| issue.issue_type == "mission")
+        .map(issue_mission_summary)
+        .collect::<Vec<_>>();
     Ok(match status {
         None | Some("all") => records,
         Some("current") => records
@@ -582,6 +629,28 @@ fn mission_records_for_filter(db: &Database, status: Option<&str>) -> Result<Vec
                 .collect()
         }
     })
+}
+
+fn mission_objective_summary(db: &Database, id: &str) -> Result<RecordSummary> {
+    if let Some(issue) = db.get_issue(id)? {
+        if issue.issue_type == "mission" {
+            return Ok(issue_mission_summary(issue));
+        }
+    }
+    db.require_record(KIND, id)
+}
+
+fn issue_mission_summary(issue: Issue) -> RecordSummary {
+    let id = issue.id.clone();
+    RecordSummary {
+        kind: "issue".to_string(),
+        id: id.clone(),
+        title: issue.title,
+        status: issue.status,
+        created_at: issue.created_at,
+        updated_at: issue.updated_at,
+        source_path: format!("issues/{id}.md"),
+    }
 }
 
 fn normalize_mission_status(status: &str) -> Result<&str> {
@@ -751,10 +820,7 @@ struct MissionTerminalStatus {
 
 impl MissionTerminalStatus {
     fn ready(&self) -> bool {
-        self.has_work
-            && self.open_work.is_empty()
-            && self.open_blockers.is_empty()
-            && self.validator_results.iter().all(|result| result.passed)
+        self.validator_results.iter().all(|result| result.passed)
     }
 
     fn validator_failure_count(&self) -> usize {
@@ -766,23 +832,6 @@ impl MissionTerminalStatus {
 
     fn blocking_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
-        if !self.has_work {
-            messages.push(
-                "no linked mission work: add accountable work before objective close".to_string(),
-            );
-        }
-        if !self.open_work.is_empty() {
-            messages.push(format!(
-                "open mission work: {}; close or defer linked work before objective close",
-                compact_strings(&self.open_work)
-            ));
-        }
-        if !self.open_blockers.is_empty() {
-            messages.push(format!(
-                "open blockers: {}; close or remove blocker links before objective close",
-                compact_strings(&self.open_blockers)
-            ));
-        }
         for result in self
             .validator_results
             .iter()
@@ -1080,6 +1129,24 @@ fn terminal_validator_user_text(
             "incomplete",
             "atelier issue status {mission}",
         )),
+        "objective.work_present" => Some((
+            "Linked Work",
+            "present",
+            "missing",
+            "atelier issue link {mission} <issue-id> --role advances",
+        )),
+        "objective.work_terminal" => Some((
+            "Linked Work Terminal",
+            "closed",
+            "open",
+            "atelier issue status {mission}",
+        )),
+        "objective.blockers_none_open" => Some((
+            "Direct Objective Blockers",
+            "clear",
+            "open",
+            "atelier issue blocked {mission}",
+        )),
         "git.worktree_clean" => Some((
             "Checkout",
             "clean",
@@ -1130,6 +1197,42 @@ pub(crate) fn mission_validation_criteria_gate(
             compact_strings(&pending)
         ),
     ))
+}
+
+fn validating_evidence_records(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<RecordSummary>> {
+    let mut records = db
+        .list_record_links(target_kind, target_id)?
+        .into_iter()
+        .filter(|link| link.relation_type == "validates")
+        .filter_map(|link| {
+            if link.source_kind == "evidence" {
+                Some(link.source_id)
+            } else if link.target_kind == "evidence" {
+                Some(link.target_id)
+            } else {
+                None
+            }
+        })
+        .map(|id| db.require_record("evidence", &id))
+        .collect::<Result<Vec<_>>>()?;
+    records.sort_by(|a, b| a.id.cmp(&b.id));
+    records.dedup_by(|a, b| a.id == b.id);
+    Ok(records)
+}
+
+fn validating_evidence_ids(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<Vec<String>> {
+    Ok(validating_evidence_records(db, target_kind, target_id)?
+        .into_iter()
+        .map(|record| record.id)
+        .collect())
 }
 
 #[derive(Default)]
@@ -1208,7 +1311,7 @@ fn enforce_mission_terminal_checks(
     state_dir: &Path,
     mission_id: &str,
 ) -> Result<()> {
-    let mission = db.require_record(KIND, mission_id)?;
+    let mission = mission_objective_summary(db, mission_id)?;
     let summary = mission_list_summary(db, mission_id)?;
     let terminal = mission_terminal_status(db, state_dir, &mission, &summary)?;
     if terminal.ready() {
@@ -1232,18 +1335,23 @@ fn mission_terminal_status(
     let has_work =
         !crate::commands::objective_status::mission_issue_ids(db, &mission.id)?.is_empty();
     let open_work = crate::commands::objective_status::open_objective_work(db, &mission.id)?;
-    let open_blockers =
-        crate::commands::objective_status::open_objective_blockers(db, KIND, &mission.id)?;
+    let objective_kind =
+        crate::commands::objective_status::mission_objective_kind(db, &mission.id)?;
+    let open_blockers = crate::commands::objective_status::open_objective_blockers(
+        db,
+        objective_kind,
+        &mission.id,
+    )?;
     let validator_results = match crate::commands::workflow::evaluate(
         db,
-        KIND,
+        objective_kind,
         &mission.id,
         MISSION_TERMINAL_TRANSITION,
         Vec::new(),
     ) {
         Ok(results) => results,
         Err(error) => vec![crate::commands::workflow::ValidatorResult {
-            target_kind: KIND.to_string(),
+            target_kind: objective_kind.to_string(),
             target_id: mission.id.clone(),
             transition: MISSION_TERMINAL_TRANSITION.to_string(),
             validator: "workflow_policy".to_string(),
@@ -1341,38 +1449,28 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
     let mut seen_blockers = BTreeSet::new();
     let mut seen_work = BTreeSet::new();
     let mut linked_work = Vec::new();
+    let objective_kind = crate::commands::objective_status::mission_objective_kind(db, mission_id)?;
+    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
 
-    for link in db.list_record_links(KIND, mission_id)? {
-        let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
-            continue;
-        };
-        match kind {
-            "issue" if link.relation_type == "blocked_by" => {
-                if seen_blockers.insert(linked_id.to_string()) {
-                    let issue = db.require_issue(linked_id)?;
-                    let workflow_policy =
-                        crate::commands::issue_workflow::load_issue_workflow_policy()?;
-                    if crate::commands::issue_workflow::issue_blocks_work(
-                        workflow_policy.as_ref(),
-                        &issue,
-                    ) {
-                        summary.open_blockers += 1;
-                    }
-                }
+    for blocker_id in
+        crate::commands::objective_status::direct_blocker_ids(db, objective_kind, mission_id)?
+    {
+        if seen_blockers.insert(blocker_id.clone()) {
+            let issue = db.require_issue(&blocker_id)?;
+            if crate::commands::issue_workflow::issue_blocks_work(workflow_policy.as_ref(), &issue)
+            {
+                summary.open_blockers += 1;
             }
-            "issue" if link.relation_type == "advances" => {
-                if !seen_work.insert(linked_id.to_string()) {
-                    continue;
-                }
-                let issue = db.require_issue(linked_id)?;
-                linked_work.push(issue);
-            }
-            "evidence" if link.relation_type == "validates" => {
-                summary.evidence_count += 1;
-            }
-            _ => {}
         }
     }
+
+    for linked_id in mission_linked_work_roots(db, objective_kind, mission_id)? {
+        if seen_work.insert(linked_id.clone()) {
+            let issue = db.require_issue(&linked_id)?;
+            linked_work.push(issue);
+        }
+    }
+    summary.evidence_count = validating_evidence_ids(db, objective_kind, mission_id)?.len();
 
     let linked_epic_ids = linked_work
         .iter()
@@ -1381,7 +1479,6 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
         .collect::<BTreeSet<_>>();
     let mission_issue_ids = crate::commands::objective_status::mission_issue_ids(db, mission_id)?;
 
-    let workflow_policy = crate::commands::issue_workflow::load_issue_workflow_policy()?;
     for issue_id in &mission_issue_ids {
         let issue = db.require_issue(issue_id)?;
         summary.work.add_bucket(issue_bucket(db, &issue)?);
@@ -1430,6 +1527,37 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
     )?;
     summary.blocked_work = order_blocked_work(db, summary.blocked_work)?;
     Ok(summary)
+}
+
+fn mission_linked_work_roots(
+    db: &Database,
+    objective_kind: &str,
+    mission_id: &str,
+) -> Result<Vec<String>> {
+    let mut roots = BTreeSet::new();
+    if objective_kind == "issue" {
+        for relation in db.get_typed_relations(mission_id)? {
+            if relation.relation_type != "advances" {
+                continue;
+            }
+            let linked_id = if relation.issue_id_1 == mission_id {
+                relation.issue_id_2
+            } else {
+                relation.issue_id_1
+            };
+            roots.insert(linked_id);
+        }
+    } else {
+        for link in db.list_record_links(KIND, mission_id)? {
+            let Some((kind, linked_id)) = other_side(&link, KIND, mission_id) else {
+                continue;
+            };
+            if kind == "issue" && link.relation_type == "advances" {
+                roots.insert(linked_id.to_string());
+            }
+        }
+    }
+    Ok(roots.into_iter().collect())
 }
 
 impl MissionListSummary {
@@ -1557,7 +1685,7 @@ fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
         println!("  atelier issue status {}", row.record.id);
         println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier issue status");
+    println!("  atelier issue table --kind mission");
     println!("  atelier issue create \"...\" --issue-type mission");
 }
 
@@ -1886,14 +2014,6 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
     crate::commands::objective_status::order_issues_by_work_with_default(db, issues)
 }
 
-fn is_active_mission(record: &RecordSummary) -> bool {
-    record.status == "active"
-}
-
-fn mission_focus_label(record: &RecordSummary) -> String {
-    mission_lifecycle_status(record)
-}
-
 fn count_label(count: usize, label: &str) -> String {
     format!("{count} {label}")
 }
@@ -1930,6 +2050,9 @@ fn render_mission_show_human(
         "Updated:  {}",
         format_human_datetime(mission.header.updated_at)
     );
+    if let Some(path) = canonical_mission_path(&mission.header.id)? {
+        println!("File:     {}", path.display());
+    }
 
     print_mission_section("Intent", &sections.intent);
     print_mission_section("Constraints", &sections.constraints);

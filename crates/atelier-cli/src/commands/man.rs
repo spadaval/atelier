@@ -49,7 +49,6 @@ impl Role {
 struct Snapshot {
     tracker: String,
     repo: String,
-    active_mission: Option<String>,
     current_work: Vec<String>,
     ready_count: usize,
     stale_count: usize,
@@ -82,8 +81,6 @@ fn run_admin() -> Result<()> {
 }
 
 fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Snapshot> {
-    let active_mission = commands::mission::active_mission(db)?
-        .map(|mission| format!("{} - {}", mission.id, mission.title));
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let current_work = commands::status::current_work_issues(db, workflow_policy.as_ref())?
         .into_iter()
@@ -103,7 +100,6 @@ fn snapshot(db: &Database, state_dir: &std::path::Path, repo: &str) -> Result<Sn
     Ok(Snapshot {
         tracker,
         repo: repo.to_string(),
-        active_mission,
         current_work,
         ready_count,
         stale_count,
@@ -152,10 +148,6 @@ fn print_current_state(snapshot: Option<&Snapshot>, state_error: Option<&str>) {
             println!("  Tracker:    {}", snapshot.tracker);
             if snapshot.stale_count > 0 {
                 println!("  Stale records: {}", snapshot.stale_count);
-            }
-            match &snapshot.active_mission {
-                Some(mission) => println!("  Active mission: {mission}"),
-                None => println!("  Active mission: none"),
             }
             if snapshot.current_work.is_empty() {
                 println!("  Current work:   none");
@@ -217,19 +209,11 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
             );
         }
         Role::Manager => {
-            if snapshot.and_then(|s| s.active_mission.as_ref()).is_some() {
-                println!(
-                    "  1. atelier issue status - Review active mission readiness and blockers."
-                );
-                println!("  2. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
-                println!(
-                    "  3. atelier bundle apply <file> --yes - Apply reviewed bulk graph changes."
-                );
-            } else {
-                println!("  1. atelier issue list --status all - Choose a mission to inspect explicitly.");
-                println!("  2. atelier issue status <id> - Review mission readiness and blockers.");
-                println!("  3. atelier bundle preview <file> - Validate bulk mission and issue graph changes.");
-            }
+            println!(
+                "  1. atelier issue table --kind mission - Choose a mission to inspect explicitly."
+            );
+            println!("  2. atelier issue status <id> - Review objective readiness and blockers.");
+            println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
         }
         Role::Admin => {
             println!("  1. atelier init - Create tracker scaffolding when missing.");
@@ -252,7 +236,7 @@ fn print_normal_loop(role: Role) {
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
         }
         Role::Reviewer => {
-            println!("  atelier issue status");
+            println!("  atelier issue status <id>");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
             println!(
@@ -269,7 +253,8 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
-            println!("  atelier issue status");
+            println!("  atelier issue table --kind mission");
+            println!("  atelier issue status <id>");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");

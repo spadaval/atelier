@@ -67,7 +67,6 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 249 filtered out; fi
 
 
 running 3 tests
-...
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 248 filtered out; finished in 1.71s
 
 Lint passed.
@@ -197,7 +196,6 @@ warning: method `remove_dependency` is never used
    |
  7 | impl Database {
    | ------------- method in this implementation
-...
 53 |     pub fn remove_dependency(
    |            ^^^^^^^^^^^^^^^^^
 
@@ -206,15 +204,11 @@ warning: multiple methods are never used
     |
  10 | impl Database {
     | ------------- methods in this implementation
-...
  54 |     pub fn create_issue(
     |            ^^^^^^^^^^^^
-...
  63 |     pub fn create_subissue(
     |            ^^^^^^^^^^^^^^^
-...
  73 |     pub fn create_issue_with_type(
     |            ^^^^^^^^^^^^^^^^^^^^^^
-...
  83 |     pub fn create_subissue_with_type(
     |            ^^^^^^^^

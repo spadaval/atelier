@@ -47,20 +47,20 @@ impl ObjectiveStatusSnapshot {
     }
 }
 
-pub(crate) fn snapshot_for_mission(
+pub(crate) fn snapshot_for_issue_objective(
     db: &Database,
-    mission_id: &str,
+    issue_id: &str,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<ObjectiveStatusSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut snapshot = ObjectiveStatusSnapshot {
-        issue_ids: mission_issue_ids(db, mission_id)?,
-        open_blockers: open_objective_blockers(db, "mission", mission_id)?,
+        issue_ids: issue_descendant_ids(db, issue_id)?,
+        open_blockers: open_issue_objective_blockers(db, issue_id)?,
         ..ObjectiveStatusSnapshot::default()
     };
 
-    for issue_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(issue_id)? else {
+    for child_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(child_id)? else {
             continue;
         };
         match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
@@ -95,20 +95,21 @@ pub(crate) fn snapshot_for_mission(
     Ok(snapshot)
 }
 
-pub(crate) fn snapshot_for_issue_objective(
+pub(crate) fn snapshot_for_mission(
     db: &Database,
-    issue_id: &str,
+    mission_id: &str,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<ObjectiveStatusSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let objective_kind = mission_objective_kind(db, mission_id)?;
     let mut snapshot = ObjectiveStatusSnapshot {
-        issue_ids: issue_descendant_ids(db, issue_id)?,
-        open_blockers: open_issue_objective_blockers(db, issue_id)?,
+        issue_ids: mission_issue_ids(db, mission_id)?,
+        open_blockers: open_objective_blockers(db, objective_kind, mission_id)?,
         ..ObjectiveStatusSnapshot::default()
     };
 
-    for child_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(child_id)? else {
+    for issue_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
         match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
@@ -313,6 +314,10 @@ pub(crate) fn open_objective_work(db: &Database, mission_id: &str) -> Result<Vec
 }
 
 pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
+    if mission_objective_kind(db, mission_id)? == "issue" {
+        return issue_descendant_ids(db, mission_id);
+    }
+
     let mut issue_ids = BTreeSet::new();
     for link in db.list_record_links("mission", mission_id)? {
         let Some((kind, linked_id)) = other_side(&link, "mission", mission_id) else {
@@ -325,10 +330,27 @@ pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTree
     Ok(issue_ids)
 }
 
+pub(crate) fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<&'static str> {
+    if db
+        .get_issue(mission_id)?
+        .is_some_and(|issue| issue.issue_type == "mission")
+    {
+        Ok("issue")
+    } else {
+        Ok("mission")
+    }
+}
+
 pub(crate) fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTreeSet<String>> {
     let mut issue_ids = BTreeSet::new();
     for child in db.get_subissues(issue_id)? {
         collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
+    }
+    let follows_advances = db
+        .get_issue(issue_id)?
+        .is_some_and(|issue| issue.issue_type == "mission");
+    if !follows_advances {
+        return Ok(issue_ids);
     }
     for relation in db.get_typed_relations(issue_id)? {
         if relation.relation_type != "advances" {
@@ -373,6 +395,18 @@ pub(crate) fn parent_context(issue: &Issue) -> String {
 
 pub(crate) fn proof_context(_db: &Database, _issue_id: &str) -> Result<&'static str> {
     Ok("proof checked by workflow validators")
+}
+
+pub(crate) fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
+    for link in db.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        if link.source_kind == "evidence" || link.target_kind == "evidence" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn collect_issue_and_descendants(

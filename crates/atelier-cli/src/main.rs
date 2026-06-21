@@ -63,7 +63,7 @@ Common commands:
   atelier issue blocked [<id>]
   atelier issue create \"...\" --issue-type mission
   atelier issue show <mission-id>
-  atelier issue status
+  atelier issue table --kind mission
   atelier issue transition <mission-id> close --reason \"...\"
   atelier bundle preview <file>
   atelier bundle apply <file> --yes
@@ -328,6 +328,19 @@ enum IssueCommands {
         blocked: bool,
     },
 
+    /// Show a homogeneous objective inventory table
+    Table {
+        /// Record kind to inventory: mission or issue
+        #[arg(long, default_value = "mission")]
+        kind: String,
+        /// Filter by exact record/workflow status, or all
+        #[arg(long, default_value = "current")]
+        status: String,
+        /// Filter issue rows by issue type, such as epic
+        #[arg(long)]
+        issue_type: Option<String>,
+    },
+
     /// Show issue details
     Show {
         /// Issue ID
@@ -337,7 +350,7 @@ enum IssueCommands {
     /// Show type-aware issue status for objective records
     Status {
         /// Issue ID
-        id: Option<String>,
+        id: String,
         /// Show verbose validator detail for mission objective records
         #[arg(long)]
         verbose: bool,
@@ -1205,6 +1218,7 @@ fn command_identity(command: &Commands) -> &'static str {
         Commands::Issue { action } => match action {
             IssueCommands::Create { .. } => "issue create",
             IssueCommands::List { .. } => "issue list",
+            IssueCommands::Table { .. } => "issue table",
             IssueCommands::Show { .. } => "issue show",
             IssueCommands::Status { .. } => "issue status",
             IssueCommands::Transition { .. } => "issue transition",

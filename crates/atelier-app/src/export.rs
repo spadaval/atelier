@@ -223,7 +223,7 @@ fn is_activity_path(relative: &Path) -> bool {
     let Some(std::path::Component::Normal(root)) = components.next() else {
         return false;
     };
-    if root != "issues" && root != "missions" {
+    if root != "issues" {
         return false;
     }
     let Some(std::path::Component::Normal(dir)) = components.next() else {

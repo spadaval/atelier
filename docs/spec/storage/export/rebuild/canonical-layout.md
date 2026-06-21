@@ -270,7 +270,7 @@ standard recovery loop is:
 1. Resolve file conflicts under tracked `.atelier/` record directories.
 2. Run `atelier lint`.
 3. Use focused drill-down commands such as `atelier issue show <id>`,
-   `atelier mission show <id>`, `atelier evidence show <id>`, or
+   `atelier issue status <objective-id>`, `atelier evidence show <id>`, or
    `atelier issue list --ready` to inspect the affected records.
 4. Run `atelier doctor --fix` if ignored local projection/runtime state is
    stale or was rebuilt from invalid intermediate files.

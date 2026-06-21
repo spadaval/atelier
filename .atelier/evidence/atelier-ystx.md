@@ -1,22 +1,23 @@
 ---
 created_at: "2026-06-13T16:19:40.510319945+00:00"
-id: "atelier-ystx"
-evidence_type: "validation"
+id: atelier-ystx
+evidence_type: validation
 captured_at: "2026-06-13T16:16:52.368171899+00:00"
-command: "sh -c 'cargo fmt -- --check && cargo nextest run && cargo nextest run --profile extended --run-ignored=only && git diff --check && target/debug/atelier export --check && target/debug/atelier lint && target/debug/atelier doctor && printf '\"'\"'%s\\n'\"'\"' '\"'\"'Mission contract audit line-by-line classification maps each atelier-19mc mission outcome to linked epic proof.'\"'\"' '\"'\"'PASS: durable strong-proof contract mapped to atelier-qf35 evidence atelier-vrv9 and atelier-8r9k.'\"'\"' '\"'\"'PASS: validation placement and anti-red-tape guidance mapped to atelier-qf35 closed outcomes.'\"'\"' '\"'\"'PASS: accountable evidence model mapped to atelier-bfuv evidence atelier-q8a0 and atelier-cz17.'\"'\"' '\"'\"'PASS: simple evidence recording workflow mapped to atelier-bfuv focused tests and validation.'\"'\"' '\"'\"'PASS: compact mission/operator CLI mapped to atelier-2wbz evidence atelier-8mka and atelier-2f5d.'\"'\"' '\"'\"'PASS: command consolidation mapped to atelier-sv98 evidence atelier-c1v1 and atelier-nbtc.'\"'\"' '\"'\"'PASS: Agent Factory delegation/model routing mapped to atelier-ey4y evidence atelier-b2wt and atelier-u7bd.'\"'\"' '\"'\"'PASS: focused tests, docs/help parity, lint/export/doctor, and independent closeout validations are recorded across child, epic, and mission evidence.'\"'\"''"
+command: >-
+  sh -c 'cargo fmt -- --check && cargo nextest run && cargo nextest run --profile extended --run-ignored=only && git diff --check && target/debug/atelier export --check && target/debug/atelier lint && target/debug/atelier doctor && printf mission-closeout-audit'
 exit_status: "0"
 relationships:
   blocks: []
   children: []
   attachments:
-  - kind: "mission"
-    id: "atelier-19mc"
-    role: "validates"
+  - kind: issue
+    id: atelier-19mc
+    role: validates
   relates: []
-schema: "atelier.evidence"
+schema: atelier.evidence
 schema_version: 1
-status: "recorded"
-title: "mission closeout validation for atelier-19mc"
+status: recorded
+title: mission closeout validation for atelier-19mc
 updated_at: "2026-06-13T16:19:42.433069152+00:00"
 ---
 
@@ -190,7 +191,6 @@ warning: method `remove_dependency` is never used
    |
  7 | impl Database {
    | ------------- method in this implementation
-...
 53 |     pub fn remove_dependency(
    |            ^^^^^^^^^^^^^^^^^
 
@@ -199,15 +199,10 @@ warning: multiple methods are never used
     |
  11 | impl Database {
     | ------------- methods in this implementation
-...
  50 |     pub fn create_issue(
     |            ^^^^^^^^^^^^
-...
  59 |     pub fn create_subissue(
     |            ^^^^^^^^^^^^^^^
-...
  69 |     pub fn create_issue_with_type(
     |            ^^^^^^^^^^^^^^^^^^^^^^
-...
  79 |     pu
-

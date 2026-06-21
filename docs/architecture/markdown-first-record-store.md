@@ -300,7 +300,7 @@ are classified as follows:
 | Dropped `token_usage`, `time_entries`, `milestones`, `milestone_issues` | Compatibility removal | Already removed from the active schema after their command surfaces or replacement record forms superseded them. |
 
 Representative detail paths for this boundary are `atelier issue show`,
-`atelier mission show`, and `atelier evidence show`: the
+`atelier issue status <objective-id>`, and `atelier evidence show`: the
 commands use SQLite to resolve requested IDs, relationships, and graph/runtime
 metadata, then load the selected Markdown payload from `RecordStore` before
 rendering. `atelier search` also matches issue titles and bodies from

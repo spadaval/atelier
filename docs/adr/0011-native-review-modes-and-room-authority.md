@@ -49,7 +49,7 @@ room summaries that drift from their event history.
    recording a merge event. In provider mode it delegates merge or merge
    confirmation to the configured provider. It never starts, closes, blocks, or
    otherwise transitions Atelier issues. Workflow transitions continue to use
-   explicit `atelier issue` and `atelier mission` commands.
+   explicit `atelier issue` commands, including objective issue transitions.
 
 6. Workflow transition actions may prepare review artifacts.
    A successful explicit issue transition may declare a bounded action that

@@ -9,7 +9,7 @@ the root command file when the root command serves more than one role.
 
 Last refreshed: 2026-06-20 from `cargo run -q -p atelier-cli -- --help`.
 
-Current checkout caveat: `atelier status` and `atelier issue status` fail in
+Current checkout caveat: `atelier status` and `atelier issue status <id>` fail in
 this checkout because `.atelier/workflow.yaml` contains
 `statuses.in_progress.role`, while the current workflow parser expects
 `category`. That makes the command surface available for audit, but the

@@ -15,9 +15,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+closed_at: "2026-06-21T19:33:33.088726030+00:00"
+status: "done"
 title: "Migrate existing first-class mission records to target objective records"
-updated_at: "2026-06-21T16:37:30.769361494+00:00"
+updated_at: "2026-06-21T19:33:33.088726030+00:00"
 ---
 
 ## Description

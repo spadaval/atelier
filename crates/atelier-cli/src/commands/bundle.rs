@@ -409,17 +409,41 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
     }
 
     for mission in &bundle.resources.missions {
-        create_bulk_record(
-            &store,
-            &mut resolved,
-            &mut created,
-            &mission.client_ref,
-            "mission",
-            &mission.title,
-            mission.body.as_deref(),
-            json!({}),
-            mission_labels(mission),
-        )?;
+        let now = chrono::Utc::now();
+        let id = store.allocate_issue_id()?;
+        let record = CanonicalIssueRecord {
+            issue: Issue {
+                id: id.clone(),
+                title: mission.title.clone(),
+                description: mission.body.clone(),
+                status: workflow_initial_issue_status("mission")?,
+                issue_type: "mission".to_string(),
+                priority: "medium".to_string(),
+                fields: Default::default(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                closed_at: None,
+            },
+            labels: mission_labels(mission),
+            sections: IssueSections::unchecked_from_body(mission.body.as_deref()),
+            relationships: Relationships::default(),
+        };
+        store.write_issue_atomic(&record)?;
+        resolved.insert(
+            mission.client_ref.clone(),
+            ResolvedRef {
+                kind: "issue".to_string(),
+                id: id.clone(),
+            },
+        );
+        created
+            .entry("issues".to_string())
+            .or_default()
+            .push(json!({
+                "client_ref": mission.client_ref,
+                "id": id,
+            }));
     }
     for evidence in &bundle.resources.evidence {
         let data = EvidenceRecordData {
@@ -575,7 +599,7 @@ fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<()> {
 }
 
 fn install_bundle_stage(stage: &Path, state_dir: &Path) -> Result<()> {
-    for name in ["issues", "missions", "evidence"] {
+    for name in ["issues", "evidence"] {
         replace_dir_from_stage(&stage.join(name), &state_dir.join(name))?;
     }
     Ok(())
@@ -626,7 +650,7 @@ impl BundleFile {
             self.resources
                 .missions
                 .iter()
-                .map(|record| (record.client_ref.clone(), "mission")),
+                .map(|record| (record.client_ref.clone(), "issue")),
         );
         refs.extend(
             self.resources
@@ -755,19 +779,7 @@ fn create_bulk_record(
     data: Value,
     labels: Vec<String>,
 ) -> Result<()> {
-    let status = if kind == "mission" { "ready" } else { "open" };
     let mut record = match kind {
-        "mission" => Record::Mission(store.create_mission(
-            title,
-            status,
-            atelier_records::mission_sections_from_inputs(
-                title,
-                body,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-        )?),
         "evidence" => Record::Evidence(store.create_evidence(
             title,
             "recorded",
@@ -891,7 +903,7 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         println!();
         println!("Records");
         println!("-------");
-        for key in ["issues", "missions", "evidence"] {
+        for key in ["issues", "evidence"] {
             let count = records
                 .get(key)
                 .and_then(|value| value.as_array())
@@ -912,7 +924,7 @@ fn print_bundle_summary(summary: Value) -> Result<()> {
         .unwrap_or(0);
     println!("  relationships: {relationship_count}");
 
-    if let Some(id) = first_created_id(&summary, "missions") {
+    if let Some(id) = first_created_id(&summary, "issues") {
         println!();
         println!("Next Commands");
         println!("-------------");
@@ -949,7 +961,6 @@ fn mission_labels(mission: &BundleMission) -> Vec<String> {
 fn created_key(kind: &str) -> &str {
     match kind {
         "evidence" => "evidence",
-        "mission" => "missions",
         "issue" => "issues",
         _ => kind,
     }
