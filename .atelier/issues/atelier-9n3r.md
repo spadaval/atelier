@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "evidence"
 - "workflow"
+review:
+  kind: pull_request
+  number: 21
+  provider: forgejo
 priority: "P2"
 relationships:
   blocks: []
