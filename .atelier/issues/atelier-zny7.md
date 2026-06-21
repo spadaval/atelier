@@ -27,9 +27,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Record ADR for mission command and workflow authority"
-updated_at: "2026-06-21T16:37:30.761972151+00:00"
+updated_at: "2026-06-21T18:21:42.793777155+00:00"
 ---
 
 ## Description

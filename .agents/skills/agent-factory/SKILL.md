@@ -11,12 +11,12 @@ Agent Factory is the portable coordination layer. It assigns bounded agent roles
 from durable repository state; it is not the repository command manual.
 
 For Atelier repositories, tactical workflow lives in Atelier's executable
-surfaces: `atelier man <role>`, `atelier status`, `atelier mission status`, and
-focused `show`/`list`/`transition` commands. Use those surfaces for current
-command names, readiness, proof, recovery, and closeout detail. Do not encode
-repository-specific review, branch, provider, merge, or completion policy in
-this skill; follow the process guidance emitted by Atelier for the current
-checkout and work item.
+surfaces: `atelier man <role>`, `atelier status`, focused `atelier issue status
+<objective-id>`, and focused `show`/`list`/`transition` commands. Use those
+surfaces for current command names, readiness, proof, recovery, and closeout
+detail. Do not encode repository-specific review, branch, provider, merge, or
+completion policy in this skill; follow the process guidance emitted by Atelier
+for the current checkout and work item.
 
 ## Coordination Rules
 

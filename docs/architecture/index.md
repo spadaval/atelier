@@ -53,6 +53,7 @@ Accepted ADRs record cross-cutting product choices:
 - [ADR 0011: Native Review Modes And Room Authority](../adr/0011-native-review-modes-and-room-authority.md)
 - [ADR 0013: Workflow Transition Actions And Branching](../adr/0013-workflow-transition-actions-and-branching.md)
 - [ADR 0014: Status Role Attribution Replaces Sessions](../adr/0014-status-role-attribution-replaces-sessions.md)
+- [ADR 0015: Missions Are Declared Workflow Policy](../adr/0015-missions-are-declared-workflow-policy.md)
 
 ## Target Architecture
 
