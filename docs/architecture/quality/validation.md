@@ -240,9 +240,10 @@ automation-heavy completion; ordinary issue work should stay readable and avoid
 mandatory line IDs.
 
 `atelier issue status <mission-id>` is the normal operator surface for mission
-state, blockers, evidence gaps, next actions, and completion status. Verbose
-issue status is completion drill-down: it reports mission shell completion and
-any explicit linked validation work that supplies workflow approval.
+state, blockers, configured validator failures, next actions, and completion
+status. Verbose issue status is completion drill-down: it reports mission shell
+completion and any explicit linked validation work that supplies workflow
+approval.
 Hidden workflow validators are
 advanced diagnostics; use them only when the assignment or completion
 contract explicitly requires them, and attach the human-readable result to the
@@ -253,11 +254,12 @@ accountable issue that performed the check.
 For a subjective `mission list` information-hierarchy task:
 
 - Mission validation says the mission operator can identify state, blockers,
-  missing proof, and next action without private context.
+  configured proof validator failures, and next action without private context.
 - Epic outcome says the mission operator CLI presents a concise default view
   with drill-down available for audit detail.
 - Executable issue outcome says `mission list` output groups active missions by
-  status and exposes blockers/evidence gaps in the default human output.
+  status and exposes blockers and configured validator failures in the default
+  human output.
 - The validation issue says an independent evaluator reviews the default output
   for a representative mission fixture, classifies the information hierarchy,
   records rationale, and attaches the transcript or screenshot.

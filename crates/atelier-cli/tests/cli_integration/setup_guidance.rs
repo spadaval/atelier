@@ -1163,19 +1163,8 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Checkout: dirty"));
     assert!(stdout.contains("status-dirty.txt"));
     assert!(stdout.contains("Branch:"));
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout
-        .contains("Attached Proof: missing - 2 issue(s) without validating evidence; 0 attached"));
-    assert!(stdout.contains(&format!("  Missing: {blocker_id}")));
-    assert!(stdout.contains(&format!("  Missing: {ready_id}")));
-    assert!(
-        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains("atelier evidence record --target issue/<id> --kind validation \"...\"")
-    );
-    assert!(stdout.contains("atelier evidence attach <evidence-id> issue <issue-id>"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: missing"));
     assert!(stdout.contains("Active Mission"));
     assert!(stdout.contains(&format!("{mission_id} - Status focus")));
     assert!(stdout.contains("Health:   blocked"));
@@ -1184,10 +1173,10 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains(ready_id));
     assert!(stdout.contains(blocker_id));
     assert!(stdout.contains(&format!(
-        "ready {blocker_id} - Focus blocker | no open blockers; mission-linked root; proof missing"
+        "ready {blocker_id} - Focus blocker | no open blockers; mission-linked root; proof checked by workflow validators"
     )));
     assert!(stdout.contains(&format!(
-        "ready {ready_id} - Ready focus | no open blockers; mission-linked root; proof missing"
+        "ready {ready_id} - Ready focus | no open blockers; mission-linked root; proof checked by workflow validators"
     )));
     assert!(stdout.contains("Blocked In Active Mission"));
     assert!(stdout.contains(&format!(
@@ -1274,10 +1263,10 @@ fn test_issue_status_renders_objective_work_health() {
     assert!(stdout.contains("Total: ready 2, blocked 1, done 0, backlog 0"));
     assert!(stdout.contains("Ready Work"));
     assert!(stdout.contains(&format!(
-        "ready {ready_id} - Ready child | no open blockers; parent {objective_id}; proof missing"
+        "ready {ready_id} - Ready child | no open blockers; parent {objective_id}; proof checked by workflow validators"
     )));
     assert!(stdout.contains(&format!(
-        "ready {blocker_id} - Blocking child | no open blockers; parent {objective_id}; proof missing"
+        "ready {blocker_id} - Blocking child | no open blockers; parent {objective_id}; proof checked by workflow validators"
     )));
     assert!(stdout.contains("Blocked Work"));
     assert!(stdout.contains(&format!(
@@ -1285,7 +1274,7 @@ fn test_issue_status_renders_objective_work_health() {
     )));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
-    assert!(stdout.contains("Attached Proof: missing - issue proof gaps"));
+    assert!(!stdout.contains("Attached Proof: missing - issue proof gaps"));
     assert!(stdout.contains("Terminal Checks"));
     assert!(stdout.contains("Work: open"));
     assert!(stdout.contains("Blockers: open"));
@@ -1360,7 +1349,7 @@ fn test_issue_link_replaces_objective_relationship_mutations() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
     assert!(success, "issue status failed: {stderr}");
     assert!(stdout.contains(&format!(
-        "ready {work_id} - Linked work | no open blockers; mission-linked root; proof missing"
+        "ready {work_id} - Linked work | no open blockers; mission-linked root; proof checked by workflow validators"
     )));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
@@ -1461,8 +1450,8 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: irrelevant - no current or ready work"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: irrelevant - no current or ready work"));
     assert!(stdout.contains(
         "Inspect blocked work (no ready work is available): atelier issue list --blocked"
     ));

@@ -523,7 +523,6 @@ fn render_issue_show_human(
     render_parent_context(db, canonical_id)?;
     render_branch_lifecycle_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
-    render_issue_evidence_status(db, canonical_id, object.sections.as_ref())?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -541,30 +540,6 @@ fn render_issue_show_human(
     render_impact_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
-    Ok(())
-}
-
-fn render_issue_evidence_status(
-    db: &Database,
-    canonical_id: &str,
-    sections: Option<&IssueSections>,
-) -> Result<()> {
-    let issue = db.require_issue(canonical_id)?;
-    let gate = issue_evidence_gate_status(db, &issue, sections)?;
-    println!("\nEvidence Status");
-    println!("---------------");
-    if gate.passed {
-        println!("Attached Proof: attached - {}", gate.reason);
-    } else {
-        println!("Attached Proof: missing - {}", gate.reason);
-        if let Some(help) = &gate.help {
-            println!("  Hint: {help}");
-        }
-        println!(
-            "  Next: atelier evidence record --target issue/{canonical_id} --kind validation \"...\""
-        );
-        println!("  Next: atelier evidence attach <evidence-id> issue {canonical_id}");
-    }
     Ok(())
 }
 

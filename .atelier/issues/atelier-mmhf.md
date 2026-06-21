@@ -15,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Replace hardcoded evidence proof gaps with validator readiness"
-updated_at: "2026-06-21T17:40:37.513320749+00:00"
+updated_at: "2026-06-21T19:00:13.563293979+00:00"
 ---
 
 ## Description

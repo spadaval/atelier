@@ -100,13 +100,12 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
             let work = row.summary.total_work();
             let health = mission_health(&row.summary);
             println!(
-                "  {} [{}] {} - {} | {} | evidence gaps {} | terminal {}",
+                "  {} [{}] {} - {} | {} | terminal {}",
                 row.record.id,
                 health,
                 mission_focus_label(&row.record),
                 row.record.title,
                 work.to_compact_text(),
-                row.summary.evidence_gap_count(),
                 if row.summary.terminal_ready() {
                     "ready"
                 } else {
@@ -140,7 +139,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     if quiet {
         let work = summary.total_work();
         println!(
-            "{} health={} ready={} blocked={} done={} backlog={} blockers={} evidence_gaps={} validator_failures={} tracker={} terminal_ready={}",
+            "{} health={} ready={} blocked={} done={} backlog={} blockers={} validator_failures={} tracker={} terminal_ready={}",
             mission.id,
             mission_health_for(&mission, &summary),
             work.ready,
@@ -148,7 +147,6 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
             work.done,
             work.backlog,
             summary.open_blockers,
-            summary.evidence_gap_count(),
             validator_failures,
             tracker.status_token(),
             if mission_lifecycle_status(&mission) == "closed" {
@@ -457,12 +455,6 @@ fn print_status_next_commands(
                 "  Inspect selectable mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
                 summary.selectable_work.len(),
                 issue.id
-            );
-        }
-        if summary.evidence_gap_count() > 0 {
-            println!(
-                "  Record validation proof ({} evidence gap(s)): atelier evidence record --target issue/<id> --kind validation \"...\"",
-                summary.evidence_gap_count()
             );
         }
     }
@@ -856,7 +848,6 @@ fn print_reliability_summary(
     terminal: &MissionTerminalStatus,
 ) -> Result<()> {
     let section_gaps = mission_issue_section_gaps(db, state_dir, &mission.id)?;
-    let issue_proof_gaps = mission_issue_proof_gaps(db, &mission.id)?;
 
     if tracker.stale_entries.is_empty() {
         println!("Projection Freshness: current");
@@ -884,18 +875,6 @@ fn print_reliability_summary(
 
     print_section_gap_signal("Missing Outcome Sections", &section_gaps.missing_outcome);
     print_graph_hygiene_signal(summary);
-
-    if issue_proof_gaps.is_empty() {
-        println!("Attached Proof: complete");
-    } else {
-        println!(
-            "Attached Proof: missing - issue proof gaps: {}",
-            compact_strings(&issue_proof_gaps)
-        );
-        println!("  Hint: {}", crate::commands::issue::evidence_help_hint());
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
-    }
 
     print_reliability_validator_signal(
         terminal,
@@ -1025,17 +1004,6 @@ fn mission_issue_section_gaps(
     Ok(gaps)
 }
 
-fn mission_issue_proof_gaps(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let mut gaps = Vec::new();
-    for issue_id in crate::commands::objective_status::mission_issue_ids(db, mission_id)? {
-        if validating_evidence_ids(db, "issue", &issue_id)?.is_empty() {
-            gaps.push(issue_id);
-        }
-    }
-    gaps.sort();
-    Ok(gaps)
-}
-
 struct TerminalCheckStatusLine {
     summary: String,
     next: Option<String>,
@@ -1162,42 +1130,6 @@ pub(crate) fn mission_validation_criteria_gate(
             compact_strings(&pending)
         ),
     ))
-}
-
-fn validating_evidence_records(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<Vec<RecordSummary>> {
-    let mut records = db
-        .list_record_links(target_kind, target_id)?
-        .into_iter()
-        .filter(|link| link.relation_type == "validates")
-        .filter_map(|link| {
-            if link.source_kind == "evidence" {
-                Some(link.source_id)
-            } else if link.target_kind == "evidence" {
-                Some(link.target_id)
-            } else {
-                None
-            }
-        })
-        .map(|id| db.require_record("evidence", &id))
-        .collect::<Result<Vec<_>>>()?;
-    records.sort_by(|a, b| a.id.cmp(&b.id));
-    records.dedup_by(|a, b| a.id == b.id);
-    Ok(records)
-}
-
-fn validating_evidence_ids(
-    db: &Database,
-    target_kind: &str,
-    target_id: &str,
-) -> Result<Vec<String>> {
-    Ok(validating_evidence_records(db, target_kind, target_id)?
-        .into_iter()
-        .map(|record| record.id)
-        .collect())
 }
 
 #[derive(Default)]
@@ -1376,7 +1308,6 @@ struct MissionListSummary {
     blocked_work: Vec<BlockedMissionWork>,
     open_blockers: usize,
     evidence_count: usize,
-    issue_proof_gap_count: usize,
     approval_pending_count: usize,
     duplicate_reachability: Vec<DuplicateReachability>,
 }
@@ -1454,9 +1385,6 @@ fn mission_list_summary(db: &Database, mission_id: &str) -> Result<MissionListSu
     for issue_id in &mission_issue_ids {
         let issue = db.require_issue(issue_id)?;
         summary.work.add_bucket(issue_bucket(db, &issue)?);
-        if validating_evidence_ids(db, "issue", issue_id)?.is_empty() {
-            summary.issue_proof_gap_count += 1;
-        }
         if issue.issue_type == "validation"
             && !crate::commands::issue_workflow::issue_is_done(workflow_policy.as_ref(), &issue)
         {
@@ -1509,10 +1437,6 @@ impl MissionListSummary {
         self.work
     }
 
-    fn evidence_gap_count(&self) -> usize {
-        self.issue_proof_gap_count
-    }
-
     fn terminal_ready(&self) -> bool {
         let work = self.total_work();
         work.done > 0
@@ -1520,7 +1444,6 @@ impl MissionListSummary {
             && work.blocked == 0
             && work.backlog == 0
             && self.open_blockers == 0
-            && self.issue_proof_gap_count == 0
             && self.approval_pending_count == 0
     }
 }
@@ -1740,9 +1663,6 @@ fn print_mission_list_open_work(row: &MissionListRow) {
             count_label(row.summary.open_blockers, "open")
         );
     }
-    if row.summary.evidence_gap_count() > 0 {
-        println!("    Evidence gaps: {}", row.summary.evidence_gap_count());
-    }
     if row.summary.terminal_ready() {
         println!("    Terminal: ready");
     }
@@ -1932,7 +1852,7 @@ fn mission_health(summary: &MissionListSummary) -> &'static str {
         "terminal"
     } else if work.ready > 0 {
         "ready"
-    } else if summary.evidence_gap_count() > 0 || summary.approval_pending_count > 0 {
+    } else if summary.approval_pending_count > 0 {
         "needs-evidence"
     } else {
         "steady"

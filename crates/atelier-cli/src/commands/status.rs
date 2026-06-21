@@ -9,7 +9,7 @@ use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
 use atelier_records::activity::list_all_issue_activities;
-use atelier_sqlite::{Database, RecordSummary};
+use atelier_sqlite::Database;
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
@@ -120,17 +120,6 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!("Branch Policy");
     println!("----------------");
     print_branch_lifecycle_state(db, &active_issues)?;
-
-    println!();
-    println!("Evidence Status");
-    println!("---------------");
-    print_evidence_status(
-        db,
-        &active_issues,
-        active_mission.as_ref(),
-        mission_snapshot.as_ref(),
-        &ready,
-    )?;
 
     if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
         println!();
@@ -352,67 +341,6 @@ fn render_role_counts(counts: &BTreeMap<String, usize>) -> String {
         .map(|(role, count)| format!("{role}={count}"))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn print_evidence_status(
-    db: &Database,
-    active_issues: &[Issue],
-    active_mission: Option<&RecordSummary>,
-    mission_snapshot: Option<&commands::objective_status::ObjectiveStatusSnapshot>,
-    ready: &[Issue],
-) -> Result<()> {
-    let proof_issue_ids = if let Some(snapshot) = mission_snapshot {
-        active_issues
-            .iter()
-            .chain(snapshot.selectable_issues.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    } else {
-        active_issues
-            .iter()
-            .chain(ready.iter())
-            .map(|issue| issue.id.as_str())
-            .collect::<BTreeSet<_>>()
-    };
-
-    if proof_issue_ids.is_empty() {
-        if active_mission.is_some() {
-            println!("Attached Proof: irrelevant - no current or selectable mission work");
-        } else {
-            println!("Attached Proof: irrelevant - no current or ready work");
-        }
-        return Ok(());
-    }
-
-    let mut attached = 0usize;
-    let mut missing = Vec::new();
-    for issue_id in &proof_issue_ids {
-        if commands::objective_status::has_validating_evidence(db, issue_id)? {
-            attached += 1;
-        } else {
-            missing.push((*issue_id).to_string());
-        }
-    }
-
-    if missing.is_empty() {
-        println!("Attached Proof: attached - {attached} issue(s) have validating evidence");
-    } else {
-        println!(
-            "Attached Proof: missing - {} issue(s) without validating evidence; {attached} attached",
-            missing.len()
-        );
-        for issue_id in missing.iter().take(3) {
-            println!("  Missing: {issue_id}");
-        }
-        if missing.len() > 3 {
-            println!("  Missing: {} more issue(s)", missing.len() - 3);
-        }
-        println!("  Hint: {}", commands::issue::evidence_help_hint());
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
-    }
-
-    Ok(())
 }
 
 fn plural_suffix(count: usize) -> &'static str {

@@ -1372,7 +1372,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     assert!(success, "mission list failed: {stderr}");
     assert!(stdout.contains("Mission Status"));
     assert!(stdout.contains("2 ready missions | 1 blocked"));
-    assert!(stdout.contains("evidence gaps"));
+    assert!(!stdout.contains("evidence gaps"));
     assert!(!stdout.contains("ready="));
     assert!(!stdout.contains("Closed"));
 
@@ -1501,11 +1501,11 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("blocked"));
     assert!(status_out.contains("Selectable Work"));
     assert!(status_out.contains(&format!(
-        "ready {ready_id} - Ready status work | no open blockers; parent {epic_id}; proof missing"
+        "ready {ready_id} - Ready status work | no open blockers; parent {epic_id}; proof checked by workflow validators"
     )));
     assert!(status_out.contains("Blocked Work"));
     assert!(status_out.contains(&format!(
-        "blocked {blocked_id} - Blocked status work | 1 blocker; details: atelier issue blocked {blocked_id}; parent {epic_id}; proof missing"
+        "blocked {blocked_id} - Blocked status work | 1 blocker; details: atelier issue blocked {blocked_id}; parent {epic_id}; proof checked by workflow validators"
     )));
     assert!(!status_out.contains(&format!("blocked by {blocker_id}")));
     assert!(status_out.contains("Blockers"));
@@ -1515,7 +1515,7 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Projection Freshness: current"));
     assert!(status_out.contains("Malformed Work: none"));
     assert!(status_out.contains("Missing Outcome Sections: none"));
-    assert!(status_out.contains("Attached Proof: missing"));
+    assert!(!status_out.contains("Attached Proof: missing"));
     assert!(status_out.contains("Open Blockers: 1 open"));
     assert!(status_out.contains(&format!("atelier issue status {mission_id} --verbose")));
     assert!(status_out.contains("atelier lint"));
@@ -1538,9 +1538,6 @@ fn test_mission_status_cli_reports_control_state() {
     assert!(status_out.contains("Resolve open blockers before assigning more implementation work"));
     assert!(!status_out.contains("ready item(s)): atelier issue list --ready"));
     assert!(!status_out.contains("selectable issue(s)): atelier start"));
-    assert!(status_out.contains("Record validation proof ("));
-    assert!(status_out
-        .contains("atelier evidence record --target issue/<id> --kind validation \"...\""));
     assert!(
         !status_out.contains("workflow validate"),
         "normal mission next commands must not route to raw workflow validators:\n{status_out}"
@@ -1550,7 +1547,7 @@ fn test_mission_status_cli_reports_control_state() {
         run_atelier(dir.path(), &["--quiet", "issue", "status", mission_id]);
     assert!(success, "quiet mission status failed: {stderr}");
     assert!(quiet_out.contains(&format!("{mission_id} health=blocked")));
-    assert!(quiet_out.contains("evidence_gaps="));
+    assert!(!quiet_out.contains("evidence_gaps="));
     assert!(quiet_out.contains("tracker=ok"));
 
     let (success, dashboard_out, stderr) = run_atelier(dir.path(), &["issue", "status"]);
@@ -1622,7 +1619,7 @@ fn test_mission_status_cli_reports_control_state() {
         "unexpected closeout mission status:\n{closeout_status}"
     );
     assert!(closeout_status.contains("Reliability"));
-    assert!(closeout_status.contains("Attached Proof: complete"));
+    assert!(!closeout_status.contains("Attached Proof: complete"));
     assert!(closeout_status.contains("Docs/Help Drift: clear"));
     assert!(closeout_status.contains("Ignored Test Review: current"));
     assert!(closeout_status.contains("Open Blockers: none"));

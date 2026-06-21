@@ -371,24 +371,8 @@ pub(crate) fn parent_context(issue: &Issue) -> String {
     }
 }
 
-pub(crate) fn proof_context(db: &Database, issue_id: &str) -> Result<&'static str> {
-    if has_validating_evidence(db, issue_id)? {
-        Ok("proof attached")
-    } else {
-        Ok("proof missing")
-    }
-}
-
-pub(crate) fn has_validating_evidence(db: &Database, issue_id: &str) -> Result<bool> {
-    for link in db.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        if link.source_kind == "evidence" || link.target_kind == "evidence" {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+pub(crate) fn proof_context(_db: &Database, _issue_id: &str) -> Result<&'static str> {
+    Ok("proof checked by workflow validators")
 }
 
 fn collect_issue_and_descendants(

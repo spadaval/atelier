@@ -448,18 +448,8 @@ fn test_issue_show_surfaces_evidence_status() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show without evidence failed: {stderr}");
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: missing - no validating evidence link found"));
-    assert!(
-        stdout.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
-        "{stdout}"
-    );
-    assert!(stdout.contains(&format!(
-        "atelier evidence record --target issue/{issue_id} --kind validation"
-    )));
-    assert!(stdout.contains(&format!(
-        "atelier evidence attach <evidence-id> issue {issue_id}"
-    )));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: missing - no validating evidence link found"));
 
     move_issue_to_validation(dir.path(), &issue_id);
     let (success, transitions, stderr) =
@@ -493,8 +483,8 @@ fn test_issue_show_surfaces_evidence_status() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show with evidence failed: {stderr}");
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
