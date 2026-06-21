@@ -91,23 +91,13 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            let inferred_issue_type = if issue_type.is_none()
-                && (body.is_some()
-                    || !constraint.is_empty()
-                    || !risk.is_empty()
-                    || !validation.is_empty())
-            {
-                Some("mission")
-            } else {
-                issue_type.as_deref()
-            };
             let (final_priority, final_description, labels, issue_type) = issue_create_parts(
                 &priority,
                 template.as_deref(),
                 description.as_deref(),
                 body.as_deref(),
                 &label,
-                inferred_issue_type,
+                issue_type.as_deref(),
             )?;
             commands::issue::create_lifecycle(
                 &state_dir,

@@ -10,7 +10,6 @@ use crate::commands::issue_workflow::{
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
 use crate::utils::format_issue_id;
-use atelier_app::use_cases as app_use_cases;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
@@ -603,6 +602,9 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
 }
 
 pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
+    if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
+        return crate::commands::mission::transition_options(db, issue_ref);
+    }
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
@@ -1718,11 +1720,8 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
-    if input.issue_type == "mission" {
-        return create_mission_lifecycle(state_dir, db_path, input);
-    }
     if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty() {
-        bail!("mission section flags require `--issue-type mission`");
+        bail!("mission section flags are not supported for issue records");
     }
     validate_priority(input.priority)?;
     validate_configured_issue_type(state_dir, input.issue_type)?;
@@ -1803,65 +1802,6 @@ pub fn create_lifecycle(
     Ok(())
 }
 
-fn create_mission_lifecycle(
-    state_dir: &Path,
-    db_path: &Path,
-    input: LifecycleCreateInput<'_>,
-) -> Result<()> {
-    if input.parent.is_some() {
-        bail!("mission objective records do not support --parent; use `atelier issue link <objective-id> <issue-id> --role advances` after creation");
-    }
-    let sections = atelier_records::mission_sections_from_inputs(
-        input.title,
-        input.description,
-        input.constraints,
-        input.risks,
-        input.validation,
-    );
-    let mut record =
-        app_use_cases::create_mission_record(state_dir, input.title, "ready", sections)?;
-    for label in input.labels {
-        push_unique(&mut record.header.labels, label.to_string());
-    }
-    if !input.labels.is_empty() {
-        record.header.updated_at = Utc::now();
-        app_use_cases::write_canonical_record(state_dir, &Record::Mission(record.clone()))?;
-    }
-    app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
-    if input.quiet {
-        println!("{}", record.header.id);
-        return Ok(());
-    }
-
-    let file_path = state_dir
-        .join("missions")
-        .join(format!("{}.md", record.header.id));
-    println!(
-        "Created mission objective {} - {}",
-        record.header.id, record.header.title
-    );
-    println!("Type:     mission");
-    println!("Status:   {}", record.header.status);
-    println!("File:     {}", file_path.display());
-    println!();
-    println!("Next Commands");
-    println!("-------------");
-    println!("  Edit mission Markdown: {}", file_path.display());
-    println!(
-        "  Validate this objective: atelier lint {}",
-        record.header.id
-    );
-    println!(
-        "  Inspect this objective: atelier issue show {}",
-        record.header.id
-    );
-    println!(
-        "  Inspect objective status: atelier issue status {}",
-        record.header.id
-    );
-    Ok(())
-}
-
 fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {
     validate_issue_type(issue_type)?;
     let policy = load_repo_policy(state_dir)?;
@@ -1869,7 +1809,8 @@ fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<
         Ok(())
     } else {
         bail!(
-            "Invalid issue_type '{}'. Valid values: {}",
+            "workflow policy at {} must declare issue_type '{}' in issue_types and cover it exactly once in workflows.*.applies_to; valid values: {}",
+            atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
             issue_type,
             configured_issue_type_names(&policy).join(", ")
         )

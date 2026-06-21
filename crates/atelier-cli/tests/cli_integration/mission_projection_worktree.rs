@@ -1,5 +1,36 @@
 use super::*;
 
+fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
+    let bundle_path = dir.join(format!("mission-fixture-{}.json", title.replace(' ', "-")));
+    std::fs::write(
+        &bundle_path,
+        format!(
+            r#"{{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Mission fixture",
+  "resources": {{
+    "missions": [
+      {{
+        "client_ref": "mission.fixture",
+        "title": {title:?},
+        "body": "Mission fixture body.",
+        "labels": ["mission"]
+      }}
+    ]
+  }}
+}}"#
+        ),
+    )
+    .unwrap();
+    let (success, _stdout, stderr) = run_atelier(
+        dir,
+        &["bundle", "apply", bundle_path.to_str().unwrap(), "--yes"],
+    );
+    assert!(success, "mission fixture bundle apply failed: {stderr}");
+    record_id_by_title(dir, "missions", title)
+}
+
 #[test]
 fn test_issue_orientation_uses_workflow_categories_and_exact_statuses() {
     let dir = tempdir().unwrap();
@@ -457,6 +488,140 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
             && stderr.contains(&format!(".atelier/issues/{issue_id}.md")),
         "missing closeout diagnostic, stdout:\n{stdout}\nstderr:\n{stderr}"
     );
+}
+
+#[test]
+fn test_mission_terminal_status_and_options_use_configured_objective_validators() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Configured validator blockers");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Configured open work"]);
+    assert!(success, "issue create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Configured open work");
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
+    assert!(success, "mission link failed: {stderr}");
+    commit_all(dir.path(), "configured validator blocked fixture");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Linked Work: present"), "{status_out}");
+    assert!(
+        status_out.contains("Linked Work Terminal: open"),
+        "{status_out}"
+    );
+    assert!(status_out.contains(&work_id), "{status_out}");
+
+    let (success, options_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--options"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        options_out.contains("objective.work_present"),
+        "{options_out}"
+    );
+    assert!(
+        options_out.contains("objective.work_terminal"),
+        "{options_out}"
+    );
+    assert!(options_out.contains(&work_id), "{options_out}");
+    assert!(
+        options_out.contains("open advancing work via advances"),
+        "{options_out}"
+    );
+}
+
+#[test]
+fn test_mission_close_uses_configured_objective_validators() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission_id = create_mission_fixture(dir.path(), "Configured validator close");
+
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Configured terminal work"]);
+    assert!(success, "issue create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Configured terminal work");
+    let (success, _stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
+    assert!(success, "mission link failed: {stderr}");
+    commit_all(dir.path(), "configured validator close fixture");
+
+    close_issue_with_evidence(dir.path(), &work_id, Some("done"));
+    attach_pass_evidence(
+        dir.path(),
+        "mission",
+        &mission_id,
+        "configured mission proof",
+    );
+    commit_all(dir.path(), "configured validator close ready");
+
+    let (success, options_out, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "transition", &mission_id, "--options"],
+    );
+    assert!(success, "mission transition options failed: {stderr}");
+    assert!(
+        options_out.contains("pass  objective.work_present"),
+        "{options_out}"
+    );
+    assert!(
+        options_out.contains("pass  objective.work_terminal"),
+        "{options_out}"
+    );
+    assert!(
+        options_out.contains("pass  objective.blockers_none_open"),
+        "{options_out}"
+    );
+
+    let (success, close_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "configured validators passed",
+        ],
+    );
+    assert!(success, "mission close failed: {stderr}");
+    assert!(close_out.contains("Status: closed"), "{close_out}");
+    assert!(
+        close_out.contains("- Close reason: configured validators passed"),
+        "{close_out}"
+    );
+}
+
+#[test]
+fn test_root_status_reports_current_mission_counts_without_active_focus() {
+    let zero = tempdir().unwrap();
+    init_atelier(zero.path());
+    let (success, zero_out, stderr) = run_atelier(zero.path(), &["status"]);
+    assert!(success, "zero mission status failed: {stderr}");
+    assert!(zero_out.contains("Current missions: 0"), "{zero_out}");
+    assert!(!zero_out.contains("Active mission:"), "{zero_out}");
+
+    let one = tempdir().unwrap();
+    init_atelier(one.path());
+    create_mission_fixture(one.path(), "One current objective");
+    let (success, one_out, stderr) = run_atelier(one.path(), &["status"]);
+    assert!(success, "one mission status failed: {stderr}");
+    assert!(one_out.contains("Current missions: 1"), "{one_out}");
+    assert!(!one_out.contains("Active mission:"), "{one_out}");
+
+    let many = tempdir().unwrap();
+    init_atelier(many.path());
+    create_mission_fixture(many.path(), "First current objective");
+    create_mission_fixture(many.path(), "Second current objective");
+    let (success, many_out, stderr) = run_atelier(many.path(), &["status"]);
+    assert!(success, "many mission status failed: {stderr}");
+    assert!(many_out.contains("Current missions: 2"), "{many_out}");
+    assert!(!many_out.contains("Active mission:"), "{many_out}");
 }
 
 #[test]

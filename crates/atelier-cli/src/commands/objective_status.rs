@@ -47,20 +47,20 @@ impl ObjectiveStatusSnapshot {
     }
 }
 
-pub(crate) fn snapshot_for_mission(
+pub(crate) fn snapshot_for_issue_objective(
     db: &Database,
-    mission_id: &str,
+    issue_id: &str,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<ObjectiveStatusSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut snapshot = ObjectiveStatusSnapshot {
-        issue_ids: mission_issue_ids(db, mission_id)?,
-        open_blockers: open_objective_blockers(db, "mission", mission_id)?,
+        issue_ids: issue_descendant_ids(db, issue_id)?,
+        open_blockers: open_issue_objective_blockers(db, issue_id)?,
         ..ObjectiveStatusSnapshot::default()
     };
 
-    for issue_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(issue_id)? else {
+    for child_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(child_id)? else {
             continue;
         };
         match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
@@ -95,20 +95,20 @@ pub(crate) fn snapshot_for_mission(
     Ok(snapshot)
 }
 
-pub(crate) fn snapshot_for_issue_objective(
+pub(crate) fn snapshot_for_mission(
     db: &Database,
-    issue_id: &str,
+    mission_id: &str,
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<ObjectiveStatusSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
     let mut snapshot = ObjectiveStatusSnapshot {
-        issue_ids: issue_descendant_ids(db, issue_id)?,
-        open_blockers: open_issue_objective_blockers(db, issue_id)?,
+        issue_ids: mission_issue_ids(db, mission_id)?,
+        open_blockers: open_objective_blockers(db, "mission", mission_id)?,
         ..ObjectiveStatusSnapshot::default()
     };
 
-    for child_id in &snapshot.issue_ids {
-        let Some(issue) = db.get_issue(child_id)? else {
+    for issue_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(issue_id)? else {
             continue;
         };
         match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {

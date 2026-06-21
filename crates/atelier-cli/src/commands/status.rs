@@ -8,7 +8,6 @@ use crate::commands;
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::Issue;
-use atelier_records::activity::list_all_issue_activities;
 use atelier_sqlite::{Database, RecordSummary};
 
 pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -18,7 +17,6 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .iter()
         .map(|issue| issue.id.as_str())
         .collect::<BTreeSet<_>>();
-    let active_mission = commands::mission::active_mission(db)?;
     let active_role_counts = active_role_counts(&active_issues, workflow_policy.as_ref());
     let current_missions = db
         .list_records("mission", None)?
@@ -39,12 +37,6 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     let ready =
         commands::objective_status::order_issues_by_work(db, workflow_policy.as_ref(), ready)?;
-    let mission_snapshot = active_mission
-        .as_ref()
-        .map(|mission| {
-            commands::objective_status::snapshot_for_mission(db, &mission.id, &active_issue_ids)
-        })
-        .transpose()?;
     let export_stale = atelier_app::export::canonical_stale_entries(db, state_dir)?;
     let tracker_state = if export_stale.is_empty() {
         "current"
@@ -54,16 +46,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
 
     if quiet {
         println!(
-            "work={} active_mission={} current_missions={} ready={} tracker={}",
+            "work={} current_missions={} ready={} tracker={}",
             if active_issues.is_empty() {
                 "none".to_string()
             } else {
                 active_issues.len().to_string()
             },
-            active_mission
-                .as_ref()
-                .map(|mission| mission.id.as_str())
-                .unwrap_or("none"),
             current_missions.len(),
             ready.len(),
             tracker_state
@@ -92,11 +80,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         }
     }
 
-    match &active_mission {
-        Some(mission) => println!("Active mission: {} - {}", mission.id, mission.title),
-        None if current_missions.is_empty() => println!("Active mission: none"),
-        None => println!("Active mission: none ({} current)", current_missions.len()),
-    }
+    println!("Current missions: {}", current_missions.len());
     if active_role_counts.is_empty() {
         println!("Active roles:   none");
     } else {
@@ -124,169 +108,25 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     println!();
     println!("Evidence Status");
     println!("---------------");
-    print_evidence_status(
-        db,
-        &active_issues,
-        active_mission.as_ref(),
-        mission_snapshot.as_ref(),
-        &ready,
-    )?;
+    print_evidence_status(db, &active_issues, None, None, &ready)?;
 
-    if let Some((mission, snapshot)) = active_mission.as_ref().zip(mission_snapshot.as_ref()) {
-        println!();
-        println!("Active Mission");
-        println!("--------------");
-        println!("{} - {}", mission.id, mission.title);
-        println!("Health:   {}", snapshot.health());
-        if snapshot.active > 0 {
-            println!(
-                "Work:     ready {}, active {}, blocked {}, done {}, backlog {}",
-                snapshot.ready, snapshot.active, snapshot.blocked, snapshot.done, snapshot.backlog
-            );
-        } else {
-            println!(
-                "Work:     ready {}, blocked {}, done {}, backlog {}",
-                snapshot.ready, snapshot.blocked, snapshot.done, snapshot.backlog
-            );
-        }
-
-        println!();
-        println!("Ready In Active Mission");
-        println!("-----------------------");
-        if snapshot.selectable_issues.is_empty() {
-            println!("(none)");
-        } else {
-            for issue in snapshot.selectable_issues.iter().take(5) {
-                let state =
-                    commands::objective_status::issue_state(db, workflow_policy.as_ref(), issue)?;
-                println!(
-                    "  {state} {} - {} | no open blockers; {}; {}",
-                    issue.id,
-                    issue.title,
-                    commands::objective_status::parent_context(issue),
-                    commands::objective_status::proof_context(db, &issue.id)?
-                );
-            }
-        }
-
-        println!();
-        println!("Blocked In Active Mission");
-        println!("-------------------------");
-        if snapshot.blocked_issues.is_empty() {
-            println!("(none)");
-        } else {
-            for issue in snapshot.blocked_issues.iter().take(5) {
-                let blockers = commands::objective_status::open_issue_blockers(
-                    db,
-                    &issue.id,
-                    workflow_policy.as_ref(),
-                )?;
-                println!(
-                    "  blocked {} - {} | {} blocker{}; details: atelier issue blocked {}",
-                    issue.id,
-                    issue.title,
-                    blockers.len(),
-                    plural_suffix(blockers.len()),
-                    issue.id
-                );
-            }
-        }
-
-        println!();
-        println!("Immediate Blockers");
-        println!("------------------");
-        if snapshot.open_blockers.is_empty() {
-            println!("(none)");
-        } else {
-            for blocker_id in snapshot.open_blockers.iter().take(5) {
-                let title = db
-                    .get_issue(blocker_id)?
-                    .map(|issue| issue.title)
-                    .unwrap_or_else(|| "(issue missing)".to_string());
-                println!("  {blocker_id} - {title}");
-            }
-        }
-
-        println!();
-        println!("Recent Activity");
-        println!("---------------");
-        let recent = recent_mission_activity(state_dir, &snapshot.issue_ids)?;
-        if recent.is_empty() {
-            println!("(none)");
-        } else {
-            for activity in recent {
-                println!("{activity}");
-            }
-        }
-    } else {
-        println!();
-        println!("Recent Activity");
-        println!("---------------");
-        println!("(no active mission)");
-    }
+    println!();
+    println!("Recent Activity");
+    println!("---------------");
+    println!("(no active mission focus)");
 
     println!();
     println!("Next Actions");
     println!("------------");
-    match active_mission.as_ref().zip(mission_snapshot.as_ref()) {
-        Some((mission, snapshot)) => {
-            println!(
-                "  Inspect active mission health ({}): atelier issue status {}",
-                mission.id, mission.id
-            );
-            println!(
-                "  Open active mission record ({}): atelier issue show {}",
-                mission.id, mission.id
-            );
-            if !snapshot.active_issues.is_empty() {
-                for issue in snapshot.active_issues.iter().take(3) {
-                    println!(
-                        "  Inspect current work transitions ({}): atelier issue transition {} --options",
-                        issue.id, issue.id
-                    );
-                }
-                if snapshot.active_issues.len() > 3 {
-                    println!(
-                        "  Inspect remaining current work ({} more issue(s)): atelier status",
-                        snapshot.active_issues.len() - 3
-                    );
-                }
-                println!("  Inspect checkout context if state is unclear: atelier status");
-            } else if let Some(issue) = snapshot.selectable_issues.first() {
-                println!(
-                    "  Inspect selectable active-mission work transitions ({} selectable issue(s)): atelier issue transition {} --options",
-                    snapshot.selectable_issues.len(),
-                    issue.id
-                );
-            } else if snapshot.blocked > 0 || !snapshot.open_blockers.is_empty() {
-                println!(
-                    "  Inspect blocked active-mission work (no ready work is available): atelier issue status {}",
-                    mission.id
-                );
-            } else {
-                println!(
-                    "  Review active mission terminal state (no ready work is available): atelier issue status {}",
-                    mission.id
-                );
-            }
-        }
-        None => match &active_mission {
-            Some(mission) => println!(
-                "  Inspect active mission ({} is active): atelier issue status {}",
-                mission.id, mission.id
-            ),
-            None if current_missions.is_empty() => {
-                println!("  Inspect mission inventory (no mission is active): atelier issue table --kind mission")
-            }
-            None => println!(
+    if current_missions.is_empty() {
+        println!("  Inspect objective readiness: atelier issue status <id>");
+    } else {
+        println!(
             "  Inspect mission choices ({} current mission(s), none active): atelier issue table --kind mission",
             current_missions.len()
-        ),
-        },
+        );
     }
-    if active_mission.is_some() {
-        // Active-mission scoped actions above own work selection in focused runs.
-    } else if ready.is_empty() {
+    if ready.is_empty() {
         println!(
             "  Inspect blocked work (no ready work is available): atelier issue list --blocked"
         );
@@ -412,32 +252,6 @@ fn print_evidence_status(
     }
 
     Ok(())
-}
-
-fn plural_suffix(count: usize) -> &'static str {
-    if count == 1 {
-        ""
-    } else {
-        "s"
-    }
-}
-
-fn recent_mission_activity(state_dir: &Path, issue_ids: &BTreeSet<String>) -> Result<Vec<String>> {
-    let mut activities = list_all_issue_activities(state_dir)?
-        .into_iter()
-        .filter(|activity| issue_ids.contains(&activity.subject_id))
-        .collect::<Vec<_>>();
-    activities.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
-    Ok(activities
-        .into_iter()
-        .take(3)
-        .map(|activity| {
-            format!(
-                "  {} {}: {}",
-                activity.subject_id, activity.event_type, activity.summary
-            )
-        })
-        .collect())
 }
 
 fn print_git_state() {

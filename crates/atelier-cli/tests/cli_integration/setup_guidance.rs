@@ -1559,7 +1559,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
 }
 
 #[test]
-fn test_man_manager_names_active_mission() {
+fn test_man_manager_routes_to_mission_inventory_without_focus() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -1568,18 +1568,11 @@ fn test_man_manager_names_active_mission() {
         &["issue", "create", "Man mission", "--issue-type", "mission"],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Man mission");
-    let mission_id = mission_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", mission_id, "--status", "active"],
-    );
-    assert!(success, "legacy active mission setup failed: {stderr}");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "manager"]);
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
-    assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
+    assert!(stdout.contains("Active mission: none"));
     assert!(stdout.contains("atelier issue table --kind mission"));
     assert!(stdout.contains("atelier issue status <id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));
