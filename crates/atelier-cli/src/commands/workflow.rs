@@ -200,16 +200,8 @@ fn print_start_context_and_record(db: &Database, issue: &Issue) -> Result<()> {
 }
 
 fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
-    let Some(mission) = crate::commands::mission::active_mission(db)? else {
-        return Ok(());
-    };
-    if crate::commands::mission::issue_advances_mission(db, &mission.id, issue_id)? {
-        println!("Mission: {} (active)", mission.id);
-    } else {
-        println!(
-            "Warning: {issue_id} is outside active mission {}; non-mission work remains allowed.",
-            mission.id
-        );
+    if let Some(mission_id) = containing_mission(db, issue_id)? {
+        println!("Mission: {mission_id} (linked)");
     }
     Ok(())
 }
@@ -1667,36 +1659,151 @@ pub fn evaluate(
     validators: Vec<String>,
 ) -> Result<Vec<ValidatorResult>> {
     ensure_target_exists(db, target_kind, target_id)?;
-    let validators = if validators.is_empty() {
-        default_validators(target_kind, transition)
+    let policy = atelier_app::workflow_policy::load(&repo_root()?)?;
+    let definitions = if validators.is_empty() && target_kind == "mission" {
+        policy
+            .transition_for_issue_type("mission", transition)
+            .with_context(|| {
+                format!(
+                    "mission terminal checks require issue_type 'mission' and transition '{}' in {}",
+                    transition,
+                    atelier_app::workflow_policy::WORKFLOW_POLICY_PATH
+                )
+            })?
+            .validators
+            .clone()
+    } else if validators.is_empty() {
+        default_validator_definitions(target_kind, transition)
     } else {
         validators
+            .into_iter()
+            .map(
+                |builtin| atelier_app::workflow_policy::ValidatorDefinition {
+                    builtin,
+                    params: None,
+                },
+            )
+            .collect()
     };
-    let mut results = Vec::new();
-    for validator in validators {
-        let started = Instant::now();
-        let (passed, reason) = evaluate_builtin_with_params(
-            db,
-            &atelier_app::workflow_policy::load(&repo_root()?)?,
-            target_kind,
-            target_id,
-            transition,
-            &validator,
-            None,
-        )?;
-        let elapsed_ms = started.elapsed().as_millis();
-        results.push(ValidatorResult {
-            target_kind: target_kind.to_string(),
-            target_id: target_id.to_string(),
-            transition: transition.to_string(),
-            validator,
-            passed,
-            reason,
-            elapsed_ms,
-        });
-    }
+    evaluate_policy_transition(
+        db,
+        &policy,
+        target_kind,
+        target_id,
+        transition,
+        &definitions,
+    )
+}
 
-    Ok(results)
+fn default_validator_definitions(
+    target_kind: &str,
+    transition: &str,
+) -> Vec<atelier_app::workflow_policy::ValidatorDefinition> {
+    default_validators(target_kind, transition)
+        .into_iter()
+        .map(
+            |builtin| atelier_app::workflow_policy::ValidatorDefinition {
+                builtin,
+                params: None,
+            },
+        )
+        .collect()
+}
+
+fn objective_work_ids(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<BTreeSet<String>> {
+    match target_kind {
+        "mission" => mission_issue_ids(db, target_id),
+        "issue" => crate::commands::objective_status::issue_descendant_ids(db, target_id),
+        _ => Ok(BTreeSet::new()),
+    }
+}
+
+fn objective_work_present(
+    db: &Database,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    let work = objective_work_ids(db, target_kind, target_id)?;
+    if work.is_empty() {
+        Ok((
+            false,
+            format!(
+                "no advancing work linked to {target_kind} {target_id}; run `atelier issue link {target_id} <issue-id> --role advances`"
+            ),
+        ))
+    } else {
+        Ok((
+            true,
+            format!(
+                "advancing work linked via advances: {}",
+                work.into_iter().collect::<Vec<_>>().join(", ")
+            ),
+        ))
+    }
+}
+
+fn objective_work_terminal(
+    db: &Database,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    let mut open = objective_work_ids(db, target_kind, target_id)?
+        .into_iter()
+        .filter_map(|id| db.get_issue(&id).ok().flatten())
+        .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
+            Ok(true) => Some(Ok(issue.id)),
+            Ok(false) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<Result<Vec<_>>>()?;
+    open.sort();
+    if open.is_empty() {
+        Ok((true, "all advancing work is terminal".to_string()))
+    } else {
+        Ok((
+            false,
+            format!(
+                "open advancing work via advances: {}; inspect `atelier issue transition {} --options`",
+                open.join(", "),
+                open.first().cloned().unwrap_or_else(|| "<issue-id>".to_string())
+            ),
+        ))
+    }
+}
+
+fn objective_direct_blockers_none_open(
+    db: &Database,
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    target_kind: &str,
+    target_id: &str,
+) -> Result<(bool, String)> {
+    let mut open =
+        crate::commands::objective_status::direct_blocker_ids(db, target_kind, target_id)?
+            .into_iter()
+            .filter_map(|id| db.get_issue(&id).ok().flatten())
+            .filter_map(|issue| match issue_is_open_for_workflow(policy, &issue) {
+                Ok(true) => Some(Ok(issue.id)),
+                Ok(false) => None,
+                Err(error) => Some(Err(error)),
+            })
+            .collect::<Result<Vec<_>>>()?;
+    open.sort();
+    if open.is_empty() {
+        Ok((true, "no open direct objective blockers".to_string()))
+    } else {
+        Ok((
+            false,
+            format!(
+                "open direct objective blockers via blocked_by: {}; inspect `atelier issue blocked {target_id}`",
+                open.join(", ")
+            ),
+        ))
+    }
 }
 
 fn print_transition_attempt(
@@ -2047,6 +2154,11 @@ fn evaluate_builtin_with_params(
         "issue.sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
         "validation.criteria_satisfied" => {
             validation_criteria_satisfied(db, target_kind, target_id)
+        }
+        "objective.work_present" => objective_work_present(db, target_kind, target_id),
+        "objective.work_terminal" => objective_work_terminal(db, policy, target_kind, target_id),
+        "objective.blockers_none_open" => {
+            objective_direct_blockers_none_open(db, policy, target_kind, target_id)
         }
         "review.linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
         "review.complete" => review_complete(db, policy, target_kind, target_id, transition),

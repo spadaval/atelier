@@ -4,6 +4,10 @@ id: "atelier-ncq9"
 issue_type: "epic"
 labels:
 - "mission-rework"
+review:
+  kind: pull_request
+  number: 18
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Move mission lifecycle into workflow policy"
-updated_at: "2026-06-21T16:37:31.085615249+00:00"
+updated_at: "2026-06-21T19:05:54.221389668+00:00"
 ---
 
 ## Description

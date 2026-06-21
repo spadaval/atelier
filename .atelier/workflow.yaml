@@ -12,11 +12,14 @@ issue_types:
   bug: { label: Bug }
   epic: { label: Epic }
   feature: { label: Feature }
+  mission: { label: Mission }
   spike: { label: Spike }
   task: { label: Task }
   validation: { label: Validation }
 
 statuses:
+  ready:
+    category: todo
   todo:
     category: todo
   in_progress:
@@ -32,8 +35,34 @@ statuses:
     role: validator
   done:
     category: done
+  closed:
+    category: done
 
 workflows:
+  mission_delivery:
+    applies_to: [mission]
+    initial_status: ready
+    done_statuses: [closed]
+    transitions:
+      close:
+        from: [ready, in_progress, validation]
+        to: closed
+        required_fields: [close_reason]
+        description: "Closing requires configured objective validators to pass."
+        validators:
+          - objective.work_present
+          - objective.work_terminal
+          - objective.blockers_none_open
+          - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
+          - validation.criteria_satisfied
+          - lint.none_blocking
+          - command_surface_current
+          - ignored_tests_reviewed
+          - tracker.current
+          - git.on_base_branch
+          - git.worktree_clean
+
   task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo

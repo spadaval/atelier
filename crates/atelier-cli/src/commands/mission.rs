@@ -40,11 +40,70 @@ pub fn status(
 ) -> Result<()> {
     match id {
         Some(id) => status_one(db, state_dir, id, quiet, verbose),
-        None => match active_mission(db)? {
-            Some(record) => status_one(db, state_dir, &record.id, quiet, verbose),
-            None => status_dashboard(db, state_dir, quiet),
-        },
+        None => status_dashboard(db, state_dir, quiet),
     }
+}
+
+pub fn transition_options(db: &Database, id: &str) -> Result<()> {
+    let state_dir =
+        atelier_app::storage_layout::StorageLayout::new(crate::commands::workflow::repo_root()?)
+            .canonical_dir();
+    let mission = db.require_record(KIND, id)?;
+    let summary = mission_list_summary(db, id)?;
+    let terminal = mission_terminal_status(db, &state_dir, &mission, &summary)?;
+    let mut blockers = vec![format!(
+        "missing required field close_reason; rerun with `atelier issue transition {id} close --reason \"...\"`"
+    )];
+    blockers.extend(terminal.blocking_messages());
+
+    println!("Mission Transitions {} - {}", mission.id, mission.title);
+    println!(
+        "{}",
+        "=".repeat(mission.id.len() + mission.title.len() + 23)
+    );
+    println!("State");
+    println!("-----");
+    println!("Status:   {}", mission.status);
+    println!("Type:     mission");
+    println!("Options:  1");
+    println!();
+    println!(
+        "close [{}]",
+        if blockers.is_empty() {
+            "allowed"
+        } else {
+            "blocked"
+        }
+    );
+    println!("  From: ready, active");
+    println!("  To:   closed");
+    println!("  Command: atelier issue transition {id} close --reason \"...\"");
+    println!("Validators");
+    println!("----------");
+    if terminal.validator_results.is_empty() {
+        println!("(none)");
+    } else {
+        for result in &terminal.validator_results {
+            println!(
+                "  {}  {}",
+                if result.passed { "pass" } else { "fail" },
+                result.validator
+            );
+            println!("      {}", result.reason);
+        }
+    }
+    println!("Blockers");
+    println!("--------");
+    for blocker in blockers {
+        println!("  {blocker}");
+    }
+    println!("Planned Actions");
+    println!("---------------");
+    println!("(none)");
+    println!("Description");
+    println!("-----------");
+    println!("  Closing requires configured workflow validators to pass.");
+    Ok(())
 }
 
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
@@ -103,7 +162,7 @@ fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> 
                 "  {} [{}] {} - {} | {} | evidence gaps {} | terminal {}",
                 row.record.id,
                 health,
-                mission_focus_label(&row.record),
+                mission_lifecycle_status(&row.record),
                 row.record.title,
                 work.to_compact_text(),
                 row.summary.evidence_gap_count(),
@@ -165,7 +224,7 @@ fn status_one(db: &Database, state_dir: &Path, id: &str, quiet: bool, verbose: b
     let identity = format!(
         "Mission Status {} [{}] - {}",
         mission.id,
-        mission_focus_label(&mission),
+        mission_lifecycle_status(&mission),
         mission_title
     );
     println!("{identity}");
@@ -552,24 +611,6 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
-pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
-    let active = current_mission_records(db)?
-        .into_iter()
-        .filter(is_active_mission)
-        .collect::<Vec<_>>();
-    if active.len() > 1 {
-        bail!(
-            "Multiple active missions found: {}. Run `atelier lint` and switch one mission focus.",
-            active
-                .iter()
-                .map(|record| record.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-    Ok(active.into_iter().next())
-}
-
 fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
     mission_records_for_filter(db, Some("current"))
 }
@@ -759,10 +800,7 @@ struct MissionTerminalStatus {
 
 impl MissionTerminalStatus {
     fn ready(&self) -> bool {
-        self.has_work
-            && self.open_work.is_empty()
-            && self.open_blockers.is_empty()
-            && self.validator_results.iter().all(|result| result.passed)
+        self.validator_results.iter().all(|result| result.passed)
     }
 
     fn validator_failure_count(&self) -> usize {
@@ -774,23 +812,6 @@ impl MissionTerminalStatus {
 
     fn blocking_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
-        if !self.has_work {
-            messages.push(
-                "no linked mission work: add accountable work before objective close".to_string(),
-            );
-        }
-        if !self.open_work.is_empty() {
-            messages.push(format!(
-                "open mission work: {}; close or defer linked work before objective close",
-                compact_strings(&self.open_work)
-            ));
-        }
-        if !self.open_blockers.is_empty() {
-            messages.push(format!(
-                "open blockers: {}; close or remove blocker links before objective close",
-                compact_strings(&self.open_blockers)
-            ));
-        }
         for result in self
             .validator_results
             .iter()
@@ -1121,6 +1142,24 @@ fn terminal_validator_user_text(
             "satisfied",
             "incomplete",
             "atelier issue status {mission}",
+        )),
+        "objective.work_present" => Some((
+            "Linked Work",
+            "present",
+            "missing",
+            "atelier issue link {mission} <issue-id> --role advances",
+        )),
+        "objective.work_terminal" => Some((
+            "Linked Work Terminal",
+            "closed",
+            "open",
+            "atelier issue status {mission}",
+        )),
+        "objective.blockers_none_open" => Some((
+            "Direct Objective Blockers",
+            "clear",
+            "open",
+            "atelier issue blocked {mission}",
         )),
         "git.worktree_clean" => Some((
             "Checkout",
@@ -1973,14 +2012,6 @@ fn active_work_for_mission(db: &Database, mission_id: &str) -> Result<Vec<Issue>
         })
         .collect::<Vec<_>>();
     crate::commands::objective_status::order_issues_by_work_with_default(db, issues)
-}
-
-fn is_active_mission(record: &RecordSummary) -> bool {
-    record.status == "active"
-}
-
-fn mission_focus_label(record: &RecordSummary) -> String {
-    mission_lifecycle_status(record)
 }
 
 fn count_label(count: usize, label: &str) -> String {
