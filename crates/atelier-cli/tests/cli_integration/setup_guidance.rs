@@ -1572,7 +1572,7 @@ fn test_man_manager_routes_to_mission_inventory_without_focus() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["man", "manager"]);
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
-    assert!(stdout.contains("Active mission: none"));
+    assert!(!stdout.contains("Active mission:"), "{stdout}");
     assert!(stdout.contains("atelier issue table --kind mission"));
     assert!(stdout.contains("atelier issue status <id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));

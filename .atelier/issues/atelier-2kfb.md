@@ -19,9 +19,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Delete mission root namespace and mission command shims"
-updated_at: "2026-06-21T16:37:30.767152802+00:00"
+updated_at: "2026-06-21T19:11:08.985781895+00:00"
 ---
 
 ## Description

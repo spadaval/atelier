@@ -30,9 +30,8 @@ and skill bindings were updated.
 - Current Agent Factory validation should inspect and close work through human
   command output, quiet acknowledgements where a command naturally returns a
   single result, and explicit drill-down commands such as `atelier issue show
-  <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
-  `atelier lint` and `atelier doctor`. Do not use command-result `--json` as
-  the workflow proof.
+  <id>`, `atelier issue status <objective-id>`, `atelier lint` and `atelier
+  doctor`. Do not use command-result `--json` as the workflow proof.
 - Historical storage-rendering check: `/tmp/atelier-rebuild-check` was populated with
   `.atelier` and an empty `.atelier`; from that directory, `atelier
   rebuild --input .atelier` rebuilt `/tmp/atelier-rebuild-check/.atelier/runtime/state.db`,
