@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Epic: Define minimal mission contract"
-updated_at: "2026-06-21T16:37:30.773910041+00:00"
+updated_at: "2026-06-21T18:33:07.193809853+00:00"
 ---
 
 ## Description
