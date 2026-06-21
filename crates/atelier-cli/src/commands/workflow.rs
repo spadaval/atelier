@@ -1821,6 +1821,7 @@ pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
         "lint.none_blocking",
         "command_surface_current",
         "ignored_tests_reviewed",
+        "git.on_base_branch",
         "git.worktree_clean",
     ]
 }
@@ -2029,6 +2030,7 @@ fn evaluate_builtin_with_params(
                 Ok((false, format!("open linked work: {}", open.join(", "))))
             }
         }
+        "git.on_base_branch" => git_on_base_branch(),
         "git.worktree_clean" => git_worktree_clean(),
         "lint.none_blocking" => {
             let status = Command::new(std::env::current_exe()?)
@@ -2543,6 +2545,24 @@ fn git_worktree_clean() -> Result<(bool, String)> {
                 }
             ),
         ))
+    }
+}
+
+fn git_on_base_branch() -> Result<(bool, String)> {
+    let expected = configured_base_branch()?;
+    match current_git_branch()? {
+        Some(current) if current == expected => Ok((
+            true,
+            format!("current branch is configured base branch {expected}"),
+        )),
+        Some(current) => Ok((
+            false,
+            format!("current branch is {current}; expected configured base branch {expected}"),
+        )),
+        None => Ok((
+            false,
+            format!("detached HEAD; expected configured base branch {expected}"),
+        )),
     }
 }
 
