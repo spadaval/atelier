@@ -293,12 +293,13 @@ asserts timestamp rendering.
 
 Required fixture coverage:
 
-- active mission with planning/checkpoint references, risks, evidence gaps, and
-  validator failures;
+- active mission with planning/checkpoint references, risks, and validator
+  failures;
 - backlog and ready work, including review and validation queues;
 - open blockers with both issue blockers and artifact-update blockers;
 - artifact-update rows for stale or superseded planning artifacts;
-- evidence gaps for missing count, missing evidence type, and linked validator;
+- configured evidence validator failures, including missing count, missing
+  evidence type, and linked validator;
 - workflow validator failures using the machine-readable result shape from the
   workflow configuration contract;
 - artifact-update tasks that block work and artifact-update tasks that only

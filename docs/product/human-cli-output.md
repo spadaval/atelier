@@ -78,12 +78,13 @@ Required sections for mission detail views:
 - planning/checkpoint references from mission prose and evidence summaries;
 - mission blockers with open blockers visibly marked;
 - linked work grouped by ready, blocked, done, and backlog;
-- evidence gaps;
+- configured validator failures, including evidence validators when workflow
+  policy requires them;
 - next commands for likely coordination steps.
 
 Do not hide empty sections when their absence is operationally meaningful.
-For example, `Mission blockers: 0` and an evidence gap message are useful during
-closeout. Long free-form bodies may be printed as text blocks, but lists of
+For example, `Mission blockers: 0` and failed configured validator messages are
+useful during closeout. Long free-form bodies may be printed as text blocks, but lists of
 related records should be bounded or grouped before they become noisy.
 
 Example shape:
@@ -274,7 +275,8 @@ diagnostic logging are separate from command-result rendering.
 Human-output changes need focused tests at the behavior boundary they affect:
 
 - detail views with blockers, subissues, recent activity, and empty sections;
-- mission detail with linked work, blockers, evidence, and evidence gaps;
+- mission detail with linked work, blockers, evidence records, and configured
+  validator failures;
 - queues with mixed priority, type, status, blockers, and parent context;
 - compact hierarchy with deep trees, wide sibling sets, and closed/open mixes;
 - narrow-width or bounded-output behavior when wrapping or omission is involved;

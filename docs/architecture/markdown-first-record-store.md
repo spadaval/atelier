@@ -124,8 +124,8 @@ always from the source record to the target record named in that entry.
 | --- | --- |
 | Required front matter | Common fields plus `priority` and `issue_type`. |
 | Optional front matter | None in V1 beyond record-generic labels and relationships. |
-| Required body | `## Description`, `## Outcome`, and `## Evidence`. |
-| Optional body | `## Notes`. |
+| Required body | `## Description` and `## Outcome`. |
+| Optional body | `## Evidence` and `## Notes`; workflow policy and issue contracts may still require attached proof or authored proof prose for specific work. |
 | Derived | Workflow status category from `.atelier/workflow.yaml`; display priority bucket; inverse blockers/parents; recent activity preview from sidecars. |
 | Compatibility-only | Legacy SQLite `description` mirror columns; imported prose that has not yet been normalized into the required sections. |
 | Forbidden | Front matter or duplicate body fields named `description`, `outcome`, `acceptance`, `evidence_required`, `depends_on`, or `blocked_by`. |
@@ -221,7 +221,7 @@ current committed records against the target contract above.
 
 | Sample | Record kind | Result | Notes |
 | --- | --- | --- | --- |
-| `.atelier/issues/atelier-x45p.md` | Issue | Pass | Uses required issue front matter plus `Description`/`Outcome`/`Evidence`; blocker intent lives in `relationships.blocks`; durable priority/status tokens are `P1` and `todo`. |
+| `.atelier/issues/atelier-x45p.md` | Issue | Pass | Uses required issue front matter plus `Description`/`Outcome` and optional `Evidence`; blocker intent lives in `relationships.blocks`; durable priority/status tokens are `P1` and `todo`. |
 | `.atelier/missions/atelier-man9.md` | Mission | Pass | Uses mission required sections and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
 | `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (forbidden payload residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
 | `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |

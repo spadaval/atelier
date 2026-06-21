@@ -36,6 +36,7 @@ pub struct ValidatorResult {
     pub validator: String,
     pub passed: bool,
     pub reason: String,
+    pub help: Option<String>,
     pub elapsed_ms: u128,
 }
 
@@ -207,7 +208,11 @@ fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
 }
 
 fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
-    for mission in db.list_records("mission", None)? {
+    for mission in db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| issue.issue_type == "mission")
+    {
         if mission.status == "closed" {
             continue;
         }
@@ -1872,6 +1877,9 @@ fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
             result.validator
         );
         println!("      {}", result.reason);
+        if let Some(help) = &result.help {
+            println!("      Hint: {help}");
+        }
     }
 }
 
@@ -2005,7 +2013,7 @@ pub(crate) fn evaluate_policy_transition(
     let mut results = Vec::new();
     for definition in validators {
         let started = Instant::now();
-        let (passed, reason) = evaluate_builtin_with_params(
+        let (passed, reason, help) = evaluate_builtin_with_params(
             db,
             policy,
             target_kind,
@@ -2021,6 +2029,7 @@ pub(crate) fn evaluate_policy_transition(
             validator: definition.builtin.clone(),
             passed,
             reason,
+            help,
             elapsed_ms: started.elapsed().as_millis(),
         });
     }
@@ -2063,18 +2072,19 @@ fn evaluate_builtin_with_params(
     transition: &str,
     validator: &str,
     params: Option<&atelier_app::workflow_policy::ValidatorParams>,
-) -> Result<(bool, String)> {
+) -> Result<(bool, String, Option<String>)> {
     match validator {
         "tracker.current" => {
             let state_dir =
                 atelier_app::storage_layout::StorageLayout::new(repo_root()?).canonical_dir();
             let stale = atelier_app::export::canonical_stale_entries(db, &state_dir)?;
             if stale.is_empty() {
-                Ok((true, "canonical export is current".to_string()))
+                Ok((true, "canonical export is current".to_string(), None))
             } else {
                 Ok((
                     false,
                     format!("canonical export is stale: {}", stale.join("; ")),
+                    None,
                 ))
             }
         }
@@ -2103,10 +2113,11 @@ fn evaluate_builtin_with_params(
                                     .unwrap_or_default(),
                                 validating_count
                             ),
+                            Some(crate::commands::issue::evidence_help_hint()),
                         ));
                     }
                 }
-                return Ok((gate.passed, gate.reason));
+                return Ok((gate.passed, gate.reason, gate.help));
             }
             let attached = db
                 .list_record_links(target_kind, target_id)?
@@ -2116,55 +2127,82 @@ fn evaluate_builtin_with_params(
                         && (link.source_kind == "evidence" || link.target_kind == "evidence")
                 });
             if attached {
-                Ok((true, "validating evidence is linked".to_string()))
+                Ok((true, "validating evidence is linked".to_string(), None))
             } else {
-                Ok((false, "no validating evidence link found".to_string()))
+                Ok((
+                    false,
+                    "no validating evidence link found".to_string(),
+                    Some(crate::commands::issue::evidence_help_hint()),
+                ))
             }
         }
         "blockers.none_open" => {
             let open = open_blockers(db, policy, target_kind, target_id)?;
             if open.is_empty() {
-                Ok((true, "no open blockers".to_string()))
+                Ok((true, "no open blockers".to_string(), None))
             } else {
-                Ok((false, format!("open blockers: {}", open.join(", "))))
+                Ok((false, format!("open blockers: {}", open.join(", ")), None))
             }
         }
         "no_open_work" => {
             let open = open_work(db, policy, target_kind, target_id)?;
             if open.is_empty() {
-                Ok((true, "no open linked work".to_string()))
+                Ok((true, "no open linked work".to_string(), None))
             } else {
-                Ok((false, format!("open linked work: {}", open.join(", "))))
+                Ok((
+                    false,
+                    format!("open linked work: {}", open.join(", ")),
+                    None,
+                ))
             }
         }
-        "git.on_base_branch" => git_on_base_branch(),
-        "git.worktree_clean" => git_worktree_clean(),
+        "git.on_base_branch" => git_on_base_branch().map(without_validator_help),
+        "git.worktree_clean" => git_worktree_clean().map(without_validator_help),
         "lint.none_blocking" => {
             let status = Command::new(std::env::current_exe()?)
                 .arg("lint")
                 .status()?;
             if status.success() {
-                Ok((true, "lint passed".to_string()))
+                Ok((true, "lint passed".to_string(), None))
             } else {
-                Ok((false, "atelier lint failed".to_string()))
+                Ok((false, "atelier lint failed".to_string(), None))
             }
         }
-        "ignored_tests_reviewed" => ignored_tests_reviewed(),
-        "command_surface_current" => command_surface_current(),
-        "issue.sections_parseable" => issue_sections_parseable(db, target_kind, target_id),
-        "validation.criteria_satisfied" => {
-            validation_criteria_satisfied(db, target_kind, target_id)
+        "ignored_tests_reviewed" => ignored_tests_reviewed().map(without_validator_help),
+        "command_surface_current" => command_surface_current().map(without_validator_help),
+        "issue.sections_parseable" => {
+            issue_sections_parseable(db, target_kind, target_id).map(without_validator_help)
         }
-        "objective.work_present" => objective_work_present(db, target_kind, target_id),
-        "objective.work_terminal" => objective_work_terminal(db, policy, target_kind, target_id),
+        "validation.criteria_satisfied" => {
+            validation_criteria_satisfied(db, target_kind, target_id).map(without_validator_help)
+        }
+        "objective.work_present" => {
+            objective_work_present(db, target_kind, target_id).map(without_validator_help)
+        }
+        "objective.work_terminal" => {
+            objective_work_terminal(db, policy, target_kind, target_id).map(without_validator_help)
+        }
         "objective.blockers_none_open" => {
             objective_direct_blockers_none_open(db, policy, target_kind, target_id)
+                .map(without_validator_help)
         }
-        "review.linked_pr_merged" => linked_pr_merged(db, target_kind, target_id),
-        "review.complete" => review_complete(db, policy, target_kind, target_id, transition),
-        "children.proof_complete" => epic_child_proof_complete(db, policy, target_kind, target_id),
-        other => Ok((false, format!("unsupported builtin validator: {other}"))),
+        "review.linked_pr_merged" => {
+            linked_pr_merged(db, target_kind, target_id).map(without_validator_help)
+        }
+        "review.complete" => review_complete(db, policy, target_kind, target_id, transition)
+            .map(without_validator_help),
+        "children.proof_complete" => epic_child_proof_complete(db, policy, target_kind, target_id)
+            .map(without_validator_help),
+        other => Ok((
+            false,
+            format!("unsupported builtin validator: {other}"),
+            None,
+        )),
     }
+}
+
+fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
+    (passed, reason, None)
 }
 
 fn linked_pr_merged(db: &Database, target_kind: &str, target_id: &str) -> Result<(bool, String)> {
@@ -2531,64 +2569,12 @@ fn open_work(
 }
 
 fn mission_direct_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type != "blocked_by" {
-            continue;
-        }
-        if link.source_kind == "issue"
-            && link.target_kind == "mission"
-            && link.target_id == mission_id
-        {
-            blockers.push(link.source_id);
-        } else if link.target_kind == "issue"
-            && link.source_kind == "mission"
-            && link.source_id == mission_id
-        {
-            blockers.push(link.target_id);
-        }
-    }
-    Ok(blockers)
+    let objective_kind = crate::commands::objective_status::mission_objective_kind(db, mission_id)?;
+    crate::commands::objective_status::direct_blocker_ids(db, objective_kind, mission_id)
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    let mut issue_ids = BTreeSet::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type != "advances" {
-            continue;
-        }
-        let linked_id = if link.source_kind == "issue"
-            && link.target_kind == "mission"
-            && link.target_id == mission_id
-        {
-            Some(link.source_id)
-        } else if link.target_kind == "issue"
-            && link.source_kind == "mission"
-            && link.source_id == mission_id
-        {
-            Some(link.target_id)
-        } else {
-            None
-        };
-        if let Some(linked_id) = linked_id {
-            collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
-        }
-    }
-    Ok(issue_ids)
-}
-
-fn collect_issue_and_descendants(
-    db: &Database,
-    issue_id: &str,
-    issue_ids: &mut BTreeSet<String>,
-) -> Result<()> {
-    if !issue_ids.insert(issue_id.to_string()) {
-        return Ok(());
-    }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
-    }
-    Ok(())
+    crate::commands::objective_status::mission_issue_ids(db, mission_id)
 }
 
 fn git_worktree_clean() -> Result<(bool, String)> {

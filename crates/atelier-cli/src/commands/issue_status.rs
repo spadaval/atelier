@@ -14,12 +14,11 @@ pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
         .collect::<BTreeSet<_>>();
     let snapshot =
         commands::objective_status::snapshot_for_issue_objective(db, &issue.id, &active_issue_ids)?;
-    let evidence_gaps = evidence_gaps(db, &snapshot.issue_ids)?;
     let open_work = open_work_ids(&snapshot);
 
     if quiet {
         println!(
-            "issue={} health={} ready={} active={} blocked={} done={} backlog={} blockers={} proof_gaps={}",
+            "issue={} health={} ready={} active={} blocked={} done={} backlog={} blockers={}",
             issue.id,
             snapshot.health(),
             snapshot.ready,
@@ -27,8 +26,7 @@ pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
             snapshot.blocked,
             snapshot.done,
             snapshot.backlog,
-            snapshot.open_blockers.len(),
-            evidence_gaps.len()
+            snapshot.open_blockers.len()
         );
         return Ok(());
     }
@@ -57,9 +55,8 @@ pub fn run(db: &Database, issue_id: &str, quiet: bool) -> Result<()> {
     print_ready_work(db, &snapshot)?;
     print_blocked_work(db, &snapshot)?;
     print_blockers(&snapshot);
-    print_evidence(&evidence_gaps);
-    print_terminal(&snapshot, &open_work, &evidence_gaps);
-    print_next_commands(&issue.id, &snapshot, &open_work, &evidence_gaps);
+    print_terminal(&snapshot, &open_work);
+    print_next_commands(&issue.id, &snapshot, &open_work);
     Ok(())
 }
 
@@ -127,26 +124,9 @@ fn print_blockers(snapshot: &commands::objective_status::ObjectiveStatusSnapshot
     }
 }
 
-fn print_evidence(evidence_gaps: &[String]) {
-    println!();
-    println!("Evidence");
-    println!("--------");
-    if evidence_gaps.is_empty() {
-        println!("Attached Proof: complete");
-    } else {
-        println!(
-            "Attached Proof: missing - issue proof gaps: {}",
-            compact_strings(evidence_gaps)
-        );
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-        println!("  Next: atelier evidence attach <evidence-id> issue <issue-id>");
-    }
-}
-
 fn print_terminal(
     snapshot: &commands::objective_status::ObjectiveStatusSnapshot,
     open_work: &[String],
-    evidence_gaps: &[String],
 ) {
     println!();
     println!("Terminal Checks");
@@ -169,22 +149,12 @@ fn print_terminal(
         );
         println!("  Next: close or unblock the blocker issues.");
     }
-    if evidence_gaps.is_empty() {
-        println!("Attached Proof: complete");
-    } else {
-        println!(
-            "Attached Proof: missing - issue proof gaps: {}",
-            compact_strings(evidence_gaps)
-        );
-        println!("  Next: atelier evidence record --target issue/<id> --kind validation \"...\"");
-    }
 }
 
 fn print_next_commands(
     issue_id: &str,
     snapshot: &commands::objective_status::ObjectiveStatusSnapshot,
     open_work: &[String],
-    evidence_gaps: &[String],
 ) {
     println!();
     println!("Next Commands");
@@ -202,23 +172,11 @@ fn print_next_commands(
         );
     } else if let Some(issue_id) = open_work.first() {
         println!("  Close or defer open work: atelier issue transition {issue_id} --options");
-    } else if let Some(issue_id) = evidence_gaps.first() {
-        println!("  Record missing proof: atelier evidence record --target issue/{issue_id} --kind validation \"...\"");
     } else {
         println!(
             "  Inspect objective close readiness: atelier issue transition {issue_id} --options"
         );
     }
-}
-
-fn evidence_gaps(db: &Database, issue_ids: &BTreeSet<String>) -> Result<Vec<String>> {
-    let mut gaps = Vec::new();
-    for issue_id in issue_ids {
-        if !commands::objective_status::has_validating_evidence(db, issue_id)? {
-            gaps.push(issue_id.clone());
-        }
-    }
-    Ok(gaps)
 }
 
 fn open_work_ids(snapshot: &commands::objective_status::ObjectiveStatusSnapshot) -> Vec<String> {

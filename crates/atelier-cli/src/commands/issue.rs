@@ -522,7 +522,6 @@ fn render_issue_show_human(
     render_parent_context(db, canonical_id)?;
     render_branch_lifecycle_context(db, canonical_id)?;
     render_transition_readiness(db, canonical_id, object)?;
-    render_issue_evidence_status(db, canonical_id, object.sections.as_ref())?;
 
     if let Some(sections) = &object.sections {
         print_text_section("Description", Some(&sections.description));
@@ -540,27 +539,6 @@ fn render_issue_show_human(
     render_impact_section(db, canonical_id)?;
     render_recent_activity_section(canonical_id, object)?;
     render_command_footer(canonical_id, object)?;
-    Ok(())
-}
-
-fn render_issue_evidence_status(
-    db: &Database,
-    canonical_id: &str,
-    sections: Option<&IssueSections>,
-) -> Result<()> {
-    let issue = db.require_issue(canonical_id)?;
-    let gate = issue_evidence_gate_status(db, &issue, sections)?;
-    println!("\nEvidence Status");
-    println!("---------------");
-    if gate.passed {
-        println!("Attached Proof: attached - {}", gate.reason);
-    } else {
-        println!("Attached Proof: missing - {}", gate.reason);
-        println!(
-            "  Next: atelier evidence record --target issue/{canonical_id} --kind validation \"...\""
-        );
-        println!("  Next: atelier evidence attach <evidence-id> issue {canonical_id}");
-    }
     Ok(())
 }
 
@@ -676,6 +654,7 @@ fn linked_validating_evidence(db: &Database, issue_id: &str) -> Result<Vec<Evide
 pub(crate) struct EvidenceGateStatus {
     pub passed: bool,
     pub reason: String,
+    pub help: Option<String>,
 }
 
 pub(crate) fn issue_evidence_gate_status(
@@ -695,7 +674,11 @@ fn issue_evidence_gate_status_from_records(
     evidence: &[EvidenceRecord],
 ) -> EvidenceGateStatus {
     if evidence.is_empty() {
-        return evidence_gate(false, "no validating evidence link found");
+        return evidence_gate(
+            false,
+            "no validating evidence link found",
+            Some(evidence_help_hint()),
+        );
     }
 
     let _ = issue;
@@ -706,9 +689,13 @@ fn issue_evidence_gate_status_from_records(
         })
     });
     if passing {
-        evidence_gate(true, "passing validating evidence is linked")
+        evidence_gate(true, "passing validating evidence is linked", None)
     } else {
-        evidence_gate(false, "expected at least 1 passing evidence record")
+        evidence_gate(
+            false,
+            "expected at least 1 passing evidence record",
+            Some(evidence_help_hint()),
+        )
     }
 }
 
@@ -723,10 +710,19 @@ fn canonical_evidence_record(id: &str) -> Result<Option<EvidenceRecord>> {
     })
 }
 
-fn evidence_gate(passed: bool, reason: impl Into<String>) -> EvidenceGateStatus {
+pub(crate) fn evidence_help_hint() -> String {
+    "record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"` or attach existing proof with `atelier evidence attach <evidence-id> issue <issue-id>`".to_string()
+}
+
+fn evidence_gate(
+    passed: bool,
+    reason: impl Into<String>,
+    help: Option<String>,
+) -> EvidenceGateStatus {
     EvidenceGateStatus {
         passed,
         reason: reason.into(),
+        help,
     }
 }
 
@@ -1738,7 +1734,11 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
-    if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty() {
+    if input.issue_type != "mission"
+        && (!input.constraints.is_empty()
+            || !input.risks.is_empty()
+            || !input.validation.is_empty())
+    {
         bail!("mission section flags are not supported for issue records");
     }
     validate_priority(input.priority)?;
@@ -1754,11 +1754,12 @@ pub fn create_lifecycle(
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
+    let description = lifecycle_issue_description(&input);
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
             title: input.title.to_string(),
-            description: input.description.map(str::to_string),
+            description: description.clone(),
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
@@ -1769,7 +1770,7 @@ pub fn create_lifecycle(
             closed_at: None,
         },
         labels: input.labels.to_vec(),
-        sections: IssueSections::unchecked_from_body(input.description),
+        sections: IssueSections::unchecked_from_body(description.as_deref()),
         relationships: Relationships::default(),
     };
     store.write_issue_atomic(&record)?;
@@ -1802,7 +1803,11 @@ pub fn create_lifecycle(
             object.id
         );
     } else {
-        println!("Created issue {} - {}", object.id, object.title);
+        if object.issue_type == "mission" {
+            println!("Created mission objective {} - {}", object.id, object.title);
+        } else {
+            println!("Created issue {} - {}", object.id, object.title);
+        }
         println!("Type:     {}", object.issue_type);
         println!("Priority: {}", object.priority);
         println!("File:     {}", file_path.display());
@@ -1818,6 +1823,41 @@ pub fn create_lifecycle(
         );
     }
     Ok(())
+}
+
+fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<String> {
+    if input.issue_type != "mission" {
+        return input.description.map(str::to_string);
+    }
+    let mut lines = Vec::new();
+    if let Some(description) = input.description {
+        let description = description.trim();
+        if !description.is_empty() {
+            lines.push(description.to_string());
+        }
+    }
+    append_named_list(&mut lines, "Constraints", &input.constraints);
+    append_named_list(&mut lines, "Risks", &input.risks);
+    append_named_list(&mut lines, "Validation", &input.validation);
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n\n"))
+    }
+}
+
+fn append_named_list(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    if values.is_empty() {
+        return;
+    }
+    lines.push(format!(
+        "{title}:\n{}",
+        values
+            .iter()
+            .map(|value| format!("- {}", value.trim()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    ));
 }
 
 fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {

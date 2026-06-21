@@ -365,11 +365,11 @@ The required section policy is:
   context, or work request.
 - `Outcome` is required for every issue and describes the desired finished
   world in observable terms.
-- `Evidence` is required for every issue and describes the proof artifacts,
-  commands, file contents, rejected commands, screenshots, lint/doctor checks,
-  explicit deterministic export diagnostics, or evidence records needed to show
-  the outcome was met. When no proof artifact is meaningful, the section must
-  explicitly say why it is not applicable.
+- `Evidence` is optional by default. It describes proof artifacts, commands,
+  file contents, rejected commands, screenshots, lint/doctor checks, explicit
+  deterministic export diagnostics, or evidence records when the issue
+  contract, issue type, or workflow policy explicitly requires authored proof
+  prose.
 - `Notes` is optional and carries handoff context, sequencing notes, caveats,
   or non-contract background.
 

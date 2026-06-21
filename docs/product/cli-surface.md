@@ -298,8 +298,9 @@ State-specific next actions are part of the command contract:
   `atelier lint <mission-id>`, or `atelier issue update <id> --status ready`.
 - `ready`: show ready work and the command to transition an issue into active
   work or inspect issue status <objective-id> explicitly.
-- `active`: show active work, ready work, blockers, evidence gaps, and the next
-  issue, evidence, or health command that advances the mission.
+- `active`: show active work, ready work, blockers, configured validator
+  failures, and the next issue, evidence, or health command that advances the
+  mission.
 - `blocked`: show the open blocker records first and point to the specific
   blocker or dependent issue to resolve.
 - `close-ready`: show the completion command only after linked work is closed,

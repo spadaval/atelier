@@ -11,8 +11,8 @@ fn test_create_issue() {
 
     assert!(success);
     assert!(
-        stdout.contains("Created subissue atelier-"),
-        "Expected project-scoped subissue id in output, got: {}",
+        stdout.contains("Created issue atelier-"),
+        "Expected project-scoped issue id in output, got: {}",
         stdout
     );
     let issue_id = issue_id_by_title(dir.path(), "Test issue");
@@ -22,14 +22,14 @@ fn test_create_issue() {
     let issue_text = read_canonical_record(dir.path(), "issues", &issue_id);
     assert!(issue_text.contains("## Description\n\nNo description provided."));
     assert!(issue_text.contains("## Outcome\n\nOutcome was not specified."));
-    assert!(issue_text.contains("## Evidence\n\nEvidence was not specified."));
+    assert!(!issue_text.contains("## Evidence"));
 
     let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &issue_id]);
     assert!(!success, "placeholder scaffold should be under-specified");
     assert!(stderr.contains("Lint failed"));
     assert!(lint_out.contains("Issue section Description must be present and non-empty"));
     assert!(lint_out.contains("Issue section Outcome must be present and non-empty"));
-    assert!(lint_out.contains("Issue section Evidence must be present and non-empty"));
+    assert!(!lint_out.contains("Issue section Evidence must be present and non-empty"));
 }
 
 #[test]
@@ -100,11 +100,7 @@ fn test_issue_create_scaffold_edit_lint_show_flow() {
         )
         .replace(
             "Outcome was not specified.",
-            "Issue sections are populated by editing canonical Markdown.",
-        )
-        .replace(
-            "Evidence was not specified.",
-            "- `atelier lint <id>` passes after section edits.",
+            "Issue sections are populated by editing canonical Markdown.\n\n## Evidence\n\n- `atelier lint <id>` passes after section edits.",
         );
     std::fs::write(&path, text).unwrap();
 
@@ -412,11 +408,7 @@ fn test_show_issue() {
         text.replace("No description provided.", "Description")
             .replace(
                 "Outcome was not specified.",
-                "The issue show command renders parsed sections.",
-            )
-            .replace(
-                "Evidence was not specified.",
-                "- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
+                "The issue show command renders parsed sections.\n\n## Evidence\n\n- Show output contains the section headings.\n\n## Notes\n\nCLI display context.",
             )
     });
 
@@ -449,25 +441,15 @@ fn test_issue_show_surfaces_evidence_status() {
         )
         .replace(
             "Outcome was not specified.",
-            "Issue show renders attached proof state and next commands.",
-        )
-        .replace(
-            "Evidence was not specified.",
-            "- Manual check: issue show and transition options report missing and attached validation evidence.",
+            "Issue show renders attached proof state and next commands.\n\n## Evidence\n\n- Manual check: issue show and transition options report missing and attached validation evidence.",
         )
     });
     commit_all(dir.path(), "evidence status issue setup");
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show without evidence failed: {stderr}");
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: missing - no validating evidence link found"));
-    assert!(stdout.contains(&format!(
-        "atelier evidence record --target issue/{issue_id} --kind validation"
-    )));
-    assert!(stdout.contains(&format!(
-        "atelier evidence attach <evidence-id> issue {issue_id}"
-    )));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: missing - no validating evidence link found"));
 
     move_issue_to_validation(dir.path(), &issue_id);
     let (success, transitions, stderr) =
@@ -479,6 +461,10 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(transitions.contains("close"));
     assert!(transitions.contains("fail  evidence.attached"));
     assert!(transitions.contains("expected at least 1 validating evidence record(s); found 0"));
+    assert!(
+        transitions.contains("Hint: record proof with `atelier evidence record --target issue/<id> --kind validation \"...\"`"),
+        "{transitions}"
+    );
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -497,8 +483,8 @@ fn test_issue_show_surfaces_evidence_status() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "show", &issue_id]);
     assert!(success, "issue show with evidence failed: {stderr}");
-    assert!(stdout.contains("Evidence Status"));
-    assert!(stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
+    assert!(!stdout.contains("Evidence Status"));
+    assert!(!stdout.contains("Attached Proof: attached - passing validating evidence is linked"));
 
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--options"]);
@@ -1156,8 +1142,10 @@ fn test_issue_sections_are_canonical_after_direct_markdown_edit_and_rebuild() {
     let issue_text = std::fs::read_to_string(&issue_path)
         .unwrap()
         .replace("No description provided.", edited_body)
-        .replace("Outcome was not specified.", edited_outcome)
-        .replace("Evidence was not specified.", edited_evidence);
+        .replace(
+            "Outcome was not specified.",
+            &format!("{edited_outcome}\n\n## Evidence\n\n{edited_evidence}"),
+        );
     std::fs::write(&issue_path, issue_text).unwrap();
 
     let (success, _, stderr) = run_atelier(dir.path(), &["rebuild"]);

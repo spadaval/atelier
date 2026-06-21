@@ -311,11 +311,8 @@ pub enum MissionSectionName {
 }
 
 impl IssueSections {
-    pub const REQUIRED_NAMES: [IssueSectionName; 3] = [
-        IssueSectionName::Description,
-        IssueSectionName::Outcome,
-        IssueSectionName::Evidence,
-    ];
+    pub const REQUIRED_NAMES: [IssueSectionName; 2] =
+        [IssueSectionName::Description, IssueSectionName::Outcome];
 
     pub const ALL_NAMES: [IssueSectionName; 4] = [
         IssueSectionName::Description,
@@ -335,7 +332,7 @@ impl IssueSections {
         Self {
             description: description.to_string(),
             outcome: "Outcome was not specified.".to_string(),
-            evidence: "Evidence was not specified.".to_string(),
+            evidence: String::new(),
             notes: None,
         }
     }
@@ -344,7 +341,9 @@ impl IssueSections {
         match name {
             IssueSectionName::Description => Some(&self.description),
             IssueSectionName::Outcome => Some(&self.outcome),
-            IssueSectionName::Evidence => Some(&self.evidence),
+            IssueSectionName::Evidence => {
+                (!self.evidence.trim().is_empty()).then_some(&self.evidence)
+            }
             IssueSectionName::Notes => self.notes.as_deref(),
         }
     }
@@ -429,7 +428,7 @@ fn parse_issue_sections_lenient(body: &str) -> Option<IssueSections> {
     let description = description.trim().to_string();
     let outcome = outcome.trim().to_string();
     let evidence = evidence.trim().to_string();
-    if description.is_empty() || outcome.is_empty() || evidence.is_empty() {
+    if description.is_empty() || outcome.is_empty() {
         return None;
     }
     Some(IssueSections {
@@ -453,7 +452,7 @@ impl IssueSectionName {
     pub fn required(self) -> bool {
         matches!(
             self,
-            IssueSectionName::Description | IssueSectionName::Outcome | IssueSectionName::Evidence
+            IssueSectionName::Description | IssueSectionName::Outcome
         )
     }
 }

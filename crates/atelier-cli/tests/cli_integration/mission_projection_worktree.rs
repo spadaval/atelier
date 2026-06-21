@@ -508,11 +508,7 @@ fn test_mission_terminal_status_and_options_use_configured_objective_validators(
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
-    assert!(status_out.contains("Linked Work: present"), "{status_out}");
-    assert!(
-        status_out.contains("Linked Work Terminal: open"),
-        "{status_out}"
-    );
+    assert!(status_out.contains("Work: open"), "{status_out}");
     assert!(status_out.contains(&work_id), "{status_out}");
 
     let (success, options_out, stderr) = run_atelier(
@@ -1401,7 +1397,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
             "evidence",
             "attach",
             &closed_evidence_id,
-            "mission",
+            "issue",
             closed_id,
         ],
     );
@@ -1419,27 +1415,6 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
         ],
     );
     assert!(success, "close mission failed: {stderr}");
-
-    let (success, superseded_out, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "Superseded mission",
-            "--issue-type",
-            "mission",
-        ],
-    );
-    assert!(success, "superseded mission create failed: {stderr}");
-    assert!(superseded_out.contains("mission objective atelier-"));
-    let superseded_id = record_id_by_title(dir.path(), "missions", "Superseded mission");
-    let superseded_id = superseded_id.as_str();
-    let (success, superseded_update, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", superseded_id, "--status", "superseded"],
-    );
-    assert!(success, "superseded mission update failed: {stderr}");
-    assert!(superseded_update.contains("Status: superseded"));
 
     let (success, epic_out, stderr) = run_atelier(
         dir.path(),
@@ -1521,7 +1496,7 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let evidence_id = evidence_id.as_str();
     let (success, _, stderr) = run_atelier(
         dir.path(),
-        &["evidence", "attach", &evidence_id, "mission", &older_id],
+        &["evidence", "attach", &evidence_id, "issue", &older_id],
     );
     assert!(success, "link evidence failed: {stderr}");
 
@@ -1537,11 +1512,9 @@ fn test_mission_list_human_overview_orders_and_summarizes() {
     let active_row = format!("{active_id} ");
     let older_row = format!("{older_id} ");
     let closed_row = format!("{closed_id} [closed] - Newest closed");
-    let superseded_row = format!("{superseded_id} [superseded] - Superseded mission");
     assert!(stdout.contains(&active_row), "{stdout}");
     assert!(stdout.contains(&older_row), "{stdout}");
     assert!(!stdout.contains(&closed_row));
-    assert!(!stdout.contains(&superseded_row));
     assert!(stdout.contains("atelier issue status <id>"));
     assert!(stdout.contains("atelier issue list"));
     assert!(!stdout.contains("Loose mission work"));
