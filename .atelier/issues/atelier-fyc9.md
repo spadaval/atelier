@@ -12,9 +12,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T18:59:57.484074763+00:00"
+status: "done"
 title: "Normalize mission work and blocker relationships under issue commands"
-updated_at: "2026-06-21T18:55:20.377502007+00:00"
+updated_at: "2026-06-21T18:59:57.484074763+00:00"
 ---
 
 ## Description
