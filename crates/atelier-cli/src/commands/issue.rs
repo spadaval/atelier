@@ -602,6 +602,9 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
 }
 
 pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
+    if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
+        return crate::commands::mission::transition_options(db, issue_ref);
+    }
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;

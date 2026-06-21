@@ -654,6 +654,7 @@ fn test_issue_create_update_and_transition_use_custom_issue_type() {
 fn test_issue_create_mission_type_requires_workflow_policy_declaration() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    write_workflow_without_mission_issue_type(dir.path());
 
     let (success, stdout, stderr) = run_atelier_raw(
         dir.path(),
@@ -699,7 +700,6 @@ fn test_issue_create_mission_type_requires_workflow_policy_declaration() {
 fn test_issue_create_mission_type_uses_declared_workflow_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    write_mission_issue_type_workflow(dir.path());
 
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
@@ -732,7 +732,7 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
     assert!(success, "declared mission issue show failed: {stderr}");
     assert!(show.contains("Type:     mission"), "{show}");
     assert!(
-        show.contains("Status:   todo"),
+        show.contains("Status:   ready"),
         "declared mission should use its configured initial status: {show}"
     );
 }
@@ -2554,17 +2554,38 @@ fn write_incident_issue_type_workflow(dir: &std::path::Path) {
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
 
-fn write_mission_issue_type_workflow(dir: &std::path::Path) {
+fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
     let workflow_path = dir.join(".atelier/workflow.yaml");
     let workflow = std::fs::read_to_string(&workflow_path)
         .expect("failed to read workflow policy")
+        .replace("  mission: { label: Mission }\n", "")
         .replace(
-            "  task: { label: Task }\n  validation: { label: Validation }",
-            "  task: { label: Task }\n  mission: { label: Mission }\n  validation: { label: Validation }",
-        )
-        .replace(
-            "applies_to: [bug, feature, task]",
-            "applies_to: [bug, feature, mission, task]",
+            r#"  mission_delivery:
+    applies_to: [mission]
+    initial_status: ready
+    done_statuses: [closed]
+    transitions:
+      close:
+        from: [ready, in_progress, validation]
+        to: closed
+        required_fields: [close_reason]
+        description: "Closing requires configured objective validators to pass."
+        validators:
+          - objective.work_present
+          - objective.work_terminal
+          - objective.blockers_none_open
+          - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
+          - validation.criteria_satisfied
+          - lint.none_blocking
+          - command_surface_current
+          - ignored_tests_reviewed
+          - tracker.current
+          - git.on_base_branch
+          - git.worktree_clean
+
+"#,
+            "",
         );
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }

@@ -47,6 +47,68 @@ pub fn status(
     }
 }
 
+pub fn transition_options(db: &Database, id: &str) -> Result<()> {
+    let state_dir =
+        atelier_app::storage_layout::StorageLayout::new(crate::commands::workflow::repo_root()?)
+            .canonical_dir();
+    let mission = db.require_record(KIND, id)?;
+    let summary = mission_list_summary(db, id)?;
+    let terminal = mission_terminal_status(db, &state_dir, &mission, &summary)?;
+    let mut blockers = vec![format!(
+        "missing required field close_reason; rerun with `atelier issue transition {id} close --reason \"...\"`"
+    )];
+    blockers.extend(terminal.blocking_messages());
+
+    println!("Mission Transitions {} - {}", mission.id, mission.title);
+    println!(
+        "{}",
+        "=".repeat(mission.id.len() + mission.title.len() + 23)
+    );
+    println!("State");
+    println!("-----");
+    println!("Status:   {}", mission.status);
+    println!("Type:     mission");
+    println!("Options:  1");
+    println!();
+    println!(
+        "close [{}]",
+        if blockers.is_empty() {
+            "allowed"
+        } else {
+            "blocked"
+        }
+    );
+    println!("  From: ready, active");
+    println!("  To:   closed");
+    println!("  Command: atelier issue transition {id} close --reason \"...\"");
+    println!("Validators");
+    println!("----------");
+    if terminal.validator_results.is_empty() {
+        println!("(none)");
+    } else {
+        for result in &terminal.validator_results {
+            println!(
+                "  {}  {}",
+                if result.passed { "pass" } else { "fail" },
+                result.validator
+            );
+            println!("      {}", result.reason);
+        }
+    }
+    println!("Blockers");
+    println!("--------");
+    for blocker in blockers {
+        println!("  {blocker}");
+    }
+    println!("Planned Actions");
+    println!("---------------");
+    println!("(none)");
+    println!("Description");
+    println!("-----------");
+    println!("  Closing requires configured workflow validators to pass.");
+    Ok(())
+}
+
 fn status_dashboard(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
     let records = current_mission_records(db)?;
     let mut rows = records
@@ -759,10 +821,7 @@ struct MissionTerminalStatus {
 
 impl MissionTerminalStatus {
     fn ready(&self) -> bool {
-        self.has_work
-            && self.open_work.is_empty()
-            && self.open_blockers.is_empty()
-            && self.validator_results.iter().all(|result| result.passed)
+        self.validator_results.iter().all(|result| result.passed)
     }
 
     fn validator_failure_count(&self) -> usize {
@@ -774,23 +833,6 @@ impl MissionTerminalStatus {
 
     fn blocking_messages(&self) -> Vec<String> {
         let mut messages = Vec::new();
-        if !self.has_work {
-            messages.push(
-                "no linked mission work: add accountable work before objective close".to_string(),
-            );
-        }
-        if !self.open_work.is_empty() {
-            messages.push(format!(
-                "open mission work: {}; close or defer linked work before objective close",
-                compact_strings(&self.open_work)
-            ));
-        }
-        if !self.open_blockers.is_empty() {
-            messages.push(format!(
-                "open blockers: {}; close or remove blocker links before objective close",
-                compact_strings(&self.open_blockers)
-            ));
-        }
         for result in self
             .validator_results
             .iter()
@@ -1121,6 +1163,24 @@ fn terminal_validator_user_text(
             "satisfied",
             "incomplete",
             "atelier issue status {mission}",
+        )),
+        "objective.work_present" => Some((
+            "Linked Work",
+            "present",
+            "missing",
+            "atelier issue link {mission} <issue-id> --role advances",
+        )),
+        "objective.work_terminal" => Some((
+            "Linked Work Terminal",
+            "closed",
+            "open",
+            "atelier issue status {mission}",
+        )),
+        "objective.blockers_none_open" => Some((
+            "Direct Objective Blockers",
+            "clear",
+            "open",
+            "atelier issue blocked {mission}",
         )),
         "git.worktree_clean" => Some((
             "Checkout",
