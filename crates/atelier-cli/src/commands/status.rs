@@ -122,7 +122,7 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Inspect objective readiness: atelier issue status <id>");
     } else {
         println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier issue status",
+            "  Inspect mission choices ({} current mission(s), none active): atelier issue table --kind mission",
             current_missions.len()
         );
     }

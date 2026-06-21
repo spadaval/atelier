@@ -69,10 +69,10 @@ reimplement transition availability rules as a parallel source of truth.
 
 `atelier-cli` owns Clap command shape, process exit mapping, and terminal
 rendering only. Commands such as `atelier issue transition <id> --options`,
-`atelier issue transition <id> <transition>`, `atelier mission status`, and
-`atelier issue list --ready` should render the app/workflow outcomes they
-receive. CLI code may contain formatting labels such as section headings, but
-not workflow policy decisions.
+`atelier issue transition <id> <transition>`, `atelier issue status
+<objective-id>`, and `atelier issue list --ready` should render the
+app/workflow outcomes they receive. CLI code may contain formatting labels such
+as section headings, but not workflow policy decisions.
 
 `atelier-records` owns durable issue status storage as canonical Markdown data.
 When it validates or defaults a status during record creation or bundle apply,

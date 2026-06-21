@@ -4,6 +4,10 @@ id: "atelier-vays"
 issue_type: "epic"
 labels:
 - "mission-rework"
+review:
+  kind: pull_request
+  number: 19
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +24,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "review"
 title: "Epic: Collapse mission command surface into issue commands"
-updated_at: "2026-06-21T17:24:17.004976255+00:00"
+updated_at: "2026-06-21T19:18:23.692126589+00:00"
 ---
 
 ## Description

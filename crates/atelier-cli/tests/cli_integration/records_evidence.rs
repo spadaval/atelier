@@ -971,7 +971,7 @@ fn test_first_class_records_export_rebuild_and_validate() {
     assert!(human_out.contains("Evidence Gaps"));
     assert!(human_out.contains("(none)"));
     assert!(human_out.contains("Next Commands"));
-    assert!(human_out.contains("atelier issue status"));
+    assert!(human_out.contains(&format!("atelier issue status {mission_id}")));
 
     let (success, evidence_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", evidence_id]);

@@ -95,6 +95,54 @@ pub(crate) fn snapshot_for_issue_objective(
     Ok(snapshot)
 }
 
+pub(crate) fn snapshot_for_mission(
+    db: &Database,
+    mission_id: &str,
+    active_issue_ids: &BTreeSet<&str>,
+) -> Result<ObjectiveStatusSnapshot> {
+    let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let mut snapshot = ObjectiveStatusSnapshot {
+        issue_ids: mission_issue_ids(db, mission_id)?,
+        open_blockers: open_objective_blockers(db, "mission", mission_id)?,
+        ..ObjectiveStatusSnapshot::default()
+    };
+
+    for issue_id in &snapshot.issue_ids {
+        let Some(issue) = db.get_issue(issue_id)? else {
+            continue;
+        };
+        match issue_bucket(db, &issue, active_issue_ids, workflow_policy.as_ref())? {
+            ObjectiveIssueBucket::Active => {
+                snapshot.active += 1;
+                snapshot.active_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Ready => {
+                snapshot.ready += 1;
+                if is_selectable_work(db, &issue)? {
+                    snapshot.selectable_issues.push(issue.clone());
+                }
+                snapshot.ready_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Blocked => {
+                snapshot.blocked += 1;
+                snapshot.blocked_issues.push(issue);
+            }
+            ObjectiveIssueBucket::Done => snapshot.done += 1,
+            ObjectiveIssueBucket::Backlog => snapshot.backlog += 1,
+        }
+    }
+
+    snapshot.active_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.active_issues)?;
+    snapshot.ready_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.ready_issues)?;
+    snapshot.selectable_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.selectable_issues)?;
+    snapshot.blocked_issues =
+        order_issues_by_work(db, workflow_policy.as_ref(), snapshot.blocked_issues)?;
+    Ok(snapshot)
+}
+
 pub(crate) fn issue_bucket(
     db: &Database,
     issue: &Issue,

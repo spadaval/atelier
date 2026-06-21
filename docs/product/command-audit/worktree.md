@@ -14,7 +14,7 @@ mission/issue worktrees?"
 - Design: Remove pending redesign. Mission worktree ownership and per-issue
   worktree setup were buggy, under-specified, and not valuable enough to carry
   as first-class surface.
-- Replacement: Use `atelier status`, `atelier issue status`,
+- Replacement: Use `atelier status`, `atelier issue status <id>`,
   `atelier issue transition <id> --options`, and workflow-backed issue
   transitions for ordinary work. Use `atelier branch ...` only for advanced
   owner-branch recovery.

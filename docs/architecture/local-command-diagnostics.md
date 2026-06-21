@@ -199,11 +199,11 @@ future tools that summarize command behavior. It is not the contract for normal
 project operation.
 
 Normal mission, issue, validation, and terminal workflows must use
-human-oriented operator surfaces: `atelier status`, `atelier mission status`,
-`atelier issue transition <id> --options`, `atelier lint`, `atelier doctor`,
-and `atelier evidence record`. Agents and scripts must not parse diagnostics
-JSON to choose ready work, decide blockers, prove validation, infer evidence
-coverage, or close work.
+human-oriented operator surfaces: `atelier status`, `atelier issue status
+<objective-id>`, `atelier issue transition <id> --options`, `atelier lint`,
+`atelier doctor`, and `atelier evidence record`. Agents and scripts must not
+parse diagnostics JSON to choose ready work, decide blockers, prove validation,
+infer evidence coverage, or close work.
 
 This boundary applies even though diagnostics query commands intentionally emit
 stable JSON. That JSON is stable for local diagnostic tooling, telemetry review,

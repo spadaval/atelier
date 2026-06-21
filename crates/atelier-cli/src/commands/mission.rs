@@ -611,6 +611,11 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
+fn canonical_mission_path(id: &str) -> Result<Option<PathBuf>> {
+    Ok(find_state_dir_from_cwd()?
+        .map(|state_dir| state_dir.join("missions").join(format!("{id}.md"))))
+}
+
 fn current_mission_records(db: &Database) -> Result<Vec<RecordSummary>> {
     mission_records_for_filter(db, Some("current"))
 }
@@ -1682,7 +1687,7 @@ fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
         println!("  atelier issue status {}", row.record.id);
         println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier issue status");
+    println!("  atelier issue table --kind mission");
     println!("  atelier issue create \"...\" --issue-type mission");
 }
 
@@ -2050,6 +2055,9 @@ fn render_mission_show_human(
         "Updated:  {}",
         format_human_datetime(mission.header.updated_at)
     );
+    if let Some(path) = canonical_mission_path(&mission.header.id)? {
+        println!("File:     {}", path.display());
+    }
 
     print_mission_section("Intent", &sections.intent);
     print_mission_section("Constraints", &sections.constraints);

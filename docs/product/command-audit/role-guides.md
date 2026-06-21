@@ -62,7 +62,7 @@ bundle apply, branch merge, and destructive record deletion.
 
 Primary job: check proof, review outputs, and validate transitions.
 
-Default first command: `atelier issue status`.
+Default first command: `atelier issue status <id>`.
 
 Orientation loop:
 
@@ -108,11 +108,12 @@ Primary job: create and coordinate work.
 `manager` is the broad CLI role class. `orchestrator` remains a specific Agent
 Factory agent type within that class.
 
-Default first command: `atelier issue status`.
+Default first command: `atelier issue table --kind mission`.
 
 Core loop:
 
 ```text
+atelier issue table --kind mission
 atelier issue list --ready
 atelier issue show <id>
 atelier issue status <id>

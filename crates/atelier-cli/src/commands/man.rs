@@ -210,7 +210,7 @@ fn print_relevant_commands(role: Role, snapshot: Option<&Snapshot>) {
         }
         Role::Manager => {
             println!(
-                "  1. atelier issue list --status all - Choose an objective to inspect explicitly."
+                "  1. atelier issue table --kind mission - Choose a mission to inspect explicitly."
             );
             println!("  2. atelier issue status <id> - Review objective readiness and blockers.");
             println!("  3. atelier bundle preview <file> - Validate bulk graph changes.");
@@ -236,7 +236,7 @@ fn print_normal_loop(role: Role) {
             println!("  atelier evidence record --target issue/<id> --kind test -- <command>");
         }
         Role::Reviewer => {
-            println!("  atelier issue status");
+            println!("  atelier issue status <id>");
             println!("  atelier issue show <id>");
             println!("  atelier issue transition <id> --options");
             println!(
@@ -253,7 +253,8 @@ fn print_normal_loop(role: Role) {
             );
         }
         Role::Manager => {
-            println!("  atelier issue status");
+            println!("  atelier issue table --kind mission");
+            println!("  atelier issue status <id>");
             println!("  atelier bundle preview <file>");
             println!("  atelier bundle apply <file> --yes");
             println!("  atelier issue create \"...\"");

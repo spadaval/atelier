@@ -51,7 +51,7 @@ supported replacements:
 - freshness and health commands such as `atelier export --check`,
   `atelier lint`, and `atelier doctor`;
 - focused drill-down commands such as `atelier issue show <id>`,
-  `atelier mission show <id>`, `atelier issue list --ready`, and dependency commands;
+  `atelier issue status <objective-id>`, `atelier issue list --ready`, and dependency commands;
 - documented authored JSON inputs or derived projection files only when a
   specific spec defines the contract.
 
