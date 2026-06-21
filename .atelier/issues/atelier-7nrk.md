@@ -27,9 +27,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T18:32:36.623524329+00:00"
+status: "done"
 title: "Document mission-as-declared-policy target"
-updated_at: "2026-06-21T18:32:09.515511386+00:00"
+updated_at: "2026-06-21T18:32:36.623524329+00:00"
 ---
 
 ## Description
