@@ -180,11 +180,12 @@ time pressure:
   gaps, completion status, and the next action for the objective. Target state
   is owned by `atelier issue show <objective-id>`, `atelier issue status
   <objective-id>`, `atelier issue update`, and issue link/block commands.
-  Transitional mission commands remain only until those replacements land.
+  Missions are mission-typed issue records, not a separate root command
+  namespace.
 - Manage relationships: record issue blockers and inspect cross-record impact
   when the next action depends on graph shape. Owned by issue blocker
-  subcommands, issue link/unlink, issue detail/status, mission work-link
-  subcommands while transitional missions remain, and evidence attachment.
+  subcommands, issue link/unlink, issue detail/status, and evidence
+  attachment.
 - Check committed state: prove tracked records and workflow config are usable
   for handoff. Owned by `atelier lint`; local runtime repair is admin-only and
   should appear only when a command reports degraded local state. Low-level

@@ -688,18 +688,6 @@ fn resolve_issue_arg(db: &Database, issue_ref: &str) -> Result<String> {
     }
 }
 
-fn resolve_record_arg(db: &Database, kind: &str, id: &str) -> Result<String> {
-    if kind == "issue" {
-        resolve_issue_arg(db, id)
-    } else if db.get_record(kind, id)?.is_some() {
-        Ok(id.to_string())
-    } else if let Some(actual_kind) = db.record_kind_for_id(id)? {
-        bail!("{}", wrong_kind_message(kind, &actual_kind, id));
-    } else {
-        Ok(id.to_string())
-    }
-}
-
 fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> String {
     let suggested = show_command_for_kind(actual_kind)
         .map(|command| format!(" Use `{command} {id}`."))
@@ -1091,7 +1079,7 @@ fn run() -> Result<()> {
             let storage = command_storage(CommandStorageAccess::ProjectionQuery)?;
             let mission = mission
                 .as_deref()
-                .map(|id| resolve_record_arg(storage.db(), "mission", id))
+                .map(|id| resolve_issue_arg(storage.db(), id))
                 .transpose()?;
             let issue = issue
                 .as_deref()

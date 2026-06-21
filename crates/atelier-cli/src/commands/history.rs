@@ -4,10 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use atelier_core::{Issue, RecordLink};
-use atelier_records::activity::{
-    list_all_issue_activities, list_all_mission_activities, list_issue_activities,
-    list_mission_activities, IssueActivity,
-};
+use atelier_records::activity::{list_all_issue_activities, list_issue_activities, IssueActivity};
 use atelier_sqlite::{Database, RecordSummary};
 
 pub const DEFAULT_LIMIT: usize = 20;
@@ -97,10 +94,17 @@ impl HistoryScope {
         }
 
         if let Some(mission_id) = options.mission.as_deref() {
-            let mission = db.require_record("mission", mission_id)?;
-            let mut issue_ids = BTreeSet::new();
-            let mut record_ids = BTreeSet::from([("mission".to_string(), mission.id.clone())]);
-            collect_mission_scope(db, &mission.id, &mut issue_ids, &mut record_ids)?;
+            let mission = db.require_issue(mission_id)?;
+            if mission.issue_type != "mission" {
+                bail!("{} is not a mission issue", mission.id);
+            }
+            let mut issue_ids = BTreeSet::from([mission.id.clone()]);
+            issue_ids.extend(crate::commands::objective_status::mission_issue_ids(
+                db,
+                &mission.id,
+            )?);
+            let mut record_ids = BTreeSet::new();
+            collect_linked_evidence_records(db, &issue_ids, &mut record_ids)?;
             return Ok(Self {
                 label: format!("mission {} - {}", mission.id, mission.title),
                 source_boundary: SOURCE_BOUNDARY,
@@ -232,24 +236,6 @@ fn collect_rows(db: &Database, state_dir: &Path, scope: &HistoryScope) -> Result
         );
     }
 
-    if let Some(record_ids) = scope.record_ids.as_ref() {
-        for (kind, id) in record_ids {
-            if kind == "mission" {
-                rows.extend(
-                    list_mission_activities(state_dir, id)?
-                        .into_iter()
-                        .map(|activity| activity_row(activity, &lookup)),
-                );
-            }
-        }
-    } else {
-        rows.extend(
-            list_all_mission_activities(state_dir)?
-                .into_iter()
-                .map(|activity| activity_row(activity, &lookup)),
-        );
-    }
-
     for issue in lookup
         .issues
         .values()
@@ -320,7 +306,7 @@ impl Lookup {
             .map(|issue| (issue.id.clone(), issue))
             .collect();
         let mut records = BTreeMap::new();
-        for kind in ["mission", "evidence"] {
+        for kind in ["evidence"] {
             for record in db.list_records(kind, None)? {
                 records.insert((record.kind.clone(), record.id.clone()), record);
             }
@@ -418,27 +404,6 @@ fn display_target_for_link(link: &RecordLink) -> (&str, &str) {
     } else {
         (&link.source_kind, &link.source_id)
     }
-}
-
-fn collect_mission_scope(
-    db: &Database,
-    mission_id: &str,
-    issue_ids: &mut BTreeSet<String>,
-    record_ids: &mut BTreeSet<(String, String)>,
-) -> Result<()> {
-    for link in db.list_record_links("mission", mission_id)? {
-        let (kind, id) = if link.source_kind == "mission" && link.source_id == mission_id {
-            (link.target_kind.as_str(), link.target_id.as_str())
-        } else {
-            (link.source_kind.as_str(), link.source_id.as_str())
-        };
-        if kind == "issue" {
-            collect_issue_and_descendants(db, id, issue_ids)?;
-        } else {
-            record_ids.insert((kind.to_string(), id.to_string()));
-        }
-    }
-    collect_linked_evidence_records(db, issue_ids, record_ids)
 }
 
 fn collect_linked_evidence_records(

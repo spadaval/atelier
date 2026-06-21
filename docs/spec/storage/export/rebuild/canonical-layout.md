@@ -437,12 +437,12 @@ Mission relationship semantics are explicit:
 
 | Mission concept | Canonical location |
 | --- | --- |
-| Linked execution work, including epics, tasks, reviews, validations, artifact updates, and closeouts | Mission `relationships.relates[]` entries with `kind: issue` and `type: advances`. |
-| Direct mission blockers | Mission `relationships.relates[]` entries with `kind: issue` and `type: blocked_by`. Linked work item blockers remain ordinary issue dependency edges and are projected into mission status; do not duplicate them in mission prose. |
+| Linked execution work, including epics, tasks, reviews, validations, artifact updates, and closeouts | Mission-typed issue `relationships.relates[]` entries with `kind: issue` and `type: advances`. |
+| Direct mission blockers | Mission-typed issue `relationships.relates[]` entries with `kind: issue` and `type: blocked_by`. Linked work item blockers remain ordinary issue dependency edges and are projected into objective status; do not duplicate them in mission prose. |
 | Checkpoints | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 milestone relationship table exists. |
 | Plans | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 plan relationship table exists. |
-| Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission with a `relationships.attachments[]` entry using `kind: mission`, the mission ID, and `role: validates`. Mission status derives incoming evidence links instead of storing evidence summaries in the mission body. |
-| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
+| Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission-typed issue with a `relationships.attachments[]` entry using `kind: issue`, the mission ID, and `role: validates`. Objective status derives incoming evidence links instead of storing evidence summaries in the mission body. |
+| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission-typed issue `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
 | Terminal notes | The optional `## Terminal Notes` section; terminal proof remains evidence records plus workflow validation output. |
 
 For mission records, `relationships.children` is reserved and should be `[]`.
