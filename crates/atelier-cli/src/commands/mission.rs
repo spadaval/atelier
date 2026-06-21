@@ -552,6 +552,11 @@ fn canonical_mission_record(id: &str) -> Result<MissionRecord> {
     app_use_cases::load_canonical_mission(&state_dir, id)
 }
 
+fn canonical_mission_path(id: &str) -> Result<Option<PathBuf>> {
+    Ok(find_state_dir_from_cwd()?
+        .map(|state_dir| state_dir.join("missions").join(format!("{id}.md"))))
+}
+
 pub fn active_mission(db: &Database) -> Result<Option<RecordSummary>> {
     let active = current_mission_records(db)?
         .into_iter()
@@ -2019,6 +2024,9 @@ fn render_mission_show_human(
         "Updated:  {}",
         format_human_datetime(mission.header.updated_at)
     );
+    if let Some(path) = canonical_mission_path(&mission.header.id)? {
+        println!("File:     {}", path.display());
+    }
 
     print_mission_section("Intent", &sections.intent);
     print_mission_section("Constraints", &sections.constraints);

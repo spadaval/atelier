@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Make issue show/status own mission objective views"
-updated_at: "2026-06-21T16:37:30.766454867+00:00"
+updated_at: "2026-06-21T18:51:46.186703243+00:00"
 ---
 
 ## Description

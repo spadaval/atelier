@@ -703,6 +703,10 @@ fn test_issue_create_mission_type_writes_mission_sections_and_issue_show_reads_t
     assert!(show.contains("Constraints"), "{show}");
     assert!(show.contains("Risks"), "{show}");
     assert!(show.contains("Validation"), "{show}");
+    assert!(
+        show.contains(&format!(".atelier/missions/{mission_id}.md")),
+        "{show}"
+    );
 
     let (success, lint_out, stderr) = run_atelier(dir.path(), &["lint", &mission_id]);
     assert!(success, "focused mission lint failed: {stderr}");
