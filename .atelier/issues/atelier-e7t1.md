@@ -17,9 +17,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T18:51:15.481001730+00:00"
+status: "done"
 title: "Split mission discovery out of issue status"
-updated_at: "2026-06-21T18:38:16.126326520+00:00"
+updated_at: "2026-06-21T18:51:15.481001730+00:00"
 ---
 
 ## Description
