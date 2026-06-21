@@ -21,9 +21,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-21T18:35:33.836269087+00:00"
+status: "done"
 title: "Epic: Define minimal mission contract"
-updated_at: "2026-06-21T18:35:02.238827820+00:00"
+updated_at: "2026-06-21T18:35:33.836269087+00:00"
 ---
 
 ## Description
