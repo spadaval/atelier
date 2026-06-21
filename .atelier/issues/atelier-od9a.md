@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Make evidence validator failures provide simple help hints"
-updated_at: "2026-06-21T17:40:34.549734351+00:00"
+updated_at: "2026-06-21T18:58:50.006715706+00:00"
 ---
 
 ## Description
