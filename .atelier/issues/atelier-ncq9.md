@@ -22,9 +22,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Move mission lifecycle into workflow policy"
-updated_at: "2026-06-21T19:05:54.221389668+00:00"
+updated_at: "2026-06-21T19:06:23.804657005+00:00"
 ---
 
 ## Description
