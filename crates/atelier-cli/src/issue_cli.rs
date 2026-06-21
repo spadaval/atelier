@@ -164,7 +164,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Status { id, verbose } => {
             let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             let db = storage.db();
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+            if is_mission_objective(db, &id)? {
                 commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
             } else {
                 if verbose {
@@ -365,4 +365,13 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             }
         }
     }
+}
+
+fn is_mission_objective(db: &atelier_sqlite::Database, id: &str) -> Result<bool> {
+    if db.record_kind_for_id(id)?.as_deref() == Some("mission") {
+        return Ok(true);
+    }
+    Ok(db
+        .get_issue(id)?
+        .is_some_and(|issue| issue.issue_type == "mission"))
 }

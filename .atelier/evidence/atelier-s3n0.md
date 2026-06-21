@@ -1,22 +1,23 @@
 ---
 created_at: "2026-06-13T01:43:45.927716020+00:00"
-id: "atelier-s3n0"
-evidence_type: "validation"
+id: atelier-s3n0
+evidence_type: validation
 captured_at: "2026-06-13T01:41:27.189248603+00:00"
-command: "bash -lc 'cargo nextest run --profile extended --run-ignored=only --cargo-quiet && atelier export --check && atelier lint && git diff --check'"
+command: bash -lc "cargo nextest run --profile extended --run-ignored=only --cargo-quiet
+  && atelier export --check && atelier lint && git diff --check"
 exit_status: "0"
 relationships:
   blocks: []
   children: []
   attachments:
-  - kind: "mission"
-    id: "atelier-tcmr"
-    role: "validates"
+  - kind: issue
+    id: atelier-tcmr
+    role: validates
   relates: []
-schema: "atelier.evidence"
+schema: atelier.evidence
 schema_version: 1
-status: "recorded"
-title: "Extended ignored-test profile passed for mission closeout"
+status: recorded
+title: Extended ignored-test profile passed for mission closeout
 updated_at: "2026-06-13T01:43:46.946545578+00:00"
 ---
 
@@ -152,7 +153,6 @@ warning: method `remove_dependency` is never used
    |
  7 | impl Database {
    | ------------- method in this implementation
-...
 53 |     pub fn remove_dependency(
    |            ^^^^^^^^^^^^^^^^^
 
@@ -161,16 +161,12 @@ warning: multiple methods are never used
     |
  11 | impl Database {
     | ------------- methods in this implementation
-...
  50 |     pub fn create_issue(
     |            ^^^^^^^^^^^^
-...
  59 |     pub fn create_subissue(
     |            ^^^^^^^^^^^^^^^
-...
  69 |     pub fn create_issue_with_type(
     |            ^^^^^^^^^^^^^^^^^^^^^^
-...
  79 |     pub fn create_subissue_with_type(
     |            ^^^
 

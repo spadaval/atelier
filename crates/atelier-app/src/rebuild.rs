@@ -606,7 +606,7 @@ fn collect_canonical_record_paths(
 
 fn discover_activity_paths(state_dir: &Path) -> Result<Vec<PathBuf>> {
     let mut records = Vec::new();
-    for root_name in ["issues", "missions"] {
+    for root_name in ["issues"] {
         let root_dir = state_dir.join(root_name);
         if root_dir.exists() {
             collect_activity_paths(state_dir, &root_dir, &mut records)?;

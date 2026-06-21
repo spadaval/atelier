@@ -101,9 +101,10 @@ pub(crate) fn snapshot_for_mission(
     active_issue_ids: &BTreeSet<&str>,
 ) -> Result<ObjectiveStatusSnapshot> {
     let workflow_policy = commands::issue_workflow::load_issue_workflow_policy()?;
+    let objective_kind = mission_objective_kind(db, mission_id)?;
     let mut snapshot = ObjectiveStatusSnapshot {
         issue_ids: mission_issue_ids(db, mission_id)?,
-        open_blockers: open_objective_blockers(db, "mission", mission_id)?,
+        open_blockers: open_objective_blockers(db, objective_kind, mission_id)?,
         ..ObjectiveStatusSnapshot::default()
     };
 
@@ -313,6 +314,10 @@ pub(crate) fn open_objective_work(db: &Database, mission_id: &str) -> Result<Vec
 }
 
 pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
+    if mission_objective_kind(db, mission_id)? == "issue" {
+        return issue_descendant_ids(db, mission_id);
+    }
+
     let mut issue_ids = BTreeSet::new();
     for link in db.list_record_links("mission", mission_id)? {
         let Some((kind, linked_id)) = other_side(&link, "mission", mission_id) else {
@@ -325,10 +330,27 @@ pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTree
     Ok(issue_ids)
 }
 
+pub(crate) fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<&'static str> {
+    if db
+        .get_issue(mission_id)?
+        .is_some_and(|issue| issue.issue_type == "mission")
+    {
+        Ok("issue")
+    } else {
+        Ok("mission")
+    }
+}
+
 pub(crate) fn issue_descendant_ids(db: &Database, issue_id: &str) -> Result<BTreeSet<String>> {
     let mut issue_ids = BTreeSet::new();
     for child in db.get_subissues(issue_id)? {
         collect_issue_and_descendants(db, &child.id, &mut issue_ids)?;
+    }
+    let follows_advances = db
+        .get_issue(issue_id)?
+        .is_some_and(|issue| issue.issue_type == "mission");
+    if !follows_advances {
+        return Ok(issue_ids);
     }
     for relation in db.get_typed_relations(issue_id)? {
         if relation.relation_type != "advances" {

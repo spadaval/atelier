@@ -253,7 +253,6 @@ warning: method `remove_dependency` is never used
    |
  7 | impl Database {
    | ------------- method in this implementation
-...
 53 |     pub fn remove_dependency(
    |            ^^^^^^^^^^^^^^^^^
 
@@ -262,6 +261,5 @@ warning: multiple methods are never used
     |
  10 | impl Database {
     | ------------- methods in this implementation
-...
  54 |     pub fn
 
