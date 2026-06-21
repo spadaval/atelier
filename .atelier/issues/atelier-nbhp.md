@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "migration"
 - "mission-rework"
+review:
+  kind: pull_request
+  number: 20
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+status: "review"
 title: "Epic: Migrate mission records and projections"
-updated_at: "2026-06-21T19:22:57.459087648+00:00"
+updated_at: "2026-06-21T19:38:56.502114345+00:00"
 ---
 
 ## Description
