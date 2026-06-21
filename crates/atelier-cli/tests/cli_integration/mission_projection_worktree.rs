@@ -596,6 +596,70 @@ fn test_dirty_worktree_blocks_mission_closeout() {
 }
 
 #[test]
+fn test_off_base_branch_blocks_mission_closeout() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+
+    let (success, mission_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Off base closeout",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    assert!(mission_out.contains("mission objective atelier-"));
+    let mission_id = record_id_by_title(dir.path(), "missions", "Off base closeout");
+
+    let (success, work_out, stderr) =
+        run_atelier(dir.path(), &["issue", "create", "Off base terminal work"]);
+    assert!(success, "work create failed: {stderr}");
+    assert!(work_out.contains("Created issue atelier-"));
+    let work_id = issue_id_by_title(dir.path(), "Off base terminal work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "link", &mission_id, &work_id]);
+    assert!(success, "mission add work failed: {stderr}");
+    close_issue_with_evidence(dir.path(), &work_id, Some("done"));
+    commit_all(dir.path(), "ready off-base mission closeout");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "-c", "side-closeout"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git switch -c side-closeout failed");
+
+    let (success, stdout, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &mission_id,
+            "close",
+            "--reason",
+            "done",
+        ],
+    );
+    assert!(!success, "mission close must require the base branch");
+    assert!(
+        stdout.contains("Mission terminal checks blocked"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("current branch is side-closeout; expected configured base branch main"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("mission terminal checks blocked"),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "side-closeout");
+}
+
+#[test]
 fn test_mission_close_sees_issue_closeout_bookkeeping_committed_by_issue_close() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -3413,6 +3477,43 @@ fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
     assert!(success, "child show failed: {stderr}");
     assert!(show_out.contains("Status:   in_progress"), "{show_out}");
+}
+
+#[test]
+fn test_epic_start_requires_base_branch() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Base gated epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Base gated epic");
+    commit_all(dir.path(), "initial epic tracker state");
+
+    let status = Command::new("git")
+        .current_dir(dir.path())
+        .args(["switch", "-c", "side-start"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git switch -c side-start failed");
+
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &epic_id, "start"]);
+    assert!(!success, "epic start must require the base branch");
+    let output = format!("{stdout}\n{stderr}");
+    assert!(output.contains("git.on_base_branch"), "{output}");
+    assert!(
+        output.contains("current branch is side-start; expected configured base branch main"),
+        "{output}"
+    );
+    assert_eq!(git_current_branch(dir.path()), "side-start");
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &epic_id]);
+    assert!(success, "epic show failed: {stderr}");
+    assert!(show_out.contains("Status:   todo"), "{show_out}");
 }
 
 #[test]

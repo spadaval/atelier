@@ -47,7 +47,7 @@ of inventing command-specific tables.
 ## Detail Views
 
 Use a detail view when the command focuses on one record, such as
-`atelier issue show` or `atelier mission show`.
+`atelier issue show <id>` or `atelier issue show <objective-id>`.
 
 Detail views should answer these questions in order:
 
@@ -185,10 +185,10 @@ their need:
   canonical-record errors, then give one ordered recovery path through lint,
   record repair, health check or fix, and rerunning the blocked command.
 - Use focused drill-down commands for targeted state. Prefer commands such as
-  `atelier issue show <id>`, `atelier mission show <id>`, `atelier mission status <id>`,
-  `atelier issue list --ready`, `atelier issue list --blocked`,
-  `atelier issue status <objective-id>`, and issue blocker commands over
-  scraping broad human reports.
+  `atelier issue show <id>`, `atelier issue show <objective-id>`,
+  `atelier issue status <objective-id>`, `atelier issue list --ready`,
+  `atelier issue list --blocked`, and issue blocker commands over scraping
+  broad human reports.
 - Use documented authored JSON inputs and derived projection files only where a
   specific document defines that contract, such as bundle input JSON or a
   future Mission Control projection.
@@ -288,18 +288,17 @@ unless the test is specifically for a formatter primitive.
 ## Operator Output Audit
 
 The `atelier-rgd1` audit sampled the common operator surfaces named by the CLI
-stabilization mission: `status`, `mission status`, `mission show`,
-`mission list`, `issue show`, `issue list --ready`, `evidence record`,
-`evidence show/list`, dependency and link list output, issue impact rendered by
-`issue show`, `lint`, and admin repair commands when local state is
-degraded.
+stabilization mission: `status`, `issue status <objective-id>`, `issue show`,
+`issue list --ready`, `evidence record`, `evidence show/list`, dependency and
+link list output, issue impact rendered by `issue show`, `lint`, and admin
+repair commands when local state is degraded.
 
 Classification:
 
-- Healthy orientation, mission, issue, evidence, relationship, checkout, and
+- Healthy orientation, objective, issue, evidence, relationship, checkout, and
   health-check views have concise default answers and explicit drill-down
   commands in existing focused tests.
-- Degraded orientation and mission status output keeps ordinary reads usable
+- Degraded orientation and objective status output keeps ordinary reads usable
   while routing repair to `atelier lint` or admin repair commands only when
   committed records or local state are degraded.
 - Fresh `atelier init` previously suggested `atelier issue create "Task"` before

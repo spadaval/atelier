@@ -15,10 +15,11 @@ Before editing, classify the assigned work:
   recoverable.
 
 Use repository-owned command and validation surfaces for exact checks. In
-Atelier repositories, `atelier man admin`, `atelier man worker`,
-`atelier mission status`, issue transition options, lint, and mapped validation
-docs own current tactical details. Use local-state repair commands only when
-Atelier reports degraded local state or the migration explicitly owns repair.
+Atelier repositories, `atelier man admin`, `atelier man worker`, focused
+`atelier issue status <objective-id>`, issue transition options, lint, and
+mapped validation docs own current tactical details. Use local-state repair
+commands only when Atelier reports degraded local state or the migration
+explicitly owns repair.
 
 ## Rules
 

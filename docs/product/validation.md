@@ -70,10 +70,9 @@ validation rather than duplicating every child proof record.
 Proof requirements must be visible before completion.
 
 Agents should not discover required proof only after `atelier issue transition
-<id> close --reason "..."` or `atelier mission close` fails. The normal
-workflow surfaces should show the
-expected proof early, summarize whether it is satisfied, and provide the next
-command that moves the work forward.
+<id> <close-transition> --reason "..."` fails. The normal workflow surfaces
+should show the expected proof early, summarize whether it is satisfied, and
+provide the next command that moves the work forward.
 
 ## Ordinary Issue Flow
 
@@ -161,8 +160,8 @@ close -> done: blocked
   next: atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
-`atelier mission status <id>` should show mission proof gaps by accountable
-work item, not as raw validator names:
+`atelier issue status <objective-id>` should show objective proof gaps by
+accountable work item, not as raw validator names:
 
 ```text
 Proof Gaps
@@ -172,9 +171,9 @@ Proof Gaps
   atelier-epic1: child proof incomplete
 ```
 
-`atelier mission status <id> --verbose` may show deeper terminal-check detail, including
-unmapped parent outcome lines, failed proof, blocked proof, deferred proof, and
-residual risks.
+`atelier issue status <objective-id> --verbose` may show deeper terminal-check
+detail, including unmapped parent outcome lines, failed proof, blocked proof,
+deferred proof, and residual risks.
 
 ## Notes Versus Evidence
 

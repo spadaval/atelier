@@ -11,8 +11,8 @@ delegated work. Spawn subagents for complex role-specific work and assign
 exactly one Agent Factory subskill to each.
 
 Use the repository's executable guidance for tactical details. In Atelier
-repositories, start from `atelier man manager`, `atelier status`,
-`atelier mission status`, and focused record drill-down commands.
+repositories, start from `atelier man manager`, `atelier status`, focused
+`atelier issue status <objective-id>`, and focused record drill-down commands.
 
 ## Orchestrator Responsibilities
 

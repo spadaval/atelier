@@ -77,10 +77,12 @@
   configured review artifact for the branch-owning issue or epic and writes the
   canonical `review` field. It follows the active review mode and must not
   merge, approve, comment on, or close review or issue workflow by itself.
-- Mission: a high-level objective that may span multiple epics, issues,
-  evidence records, agents, and deferred run metadata.
-  It is also the shared background workspace boundary: one mission normally
-  owns one shared worktree for coordinated agent work.
+- Mission: a high-level objective declared through repository workflow policy.
+  A mission may span multiple epics, issues, evidence records, agents, and
+  deferred run metadata, but it does not own a hidden command lifecycle,
+  active-focus pointer, or universal evidence rule outside the workflow model.
+  A mission may still be the shared background workspace boundary when
+  repository workflow and operator assignment choose that coordination shape.
 - Epic: the normal branch and review boundary beneath a mission. One epic
   normally owns one reviewable branch or PR-equivalent changeset.
 - Issue: a durable accountability unit and implementation slice. It does not
@@ -211,9 +213,14 @@
   validation records. Legacy `pull_request` fields are migration input, not the
   durable target shape.
 - Workspace, branch, and review boundaries are distinct. Missions own shared
-  worktrees/background checkouts, epics own reviewable branches, and ordinary
-  issues own local implementation proof. Per-issue worktrees or branches are
-  exceptional isolation tools, not the default assignment model.
+  worktrees/background checkouts when declared as the coordination objective,
+  epics own reviewable branches, and ordinary issues own local implementation
+  proof. Per-issue worktrees or branches are exceptional isolation tools, not
+  the default assignment model.
+- Mission lifecycle and closeout policy is workflow-owned. The CLI may provide
+  objective graph summaries and migration helpers, but the valid statuses,
+  transitions, validators, and evidence requirements for mission-shaped work
+  come from `.atelier/workflow.yaml`.
 - Branch policy is workflow-owned rather than a separate routine setup step.
   `atelier start <id>` prepares the owner branch from the work graph: child
   issues use the nearest parent epic branch, standalone issues use an issue

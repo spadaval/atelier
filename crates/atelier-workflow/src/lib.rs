@@ -83,6 +83,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - git.on_base_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -200,6 +202,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "review.linked_pr_merged",
     "blockers.none_open",
     "lint.none_blocking",
+    "git.on_base_branch",
     "git.worktree_clean",
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
@@ -2429,6 +2432,10 @@ mod tests {
             action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
             vec!["review.open"]
         );
+        assert_eq!(
+            validator_names(&policy.workflows["epic_delivery"].transitions["start"].validators),
+            vec!["git.on_base_branch"]
+        );
         assert_eq!(policy.branch_policy.merge_strategy, MergeStrategy::Squash);
         assert_eq!(policy.branch_policy.base_branch, "main");
     }
@@ -2437,6 +2444,13 @@ mod tests {
         actions
             .iter()
             .map(|action| action.builtin.as_str())
+            .collect()
+    }
+
+    fn validator_names(validators: &[ValidatorDefinition]) -> Vec<&str> {
+        validators
+            .iter()
+            .map(|validator| validator.builtin.as_str())
             .collect()
     }
 

@@ -78,8 +78,9 @@ atelier issue status <id> --verbose
 
 Reviewer guide should explain that `workflow check` is raw admin diagnostics;
 normal readiness inspection uses `issue transition --options`, `lint`, and
-`mission status`. Any review-artifact action should come from Atelier's current
-workflow or recovery guidance, not from static reviewer policy.
+`issue status <objective-id>`. Any review-artifact action should come from
+Atelier's current workflow or recovery guidance, not from static reviewer
+policy.
 
 ## Validator Guide
 
@@ -97,7 +98,7 @@ atelier evidence record --target issue/<id> --kind validation -- <command>
 ```
 
 Validator guide should not encode review-provider or review-artifact policy.
-Validation follows the issue, mission, and transition guidance Atelier prints
+Validation follows the issue, objective, and transition guidance Atelier prints
 for the current work item.
 
 ## Manager Guide
@@ -112,7 +113,7 @@ Default first command: `atelier issue status`.
 Core loop:
 
 ```text
-atelier mission list
+atelier issue list --ready
 atelier issue show <id>
 atelier issue status <id>
 atelier bundle preview <file>

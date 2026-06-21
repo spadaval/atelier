@@ -6,10 +6,11 @@ separate issue hierarchy.
 
 ## Concepts
 
-- Mission: a long-running objective with intent, scope, constraints, current
-  health, active epics, risks, validation expectations, and evidence. It is also
-  the default shared background workspace boundary: one mission normally owns
-  one shared worktree or equivalent checkout.
+- Mission: a long-running objective declared through issue/workflow policy. It
+  carries intent, scope, constraints, current health, active epics, risks, and
+  validation expectations through normal objective fields, sections, and typed
+  relationships. It may be the shared background workspace boundary when the
+  repository workflow and assignment model choose that coordination shape.
 - Status role: optional workflow policy on an active status that names the role
   currently responsible for that work state. Status roles are displayed by
   status/man surfaces and used as the default role for review attribution.
@@ -95,18 +96,22 @@ behavior, Agent Factory process changes, explicitly risk-escalated issue
 slices, epic completions, and explicit mission-level completion or validation
 claims.
 
-Missions are coordination shells by default, not work logs. A mission may
-retain direct evidence links only for legacy imports or migration notes. Normal
-mission completion is computed from closed linked work, clear mission blockers,
-configured health gates, and workflow approval on accountable child work;
-mission `Validation` prose guides human completion and validation but is not
-parsed as a coded evidence contract.
-Missions keep the built-in lifecycle `draft`, `ready`, `active`, `superseded`,
-and `closed`; `superseded` means another mission has replaced the execution
-scope and hides from default current mission lists without claiming completion.
-Atelier does not add a configurable mission workflow graph. Issues and epics
-remain the workflow-owned records: they move through normal issue transitions
-until a terminal done-category status is allowed.
+Missions are coordination objectives by default, not work logs. A mission may
+retain direct evidence links only when the configured workflow or migration
+contract requires them. Normal mission completion is derived from the workflow
+declared for the mission-shaped issue type: closed linked work, clear blockers,
+configured validators, transition actions, and validation approval apply only
+when `.atelier/workflow.yaml` declares them for that objective type or
+transition. Mission `Validation` prose guides human completion and validation
+but is not parsed as a coded evidence contract unless a configured validator
+does that work.
+
+Missions do not have a hidden built-in lifecycle. If a repository wants
+mission-shaped work, it declares the issue type, statuses, done statuses,
+transitions, validators, and actions in workflow policy. `superseded`, `ready`,
+`active`, or `closed` are ordinary workflow statuses only when policy defines
+them. Evidence remains an optional validator capability rather than a universal
+tax on every issue or objective.
 
 The detailed routing table lives in
 [Validation](../architecture/quality/validation.md). Product docs should point
@@ -182,18 +187,19 @@ where the mission is executed.
 
 A mission is large enough to require at least one epic. If the work can be
 planned, claimed, implemented, validated, and closed as a single accountable
-unit, it should remain an issue. If the work needs coordinated implementation,
-review, validation, documentation, or migration slices under a shared objective,
-the shared objective should be a mission and the executable slices should live
-under one or more epics or issues linked to that mission.
+unit, it should remain an ordinary issue. If the work needs coordinated
+implementation, review, validation, documentation, or migration slices under a
+shared objective, the shared objective may be a mission-shaped issue type and
+the executable slices should live under one or more epics or issues linked to
+that objective.
 
 ## Mission Graph Shape
 
-Prefer a shallow mission graph: the mission links to epics, validation issues, or
-other root work that directly advances the objective, and those epics own their
-executable child tasks. Ordinary child tasks should not also be direct mission
-work unless the duplicate link is deliberate and useful for a specific
-validation, migration, or emergency tracking reason.
+Prefer a shallow objective graph: the objective links to epics, validation
+issues, or other root work that directly advances the objective, and those
+epics own their executable child tasks. Ordinary child tasks should not also be
+direct objective work unless the duplicate link is deliberate and useful for a
+specific validation, migration, or emergency tracking reason.
 
 ```text
 mission atelier-hy2i
@@ -206,19 +212,21 @@ mission atelier-hy2i
   advances validation issue atelier-mission-validation
 ```
 
-In this shape, the mission carries objective scope and validation expectations,
-epics group accountable work packages on reviewable branches, and child issues
-execute as implementation slices under their epic. Mission status should count
-each unique issue once even when a deliberate duplicate path exists, but
-planners should avoid duplicate mission links by default because they make
+In this shape, the objective carries scope and validation expectations, epics
+group accountable work packages on reviewable branches, and child issues
+execute as implementation slices under their epic. Objective status should
+count each unique issue once even when a deliberate duplicate path exists, but
+planners should avoid duplicate objective links by default because they make
 completion state harder to scan.
 
 ## Workspace, Branch, And Review Boundaries
 
 The default operating model separates three concerns:
 
-- Mission: one ordinary checkout or background checkout for coordinated work.
-- Epic: one reviewable branch or PR-equivalent changeset under that mission.
+- Mission: one ordinary checkout or background checkout for coordinated work
+  when the repository workflow and assignment model declare that objective
+  boundary.
+- Epic: one reviewable branch or PR-equivalent changeset under that objective.
 - Issue: one implementation, documentation, review, validation, migration, or
   artifact-update slice with local proof.
 
@@ -245,8 +253,8 @@ Use hierarchy for ownership and typed links for contribution, validation, and
 workflow proof:
 
 ```text
-mission advances issue
-mission blocked_by issue
+objective advances issue
+objective blocked_by issue
 issue part_of epic
 evidence validates issue
 evidence validates review issue
@@ -263,18 +271,19 @@ artifact update blocks epic
 validator failure blocks transition
 ```
 
-Mission work and mission blockers are distinct. `mission advances issue` means
-the issue or epic is part of the mission's execution/progress graph. `mission
-blocked_by issue` means the issue, artifact update, or validation item is gating the
-mission but is not necessarily ordinary mission scope.
+Objective work and objective blockers are distinct. `objective advances issue`
+means the issue or epic is part of the objective's execution/progress graph.
+`objective blocked_by issue` means the issue, artifact update, or validation
+item is gating the objective but is not necessarily ordinary objective scope.
 
-## Readable Mission Records
+## Readable Objective Records
 
-Mission records are meant to be reviewed by operators and agents in normal
-Markdown diffs. The product contract is not an escaped `data` object in YAML.
-Mission front matter carries compact identity, lifecycle state, labels, and
-typed relationships. Mission narrative, constraints, risks, validation
-expectations, and terminal notes live in ordered Markdown sections:
+Mission-shaped objective records are meant to be reviewed by operators and
+agents in normal Markdown diffs. The product contract is not an escaped `data`
+object in YAML. Objective front matter carries compact identity, workflow
+status, labels, and typed relationships. Objective narrative, constraints,
+risks, validation expectations, and terminal notes live in ordered Markdown
+sections chosen by the record contract:
 
 ```text
 ## Intent
@@ -288,12 +297,12 @@ expectations, and terminal notes live in ordered Markdown sections:
 optional. Linked work, blockers, evidence, and other supporting records are
 typed links, not prose-only lists. Checkpoint or plan references are prose or
 repository paths inside those sections, not v1 relationship tables.
-`atelier issue show <mission-id>` and `atelier issue status <mission-id>` render
-mission work, blockers, and evidence from canonical relationships. They count
-only `advances` issue links
-as mission work and only `blocked_by` issue links as direct mission blockers;
-other precise relations remain supporting records instead of broadening the
-work queue.
+`atelier issue show <objective-id>` and `atelier issue status <objective-id>`
+render objective work, blockers, and evidence from canonical relationships.
+They count only configured work relationships such as `advances` issue links as
+objective work and only direct blocker links as objective blockers; other
+precise relations remain supporting records instead of broadening the work
+queue.
 
 This abbreviated escaped-JSON shape is rejected as an authoring contract:
 
@@ -310,8 +319,10 @@ title: "Repair CLI workflow rework and validation gaps"
 Repair CLI workflow rework and validation gaps.
 ```
 
-The abbreviated readable shape keeps the mission content where reviewers can see
-it and keeps relationships typed:
+The abbreviated readable shape keeps objective content where reviewers can see
+it and keeps relationships typed. This legacy mission-schema example is
+migration input; new mission-shaped objectives use the issue type and workflow
+declared by repository policy:
 
 ```bash
 atelier issue create "Repair CLI workflow rework and validation gaps" \
@@ -356,18 +367,19 @@ Repair the CLI workflow and validation gaps.
 - Completion requires linked work closed and validation evidence attached.
 ```
 
-The validating evidence itself is a separate evidence record linked back to the
-mission with `role: validates`; it is not copied into the mission body.
+When configured proof is required, the validating evidence itself is a separate
+evidence record linked back to the accountable objective or validation issue
+with `role: validates`; it is not copied into the objective body.
 
 ## Agent Workflow
 
-An agent tasked with a mission should be able to:
+An agent tasked with a mission-shaped objective should be able to:
 
-1. Read the mission for intent, constraints, current risks, validation
+1. Read the objective for intent, constraints, current risks, validation
    expectations, and any checkpoint or plan prose.
 2. Inspect linked epics, issues, and evidence to understand what has already
    been proven and what remains.
-3. Select a ready issue or epic slice that advances the mission.
+3. Select a ready issue or epic slice that advances the objective.
 4. Use Atelier workflow surfaces to decide the next process step: inspect
    status, show the relevant issue, preview transitions, then follow the
    command and recovery guidance printed for the current item.

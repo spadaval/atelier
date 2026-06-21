@@ -144,6 +144,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        validators:
+          - git.on_base_branch
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -475,6 +477,7 @@ Supported built-ins include:
 | `children.proof_complete` | Child work is closed with validating proof. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
+| `git.on_base_branch` | Current checkout is the configured `branch_policy.base_branch`. |
 | `git.worktree_clean` | Worktree cleanliness gate passes. |
 | `review.linked_pr_merged` | The linked provider-local review artifact number, remote identity, source/target branches, and merged state match the Atelier workflow branch policy. |
 

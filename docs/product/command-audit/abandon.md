@@ -17,7 +17,8 @@ the issue is done?"
   record out of `in_progress`; when the durable state did not change, no extra
   cleanup command is required.
 - Output hierarchy: If kept temporarily, the output should say it is legacy and
-  point operators back to `status`, `mission status`, and `issue transition`.
+  point operators back to `status`, `issue status <objective-id>`, and
+  `issue transition`.
 
 ## Role Use
 

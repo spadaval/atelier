@@ -9,8 +9,8 @@ This contract applies to issue-like row sets in:
 - `atelier issue list`
 - `atelier issue show` subissues
 - `atelier issue status`
-- `atelier mission status`
-- `atelier mission list`
+- `atelier issue status <objective-id>`
+- explicit objective browsing or inventory views
 - root `atelier status`
 
 ## Blocker Order

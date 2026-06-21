@@ -93,17 +93,18 @@ state is unavailable. The admin guide degrades gracefully before initialization
 or when local state is broken.
 
 `atelier status` is the root checkout signpost. It summarizes the current-work
-set, any legacy active mission record, ready work count, tracker freshness, and
-the next mission/work/health drill-down commands. It does not replace
-`issue status <objective-id>`; it points operators to the scoped status surface that owns
-completion status.
+set, active objective context when visible from committed records, ready work
+count, tracker freshness, and the next work or health drill-down commands. It
+does not replace `issue status <objective-id>`; it points operators to the
+scoped status surface that owns completion status.
 
 `atelier --help` should expose the normal operator path first: orient, inspect
-missions and issues, inspect workflow options, manage blockers, record proof,
-inspect history, and validate committed records. Low-level state diagnostics such as
-doctor/export/rebuild, predecessor imports, raw workflow diagnostics, and
-command telemetry are not normal root-help entries; admin guidance, targeted
-error messages, and migration docs may name them when they are relevant.
+objectives and issues, inspect workflow options, manage blockers, record proof,
+inspect history, and validate committed records. Low-level state diagnostics
+such as doctor/export/rebuild, predecessor imports, raw workflow diagnostics,
+and command telemetry are not normal root-help entries; admin guidance,
+targeted error messages, and migration docs may name them when they are
+relevant.
 Destructive maintenance may remain visible as an explicit danger-zone command.
 
 ## Visible Help Contract
@@ -118,7 +119,7 @@ IDs, counts, paths, status tokens, and pass/fail tokens only.
 | --- | --- | --- | --- | --- |
 | `init` | Create tracker scaffolding in a repo that does not have Atelier yet. | Created or reused paths plus workflow setup, optional Beads migration detection, and verification commands before issue creation. | Created path(s) and a success token. | `lint`, `man admin`, `status`, inspect `.atelier/config.toml` and `.atelier/workflow.yaml`. |
 | `man` | Show role-specific operating guidance for worker, reviewer, validator, manager, or admin. | Role list or a role guide with current state, ranked commands, normal loop, and commands not usually for that role. | Quiet mode is ignored because `man` is human guidance, not a composition API. | `status`, `issue status <objective-id>`, `issue list --ready`, role-specific commands, or `man admin` when repair is needed. |
-| `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active mission, ready count, tracker freshness, and the next work or mission commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `issue status <objective-id>`, `issue show <id>`, `issue list --ready`, and admin repair guidance only for degraded local state. |
+| `status` | Root orientation for the current checkout. | Current-work set with configured active roles, active objective context when visible, ready count, tracker freshness, and next work commands. It names admin repair only when local state is degraded. | IDs, counts, and freshness token only. | `issue status <objective-id>`, `issue show <id>`, `issue list --ready`, and admin repair guidance only for degraded local state. |
 | `issue` | Create, list, show, update, transition, note, inspect type-aware status, and manage issue-owned blockers and links. | Queue or detail views using the shared human-output grammar; detail reads name the canonical Markdown path and next commands. Transition output owns lifecycle routing for the current issue. Blocker mutations name the blocked issue and blocker issue, blocker inspection stays under `issue blocked`, type-aware objective status owns mission-shaped health and terminal readiness, link mutations name the source, target, and role, and note entry appends activity without field mutation. | IDs, status tokens, changed fields, blocker IDs, relationship roles, and canonical paths. | `issue show <id>`, `issue status <objective-id>`, `issue note <id> "..."`, `issue transition <id> --options`, `issue list --blocked`, `issue blocked [<id>]`, edit the Markdown record, `history --issue <id>`. |
 | `search` | Search record text when the operator does not know the exact ID yet. | Bounded queue grouped by readiness or priority when useful, with the search query echoed. | Matching IDs only. | `issue show <id>`, `issue status <objective-id>`, `history`. |
 | `mission` | Transitional namespace for existing mission records until objective issue replacements land. | Existing mission reads and mutations remain only long enough to migrate behavior to type-aware issue commands. The target state removes this root namespace rather than aliasing it. | IDs, counts, lifecycle tokens, completion-status token, and close reason. | `issue show <objective-id>`, `issue status <objective-id>`, `issue transition <objective-id> --options`, `history --issue <objective-id>`. |
@@ -214,32 +215,20 @@ answer. A consolidation that merely moves ritual into a new umbrella command,
 adds mandatory ceremony to ordinary work, or hides the domain next action behind
 diagnostic jargon fails this check.
 
-Mission lifecycle statuses are `draft`, `ready`, `active`, `superseded`, and
-`closed`.
-Mission creation defaults to `ready`. Active mission focus is retained only as
-legacy committed state for existing records; there is no supported command to
-set or switch mission focus. Mission commands do not accept `open` as a
-mission-status alias and do not read legacy `data.active` state; committed
-mission records should be migrated directly to the lifecycle status they mean.
-Use `superseded` for a mission whose execution has been replaced by another
-mission; it is hidden from default current mission lists like `closed`, but
-remains visible with `atelier issue status` or
-`--status all`.
+Mission-shaped objectives use the normal issue workflow statuses declared in
+`.atelier/workflow.yaml`. Objective records use typed sections for intent,
+constraints, risks, validation criteria, linked work, blockers, and closeout
+notes. Mission focus is not renamed; it is removed as a separate state pointer.
+Checkout orientation comes from `atelier status` and canonical active issue
+records. Close reasons become transition notes on `issue transition
+<objective-id> <close-transition> --reason "..."` when the configured
+transition requires a reason.
 
-The target model removes the mission lifecycle namespace by migrating missions
-to typed objective issue records. Objective issue records use the normal issue
-workflow statuses and typed sections for intent, constraints, risks,
-validation criteria, linked work, blockers, and closeout notes. Mission focus
-is not renamed; it is removed as a separate state pointer. Checkout orientation
-comes from `atelier status` and canonical in-progress issues. Mission close
-reasons become transition notes on `issue transition <objective-id> close
---reason "..."`.
-
-Mission completion uses `atelier issue transition <id> close --reason "..."`, which runs
-the mission completion gates before it commits the lifecycle change and records
-the reason in mission completion notes. `atelier issue update <id> --status
-closed` is not the ordinary completion path. Reopening with `atelier issue
-update <id> --status ready` does not run completion validators.
+Objective completion uses `atelier issue transition <objective-id>
+<close-transition> --reason "..."`, which runs the configured validators before
+it commits the lifecycle change and records the reason. `atelier issue update
+<id> --status <done-status>` is not the ordinary completion path. Reopening by
+direct status update does not run completion validators.
 
 Issue mutation commands are migrating toward Markdown-direct writes through
 RecordStore followed by projection refresh. Projection-backed query commands
@@ -273,7 +262,7 @@ projection repair is normally transparent or routed through `doctor --fix`.
 `atelier bundle preview <file>` is the manager and orchestrator path for bulk
 graph creation. It validates authored bundle JSON from a real file path and
 prints a non-mutating deterministic preview. Use it before `atelier bundle
-apply <file> --yes` when creating a mission plus many epics, issues,
+apply <file> --yes` when creating an objective plus many epics, issues,
 relationships, or evidence links; do not script repeated `issue create`,
 `issue link`, and `issue block` loops for that shape of work. `atelier
 bundle apply` applies create-only v1 bundle resources from a file path after
@@ -281,25 +270,26 @@ the operator passes the command's required confirmation flag, creates record
 graphs in canonical Markdown, normalizes issue dependency fields, writes
 canonical relationship buckets, refreshes projection state after successful
 canonical writes, and reports recovery detail if an unexpected apply failure leaves any
-created IDs. `atelier issue show` is the rich mission detail read:
-it summarizes evidence, prose planning/checkpoint references, and work grouped
-by ready, blocked, done, and backlog state. `atelier issue status [<id>]` is the
-mission-control CLI surface for active mission health, mission proof gaps,
-blockers, record health, docs/help drift, ignored-test review, dirty worktree
-state, completion status, and next actions before any separate projection or UI
-is required.
+created IDs. `atelier issue show <objective-id>` is the rich objective detail
+read: it summarizes evidence, prose planning/checkpoint references, and work
+grouped by ready, blocked, done, and backlog state. `atelier issue status
+<objective-id>` is the objective health surface for linked work, configured
+validator failures, blockers, record health, docs/help drift, ignored-test
+review, dirty worktree state, completion status, and next actions before any
+separate projection or UI is required.
 
-`atelier issue status` without an ID defaults to the active mission when one
-exists; otherwise it reports the available ready missions and the command to
-select one. With an ID, the command is scoped to that mission regardless of the
-active runtime association. Default output is compact and answers: mission
-identity and state, committed tracker health, work counts, selectable work, blocked work,
-open blockers, missing proof, completion status, and one or two state-specific
-next actions. Selectable-work rows name the issue transition command, parent
-context, and whether proof is already attached; blocked-work rows name the
-blocked issue, the blocker IDs, parent context, and proof state. Verbose output keeps the same
-sections but expands the record lists, evidence gaps, blocked work, and degraded
-health details enough for a handoff transcript.
+`atelier issue status` requires an ID for objective drill-down. Root
+orientation and discovery belong to `atelier status` and explicit issue
+browsing or inventory surfaces. With an ID, the command is scoped to that
+objective. Default output is compact and answers: objective identity and state,
+committed tracker health, work counts, selectable work, blocked work, open
+blockers, missing proof required by configured validators, completion status,
+and one or two state-specific next actions. Selectable-work rows name the issue
+transition command, parent context, and whether proof is already attached;
+blocked-work rows name the blocked issue, the blocker IDs, parent context, and
+proof state. Verbose output keeps the same sections but expands the record
+lists, validator detail, blocked work, and degraded health details enough for a
+handoff transcript.
 
 State-specific next actions are part of the command contract:
 
