@@ -21,9 +21,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "review"
+status: "validation"
 title: "Epic: Migrate mission records and projections"
-updated_at: "2026-06-21T19:38:56.502114345+00:00"
+updated_at: "2026-06-21T19:39:27.140347484+00:00"
 ---
 
 ## Description
