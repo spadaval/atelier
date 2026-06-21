@@ -3,6 +3,10 @@
 ## Rust
 
 - Run `cargo fmt` before handing off code changes.
+- Use `cargo nextest run` as the default Rust test runner. Use `cargo test`
+  only for libtest-specific behavior, `--no-run`, reproducing standard
+  test-harness output, or when `nextest` is unavailable, and state the reason
+  in the handoff or evidence.
 - Use [rust-quality-hazard-scans.md](./rust-quality-hazard-scans.md) for the
   classified debt-marker, dead/unused-code, large-function, and unused-
   dependency review commands.
