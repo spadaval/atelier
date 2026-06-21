@@ -1,38 +1,39 @@
 ---
-created_at: '2026-06-21T17:14:25.457730058+00:00'
-id: atelier-53bu
-issue_type: mission
+created_at: "2026-06-21T17:14:25.457730058+00:00"
+id: "atelier-53bu"
+issue_type: "mission"
 labels:
-- mission
-priority: P2
+- "mission"
+priority: "P2"
 relationships:
   blocks: []
   children: []
   attachments: []
   relates:
-  - kind: issue
-    id: atelier-7jma
-    type: advances
-  - kind: issue
-    id: atelier-9n3r
-    type: advances
-  - kind: issue
-    id: atelier-f9ci
-    type: advances
-  - kind: issue
-    id: atelier-nbhp
-    type: advances
-  - kind: issue
-    id: atelier-ncq9
-    type: advances
-  - kind: issue
-    id: atelier-vays
-    type: advances
-schema: atelier.issue
+  - kind: "issue"
+    id: "atelier-7jma"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-9n3r"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-f9ci"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-nbhp"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-ncq9"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-vays"
+    type: "advances"
+schema: "atelier.issue"
 schema_version: 1
-status: ready
-title: Make workflow obligations explicit and minimal
-updated_at: '2026-06-21T17:15:50.429964131+00:00'
+closed_at: "2026-06-21T20:26:44.440874585+00:00"
+status: "closed"
+title: "Make workflow obligations explicit and minimal"
+updated_at: "2026-06-21T20:26:44.440874585+00:00"
 ---
 
 ## Description
