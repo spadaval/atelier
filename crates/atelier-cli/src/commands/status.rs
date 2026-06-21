@@ -276,10 +276,10 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
                 mission.id, mission.id
             ),
             None if current_missions.is_empty() => {
-                println!("  Inspect mission readiness (no mission is active): atelier issue status")
+                println!("  Inspect mission inventory (no mission is active): atelier issue table --kind mission")
             }
             None => println!(
-            "  Inspect mission choices ({} current mission(s), none active): atelier issue status",
+            "  Inspect mission choices ({} current mission(s), none active): atelier issue table --kind mission",
             current_missions.len()
         ),
         },

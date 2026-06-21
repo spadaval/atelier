@@ -805,7 +805,7 @@ fn test_top_level_help_only_shows_core_commands() {
         "atelier issue show <id>",
         "atelier issue create \"...\" --issue-type mission",
         "atelier issue show <mission-id>",
-        "atelier issue status",
+        "atelier issue table --kind mission",
         "atelier bundle preview <file>",
         "atelier bundle apply <file> --yes",
         "atelier history --mission <id>",
@@ -1083,9 +1083,9 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Current work:"));
     assert!(stdout.contains("Active mission:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(
-        stdout.contains("Inspect mission readiness (no mission is active): atelier issue status")
-    );
+    assert!(stdout.contains(
+        "Inspect mission inventory (no mission is active): atelier issue table --kind mission"
+    ));
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
     assert!(stdout.contains(
@@ -1580,7 +1580,8 @@ fn test_man_manager_names_active_mission() {
     assert!(success, "man manager failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Manager"));
     assert!(stdout.contains(&format!("Active mission: {mission_id} - Man mission")));
-    assert!(stdout.contains("atelier issue status"));
+    assert!(stdout.contains("atelier issue table --kind mission"));
+    assert!(stdout.contains("atelier issue status <id>"));
     assert!(stdout.contains("atelier bundle preview <file>"));
     assert!(stdout.contains("atelier bundle apply <file> --yes"));
     assert!(stdout.contains("atelier issue link <mission-id> <issue-id> --role advances"));

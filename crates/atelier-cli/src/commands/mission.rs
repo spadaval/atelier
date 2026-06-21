@@ -1643,7 +1643,7 @@ fn print_mission_list_next_commands(first_actionable: Option<&MissionListRow>) {
         println!("  atelier issue status {}", row.record.id);
         println!("  atelier issue show {}", row.record.id);
     }
-    println!("  atelier issue status");
+    println!("  atelier issue table --kind mission");
     println!("  atelier issue create \"...\" --issue-type mission");
 }
 

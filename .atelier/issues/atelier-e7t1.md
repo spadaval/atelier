@@ -3,10 +3,10 @@ created_at: "2026-06-21T17:24:17.004069237+00:00"
 id: "atelier-e7t1"
 issue_type: "feature"
 labels:
-- "mission-rework"
-- "status"
 - "issue-list"
 - "issue-table"
+- "mission-rework"
+- "status"
 priority: "P1"
 relationships:
   blocks:
@@ -17,9 +17,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "todo"
+status: "in_progress"
 title: "Split mission discovery out of issue status"
-updated_at: "2026-06-21T17:24:17.004069237+00:00"
+updated_at: "2026-06-21T18:38:16.126326520+00:00"
 ---
 
 ## Description

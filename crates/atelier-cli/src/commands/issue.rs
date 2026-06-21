@@ -15,7 +15,7 @@ use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
 use atelier_records::activity::{list_issue_activities, ActivityEventType};
 use atelier_records::{CanonicalIssueRecord, IssueSections, RecordStore, Relationships};
-use atelier_sqlite::{validate_issue_type, Database};
+use atelier_sqlite::{validate_issue_type, Database, RecordSummary};
 
 #[derive(Debug, Clone)]
 pub struct IssueSummary {
@@ -1056,6 +1056,202 @@ pub fn list(
     }
     print_workflow_read_guidance(read_context);
     Ok(())
+}
+
+pub fn table(
+    db: &Database,
+    kind: &str,
+    status: &str,
+    issue_type: Option<&str>,
+    quiet: bool,
+) -> Result<()> {
+    match kind {
+        "mission" => mission_table(db, status, quiet),
+        "issue" => issue_table(db, status, issue_type, quiet),
+        _ => bail!("Invalid table kind '{kind}'. Use `mission` or `issue`."),
+    }
+}
+
+fn mission_table(db: &Database, status: &str, quiet: bool) -> Result<()> {
+    let mut records = db.list_records("mission", None)?;
+    if status == "current" {
+        records.retain(|record| record.status != "closed" && record.status != "superseded");
+    } else if status != "all" {
+        records.retain(|record| record.status == status);
+    }
+    records.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let active_issue_ids = active_issue_ids(db)?;
+    let rows = records
+        .into_iter()
+        .map(|record| mission_table_row(db, &active_issue_ids, record))
+        .collect::<Result<Vec<_>>>()?;
+
+    if quiet {
+        for row in rows {
+            println!("{}", row.id);
+        }
+        return Ok(());
+    }
+
+    println!("Issue Table: mission");
+    println!("====================");
+    if rows.is_empty() {
+        println!("(none)");
+    } else {
+        println!("ID           Status       Health     Ready  Blocked  Done  Backlog  Title");
+        for row in rows {
+            println!(
+                "{:<12} {:<12} {:<10} {:>5} {:>8} {:>5} {:>7}  {}",
+                row.id,
+                row.status,
+                row.health,
+                row.ready,
+                row.blocked,
+                row.done,
+                row.backlog,
+                row.title
+            );
+        }
+    }
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Inspect one objective: atelier issue status <id>");
+    println!("  Open one objective record: atelier issue show <id>");
+    println!("  Browse grouped work: atelier issue list");
+    Ok(())
+}
+
+fn issue_table(db: &Database, status: &str, issue_type: Option<&str>, quiet: bool) -> Result<()> {
+    let mut issues = db.list_issues(Some("all"), None, None)?;
+    if status != "all" {
+        issues.retain(|issue| issue.status == status);
+    }
+    if let Some(issue_type) = issue_type {
+        issues.retain(|issue| issue.issue_type == issue_type);
+    }
+    issues.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let active_issue_ids = active_issue_ids(db)?;
+    let rows = issues
+        .into_iter()
+        .map(|issue| issue_table_row(db, &active_issue_ids, issue))
+        .collect::<Result<Vec<_>>>()?;
+
+    if quiet {
+        for row in rows {
+            println!("{}", row.id);
+        }
+        return Ok(());
+    }
+
+    println!("Issue Table: issue");
+    println!("==================");
+    if rows.is_empty() {
+        println!("(none)");
+    } else {
+        println!(
+            "ID           Type       Status       Health     Ready  Blocked  Done  Backlog  Title"
+        );
+        for row in rows {
+            println!(
+                "{:<12} {:<10} {:<12} {:<10} {:>5} {:>8} {:>5} {:>7}  {}",
+                row.id,
+                row.issue_type.unwrap_or_default(),
+                row.status,
+                row.health,
+                row.ready,
+                row.blocked,
+                row.done,
+                row.backlog,
+                row.title
+            );
+        }
+    }
+    println!();
+    println!("Next Commands");
+    println!("-------------");
+    println!("  Inspect one objective: atelier issue status <id>");
+    println!("  Open one objective record: atelier issue show <id>");
+    println!("  Browse grouped work: atelier issue list");
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ObjectiveTableRow {
+    id: String,
+    title: String,
+    status: String,
+    issue_type: Option<String>,
+    health: &'static str,
+    ready: usize,
+    blocked: usize,
+    done: usize,
+    backlog: usize,
+}
+
+fn mission_table_row(
+    db: &Database,
+    active_issue_ids: &BTreeSet<String>,
+    record: RecordSummary,
+) -> Result<ObjectiveTableRow> {
+    let active_issue_refs = active_issue_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let snapshot = crate::commands::objective_status::snapshot_for_mission(
+        db,
+        &record.id,
+        &active_issue_refs,
+    )?;
+    Ok(ObjectiveTableRow {
+        id: record.id,
+        title: record.title,
+        status: record.status,
+        issue_type: None,
+        health: snapshot.health(),
+        ready: snapshot.ready,
+        blocked: snapshot.blocked,
+        done: snapshot.done,
+        backlog: snapshot.backlog,
+    })
+}
+
+fn issue_table_row(
+    db: &Database,
+    active_issue_ids: &BTreeSet<String>,
+    issue: Issue,
+) -> Result<ObjectiveTableRow> {
+    let active_issue_refs = active_issue_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let snapshot = crate::commands::objective_status::snapshot_for_issue_objective(
+        db,
+        &issue.id,
+        &active_issue_refs,
+    )?;
+    Ok(ObjectiveTableRow {
+        id: issue.id,
+        title: issue.title,
+        status: issue.status,
+        issue_type: Some(issue.issue_type),
+        health: snapshot.health(),
+        ready: snapshot.ready,
+        blocked: snapshot.blocked,
+        done: snapshot.done,
+        backlog: snapshot.backlog,
+    })
+}
+
+fn active_issue_ids(db: &Database) -> Result<BTreeSet<String>> {
+    let workflow_policy = load_issue_workflow_policy()?;
+    let active_issues = crate::commands::status::current_work_issues(db, workflow_policy.as_ref())?;
+    Ok(active_issues
+        .into_iter()
+        .map(|issue| issue.id)
+        .collect::<BTreeSet<_>>())
 }
 
 pub fn search(db: &Database, query: &str, quiet: bool) -> Result<()> {

@@ -157,6 +157,15 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             }
         }
 
+        super::IssueCommands::Table {
+            kind,
+            status,
+            issue_type,
+        } => {
+            let db = degraded_projection_query_db()?;
+            commands::issue::table(&db, &kind, &status, issue_type.as_deref(), quiet)
+        }
+
         super::IssueCommands::Show { id } => {
             let db = degraded_projection_query_db()?;
             commands::issue::show(&db, &id)
@@ -165,17 +174,13 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Status { id, verbose } => {
             let storage = command_storage(CommandStorageAccess::DegradedProjectionQuery)?;
             let db = storage.db();
-            match id {
-                Some(id) if db.record_kind_for_id(&id)?.as_deref() == Some("mission") => {
-                    commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
+            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
+                commands::mission::status(db, &storage.state_dir(), Some(&id), quiet, verbose)
+            } else {
+                if verbose {
+                    bail!("--verbose is only available for mission objective records");
                 }
-                Some(id) => {
-                    if verbose {
-                        bail!("--verbose is only available for mission objective records");
-                    }
-                    commands::issue_status::run(db, &id, quiet)
-                }
-                None => commands::mission::status(db, &storage.state_dir(), None, quiet, verbose),
+                commands::issue_status::run(db, &id, quiet)
             }
         }
 
