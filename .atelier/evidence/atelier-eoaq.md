@@ -1,25 +1,25 @@
 ---
 created_at: "2026-06-12T21:53:13.836342388+00:00"
-id: "atelier-eoaq"
-evidence_type: "validation"
+id: atelier-eoaq
+evidence_type: validation
 captured_at: "2026-06-12T21:53:13.733721104+00:00"
-command: "target/debug/atelier workflow validate mission atelier-tcmr --validator ignored_tests_reviewed"
+command: target/debug/atelier workflow validate mission atelier-tcmr --validator ignored_tests_reviewed
 exit_status: "1"
 relationships:
   blocks: []
   children: []
   attachments:
-  - kind: "issue"
-    id: "atelier-l0yk"
-    role: "validates"
-  - kind: "mission"
-    id: "atelier-tcmr"
-    role: "validates"
+  - kind: issue
+    id: atelier-l0yk
+    role: validates
+  - kind: issue
+    id: atelier-tcmr
+    role: validates
   relates: []
-schema: "atelier.evidence"
+schema: atelier.evidence
 schema_version: 1
-status: "recorded"
-title: "ignored test inventory captured linked stale blockers"
+status: recorded
+title: ignored test inventory captured linked stale blockers
 updated_at: "2026-06-12T21:53:21.974039125+00:00"
 ---
 

@@ -1075,7 +1075,12 @@ pub fn table(
 }
 
 fn mission_table(db: &Database, status: &str, quiet: bool) -> Result<()> {
-    let mut records = db.list_records("mission", None)?;
+    let mut records = db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| issue.issue_type == "mission")
+        .map(mission_summary_from_issue)
+        .collect::<Vec<_>>();
     if status == "current" {
         records.retain(|record| record.status != "closed" && record.status != "superseded");
     } else if status != "all" {
@@ -1123,6 +1128,19 @@ fn mission_table(db: &Database, status: &str, quiet: bool) -> Result<()> {
     println!("  Open one objective record: atelier issue show <id>");
     println!("  Browse grouped work: atelier issue list");
     Ok(())
+}
+
+fn mission_summary_from_issue(issue: Issue) -> RecordSummary {
+    let id = issue.id.clone();
+    RecordSummary {
+        kind: "issue".to_string(),
+        id: id.clone(),
+        title: issue.title,
+        status: issue.status,
+        created_at: issue.created_at,
+        updated_at: issue.updated_at,
+        source_path: format!("issues/{id}.md"),
+    }
 }
 
 fn issue_table(db: &Database, status: &str, issue_type: Option<&str>, quiet: bool) -> Result<()> {

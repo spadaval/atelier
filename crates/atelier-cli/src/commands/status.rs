@@ -19,9 +19,12 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         .collect::<BTreeSet<_>>();
     let active_role_counts = active_role_counts(&active_issues, workflow_policy.as_ref());
     let current_missions = db
-        .list_records("mission", None)?
+        .list_issues(Some("all"), None, None)?
         .into_iter()
+        .filter(|issue| issue.issue_type == "mission")
+        .map(mission_summary_from_issue)
         .filter(|mission| mission.status != "closed")
+        .filter(|mission| mission.status != "superseded")
         .collect::<Vec<_>>();
     let ready = db
         .list_issues(Some("all"), None, None)?
@@ -147,6 +150,19 @@ pub fn run(db: &Database, state_dir: &Path, quiet: bool) -> Result<()> {
         println!("  Check committed tracker records after repair: atelier lint");
     }
     Ok(())
+}
+
+fn mission_summary_from_issue(issue: Issue) -> RecordSummary {
+    let id = issue.id.clone();
+    RecordSummary {
+        kind: "issue".to_string(),
+        id: id.clone(),
+        title: issue.title,
+        status: issue.status,
+        created_at: issue.created_at,
+        updated_at: issue.updated_at,
+        source_path: format!("issues/{id}.md"),
+    }
 }
 
 pub(crate) fn current_work_issues(

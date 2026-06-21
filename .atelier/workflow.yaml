@@ -37,12 +37,14 @@ statuses:
     category: done
   closed:
     category: done
+  superseded:
+    category: done
 
 workflows:
   mission_delivery:
     applies_to: [mission]
     initial_status: ready
-    done_statuses: [closed]
+    done_statuses: [closed, superseded]
     transitions:
       close:
         from: [ready, in_progress, validation]
