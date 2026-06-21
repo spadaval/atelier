@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "validation"
+closed_at: "2026-06-21T20:14:23.837836472+00:00"
+status: "done"
 title: "Run mission rework scenario validation"
-updated_at: "2026-06-21T20:14:15.580744229+00:00"
+updated_at: "2026-06-21T20:14:23.837836472+00:00"
 ---
 
 ## Description
