@@ -11,7 +11,7 @@ claims require independent validation and first-class evidence.
 Strong proof is claim-specific, reproducible, attached, classified, scoped, and
 independent when required by risk. Weak proof is broad, summary-only,
 unattached, unverifiable, stale, or not mapped to a claim. A full test suite,
-lint run, or mission status page can support proof, but it is weak by itself
+lint run, or objective status page can support proof, but it is weak by itself
 when it does not show the exact changed behavior, file content, command result,
 rejected command, help text, benchmark, or evidence record named by the claim.
 Workers should quote or paraphrase the exact `Outcome` or `Evidence` line they
@@ -88,7 +88,7 @@ full Atelier command or workflow contract.
 | Workflow transitions, readiness rules, and advanced diagnostics meant for operator drill-down | Atelier-owned process behavior | `.atelier/workflow.yaml`, `docs/product/workflow-configuration.md`, `atelier issue transition --options` | Agent Factory should invoke the product surface rather than carrying a second transition cookbook. |
 | Proof routing, evidence placement, independent-validation triggers, and parent completion expectations | Atelier-owned process behavior | `docs/architecture/quality/validation.md`, `atelier evidence record`, `atelier issue status <mission-id>` | Process-policy work still requires first-class evidence and often separate validation, but the durable rule is Atelier-owned. |
 | Tracker freshness, committed-state health, and readiness output | Atelier-owned product behavior | `atelier status`, `atelier issue status <mission-id>`, `atelier lint`; admin repair uses `atelier doctor` | Missing proof, blockers, stale state, and committed-state failures should be surfaced by Atelier-owned commands or validators. Low-level export/rebuild diagnostics are not the normal operator contract. |
-| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue status <mission-id> --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; mission status and completion surface docs/help drift validators when a mission is being closed. |
+| Agent-facing command freshness for `AGENTS.md`, product docs, and command-surface tests | Atelier-owned product behavior | `atelier lint`, `atelier issue status <mission-id> --verbose`, mission completion | Routine handoff uses visible lint/status surfaces; objective status and completion surface docs/help drift validators when a mission-typed issue is being closed. |
 | Removed-command policy, compatibility windows, and public workflow recovery guidance | Atelier-owned product behavior | `docs/product/cli-surface.md`, help text, workflow policy, readiness checks | Agent Factory may honor the policy, but it should not be the only durable place that defines it. |
 
 This means source locations and tracker shape belong in repository instructions
@@ -178,7 +178,7 @@ Create or use a separate validation issue when any of these apply:
 - public command/API contracts, CLI help, docs/help parity, or user-visible
   workflow behavior;
 - cross-cutting behavior in storage, export, rebuild, workflow validators,
-  evidence, mission status, Agent Factory process, or Mission Control;
+  evidence, objective status, Agent Factory process, or Mission Control;
 - epic, mission, milestone, or other parent-level completion claims;
 - epic branch review or PR-equivalent readiness;
 - stale-test, ignored-test, fixture drift, or broad-green-test risk;
@@ -206,12 +206,12 @@ the metric, baseline when available, measurement command or fixture, observed
 result, and acceptable threshold or reason a hard threshold is not practical.
 
 Do not over-specify subjective output before implementation. For example, an
-information-hierarchy issue for `mission list` should name the user task,
+information-hierarchy issue for `issue table --kind mission` should name the user task,
 important information to surface, and evaluator context; it should not mandate
 the final row layout unless that layout is the contract. A performance issue
-should be concrete: "reduce `mission status` wall time on fixture X from about
+should be concrete: "reduce `issue status <mission-id>` wall time on fixture X from about
 1.2s to under 500ms, proven by the benchmark command transcript" is stronger
-than "make mission status faster."
+than "make objective status faster."
 
 ## Example Routing Matrix
 
@@ -251,13 +251,13 @@ accountable issue that performed the check.
 
 ## Placement Examples
 
-For a subjective `mission list` information-hierarchy task:
+For a subjective mission table information-hierarchy task:
 
 - Mission validation says the mission operator can identify state, blockers,
   configured proof validator failures, and next action without private context.
 - Epic outcome says the mission operator CLI presents a concise default view
   with drill-down available for audit detail.
-- Executable issue outcome says `mission list` output groups active missions by
+- Executable issue outcome says `issue table --kind mission` output groups active missions by
   status and exposes blockers and configured validator failures in the default
   human output.
 - The validation issue says an independent evaluator reviews the default output
@@ -361,7 +361,7 @@ The `validation.criteria_satisfied` completion gate is Atelier-owned: for missio
 completion it checks configured workflow approval on explicit validation or
 validation work when parent-level judgment is required. Missing parent coverage,
 missing validation evidence, and linked epic outcome gaps surface through
-mission status, validation issue output, and completion failure output rather
+objective status, validation issue output, and completion failure output rather
 than through Agent Factory prose alone.
 
 ## Scenario Proof
@@ -380,7 +380,7 @@ than through Agent Factory prose alone.
 - Agent Factory and tracker workflow validation should use human command output
   plus explicit drill-down commands. Do not rely on command-result `--json`;
   validate durable state with tracked `.atelier/` records, `atelier lint`,
-  focused `show` commands, `issue transition --options`, and mission status or
+  focused `show` commands, `issue transition --options`, and objective status or
   audit output. Use admin repair commands only when a normal command reports
   degraded local state.
 - Diagnostics JSON from commands such as `atelier diagnostics slow` is valid
