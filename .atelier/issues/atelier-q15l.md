@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-21T03:00:58.333823581+00:00"
+status: "done"
 title: "Require base branch for epic and mission workflow gates"
-updated_at: "2026-06-21T02:54:52.266778235+00:00"
+updated_at: "2026-06-21T03:00:58.333823581+00:00"
 ---
 
 ## Description
