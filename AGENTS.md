@@ -53,6 +53,11 @@ installed yet. Recompile first when that binary is missing or stale relative to
 Rust sources/manifests; use `cargo run -- ...` only when a one-off rebuild plus
 execution is specifically useful.
 
+Use `cargo nextest run` for Rust test execution by default. Use `cargo test`
+only when the check needs libtest-specific behavior, `--no-run`, reproduced
+standard test-harness output, or when `nextest` is unavailable; state that
+reason in the handoff or evidence.
+
 ```bash
 cargo fmt -- --check
 cargo nextest run
