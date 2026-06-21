@@ -5,6 +5,10 @@ issue_type: "epic"
 labels:
 - "mission-rework"
 - "validation"
+review:
+  kind: pull_request
+  number: 22
+  provider: forgejo
 priority: "P1"
 relationships:
   blocks: []
