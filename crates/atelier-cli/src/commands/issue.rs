@@ -1734,7 +1734,11 @@ pub fn create_lifecycle(
     db_path: &Path,
     input: LifecycleCreateInput<'_>,
 ) -> Result<()> {
-    if !input.constraints.is_empty() || !input.risks.is_empty() || !input.validation.is_empty() {
+    if input.issue_type != "mission"
+        && (!input.constraints.is_empty()
+            || !input.risks.is_empty()
+            || !input.validation.is_empty())
+    {
         bail!("mission section flags are not supported for issue records");
     }
     validate_priority(input.priority)?;
@@ -1750,11 +1754,12 @@ pub fn create_lifecycle(
     let now = Utc::now();
     let id = store.allocate_issue_id()?;
     let initial_status = lifecycle_initial_status(state_dir, input.issue_type)?;
+    let description = lifecycle_issue_description(&input);
     let record = CanonicalIssueRecord {
         issue: Issue {
             id: id.clone(),
             title: input.title.to_string(),
-            description: input.description.map(str::to_string),
+            description: description.clone(),
             status: initial_status,
             issue_type: input.issue_type.to_string(),
             priority: input.priority.to_string(),
@@ -1765,7 +1770,7 @@ pub fn create_lifecycle(
             closed_at: None,
         },
         labels: input.labels.to_vec(),
-        sections: IssueSections::unchecked_from_body(input.description),
+        sections: IssueSections::unchecked_from_body(description.as_deref()),
         relationships: Relationships::default(),
     };
     store.write_issue_atomic(&record)?;
@@ -1798,7 +1803,11 @@ pub fn create_lifecycle(
             object.id
         );
     } else {
-        println!("Created issue {} - {}", object.id, object.title);
+        if object.issue_type == "mission" {
+            println!("Created mission objective {} - {}", object.id, object.title);
+        } else {
+            println!("Created issue {} - {}", object.id, object.title);
+        }
         println!("Type:     {}", object.issue_type);
         println!("Priority: {}", object.priority);
         println!("File:     {}", file_path.display());
@@ -1814,6 +1823,41 @@ pub fn create_lifecycle(
         );
     }
     Ok(())
+}
+
+fn lifecycle_issue_description(input: &LifecycleCreateInput<'_>) -> Option<String> {
+    if input.issue_type != "mission" {
+        return input.description.map(str::to_string);
+    }
+    let mut lines = Vec::new();
+    if let Some(description) = input.description {
+        let description = description.trim();
+        if !description.is_empty() {
+            lines.push(description.to_string());
+        }
+    }
+    append_named_list(&mut lines, "Constraints", &input.constraints);
+    append_named_list(&mut lines, "Risks", &input.risks);
+    append_named_list(&mut lines, "Validation", &input.validation);
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n\n"))
+    }
+}
+
+fn append_named_list(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    if values.is_empty() {
+        return;
+    }
+    lines.push(format!(
+        "{title}:\n{}",
+        values
+            .iter()
+            .map(|value| format!("- {}", value.trim()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    ));
 }
 
 fn validate_configured_issue_type(state_dir: &Path, issue_type: &str) -> Result<()> {

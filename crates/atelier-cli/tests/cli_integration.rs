@@ -571,7 +571,12 @@ fn remove_issue_section(markdown: &str, heading: &str) -> String {
 }
 
 fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
-    let record_dir = dir.join(".atelier").join(directory);
+    let search_directory = if directory == "missions" {
+        "issues"
+    } else {
+        directory
+    };
+    let record_dir = dir.join(".atelier").join(search_directory);
     let entries = std::fs::read_dir(&record_dir)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", record_dir.display()));
     for entry in entries {
@@ -580,8 +585,17 @@ fn record_id_by_title(dir: &Path, directory: &str, title: &str) -> String {
             continue;
         }
         let record_id = path.file_stem().unwrap().to_string_lossy().to_string();
-        let text = read_canonical_record(dir, directory, &record_id);
-        if text.contains(&format!("title: {title:?}")) {
+        let text = read_canonical_record(dir, search_directory, &record_id);
+        if directory == "missions"
+            && !text.contains("issue_type: mission")
+            && !text.contains("issue_type: \"mission\"")
+            && !text.contains("issue_type: 'mission'")
+        {
+            continue;
+        }
+        if text.contains(&format!("title: {title:?}"))
+            || text.contains(&format!("title: {title}\n"))
+        {
             return record_id;
         }
     }

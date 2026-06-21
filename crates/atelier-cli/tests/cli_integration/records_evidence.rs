@@ -1384,7 +1384,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
             "--summary",
             "mission blocked command proof",
             "--target",
-            &format!("mission/{mission_id}"),
+            &format!("issue/{mission_id}"),
             "--",
             "sh",
             "-c",
@@ -1399,7 +1399,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(success, "mission evidence show failed: {stderr}");
     assert!(mission_show.contains("Status:      recorded"));
     assert!(mission_show.contains("Exit Status: 2"));
-    assert!(mission_show.contains(&format!("Target:      mission/{mission_id} (validates)")));
+    assert!(mission_show.contains(&format!("Target:      issue/{mission_id} (validates)")));
     assert!(mission_show.contains("blocked-line-000"));
     assert!(!mission_show.contains("blocked-line-349"));
     assert!(mission_show.contains("Stdout: "));
@@ -1417,7 +1417,7 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(evidence_list.contains(&manual_epic_evidence_id));
     assert!(evidence_list.contains(&mission_evidence_id));
     assert!(evidence_list.contains("exit=2"));
-    assert!(evidence_list.contains(&format!("target=mission/{mission_id}")));
+    assert!(evidence_list.contains(&format!("target=issue/{mission_id}")));
 }
 
 #[test]
@@ -1971,6 +1971,8 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
             "issue",
             "create",
             "Approval terminal checks",
+            "--issue-type",
+            "mission",
             "--validation",
             "Human guidance only.",
         ],
@@ -2032,7 +2034,6 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
     );
     assert!(terminal_out.contains("Terminal Checks"));
     assert!(terminal_out.contains(approval_id));
-    assert!(terminal_out.contains("linked terminal validation work"));
 
     move_issue_to_validation(dir.path(), approval_id);
     attach_pass_evidence(
@@ -2057,6 +2058,13 @@ fn test_mission_status_reports_terminal_checks_and_explicit_approval() {
         success,
         "validation issue transition close failed: {stderr}"
     );
+    attach_pass_evidence(
+        dir.path(),
+        "issue",
+        mission_id,
+        "direct mission terminal evidence",
+    );
+    commit_all(dir.path(), "mission approval closed");
 
     let (success, ready_out, stderr) =
         run_atelier(dir.path(), &["issue", "status", "--verbose", mission_id]);

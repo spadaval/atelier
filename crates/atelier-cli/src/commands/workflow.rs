@@ -208,7 +208,11 @@ fn print_active_mission_context(db: &Database, issue_id: &str) -> Result<()> {
 }
 
 fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
-    for mission in db.list_records("mission", None)? {
+    for mission in db
+        .list_issues(Some("all"), None, None)?
+        .into_iter()
+        .filter(|issue| issue.issue_type == "mission")
+    {
         if mission.status == "closed" {
             continue;
         }
@@ -2565,64 +2569,12 @@ fn open_work(
 }
 
 fn mission_direct_blockers(db: &Database, mission_id: &str) -> Result<Vec<String>> {
-    let mut blockers = Vec::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type != "blocked_by" {
-            continue;
-        }
-        if link.source_kind == "issue"
-            && link.target_kind == "mission"
-            && link.target_id == mission_id
-        {
-            blockers.push(link.source_id);
-        } else if link.target_kind == "issue"
-            && link.source_kind == "mission"
-            && link.source_id == mission_id
-        {
-            blockers.push(link.target_id);
-        }
-    }
-    Ok(blockers)
+    let objective_kind = crate::commands::objective_status::mission_objective_kind(db, mission_id)?;
+    crate::commands::objective_status::direct_blocker_ids(db, objective_kind, mission_id)
 }
 
 fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    let mut issue_ids = BTreeSet::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        if link.relation_type != "advances" {
-            continue;
-        }
-        let linked_id = if link.source_kind == "issue"
-            && link.target_kind == "mission"
-            && link.target_id == mission_id
-        {
-            Some(link.source_id)
-        } else if link.target_kind == "issue"
-            && link.source_kind == "mission"
-            && link.source_id == mission_id
-        {
-            Some(link.target_id)
-        } else {
-            None
-        };
-        if let Some(linked_id) = linked_id {
-            collect_issue_and_descendants(db, &linked_id, &mut issue_ids)?;
-        }
-    }
-    Ok(issue_ids)
-}
-
-fn collect_issue_and_descendants(
-    db: &Database,
-    issue_id: &str,
-    issue_ids: &mut BTreeSet<String>,
-) -> Result<()> {
-    if !issue_ids.insert(issue_id.to_string()) {
-        return Ok(());
-    }
-    for child in db.get_subissues(issue_id)? {
-        collect_issue_and_descendants(db, &child.id, issue_ids)?;
-    }
-    Ok(())
+    crate::commands::objective_status::mission_issue_ids(db, mission_id)
 }
 
 fn git_worktree_clean() -> Result<(bool, String)> {
