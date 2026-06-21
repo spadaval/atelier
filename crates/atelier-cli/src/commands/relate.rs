@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::utils::format_issue_id;
 use atelier_app::use_cases as app_use_cases;
 use atelier_records::RecordStore;
-use atelier_sqlite::{validate_relation_type, validate_relationship_type, Database};
+use atelier_sqlite::{validate_link_type, validate_relation_type, Database};
 
 const BLOCKED_BY_ROLE: &str = "blocked_by";
 
@@ -80,7 +80,7 @@ pub fn link_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_relationship_type(role)?;
+    validate_link_type(role)?;
     let db = Database::open(db_path)?;
     let source = resolve_link_endpoint(&db, issue_ref)?;
     let target = resolve_link_endpoint(&db, target_ref)?;
@@ -171,7 +171,7 @@ pub fn unlink_issue(
     target_ref: &str,
     role: &str,
 ) -> Result<()> {
-    validate_relationship_type(role)?;
+    validate_link_type(role)?;
     let db = Database::open(db_path)?;
     let source = resolve_link_endpoint(&db, issue_ref)?;
     let target = resolve_link_endpoint(&db, target_ref)?;
