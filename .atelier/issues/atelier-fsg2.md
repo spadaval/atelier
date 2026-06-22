@@ -16,9 +16,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 1
-status: "in_progress"
+closed_at: "2026-06-22T14:49:11.104802869+00:00"
+status: "done"
 title: "Clean mission rework fallout"
-updated_at: "2026-06-21T22:50:17.070209975+00:00"
+updated_at: "2026-06-22T14:49:11.104802869+00:00"
 ---
 
 ## Description
