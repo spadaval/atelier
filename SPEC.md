@@ -605,7 +605,7 @@ Normal tracked work uses explicit work association rather than inherited
 Chainlink lock sync. The default workflow is one checkout, one reviewable branch
 per epic, lifecycle-owned branch
 preparation through `atelier issue transition <id> start`, lifecycle-owned close integration through
-`atelier issue transition <id> close --reason "..."` or `atelier mission close`,
+`atelier issue transition <id> close --reason "..."`,
 and `lint`/`doctor` health
 checks. Explicit branch commands such as `atelier branch for-epic`
 are internal, diagnostic, or advanced repair surfaces; they are not the normal
@@ -648,8 +648,8 @@ Mission Control should be able to show:
 - Recent decisions.
 - Items ready for review or validation.
 
-The first Mission Control slice should be CLI-native: `atelier mission status
-[<id>]` should summarize mission health, blockers, evidence gaps, validator
+The first Mission Control slice should be CLI-native: `atelier issue status
+<objective-id>` should summarize mission health, blockers, evidence gaps, validator
 failures, completion status, and next actions for agents and orchestrators.
 Deterministic JSON projections and richer UI surfaces can follow once the CLI
 status contract proves the needed state model.
@@ -668,10 +668,10 @@ atelier issue list --ready
 atelier issue show atelier-z1p8
 atelier issue create
 atelier issue transition atelier-z1p8 --options
-atelier mission create
-atelier mission status
-atelier mission show atelier-k7mq
-atelier mission add-work atelier-k7mq atelier-z1p8
+atelier issue create "Mission title" --issue-type mission
+atelier issue status atelier-k7mq
+atelier issue show atelier-k7mq
+atelier issue link atelier-k7mq atelier-z1p8 --role advances
 atelier evidence record --target issue/atelier-z1p8 --kind validation "summary"
 atelier evidence record --target issue/atelier-z1p8 --kind test -- <command>
 atelier lint

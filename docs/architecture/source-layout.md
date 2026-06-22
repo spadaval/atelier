@@ -88,7 +88,7 @@ Follow-on workflow extraction issues should be accepted only when command output
 and tests show that:
 
 - `workflow check`, `issue transition --options`, `issue transition`,
-  `issue list --ready`, `mission status`, bundle status defaults, and closeout
+  `issue list --ready`, `issue status <objective-id>`, bundle status defaults, and closeout
   validators all consume the same `atelier-workflow` policy API;
 - invalid statuses and missing workflow configuration fail through the shared
   workflow diagnostics rather than command-specific messages;

@@ -133,10 +133,6 @@ pub fn list_issue_activities(state_dir: &Path, issue_id: &str) -> Result<Vec<Iss
     list_record_activities(state_dir, "issue", issue_id)
 }
 
-pub fn list_mission_activities(state_dir: &Path, mission_id: &str) -> Result<Vec<IssueActivity>> {
-    list_record_activities(state_dir, "mission", mission_id)
-}
-
 pub fn list_record_activities(
     state_dir: &Path,
     subject_kind: &str,
@@ -165,10 +161,6 @@ pub fn list_record_activities(
 
 pub fn list_all_issue_activities(state_dir: &Path) -> Result<Vec<IssueActivity>> {
     list_all_record_activities(state_dir, "issue")
-}
-
-pub fn list_all_mission_activities(state_dir: &Path) -> Result<Vec<IssueActivity>> {
-    list_all_record_activities(state_dir, "mission")
 }
 
 pub fn list_all_record_activities(
@@ -291,20 +283,6 @@ pub fn create_issue_activity_with_metadata(
         summary,
         pr_attribution,
         body,
-    )
-}
-
-pub fn create_mission_activity(
-    state_dir: &Path,
-    subject_id: &str,
-    event_type: ActivityEventType,
-    actor: &str,
-    created_at: DateTime<Utc>,
-    summary: &str,
-    body: &str,
-) -> Result<IssueActivity> {
-    create_record_activity_with_metadata(
-        state_dir, "mission", subject_id, event_type, actor, created_at, summary, None, body,
     )
 }
 
@@ -507,15 +485,14 @@ fn normalize_body(body: &str) -> String {
 fn record_root(subject_kind: &str) -> &'static str {
     match subject_kind {
         "issue" => "issues",
-        "mission" => "missions",
         _ => "records",
     }
 }
 
 fn validate_subject_kind(subject_kind: &str, relative: &Path) -> Result<()> {
-    if !matches!(subject_kind, "issue" | "mission") {
+    if subject_kind != "issue" {
         bail!(
-            "Unsupported subject_kind '{}' in {}; expected issue or mission",
+            "Unsupported subject_kind '{}' in {}; expected issue",
             subject_kind,
             display_state_path(relative)
         );

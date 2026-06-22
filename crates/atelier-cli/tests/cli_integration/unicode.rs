@@ -51,7 +51,7 @@ fn test_unicode_variety_in_titles() {
         assert!(success, "Failed to create issue with title: {}", title);
 
         // Verify it can be shown without panic
-        let id = (i + 1).to_string();
+        let id = issue_ref(dir.path(), i + 1);
         let (success, _, _) = run_atelier(dir.path(), &["issue", "show", &id]);
         assert!(
             success,

@@ -195,31 +195,14 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                 })?;
                 let (state_dir, db_path) = state_and_db_paths()?;
                 let db = canonical_mutation_db()?;
-                if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                    if transition != "close" {
-                        bail!(
-                            "Mission objective {} only supports `atelier issue transition {} close --reason \"...\"`",
-                            id,
-                            id
-                        );
-                    }
-                    let reason = close_reason.as_deref().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "missing required field close_reason; rerun with `atelier issue transition {} close --reason \"...\"`",
-                            id
-                        )
-                    })?;
-                    commands::mission::close(&state_dir, &db_path, &id, reason)
-                } else {
-                    commands::workflow::transition_issue(
-                        &db,
-                        &state_dir,
-                        &db_path,
-                        &id,
-                        &transition,
-                        close_reason.as_deref(),
-                    )
-                }
+                commands::workflow::transition_issue(
+                    &db,
+                    &state_dir,
+                    &db_path,
+                    &id,
+                    &transition,
+                    close_reason.as_deref(),
+                )
             }
         }
 
@@ -239,59 +222,42 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             no_parent,
         } => {
             let (state_dir, db_path) = state_and_db_paths()?;
-            let db = canonical_mutation_db()?;
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                commands::mission::update(
-                    &state_dir,
-                    &db_path,
-                    &id,
-                    title.as_deref(),
-                    status.as_deref(),
-                    body.as_deref(),
-                    constraint,
-                    risk,
-                    validation,
-                )
-            } else {
-                if status.is_some() {
-                    bail!("issue status changes use `atelier issue transition <issue-id> <transition>`");
-                }
-                if body.is_some()
-                    || !constraint.is_empty()
-                    || !risk.is_empty()
-                    || !validation.is_empty()
-                {
-                    bail!("mission section flags require a mission objective record");
-                }
-                commands::issue::update_lifecycle(
-                    &state_dir,
-                    &db_path,
-                    commands::issue::UpdateInput {
-                        issue_ref: &id,
-                        title: title.as_deref(),
-                        priority: priority.as_deref(),
-                        issue_type: issue_type.as_deref(),
-                        labels: &label,
-                        remove_labels: &remove_label,
-                        parent: if no_parent {
-                            Some(None)
-                        } else {
-                            parent.as_deref().map(Some)
-                        },
-                        append_notes: None,
-                    },
-                )
+            if status.is_some() {
+                bail!(
+                    "issue status changes use `atelier issue transition <issue-id> <transition>`"
+                );
             }
+            if body.is_some()
+                || !constraint.is_empty()
+                || !risk.is_empty()
+                || !validation.is_empty()
+            {
+                bail!("mission section flags are not supported for issue records");
+            }
+            commands::issue::update_lifecycle(
+                &state_dir,
+                &db_path,
+                commands::issue::UpdateInput {
+                    issue_ref: &id,
+                    title: title.as_deref(),
+                    priority: priority.as_deref(),
+                    issue_type: issue_type.as_deref(),
+                    labels: &label,
+                    remove_labels: &remove_label,
+                    parent: if no_parent {
+                        Some(None)
+                    } else {
+                        parent.as_deref().map(Some)
+                    },
+                    append_notes: None,
+                },
+            )
         }
 
         super::IssueCommands::Note { id, text, kind } => {
             let db = canonical_mutation_db()?;
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                commands::comment::run_mission_note(&db, &id, &text, &kind)
-            } else {
-                let id = super::resolve_issue_arg(&db, &id)?;
-                commands::comment::run_issue_note(&db, &id, &text, &kind)
-            }
+            let id = super::resolve_issue_arg(&db, &id)?;
+            commands::comment::run_issue_note(&db, &id, &text, &kind)
         }
 
         super::IssueCommands::Link { id, target, role } => {
@@ -307,25 +273,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Block { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                let blocker = super::resolve_issue_arg(&db, &blocker)?;
-                let store = RecordStore::new(&state_dir);
-                let changed = store.add_relates_relationship(
-                    "mission",
-                    &id,
-                    "issue",
-                    &blocker,
-                    "blocked_by",
-                )?;
-                if changed {
-                    println!("Linked {id} -> {blocker} (blocked_by)");
-                } else {
-                    println!("Link {id} -> {blocker} (blocked_by) already exists");
-                }
-            } else {
-                let store = RecordStore::new(&state_dir);
-                commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
-            }
+            let store = RecordStore::new(&state_dir);
+            commands::issue::dep_add_canonical(&db, &store, &id, &blocker)?;
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -333,25 +282,8 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
         super::IssueCommands::Unblock { id, blocker } => {
             let db = canonical_mutation_db()?;
             let (state_dir, db_path) = state_and_db_paths()?;
-            if db.record_kind_for_id(&id)?.as_deref() == Some("mission") {
-                let blocker = super::resolve_issue_arg(&db, &blocker)?;
-                let store = RecordStore::new(&state_dir);
-                let changed = store.remove_relates_relationship(
-                    "mission",
-                    &id,
-                    "issue",
-                    &blocker,
-                    "blocked_by",
-                )?;
-                if changed {
-                    println!("Unlinked {id} -> {blocker} (blocked_by)");
-                } else {
-                    println!("No link {id} -> {blocker} (blocked_by) exists");
-                }
-            } else {
-                let store = RecordStore::new(&state_dir);
-                commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
-            }
+            let store = RecordStore::new(&state_dir);
+            commands::issue::dep_remove_canonical(&db, &store, &id, &blocker)?;
             drop(db);
             atelier_app::projection::refresh_after_canonical_write(&state_dir, &db_path)
         }
@@ -368,9 +300,6 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
 }
 
 fn is_mission_objective(db: &atelier_sqlite::Database, id: &str) -> Result<bool> {
-    if db.record_kind_for_id(id)?.as_deref() == Some("mission") {
-        return Ok(true);
-    }
     Ok(db
         .get_issue(id)?
         .is_some_and(|issue| issue.issue_type == "mission"))

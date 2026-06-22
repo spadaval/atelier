@@ -12,15 +12,14 @@ use atelier_core::{
     ISSUE_PRIORITY_LABELS,
 };
 pub use atelier_core::{
-    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, MissionRecord,
-    MissionSectionName, MissionSections, Record, RecordHeader, ReviewRecord,
+    EvidenceRecord, IssueRecord, IssueSectionName, IssueSectionState, IssueSections, Record,
+    RecordHeader, ReviewRecord,
 };
 
 pub mod activity;
 pub mod document;
 pub mod evidence;
 pub mod issue;
-pub mod mission;
 pub mod store;
 pub mod validation;
 
@@ -44,7 +43,6 @@ pub use relationships::{
 pub enum RecordKind {
     Evidence,
     Issue,
-    Mission,
     Review,
 }
 
@@ -53,7 +51,6 @@ impl RecordKind {
         match self {
             Self::Evidence => "evidence",
             Self::Issue => "issues",
-            Self::Mission => "missions",
             Self::Review => "reviews",
         }
     }
@@ -93,7 +90,15 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
 ];
 
 pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
-pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
+pub const VALID_ISSUE_TYPES: &[&str] = &[
+    "bug",
+    "epic",
+    "feature",
+    "mission",
+    "spike",
+    "task",
+    "validation",
+];
 pub const MAX_LABEL_LEN: usize = 128;
 pub fn validate_status(status: &str) -> Result<()> {
     let mut chars = status.chars();
@@ -308,30 +313,6 @@ impl RecordStore {
         let spec = canonical_record_kind(ISSUE_KIND.kind)?;
         let relative = canonical_record_path(spec, &record.issue.id)?;
         self.write_atomic(&relative, render_issue_record(record)?)
-    }
-
-    pub fn create_mission(
-        &self,
-        title: &str,
-        status: &str,
-        sections: MissionSections,
-    ) -> Result<MissionRecord> {
-        let now = Utc::now();
-        let record = MissionRecord {
-            header: RecordHeader {
-                kind: "mission".to_string(),
-                id: self.allocate_record_id()?,
-                title: title.to_string(),
-                status: status.to_string(),
-                labels: default_record_labels("mission"),
-                relationships: Relationships::default(),
-                created_at: now,
-                updated_at: now,
-            },
-            sections,
-        };
-        self.write_record_atomic(&Record::Mission(record.clone()))?;
-        Ok(record)
     }
 
     pub fn create_evidence(
@@ -866,10 +847,7 @@ pub fn render_record(record: &Record) -> Result<String> {
         return render_issue_record(&canonical_issue_record_from_record(record)?);
     }
     let mut record = record.clone();
-    if spec.kind == "mission" {
-        record.header_mut().relationships =
-            normalize_legacy_mission_relationships(record.header().relationships.clone());
-    } else if spec.kind == "evidence" {
+    if spec.kind == "evidence" {
         record.header_mut().relationships =
             normalize_legacy_evidence_relationships(record.header().relationships.clone());
     }
@@ -877,9 +855,6 @@ pub fn render_record(record: &Record) -> Result<String> {
     let mut relationships = record.header().relationships.clone();
     sort_relationships(&mut relationships);
 
-    if spec.kind == "mission" {
-        return render_mission_record(&record, &relationships, spec);
-    }
     match spec.kind {
         "evidence" => return render_evidence_record(&record, &relationships, spec),
         "review" => return render_review_record(&record, &relationships, spec),
@@ -1028,7 +1003,6 @@ pub fn parse_record(text: &str, relative: &Path, spec: &RecordKindSpec) -> Resul
     }
     reject_forbidden_data_front_matter(&front_matter, relative)?;
     match spec.kind {
-        "mission" => return parse_mission_record(front_matter, body, relative, spec, id),
         "evidence" => return parse_evidence_record(front_matter, body, relative, spec, id),
         _ => {}
     }
@@ -1087,10 +1061,6 @@ fn validate_record(record: &Record, relative: &Path, spec: &RecordKindSpec) -> R
             display_state_path(relative)
         )
     })?;
-    if spec.kind == "mission" {
-        validate_mission_record(record, relative)?;
-        return Ok(());
-    }
     match spec.kind {
         "evidence" => {
             validate_evidence_record(record, relative)?;
@@ -1250,101 +1220,6 @@ fn validate_review_record(record: &Record, relative: &Path) -> Result<()> {
     Ok(())
 }
 
-fn render_mission_record(
-    record: &Record,
-    relationships: &Relationships,
-    spec: &RecordKindSpec,
-) -> Result<String> {
-    let Record::Mission(record) = record else {
-        bail!("Expected mission record");
-    };
-    let mut labels = record.header.labels.clone();
-    labels.sort();
-    labels.dedup();
-    if labels.is_empty() {
-        labels = default_record_labels("mission");
-    }
-
-    let mut output = String::new();
-    output.push_str("---\n");
-    write_yaml_scalar(
-        &mut output,
-        "created_at",
-        Some(&record.header.created_at.to_rfc3339()),
-    )?;
-    write_yaml_scalar(&mut output, "id", Some(&record.header.id))?;
-    write_yaml_array(&mut output, "labels", &labels)?;
-    write_yaml_relationships(&mut output, relationships)?;
-    write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
-    output.push_str(&format!("schema_version: {}\n", spec.schema_version));
-    write_yaml_scalar(&mut output, "status", Some(&record.header.status))?;
-    write_yaml_scalar(&mut output, "title", Some(&record.header.title))?;
-    write_yaml_scalar(
-        &mut output,
-        "updated_at",
-        Some(&record.header.updated_at.to_rfc3339()),
-    )?;
-    output.push_str("---\n\n");
-    output.push_str(&render_mission_sections(&record.sections));
-    output.push('\n');
-    Ok(output)
-}
-
-fn parse_mission_record(
-    front_matter: BTreeMap<String, Value>,
-    body: &str,
-    relative: &Path,
-    spec: &RecordKindSpec,
-    id: String,
-) -> Result<Record> {
-    let relationships = parse_relationships(&front_matter, relative)?;
-    let title = require_scalar(&front_matter, "title", relative)?;
-    let status = require_scalar(&front_matter, "status", relative)?;
-    validate_mission_status(&status, relative)?;
-    let created_at = require_datetime(&front_matter, "created_at", relative)?;
-    let updated_at = require_datetime(&front_matter, "updated_at", relative)?;
-
-    reject_unexpected_mission_front_matter(&front_matter, relative)?;
-    let labels = string_array(&front_matter, "labels", relative)?;
-    validate_sorted_unique("labels", &labels, relative)?;
-    let sections = parse_mission_sections(body, relative)?;
-    validate_mission_relationships(&relationships, relative)?;
-
-    Ok(Record::Mission(MissionRecord {
-        header: RecordHeader {
-            id,
-            kind: spec.kind.to_string(),
-            title,
-            status,
-            labels,
-            relationships,
-            created_at,
-            updated_at,
-        },
-        sections,
-    }))
-}
-
-fn validate_mission_record(record: &Record, relative: &Path) -> Result<()> {
-    let Record::Mission(record) = record else {
-        bail!(
-            "Expected mission record in {}",
-            display_state_path(relative)
-        );
-    };
-    validate_mission_status(&record.header.status, relative)?;
-    let labels = if record.header.labels.is_empty() {
-        default_record_labels("mission")
-    } else {
-        record.header.labels.clone()
-    };
-    validate_sorted_unique("labels", &labels, relative)?;
-    parse_mission_sections(&render_mission_sections(&record.sections), relative)?;
-    validate_relationships(&record.header.relationships, relative)?;
-    validate_mission_relationships(&record.header.relationships, relative)?;
-    Ok(())
-}
-
 fn render_evidence_record(
     record: &Record,
     relationships: &Relationships,
@@ -1480,77 +1355,6 @@ fn validate_evidence_record(record: &Record, relative: &Path) -> Result<()> {
     Ok(())
 }
 
-fn validate_mission_status(status: &str, relative: &Path) -> Result<()> {
-    match status {
-        "draft" | "ready" | "active" | "superseded" | "closed" => Ok(()),
-        _ => bail!(
-            "Invalid mission status '{}' in {}; valid values: draft, ready, active, superseded, closed",
-            status,
-            display_state_path(relative)
-        ),
-    }
-}
-
-fn validate_mission_relationships(relationships: &Relationships, relative: &Path) -> Result<()> {
-    if !relationships.children.is_empty() {
-        bail!(
-            "Mission relationships.children in {} is reserved and must be empty",
-            display_state_path(relative)
-        );
-    }
-    for attachment in &relationships.attachments {
-        bail!(
-            "Invalid mission attachment {} {} ({}) in {}; mission attachments are not active v1 relationship storage",
-            attachment.kind,
-            attachment.id,
-            attachment.role,
-            display_state_path(relative)
-        );
-    }
-    for relation in &relationships.relates {
-        if relation.kind == "issue" {
-            match relation.relation_type.as_str() {
-                "advances" | "blocked_by" | "validates" | "related" | "derived_from"
-                | "supersedes" | "duplicates" => {}
-                _ => {
-                    validate_relationship_type(&relation.relation_type)?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn reject_unexpected_mission_front_matter(
-    values: &BTreeMap<String, Value>,
-    relative: &Path,
-) -> Result<()> {
-    let allowed = [
-        "created_at",
-        "id",
-        "labels",
-        "relationships",
-        "schema",
-        "schema_version",
-        "status",
-        "title",
-        "updated_at",
-    ];
-    let unexpected = values
-        .keys()
-        .filter(|key| !allowed.contains(&key.as_str()))
-        .map(String::as_str)
-        .collect::<Vec<_>>();
-    if !unexpected.is_empty() {
-        bail!(
-            "Unsupported mission front matter key(s) {} in {}; mission semantics belong in body sections and relationships",
-            unexpected.join(", "),
-            display_state_path(relative)
-        );
-    }
-    Ok(())
-}
-
 fn validate_sorted_unique(key: &str, values: &[String], relative: &Path) -> Result<()> {
     let mut sorted = values.to_vec();
     sorted.sort();
@@ -1563,25 +1367,6 @@ fn validate_sorted_unique(key: &str, values: &[String], relative: &Path) -> Resu
         );
     }
     Ok(())
-}
-
-fn normalize_legacy_mission_relationships(mut relationships: Relationships) -> Relationships {
-    let mut normalized_attachments = Vec::new();
-    for attachment in relationships.attachments {
-        match (attachment.kind.as_str(), attachment.role.as_str()) {
-            ("issue", "advances" | "blocked_by" | "validates") | ("evidence", "validates") => {
-                relationships.relates.push(RelatesRelationship {
-                    kind: attachment.kind,
-                    id: attachment.id,
-                    relation_type: attachment.role,
-                });
-            }
-            _ => normalized_attachments.push(attachment),
-        }
-    }
-    relationships.attachments = normalized_attachments;
-    sort_relationships(&mut relationships);
-    relationships
 }
 
 fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> Relationships {
@@ -1604,10 +1389,8 @@ fn normalize_legacy_evidence_relationships(mut relationships: Relationships) -> 
 }
 
 fn default_record_labels(kind: &str) -> Vec<String> {
-    match kind {
-        "mission" => vec!["mission".to_string()],
-        _ => Vec::new(),
-    }
+    let _ = kind;
+    Vec::new()
 }
 
 fn normalized_evidence_data(mut data: EvidenceRecordData) -> EvidenceRecordData {
@@ -1632,180 +1415,6 @@ fn normalized_evidence_status(status: &str) -> &str {
         "pass" | "fail" | "blocked" | "deferred" => "recorded",
         other => other,
     }
-}
-
-pub fn mission_sections_from_inputs(
-    title: &str,
-    intent: Option<&str>,
-    constraints: Vec<String>,
-    risks: Vec<String>,
-    validation: Vec<String>,
-) -> MissionSections {
-    MissionSections {
-        intent: intent
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(title)
-            .to_string(),
-        constraints: mission_list_section(constraints, "- None."),
-        risks: mission_list_section(risks, "- None."),
-        validation: mission_list_section(validation, "- Validation was not specified."),
-        terminal_notes: None,
-        notes: None,
-    }
-}
-
-pub fn render_mission_sections(sections: &MissionSections) -> String {
-    let mut body = format!(
-        "## Intent\n\n{}\n\n## Constraints\n\n{}\n\n## Risks\n\n{}\n\n## Validation\n\n{}",
-        sections.intent.trim(),
-        sections.constraints.trim(),
-        sections.risks.trim(),
-        sections.validation.trim()
-    );
-    if let Some(terminal_notes) = sections
-        .terminal_notes
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        body.push_str("\n\n## Terminal Notes\n\n");
-        body.push_str(terminal_notes);
-    }
-    if let Some(notes) = sections
-        .notes
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        body.push_str("\n\n## Notes\n\n");
-        body.push_str(notes);
-    }
-    normalize_body(&body)
-}
-
-pub fn parse_mission_sections(body: &str, relative: &Path) -> Result<MissionSections> {
-    let mut sections = BTreeMap::<String, String>::new();
-    let mut current_heading: Option<String> = None;
-    let mut current_body = String::new();
-
-    for line in body.lines() {
-        if let Some(heading) = issue_level_two_heading(line) {
-            if !MissionSections::ALL_NAMES
-                .into_iter()
-                .any(|name| name.title() == heading)
-            {
-                bail!(
-                    "Unknown mission body section '{}' in {}",
-                    heading,
-                    display_state_path(relative)
-                );
-            }
-            if let Some(previous) = current_heading.replace(heading.clone()) {
-                finish_mission_section(&mut sections, previous, &current_body, relative)?;
-                current_body.clear();
-            } else if !current_body.trim().is_empty() {
-                bail!(
-                    "Content before first recognized mission body section in {}",
-                    display_state_path(relative)
-                );
-            } else {
-                current_body.clear();
-            }
-            continue;
-        }
-
-        if current_heading.is_none() && !line.trim().is_empty() {
-            bail!(
-                "Content before first recognized mission body section in {}",
-                display_state_path(relative)
-            );
-        }
-        current_body.push_str(line);
-        current_body.push('\n');
-    }
-
-    if let Some(previous) = current_heading {
-        finish_mission_section(&mut sections, previous, &current_body, relative)?;
-    } else {
-        bail!(
-            "Missing required mission body section 'Intent' in {}",
-            display_state_path(relative)
-        );
-    }
-
-    Ok(MissionSections {
-        intent: required_mission_section(&sections, MissionSectionName::Intent, relative)?,
-        constraints: required_mission_section(
-            &sections,
-            MissionSectionName::Constraints,
-            relative,
-        )?,
-        risks: required_mission_section(&sections, MissionSectionName::Risks, relative)?,
-        validation: required_mission_section(&sections, MissionSectionName::Validation, relative)?,
-        terminal_notes: sections
-            .get(MissionSectionName::TerminalNotes.title())
-            .cloned(),
-        notes: sections.get(MissionSectionName::Notes.title()).cloned(),
-    })
-}
-
-fn finish_mission_section(
-    sections: &mut BTreeMap<String, String>,
-    heading: String,
-    body: &str,
-    relative: &Path,
-) -> Result<()> {
-    if sections.contains_key(&heading) {
-        bail!(
-            "Duplicate mission body section '{}' in {}",
-            heading,
-            display_state_path(relative)
-        );
-    }
-    let content = body.trim().to_string();
-    if content.is_empty() {
-        bail!(
-            "Empty mission body section '{}' in {}",
-            heading,
-            display_state_path(relative)
-        );
-    }
-    sections.insert(heading, content);
-    Ok(())
-}
-
-fn required_mission_section(
-    sections: &BTreeMap<String, String>,
-    name: MissionSectionName,
-    relative: &Path,
-) -> Result<String> {
-    let heading = name.title();
-    sections.get(heading).cloned().ok_or_else(|| {
-        anyhow!(
-            "Missing required mission body section '{}' in {}",
-            heading,
-            display_state_path(relative)
-        )
-    })
-}
-
-fn mission_list_section(values: Vec<String>, empty: &str) -> String {
-    if values.is_empty() {
-        return empty.to_string();
-    }
-    values
-        .into_iter()
-        .map(|value| {
-            let value = value.trim().to_string();
-            if value.starts_with("- ") {
-                value
-            } else {
-                format!("- {value}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 fn add_relationship_to_bucket(
@@ -3080,49 +2689,6 @@ mod tests {
         }
     }
 
-    fn mission_record(id: &str) -> Record {
-        let sections = MissionSections {
-            intent: "Repair mission records.".to_string(),
-            constraints: "- Keep command output readable.".to_string(),
-            risks: "- Relationship buckets can drift.".to_string(),
-            validation: "- `cargo test record_store` passes.".to_string(),
-            terminal_notes: Some("Closed with validation evidence.".to_string()),
-            notes: Some("Handoff context.".to_string()),
-        };
-        Record::Mission(MissionRecord {
-            header: record_header(
-                "mission",
-                id,
-                "Typed Mission",
-                "ready",
-                vec!["mission".to_string()],
-                Relationships {
-                    blocks: Vec::new(),
-                    children: Vec::new(),
-                    attachments: Vec::new(),
-                    relates: vec![
-                        RelatesRelationship {
-                            kind: "issue".to_string(),
-                            id: "atelier-blok".to_string(),
-                            relation_type: "blocked_by".to_string(),
-                        },
-                        RelatesRelationship {
-                            kind: "issue".to_string(),
-                            id: "atelier-supp".to_string(),
-                            relation_type: "related".to_string(),
-                        },
-                        RelatesRelationship {
-                            kind: "issue".to_string(),
-                            id: "atelier-work".to_string(),
-                            relation_type: "advances".to_string(),
-                        },
-                    ],
-                },
-            ),
-            sections,
-        })
-    }
-
     fn evidence_record(id: &str) -> Record {
         let data = EvidenceRecordData {
             evidence_type: "validation".to_string(),
@@ -3210,7 +2776,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
             canonical_contracts,
             vec![
                 ("issue", "atelier.issue", 1, Some("issues")),
-                ("mission", "atelier.mission", 1, Some("missions")),
                 ("evidence", "atelier.evidence", 1, Some("evidence")),
                 ("review", "atelier.review", 1, Some("reviews")),
             ]
@@ -3230,7 +2795,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .iter()
             .map(|spec| spec.kind)
             .collect::<Vec<_>>();
-        assert_eq!(generic_contracts, vec!["mission", "evidence", "review"]);
+        assert_eq!(generic_contracts, vec!["evidence", "review"]);
     }
 
     #[test]
@@ -3371,10 +2936,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         };
         let text = issue::render_issue_record(&record).unwrap();
         assert!(document::split_document(&text).is_some());
-        assert_eq!(
-            mission::MissionSectionName::Validation.title(),
-            "Validation"
-        );
+        assert_eq!(issue::IssueSectionName::Evidence.title(), "Evidence");
         let _store = store::RecordStore::new(tempdir().unwrap().path());
         validation::validate_priority("high").unwrap();
         let _: Option<evidence::EvidenceOutputSummary> = None;
@@ -3450,29 +3012,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn mission_record_renders_and_parses_deterministically_without_data_blob() {
-        let record = mission_record("atelier-miss");
-        let spec = canonical_record_kind("mission").unwrap();
-        let path = canonical_record_path(spec, "atelier-miss").unwrap();
-        let text = render_record(&record).unwrap();
-        let parsed = parse_record(&text, &path, spec).unwrap();
-
-        assert_eq!(parsed, record);
-        assert_eq!(render_record(&parsed).unwrap(), text);
-        assert!(text.contains("schema: \"atelier.mission\""));
-        assert!(text.contains("labels:\n- \"mission\"\n"));
-        assert!(!text.contains("\ndata: "));
-        assert!(text.contains("## Intent\n\nRepair mission records."));
-        assert!(text.contains("## Constraints\n\n- Keep command output readable."));
-        assert!(text.contains("## Terminal Notes\n\nClosed with validation evidence."));
-        assert!(text.contains(
-            "  relates:\n  - kind: \"issue\"\n    id: \"atelier-blok\"\n    type: \"blocked_by\"\n"
-        ));
-        assert!(text.contains("    type: \"advances\""));
-        assert!(text.contains("    type: \"related\""));
-    }
-
-    #[test]
     fn evidence_record_renders_and_parses_deterministically_without_data_blob() {
         let record = evidence_record("atelier-evdn");
         let spec = canonical_record_kind("evidence").unwrap();
@@ -3518,68 +3057,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
 ---
 
 Legacy evidence summary.
-"#;
-        let error = parse_record(text, &path, spec).unwrap_err();
-        assert!(error.to_string().contains("Forbidden data front matter"));
-    }
-
-    #[test]
-    fn mission_render_normalizes_legacy_evidence_attachments() {
-        let mut record = mission_record("atelier-miss");
-        record
-            .header_mut()
-            .relationships
-            .attachments
-            .push(AttachmentRelationship {
-                kind: "evidence".to_string(),
-                id: "atelier-prof".to_string(),
-                role: "validates".to_string(),
-            });
-
-        let text = render_record(&record).unwrap();
-
-        assert!(text.contains(
-            "  relates:\n  - kind: \"evidence\"\n    id: \"atelier-prof\"\n    type: \"validates\"\n"
-        ));
-        assert!(
-            !text.contains("kind: \"evidence\"\n    id: \"atelier-prof\"\n    role: \"validates\"")
-        );
-    }
-
-    #[test]
-    fn mission_record_rejects_data_front_matter() {
-        let spec = canonical_record_kind("mission").unwrap();
-        let path = canonical_record_path(spec, "atelier-legd").unwrap();
-        let text = r#"---
-created_at: "2026-06-10T12:00:00+00:00"
-id: "atelier-legd"
-data: "{\"constraints\":[\"Keep scope focused.\"],\"risks\":[\"Old buckets drift.\"],\"validation\":[\"Run focused tests.\"],\"work\":[]}"
-relationships:
-  attachments:
-  - kind: "issue"
-    id: "atelier-work"
-    role: "advances"
-  - kind: "issue"
-    id: "atelier-vlid"
-    role: "validates"
-  - kind: "evidence"
-    id: "atelier-proof"
-    role: "validates"
-  blocks: []
-  children: []
-  relates: []
-schema: "atelier.mission"
-schema_version: 1
-status: "ready"
-title: "Legacy Mission"
-updated_at: "2026-06-10T13:00:00+00:00"
----
-
-Legacy intent.
-
-## Problem
-
-Legacy missions used free-form body headings.
 "#;
         let error = parse_record(text, &path, spec).unwrap_err();
         assert!(error.to_string().contains("Forbidden data front matter"));
@@ -3786,11 +3263,11 @@ Legacy missions used free-form body headings.
         let dir = tempdir().unwrap();
         let store = RecordStore::new(dir.path().join(".atelier"));
         let candidate = "atelier-0001";
-        fs::create_dir_all(store.state_dir.join("missions")).unwrap();
+        fs::create_dir_all(store.state_dir.join("evidence")).unwrap();
         fs::write(
             store
                 .state_dir
-                .join("missions")
+                .join("evidence")
                 .join(format!("{candidate}.md")),
             "",
         )

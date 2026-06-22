@@ -199,7 +199,6 @@ pub struct RecordHeader {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Record {
     Issue(IssueRecord),
-    Mission(MissionRecord),
     Evidence(EvidenceRecord),
     Review(ReviewRecord),
 }
@@ -208,7 +207,6 @@ impl Record {
     pub fn header(&self) -> &RecordHeader {
         match self {
             Record::Issue(record) => &record.header,
-            Record::Mission(record) => &record.header,
             Record::Evidence(record) => &record.header,
             Record::Review(record) => &record.header,
         }
@@ -217,7 +215,6 @@ impl Record {
     pub fn header_mut(&mut self) -> &mut RecordHeader {
         match self {
             Record::Issue(record) => &mut record.header,
-            Record::Mission(record) => &mut record.header,
             Record::Evidence(record) => &mut record.header,
             Record::Review(record) => &mut record.header,
         }
@@ -254,12 +251,6 @@ pub struct ReviewRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct MissionRecord {
-    pub header: RecordHeader,
-    pub sections: MissionSections,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceRecord {
     pub header: RecordHeader,
     pub data: EvidenceRecordData,
@@ -288,26 +279,6 @@ pub struct IssueSectionState {
     pub required: bool,
     pub present: bool,
     pub empty: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct MissionSections {
-    pub intent: String,
-    pub constraints: String,
-    pub risks: String,
-    pub validation: String,
-    pub terminal_notes: Option<String>,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum MissionSectionName {
-    Intent,
-    Constraints,
-    Risks,
-    Validation,
-    TerminalNotes,
-    Notes,
 }
 
 impl IssueSections {
@@ -454,30 +425,6 @@ impl IssueSectionName {
             self,
             IssueSectionName::Description | IssueSectionName::Outcome
         )
-    }
-}
-
-impl MissionSections {
-    pub const ALL_NAMES: [MissionSectionName; 6] = [
-        MissionSectionName::Intent,
-        MissionSectionName::Constraints,
-        MissionSectionName::Risks,
-        MissionSectionName::Validation,
-        MissionSectionName::TerminalNotes,
-        MissionSectionName::Notes,
-    ];
-}
-
-impl MissionSectionName {
-    pub fn title(self) -> &'static str {
-        match self {
-            MissionSectionName::Intent => "Intent",
-            MissionSectionName::Constraints => "Constraints",
-            MissionSectionName::Risks => "Risks",
-            MissionSectionName::Validation => "Validation",
-            MissionSectionName::TerminalNotes => "Terminal Notes",
-            MissionSectionName::Notes => "Notes",
-        }
     }
 }
 

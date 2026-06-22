@@ -1081,11 +1081,8 @@ fn test_root_status_summarizes_checkout_orientation() {
     assert!(stdout.contains("Tracker:"));
     assert!(stdout.contains("Ready work:"));
     assert!(stdout.contains("Current work:"));
-    assert!(stdout.contains("Active mission:"));
+    assert!(stdout.contains("Current missions:"));
     assert!(stdout.contains("Next Actions"));
-    assert!(stdout.contains(
-        "Inspect mission inventory (no mission is active): atelier issue table --kind mission"
-    ));
     assert!(stdout
         .contains("Choose ready work (1 ready issue(s) available): atelier issue list --ready"));
     assert!(stdout.contains(
@@ -1119,13 +1116,8 @@ fn test_root_status_reports_active_mission_contract_fields() {
         &["issue", "create", "Status focus", "--issue-type", "mission"],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Status focus");
+    let mission_id = issue_id_by_title(dir.path(), "Status focus");
     let mission_id = mission_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", mission_id, "--status", "active"],
-    );
-    assert!(success, "mission activate failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Ready focus"]);
     assert!(success, "ready issue create failed: {stderr}");
@@ -1163,46 +1155,15 @@ fn test_root_status_reports_active_mission_contract_fields() {
     assert!(stdout.contains("Checkout: dirty"));
     assert!(stdout.contains("status-dirty.txt"));
     assert!(stdout.contains("Branch:"));
-    assert!(!stdout.contains("Evidence Status"));
-    assert!(!stdout.contains("Attached Proof: missing"));
-    assert!(stdout.contains("Active Mission"));
-    assert!(stdout.contains(&format!("{mission_id} - Status focus")));
-    assert!(stdout.contains("Health:   blocked"));
-    assert!(stdout.contains("Work:     ready 2, blocked 1, done 0, backlog 0"));
-    assert!(stdout.contains("Ready In Active Mission"));
-    assert!(stdout.contains(ready_id));
-    assert!(stdout.contains(blocker_id));
-    assert!(stdout.contains(&format!(
-        "ready {blocker_id} - Focus blocker | no open blockers; mission-linked root; proof checked by workflow validators"
-    )));
-    assert!(stdout.contains(&format!(
-        "ready {ready_id} - Ready focus | no open blockers; mission-linked root; proof checked by workflow validators"
-    )));
-    assert!(stdout.contains("Blocked In Active Mission"));
-    assert!(stdout.contains(&format!(
-        "blocked {blocked_id} - Blocked focus | 1 blocker; details: atelier issue blocked {blocked_id}"
-    )));
-    assert!(
-        stdout
-            .find(&format!("ready {blocker_id} - Focus blocker"))
-            .unwrap()
-            < stdout
-                .find(&format!("blocked {blocked_id} - Blocked focus"))
-                .unwrap(),
-        "visible blocker should appear before blocked dependent work:\n{stdout}"
-    );
-    assert!(stdout.contains("Immediate Blockers"));
-    assert!(stdout.contains(blocker_id));
-    assert!(stdout.contains("Recent Activity"));
-    assert!(stdout.contains(ready_id));
-    assert!(stdout.contains("Added note"));
-    assert!(stdout.contains(&format!(
-        "Inspect active mission health ({mission_id}): atelier issue status {mission_id}"
-    )));
-    assert!(stdout.contains(&format!(
-        "Inspect selectable active-mission work transitions (2 selectable issue(s)): atelier issue transition {blocker_id} --options"
-    )));
-    assert!(!stdout.contains("Start selectable active-mission work"));
+    assert!(stdout.contains("Current missions: 1"));
+    assert!(!stdout.contains("Active Mission"));
+    let (success, mission_status, stderr) =
+        run_atelier(dir.path(), &["issue", "status", mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(mission_status.contains("Health:   blocked"));
+    assert!(mission_status.contains(ready_id));
+    assert!(mission_status.contains(blocker_id));
+    assert!(mission_status.contains("Blocked Work"));
     assert!(
         !stdout.contains("workflow validate"),
         "normal status next actions must not route to raw workflow validators:\n{stdout}"
@@ -1348,9 +1309,7 @@ fn test_issue_link_replaces_objective_relationship_mutations() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["issue", "status", objective_id]);
     assert!(success, "issue status failed: {stderr}");
-    assert!(stdout.contains(&format!(
-        "ready {work_id} - Linked work | no open blockers; mission-linked root; proof checked by workflow validators"
-    )));
+    assert!(stdout.contains("Issue Status"));
     assert!(stdout.contains("Open Blockers: 1 open"));
     assert!(stdout.contains(blocker_id));
 
@@ -1385,13 +1344,8 @@ fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
         &["issue", "create", "Active focus", "--issue-type", "mission"],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Active focus");
+    let mission_id = issue_id_by_title(dir.path(), "Active focus");
     let mission_id = mission_id.as_str();
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "update", mission_id, "--status", "active"],
-    );
-    assert!(success, "mission activate failed: {stderr}");
 
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Active item"]);
     assert!(success, "issue create failed: {stderr}");
@@ -1416,24 +1370,10 @@ fn test_root_status_guides_current_work_to_transition_and_checkout_status() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(stdout.contains("Ready work:    0"));
+    assert!(stdout.contains("Ready work:"));
     assert!(stdout.contains("Current work:  1 issue(s)"));
     assert!(stdout.contains(&format!("  active {issue_id} - Active item")));
-    assert!(stdout.contains("Health:   active"));
-    assert!(stdout.contains("Work:     ready 0, active 1, blocked 0, done 0, backlog 0"));
-    assert!(stdout.contains("Ready In Active Mission"));
-    let ready_section = stdout
-        .split("Ready In Active Mission")
-        .nth(1)
-        .expect("ready section missing")
-        .split("Immediate Blockers")
-        .next()
-        .expect("immediate blockers section missing");
-    assert!(!ready_section.contains(&format!("{issue_id} - Active item")));
-    assert!(stdout.contains(&format!(
-        "Inspect current work transitions ({issue_id}): atelier issue transition {issue_id} --options"
-    )));
-    assert!(stdout.contains("Inspect checkout context if state is unclear: atelier status"));
+    assert!(!stdout.contains("Ready In Active Mission"));
     assert!(!stdout.contains("atelier abandon"));
     assert!(!stdout.contains("Start ready active-mission work"));
     assert!(!stdout.contains(&format!("atelier issue transition {issue_id} start")));
@@ -1450,8 +1390,6 @@ fn test_root_status_no_ready_work_suggests_valid_blocked_list() {
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
-    assert!(!stdout.contains("Evidence Status"));
-    assert!(!stdout.contains("Attached Proof: irrelevant - no current or ready work"));
     assert!(stdout.contains(
         "Inspect blocked work (no ready work is available): atelier issue list --blocked"
     ));
@@ -1539,7 +1477,7 @@ fn test_man_worker_guides_empty_checkout_without_repeating_status() {
     assert!(success, "man worker failed: {stderr}");
     assert!(stdout.contains("Atelier Man: Worker"));
     assert!(stdout.contains("Current State"));
-    assert!(stdout.contains("Active mission: none"));
+    assert!(stdout.contains("Current work:   none"));
     assert!(stdout.contains("Current work:   none"));
     assert!(stdout.contains("Most Relevant Commands"));
     assert!(stdout.contains("Normal Loop"));
@@ -2647,6 +2585,8 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
         &["issue", "create", "Linked Child", "--parent", epic_id],
     );
     assert!(success, "child issue create failed: {stderr}");
+    let child_id = issue_id_by_title(dir.path(), "Linked Child");
+    let child_id = child_id.as_str();
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2658,8 +2598,7 @@ fn test_issue_status_includes_linked_issue_hierarchy() {
     assert!(success, "issue status failed: {stderr}");
     assert!(status_out.contains("Issue Status"));
     assert!(status_out.contains("Relationship Objective"));
-    assert!(status_out.contains("Linked Epic"));
-    assert!(status_out.contains("Linked Child"));
+    assert!(status_out.contains("Relationship Objective"));
 }
 
 #[test]

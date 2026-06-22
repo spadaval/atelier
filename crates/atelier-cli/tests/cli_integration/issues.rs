@@ -127,7 +127,7 @@ fn test_create_subissue() {
 
     assert!(success);
     assert!(
-        stdout.contains("Created issue atelier-"),
+        stdout.contains("Created subissue atelier-"),
         "Expected project-scoped issue id in output, got: {}",
         stdout
     );
@@ -663,23 +663,10 @@ fn test_issue_create_mission_type_requires_workflow_policy_declaration() {
     );
     assert!(transcript.contains("issue_types"), "{transcript}");
     assert!(transcript.contains("mission"), "{transcript}");
-    let mission_dir = dir.path().join(".atelier").join("missions");
-    if mission_dir.exists() {
-        let has_mission_record = std::fs::read_dir(&mission_dir)
-            .unwrap_or_else(|error| panic!("failed to read {}: {error}", mission_dir.display()))
-            .any(|entry| {
-                entry
-                    .unwrap()
-                    .path()
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    == Some("md")
-            });
-        assert!(
-            !has_mission_record,
-            "mission type creation must not write first-class mission records"
-        );
-    }
+    assert!(
+        !dir.path().join(".atelier").join("missions").exists(),
+        "mission type creation must not write first-class mission records"
+    );
 }
 
 #[test]
@@ -698,7 +685,10 @@ fn test_issue_create_mission_type_uses_declared_workflow_policy() {
         ],
     );
     assert!(success, "declared mission issue create failed: {stderr}");
-    assert!(stdout.contains("Created issue atelier-"), "{stdout}");
+    assert!(
+        stdout.contains("Created mission objective atelier-"),
+        "{stdout}"
+    );
     assert!(stdout.contains("Type:     mission"), "{stdout}");
     assert!(stdout.contains(".atelier/issues/"), "{stdout}");
     assert!(!stdout.contains(".atelier/missions/"), "{stdout}");
@@ -772,7 +762,10 @@ fn test_unregistered_issue_type_reports_configured_values() {
         &["issue", "create", "Nope", "--issue-type", "ghost"],
     );
     assert!(!success, "unregistered issue type should fail");
-    assert!(stderr.contains("Invalid issue_type 'ghost'"), "{stderr}");
+    assert!(
+        stderr.contains("must declare issue_type 'ghost'"),
+        "{stderr}"
+    );
     assert!(stderr.contains("incident"), "{stderr}");
     assert!(!stderr.contains("decision"), "{stderr}");
 }
@@ -1186,6 +1179,8 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
             "issue",
             "create",
             "Canonical mission",
+            "--issue-type",
+            "mission",
             "--body",
             "Canonical mission body",
             "--constraint",
@@ -1193,7 +1188,7 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
         ],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "Canonical mission");
+    let mission_id = issue_id_by_title(dir.path(), "Canonical mission");
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1447,7 +1442,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
         ],
     );
     assert!(success, "mission create failed: {stderr}");
-    let mission_id = record_id_by_title(dir.path(), "missions", "History mission");
+    let mission_id = issue_id_by_title(dir.path(), "History mission");
 
     run_atelier(
         dir.path(),
@@ -1467,7 +1462,7 @@ fn test_history_mission_scope_includes_linked_work_descendants_and_evidence() {
         &["issue", "note", &mission_id, "Mission note body"],
     );
     assert!(success, "mission note failed: {stderr}");
-    assert!(note_out.contains("Added note to mission"));
+    assert!(note_out.contains("Added note to issue"));
     write_activity_fixture(
         dir.path(),
         &child_id,
@@ -2512,7 +2507,10 @@ fn test_removed_issue_type_is_rejected() {
             !success,
             "removed issue type {removed_type} should be rejected"
         );
-        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+        assert!(
+            stderr.contains(&format!("must declare issue_type '{removed_type}'")),
+            "{stderr}"
+        );
 
         let (success, _, stderr) = run_atelier(
             dir.path(),
@@ -2523,7 +2521,10 @@ fn test_removed_issue_type_is_rejected() {
             !success,
             "removed issue type {removed_type} should be rejected on update"
         );
-        assert!(stderr.contains(&format!("Invalid issue_type '{removed_type}'")));
+        assert!(
+            stderr.contains(&format!("must declare issue_type '{removed_type}'")),
+            "{stderr}"
+        );
     }
 }
 

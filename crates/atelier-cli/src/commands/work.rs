@@ -8,7 +8,10 @@ use atelier_core::Issue;
 use atelier_sqlite::Database;
 
 fn containing_mission(db: &Database, issue_id: &str) -> Result<Option<String>> {
-    for mission in db.list_records("mission", None)? {
+    for mission in db.list_issues(Some("all"), None, None)? {
+        if mission.issue_type != "mission" {
+            continue;
+        }
         if mission.status == "closed" {
             continue;
         }
@@ -67,7 +70,10 @@ pub fn branch_status(db: &Database) -> Result<()> {
     println!("Current: {current}");
 
     let mut printed = BTreeSet::new();
-    for mission in db.list_records("mission", None)? {
+    for mission in db.list_issues(Some("all"), None, None)? {
+        if mission.issue_type != "mission" {
+            continue;
+        }
         if mission.status == "closed" {
             continue;
         }

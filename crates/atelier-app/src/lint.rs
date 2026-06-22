@@ -264,7 +264,7 @@ pub fn resolve_issue_id(db: &Database, issue_ref: &str) -> Result<String> {
 
 fn show_command_for_kind(kind: &str, id: &str) -> String {
     match kind {
-        "mission" => format!("atelier mission show {id}"),
+        "mission" => format!("atelier issue show {id}"),
         "evidence" => format!("atelier evidence show {id}"),
         _ => format!("atelier {kind} show {id}"),
     }

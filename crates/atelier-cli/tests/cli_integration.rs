@@ -620,6 +620,11 @@ fn attach_evidence(
     result: &str,
     summary: &str,
 ) -> String {
+    let target_kind = if target_kind == "mission" {
+        "issue"
+    } else {
+        target_kind
+    };
     if target_kind == "issue" {
         ensure_all_issue_completion_sections(dir);
     }

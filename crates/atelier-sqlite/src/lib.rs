@@ -62,7 +62,15 @@ pub const COMPATIBILITY_TABLES: &[&str] = &[];
 pub const VALID_PRIORITIES: &[&str] = ISSUE_PRIORITY_LABELS;
 
 /// Valid values for canonical issue type.
-pub const VALID_ISSUE_TYPES: &[&str] = &["bug", "epic", "feature", "spike", "task", "validation"];
+pub const VALID_ISSUE_TYPES: &[&str] = &[
+    "bug",
+    "epic",
+    "feature",
+    "mission",
+    "spike",
+    "task",
+    "validation",
+];
 
 /// Maximum lengths for string inputs.
 pub const MAX_TITLE_LEN: usize = 512;

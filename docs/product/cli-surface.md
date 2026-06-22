@@ -463,7 +463,7 @@ surface is `delete` unless it is in the core list above.
 | Rebuild diagnostic | Low-level diagnostic | Projection rebuild is cache repair, not a product workflow. | Hidden/advanced diagnostic only; `doctor --fix` owns admin explicit local repair. |
 | Hidden `issue quick/subissue/search/relate/tree/tested` helpers | Remove | Replacement commands are clear enough; hidden callable aliases are rediscovery risk. | Public workflows use issue record commands, root `search`, issue detail/status, record-specific notes, `evidence`, and `status`. |
 | Root `abandon`, root `repair`, root `start`, hidden work-status helper, and any legacy work-start path | Remove or replace | Current work is the canonical `in_progress` issue set in the checkout, so hidden active-pointer cleanup is not a target-state workflow concept. Duplicate lifecycle paths obscure the workflow-backed status and issue-transition surfaces. | Docs and help teach status, issue detail, transition options, and issue status <objective-id> as next-step sources. |
-| `issue show <objective-id>` | Remove | Duplicate of the richer mission detail surface. | `issue show <objective-id>` |
+| `mission` root namespace | Remove | Mission objectives are issue records, so a parallel root namespace duplicates lifecycle, linking, and status concepts. | `issue create --issue-type mission`, `issue show <objective-id>`, `issue status <objective-id>`, `issue link <objective-id> <issue-id> --role advances`, and `issue transition <objective-id> close --reason "..."`. |
 | Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`, `update`, `block`, `unblock`, `relate`, `related`, and `tree` | Remove | Duplicate verbs make the command surface harder to learn and easier to misroute. | `issue` owns issue lifecycle, blockers, links, detail, and objective status. |
 | Generic link root | Remove | Relationship ownership belongs to record-specific commands, and the generic surface misrepresents mission support. | Mission work links use `issue link/unlink`; issue blockers and links use issue commands; evidence uses evidence commands; issue detail/status inspect impact. Attempts to run the removed root command fail with corrective guidance naming those record-specific homes. |
 | Backup `import` plus `export --format json|markdown` | Remove | Backup-oriented predecessor formats are not the target durable contract. | `init --import-beads` and temporarily hidden/manual `import-beads` for migration. |
@@ -471,7 +471,8 @@ surface is `delete` unless it is in the core list above.
 
 Removed command surfaces:
 
-- `issue show <objective-id>`; use `issue show <objective-id>`.
+- The `mission` root namespace; use type-aware `atelier issue ...` commands for
+  mission objectives.
 - The normal `work start` and `work status` group; use status, issue workflow
   detail, and transition output instead.
 - Flat issue aliases such as `create`, `show`, `list`, `ready`, `close`,

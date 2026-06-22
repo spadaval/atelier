@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use std::path::Path;
 
 use crate::command_storage::{command_storage, CommandStorage, CommandStorageAccess};
-use atelier_core::{EvidenceRecord, EvidenceRecordData, MissionRecord, MissionSections, Record};
+use atelier_core::{EvidenceRecord, EvidenceRecordData, Record};
 use atelier_records::{CanonicalIssueRecord, RecordStore};
 use atelier_sqlite::Database;
 
@@ -63,13 +63,6 @@ pub fn load_canonical_record(state_dir: &Path, kind: &str, id: &str) -> Result<R
     RecordStore::new(state_dir).load_record_by_id(kind, id)
 }
 
-pub fn load_canonical_mission(state_dir: &Path, id: &str) -> Result<MissionRecord> {
-    match load_canonical_record(state_dir, "mission", id)? {
-        Record::Mission(record) => Ok(record),
-        other => bail!("Expected mission record {id}, found {}", other.kind()),
-    }
-}
-
 pub fn load_canonical_evidence(state_dir: &Path, id: &str) -> Result<EvidenceRecord> {
     match load_canonical_record(state_dir, "evidence", id)? {
         Record::Evidence(record) => Ok(record),
@@ -87,15 +80,6 @@ pub fn write_canonical_issue(state_dir: &Path, record: &CanonicalIssueRecord) ->
 
 pub fn write_canonical_record(state_dir: &Path, record: &Record) -> Result<()> {
     RecordStore::new(state_dir).write_record_atomic(record)
-}
-
-pub fn create_mission_record(
-    state_dir: &Path,
-    title: &str,
-    status: &str,
-    sections: MissionSections,
-) -> Result<MissionRecord> {
-    RecordStore::new(state_dir).create_mission(title, status, sections)
 }
 
 pub fn create_evidence_record(
@@ -229,7 +213,7 @@ fn wrong_kind_message(expected_kind: &str, actual_kind: &str, id: &str) -> Strin
 fn show_command_for_kind(kind: &str) -> Option<&'static str> {
     match kind {
         "issue" | "epic" => Some("atelier issue show"),
-        "mission" => Some("atelier mission show"),
+        "mission" => Some("atelier issue show"),
         "evidence" => Some("atelier evidence show"),
         _ => None,
     }

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use std::collections::BTreeSet;
 
 use crate::commands;
@@ -314,20 +314,8 @@ pub(crate) fn open_objective_work(db: &Database, mission_id: &str) -> Result<Vec
 }
 
 pub(crate) fn mission_issue_ids(db: &Database, mission_id: &str) -> Result<BTreeSet<String>> {
-    if mission_objective_kind(db, mission_id)? == "issue" {
-        return issue_descendant_ids(db, mission_id);
-    }
-
-    let mut issue_ids = BTreeSet::new();
-    for link in db.list_record_links("mission", mission_id)? {
-        let Some((kind, linked_id)) = other_side(&link, "mission", mission_id) else {
-            continue;
-        };
-        if kind == "issue" && link.relation_type == "advances" {
-            collect_issue_and_descendants(db, linked_id, &mut issue_ids)?;
-        }
-    }
-    Ok(issue_ids)
+    mission_objective_kind(db, mission_id)?;
+    issue_descendant_ids(db, mission_id)
 }
 
 pub(crate) fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<&'static str> {
@@ -337,7 +325,7 @@ pub(crate) fn mission_objective_kind(db: &Database, mission_id: &str) -> Result<
     {
         Ok("issue")
     } else {
-        Ok("mission")
+        bail!("{mission_id} is not a mission objective issue")
     }
 }
 

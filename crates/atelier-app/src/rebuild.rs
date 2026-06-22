@@ -1239,21 +1239,13 @@ mod tests {
 
     #[test]
     fn rebuild_round_trips_canonical_domain_records() {
-        let (_db, dir) = setup_test_db();
+        let (db, dir) = setup_test_db();
+        let mission_id = db
+            .create_issue_with_type("Mission", Some("Mission body"), "medium", "mission")
+            .unwrap();
         let state_dir = dir.path().join(".atelier");
+        export::run_canonical(&db, &state_dir, false).unwrap();
         let store = record_store::RecordStore::new(&state_dir);
-        let mission_sections = record_store::mission_sections_from_inputs(
-            "Mission",
-            Some("Mission body"),
-            vec!["keep contract".to_string()],
-            Vec::new(),
-            Vec::new(),
-        );
-        let mission_id = store
-            .create_mission("Mission", "ready", mission_sections)
-            .unwrap()
-            .header
-            .id;
         let evidence_id = store
             .create_evidence(
                 "Evidence",
@@ -1288,20 +1280,19 @@ mod tests {
             .add_attachment_relationship(
                 "evidence",
                 &evidence_id,
-                "mission",
+                "issue",
                 &mission_id,
                 "validates",
             )
             .unwrap();
 
-        let mission_path = state_dir.join("missions").join(format!("{mission_id}.md"));
+        let mission_path = state_dir.join("issues").join(format!("{mission_id}.md"));
         let mission_markdown = fs::read_to_string(&mission_path).unwrap();
-        assert!(mission_markdown.contains("schema: \"atelier.mission\""));
+        assert!(mission_markdown.contains("schema: \"atelier.issue\""));
         assert!(mission_markdown.contains("schema_version: 1"));
+        assert!(mission_markdown.contains("issue_type: \"mission\""));
         assert!(!mission_markdown.contains("\ndata: "));
-        assert!(mission_markdown.contains("labels:\n- \"mission\"\n"));
-        assert!(mission_markdown.contains("## Intent\n\nMission body"));
-        assert!(mission_markdown.contains("## Constraints\n\n- keep contract"));
+        assert!(mission_markdown.contains("## Description\n\nMission body"));
         assert!(!mission_markdown.contains(&format!("id: \"{evidence_id}\"")));
 
         let evidence_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
@@ -1312,19 +1303,19 @@ mod tests {
         run(&state_dir, &rebuilt_path).unwrap();
         let rebuilt = Database::open(&rebuilt_path).unwrap();
 
-        let mission = rebuilt.get_record("mission", &mission_id).unwrap().unwrap();
+        let mission = rebuilt.get_issue(&mission_id).unwrap().unwrap();
         assert_eq!(mission.title, "Mission");
-        assert_eq!(mission.kind, "mission");
+        assert_eq!(mission.issue_type, "mission");
         assert!(rebuilt
             .get_record("evidence", &evidence_id)
             .unwrap()
             .is_some());
 
-        let mission_links = rebuilt.list_record_links("mission", &mission_id).unwrap();
+        let mission_links = rebuilt.list_record_links("issue", &mission_id).unwrap();
         assert!(mission_links.iter().any(|link| {
             link.source_kind == "evidence"
                 && link.source_id == evidence_id
-                && link.target_kind == "mission"
+                && link.target_kind == "issue"
                 && link.target_id == mission_id
                 && link.relation_type == "validates"
         }));
@@ -1348,26 +1339,44 @@ mod tests {
         let state_dir = dir.path().join(".atelier");
         export::run_canonical(&db, &state_dir, false).unwrap();
         let store = record_store::RecordStore::new(&state_dir);
-        let mission_sections = record_store::mission_sections_from_inputs(
-            "Mission",
-            Some("Mission body"),
-            vec!["global ID collision is rejected".to_string()],
-            Vec::new(),
-            Vec::new(),
-        );
-        let mission_id = store
-            .create_mission("Mission", "ready", mission_sections)
+        let evidence_id = store
+            .create_evidence(
+                "Evidence",
+                "recorded",
+                "Evidence body",
+                atelier_core::EvidenceRecordData {
+                    evidence_type: "test".to_string(),
+                    captured_at: chrono::DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                    command: None,
+                    path: None,
+                    uri: None,
+                    producer: None,
+                    proof_scope: None,
+                    agent_identity: None,
+                    independence_level: None,
+                    residual_risks: Vec::new(),
+                    follow_up_ids: Vec::new(),
+                    exit_code: None,
+                    exit_status: None,
+                    success: Some(true),
+                    spawn_error: None,
+                    output: None,
+                    target: None,
+                },
+            )
             .unwrap()
             .header
             .id;
 
-        let old_path = state_dir.join("missions").join(format!("{mission_id}.md"));
-        let new_path = state_dir.join("missions").join(format!("{issue_id}.md"));
-        let mission_markdown = fs::read_to_string(&old_path).unwrap().replace(
-            &format!("id: \"{mission_id}\""),
+        let old_path = state_dir.join("evidence").join(format!("{evidence_id}.md"));
+        let new_path = state_dir.join("evidence").join(format!("{issue_id}.md"));
+        let evidence_markdown = fs::read_to_string(&old_path).unwrap().replace(
+            &format!("id: \"{evidence_id}\""),
             &format!("id: \"{issue_id}\""),
         );
-        fs::write(&new_path, mission_markdown).unwrap();
+        fs::write(&new_path, evidence_markdown).unwrap();
         fs::remove_file(old_path).unwrap();
 
         let error = run(&state_dir, &dir.path().join(".atelier/runtime/state.db")).unwrap_err();

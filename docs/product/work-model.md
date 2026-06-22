@@ -310,8 +310,9 @@ This abbreviated escaped-JSON shape is rejected as an authoring contract:
 ---
 id: "atelier-tcmr"
 data: "{\"constraints\":[\"Use sectioned issue Markdown.\"],\"risks\":[\"Large rework can sprawl.\"],\"validation\":[\"Completion requires evidence.\"],\"work\":[]}"
-schema: "atelier.mission"
+schema: "atelier.issue"
 schema_version: 1
+issue_type: "mission"
 status: "ready"
 title: "Repair CLI workflow rework and validation gaps"
 ---
@@ -344,8 +345,9 @@ relationships:
   - kind: "issue"
     id: "atelier-gjaz"
     type: "advances"
-schema: "atelier.mission"
+schema: "atelier.issue"
 schema_version: 1
+issue_type: "mission"
 status: "ready"
 title: "Repair CLI workflow rework and validation gaps"
 ---

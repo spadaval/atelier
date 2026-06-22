@@ -447,9 +447,6 @@ fn issue_summary(db: &Database, issue: Issue) -> Result<IssueSummary> {
 }
 
 pub fn show(db: &Database, issue_ref: &str) -> Result<()> {
-    if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
-        return crate::commands::mission::show(db, issue_ref);
-    }
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let (object, degraded) = match canonical_issue_detail(&id) {
@@ -580,9 +577,6 @@ fn render_branch_lifecycle_context(db: &Database, canonical_id: &str) -> Result<
 }
 
 pub fn transition_options(db: &Database, issue_ref: &str) -> Result<()> {
-    if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
-        return crate::commands::mission::transition_options(db, issue_ref);
-    }
     let id = resolve_id(db, issue_ref)?;
     let issue = db.require_issue(&id)?;
     let options = crate::commands::workflow::issue_transition_options(db, issue_ref)?;
@@ -2200,11 +2194,6 @@ pub fn dep_list(db: &Database, issue_ref: Option<&str>) -> Result<()> {
 }
 
 pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
-    if let Some(issue_ref) = issue_ref {
-        if db.record_kind_for_id(issue_ref)?.as_deref() == Some("mission") {
-            return lint_mission_record(issue_ref);
-        }
-    }
     let outcome = atelier_app::lint::lint(atelier_app::Request {
         input: atelier_app::lint::LintRequest { db, issue_ref },
     })?;
@@ -2221,24 +2210,6 @@ pub fn lint(db: &Database, issue_ref: Option<&str>) -> Result<()> {
         Ok(())
     } else {
         bail!("Lint failed with {} finding(s)", view.findings.len())
-    }
-}
-
-fn lint_mission_record(id: &str) -> Result<()> {
-    let Some(state_dir) = find_state_dir_from_cwd()? else {
-        bail!("Canonical tracker state is unavailable; run `atelier doctor`.");
-    };
-    match RecordStore::new(&state_dir).load_record_by_id("mission", id) {
-        Ok(Record::Mission(_)) => {
-            println!("Lint passed.");
-            Ok(())
-        }
-        Ok(other) => bail!("Expected mission record {id}, found {}", other.kind()),
-        Err(error) => {
-            println!("Lint found 1 issue(s):");
-            println!("  {id}: Canonical mission Markdown is invalid: {error:#}");
-            bail!("Lint failed with 1 finding(s)")
-        }
     }
 }
 

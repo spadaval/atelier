@@ -109,7 +109,7 @@ The canonical file path is derived from the record ID:
 | Record kind | ID format | Path |
 | --- | --- | --- |
 | Issue | `atelier-z1p8` | `.atelier/issues/atelier-z1p8.md` |
-| Mission | `atelier-k7mq` | `.atelier/missions/atelier-k7mq.md` |
+| Mission objective | `atelier-k7mq` | `.atelier/issues/atelier-k7mq.md` with `issue_type: "mission"` |
 | Evidence | `atelier-n8da` | `.atelier/evidence/atelier-n8da.md` |
 
 IDs use `<project-slug>-<random-base36>`. The project slug is lowercase ASCII
@@ -381,71 +381,29 @@ before the first recognized heading is rejected, including comments, prose,
 lists, or blank-looking non-whitespace content. Blank lines immediately after
 front matter and before `## Description` are allowed.
 
-## Missions
+## Mission Objectives
 
-Path: `.atelier/missions/<record-id>.md`
+Path: `.atelier/issues/<record-id>.md`
 
-Mission records use compact YAML front matter for identity, lifecycle state,
-labels, and typed relationships. Human-authored mission content lives in
-sectioned Markdown so review, conflict resolution, and closeout audits work in
-normal diffs.
-
-Allowed mission front matter:
-
-| Field | Type | Rule |
-| --- | --- | --- |
-| `created_at` | string | Required UTC RFC 3339 timestamp. |
-| `id` | string | Required and must match the filename stem. |
-| `labels` | array | Required; sorted lexically. |
-| `relationships` | object | Required; contains `attachments`, `blocks`, `children`, and `relates`. |
-| `schema` | string | Required; exactly `atelier.mission`. |
-| `schema_version` | integer | Required; exactly `1` until a migration changes it. |
-| `status` | string | Required; one of `draft`, `ready`, `active`, `superseded`, or `closed`. |
-| `title` | string | Required human-readable mission title. |
-| `updated_at` | string | Required UTC RFC 3339 timestamp. |
-
-No mission-specific scalar, array, or escaped structured field is allowed in
-front matter. In particular, `data`, `constraints`, `risks`, `validation`,
-`validation_expectations`, `current_risks`, `work`, `plans`, `milestones`,
-`evidence`, `blockers`, and `terminal_notes` are rejected as mission front
-matter keys. Writers must not serialize mission semantics as quoted JSON.
-
-Mission body sections are exact, case-sensitive level-two Markdown headings.
-They render in this deterministic order:
-
-1. `## Intent` (required): the mission narrative, objective, scope, and useful
-   background.
-2. `## Constraints` (required): ordered constraints. Use `- None.` only when the
-   mission intentionally has no constraints yet.
-3. `## Risks` (required): ordered current risks. Use `- None.` only when there
-   are no known risks.
-4. `## Validation` (required): ordered mission validation expectations and
-   closeout proof requirements.
-5. `## Terminal Notes` (optional): final audit notes, waivers, residual risks,
-   or closure rationale. Closed missions should include it when the terminal
-   context is not fully captured by evidence records.
-6. `## Notes` (optional): handoff context or non-contract background that does
-   not belong in constraints, risks, validation, or closeout.
-
-Every present section must contain non-whitespace content before the next
-recognized section or end of file. Duplicate mission sections are rebuild and
-lint errors. Unknown level-two headings are rejected so mission-significant
-content cannot hide under unmodeled section names; use level-three or deeper
-headings inside a recognized section for local structure.
+Missions are issue records whose front matter declares `issue_type: "mission"`.
+There is no `.atelier/missions/` directory and no `atelier.mission` schema in
+the target storage contract. Mission objectives use the same issue schema,
+section rules, activity sidecars, evidence links, and workflow policy as other
+issues, with type-aware status and transition behavior supplied by workflow
+configuration.
 
 Mission relationship semantics are explicit:
 
 | Mission concept | Canonical location |
 | --- | --- |
-| Linked execution work, including epics, tasks, reviews, validations, artifact updates, and closeouts | Mission-typed issue `relationships.relates[]` entries with `kind: issue` and `type: advances`. |
-| Direct mission blockers | Mission-typed issue `relationships.relates[]` entries with `kind: issue` and `type: blocked_by`. Linked work item blockers remain ordinary issue dependency edges and are projected into objective status; do not duplicate them in mission prose. |
+| Linked execution work, including epics, tasks, reviews, validations, artifact updates, and closeouts | Mission issue `relationships.relates[]` entries with `kind: issue` and `type: advances`. |
+| Direct mission blockers | Mission issue `relationships.relates[]` entries with `kind: issue` and `type: blocked_by`. Linked work item blockers remain ordinary issue dependency edges and are projected into objective status; do not duplicate them in mission prose. |
 | Checkpoints | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 milestone relationship table exists. |
 | Plans | Prose or repository Markdown paths inside mission, epic, issue, or evidence bodies. No v1 plan relationship table exists. |
-| Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission-typed issue with a `relationships.attachments[]` entry using `kind: issue`, the mission ID, and `role: validates`. Objective status derives incoming evidence links instead of storing evidence summaries in the mission body. |
-| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission-typed issue `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
-| Terminal notes | The optional `## Terminal Notes` section; terminal proof remains evidence records plus workflow validation output. |
+| Evidence | Evidence records under `.atelier/evidence/<id>.md`; the evidence record links to the mission issue with a `relationships.attachments[]` entry using `kind: issue`, the mission ID, and `role: validates`. Objective status derives incoming evidence links instead of storing evidence summaries in the mission body. |
+| Supporting records that are not mission work, blockers, planning/checkpoint prose, or evidence | Mission issue `relationships.relates[]` entries with a precise semantic `type` such as `related`, `derived_from`, or `supersedes`; they are not counted as linked work by default. |
+| Terminal notes | Workflow transition activity and optional issue notes; terminal proof remains evidence records plus workflow validation output. |
 
-For mission records, `relationships.children` is reserved and should be `[]`.
 Mission work is not issue hierarchy. `relationships.blocks` keeps its common
 meaning: the source record blocks the target. It is not the mission's
 `blocked_by` list.
@@ -462,8 +420,9 @@ relationships:
   blocks: []
   children: []
   relates: []
-schema: "atelier.mission"
+schema: "atelier.issue"
 schema_version: 1
+issue_type: "mission"
 status: "ready"
 title: "Repair CLI workflow rework and validation gaps"
 updated_at: "2026-06-12T19:19:18Z"
@@ -494,33 +453,23 @@ relationships:
   - kind: "issue"
     id: "atelier-gjaz"
     type: "advances"
-schema: "atelier.mission"
+schema: "atelier.issue"
 schema_version: 1
+issue_type: "mission"
 status: "ready"
 title: "Repair CLI workflow rework and validation gaps"
 updated_at: "2026-06-12T19:19:18Z"
 ---
 
-## Intent
+## Description
 
 Repair the CLI workflow and validation gaps so mission closeout can be audited
 from canonical records and focused command output.
 
-## Constraints
+## Outcome
 
-- Use sectioned issue Markdown for repair work.
-- Every repair item must name observable behavior and evidence before it can
-  close.
-
-## Risks
-
-- Large rework can sprawl unless grouped under explicit blockers and
-  validation.
-
-## Validation
-
-- Mission closeout requires linked work closed, validation evidence attached,
-  workflow validators passing, and tracker lint/doctor checks passing.
+Mission closeout requires linked work closed, validation evidence attached,
+workflow validators passing, and tracker lint checks passing.
 
 Planning notes: see `docs/plans/cli-workflow-repair.md`.
 Checkpoint criteria: closeout proof must show every linked work item closed and
@@ -528,12 +477,12 @@ mission evidence attached.
 ```
 
 A validating evidence record carries this relationship fragment instead of
-copying evidence into mission front matter or prose:
+copying evidence into mission issue front matter or prose:
 
 ```yaml
 relationships:
   attachments:
-  - kind: "mission"
+  - kind: "issue"
     id: "atelier-tcmr"
     role: "validates"
   blocks: []

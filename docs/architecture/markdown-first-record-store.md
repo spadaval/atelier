@@ -153,7 +153,7 @@ tokens; `review` and `validation` are workflow statuses in the active category.
 | Compatibility-only | None in canonical Markdown. |
 | Forbidden | Escaped mission `data` payloads, front matter keys such as `constraints`, `risks`, `validation`, `work`, `plans`, `milestones`, `evidence`, `blockers`, or `terminal_notes`, and any second relationship surface for work, blockers, plans, checkpoints, or evidence. Mission prose may reference plan/checkpoint Markdown by path, but must not become a shadow graph. |
 
-Mission status is mission-lifecycle state, not issue workflow state. The current
+Mission objective status is type-aware issue workflow state. The current
 durable vocabulary is `draft`, `ready`, `active`, `superseded`, and `closed`.
 
 ### Deferred Plan Records
@@ -222,7 +222,7 @@ current committed records against the target contract above.
 | Sample | Record kind | Result | Notes |
 | --- | --- | --- | --- |
 | `.atelier/issues/atelier-x45p.md` | Issue | Pass | Uses required issue front matter plus `Description`/`Outcome` and optional `Evidence`; blocker intent lives in `relationships.blocks`; durable priority/status tokens are `P1` and `todo`. |
-| `.atelier/missions/atelier-man9.md` | Mission | Pass | Uses mission required sections and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
+| `.atelier/issues/atelier-man9.md` | Mission objective | Pass | Uses `schema: "atelier.issue"` with `issue_type: "mission"` and `relationships.relates[]` `type: advances` links for work. No escaped JSON mission payload remains. |
 | `.atelier/evidence/atelier-06rb.md` | Evidence | Fail (forbidden payload residue present) | The record uses canonical `relationships.attachments[] role=validates`, but it still stores proof metadata in escaped `data` instead of owned first-class fields such as `evidence_type`, `captured_at`, and `proof_scope`. |
 | `.atelier/issues/atelier-0001.activity/20260611T204233793564Z.md` | Activity sidecar | Pass | Uses required activity front matter. Event payload keys `field`, `old`, and `new` are acceptable event-specific detail, not a second relationship or status model. |
 | `.atelier/config.toml` | Project config/runtime boundary | Pass | Tracks canonical path ownership without committed runtime/cache or compatibility-state path settings. |
@@ -415,9 +415,9 @@ Audit date: 2026-06-11. The current command surface has three write classes:
 | Issue create/update/close/reopen/comment/label/unlabel/block/unblock/relate/unrelate/subissue/quick | RecordStore-owned Markdown-first | Public commands write canonical issue Markdown or activity sidecars first, then refresh the SQLite projection. Compatibility SQLite issue mutation helpers remain only for legacy tests/import internals. |
 | Issue delete and close-all | RecordStore-owned Markdown-first | Delete removes canonical issue Markdown before projection refresh. Close-all rewrites matching canonical issues through the lifecycle close path. |
 | `dep add` and `dep remove` | RecordStore-owned Markdown-first | Top-level Agent Factory dependency aliases mutate canonical issue relationship front matter before projection refresh. `dep list` is query-only and checks projection freshness. |
-| Mission create/update/add-work/add-blocker | RecordStore-owned Markdown-first | Mission records and cross-record links write canonical mission Markdown and relationships before projection refresh. |
+| Mission objective create/update/link/block | RecordStore-owned Markdown-first | Mission objectives are issue records with `issue_type: "mission"`; issue links and blockers write canonical issue Markdown and relationships before projection refresh. |
 | Plan create/revise/link | Removed/deferred | V1 plans are ordinary Markdown artifacts or prose references, not `.atelier/plans/` records. |
-| Bundle apply | RecordStore-owned Markdown-first | Bundle apply writes issue, mission, evidence, and relationship records through staged canonical Markdown, then refreshes projection after successful writes. |
+| Bundle apply | RecordStore-owned Markdown-first | Bundle apply writes issue-backed missions, ordinary issues, evidence, and relationship records through staged canonical Markdown, then refreshes projection after successful writes. |
 | Evidence add/attach | RecordStore-owned Markdown-first | Evidence records and attachment links write canonical evidence Markdown and relationships before projection refresh. Issue evidence attachments also write issue activity sidecars. |
 | Typed record links, labels, and dependencies | RecordStore-owned Markdown-first | Rebuild derives labels, dependency edges, typed relations, hierarchy, and record links from canonical relationship front matter. |
 | Workflow validate | Runtime/query-only | Built-in validators read projection state and do not persist validator-result records. `workflow_validator` is registered as a future non-canonical record kind only. |

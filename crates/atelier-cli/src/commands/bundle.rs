@@ -180,7 +180,7 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         if !refs.insert(client_ref.clone()) {
             bail!("Duplicate client_ref '{}'", client_ref);
         }
-        if kind == "issue" {
+        if matches!(kind, "issue" | "mission") {
             continue;
         }
         validate_record_kind(kind)?;
@@ -741,7 +741,7 @@ fn resolve_existing_ref(db: &Database, id: &str) -> Result<ResolvedRef> {
             id: issue_id,
         });
     }
-    for kind in ["mission", "evidence", "workflow_validator"] {
+    for kind in ["evidence", "workflow_validator"] {
         if db.get_record(kind, id)?.is_some() {
             return Ok(ResolvedRef {
                 kind: kind.to_string(),

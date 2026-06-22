@@ -90,7 +90,7 @@ pub fn link_issue(
     } else if source.kind == "issue" && target.kind == "issue" {
         store.add_issue_relation(&source.id, &target.id, role)?
     } else {
-        store.add_record_relationship(&source.kind, &source.id, &target.kind, &target.id, role)?
+        bail!("issue link only supports issue records");
     };
     drop(db);
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
@@ -180,19 +180,8 @@ pub fn unlink_issue(
         store.remove_issue_block(&source.id, &target.id)?
     } else if source.kind == "issue" && target.kind == "issue" {
         store.remove_issue_relation(&source.id, &target.id, role)?
-    } else if source.kind == "mission" {
-        store.remove_relates_relationship(
-            &source.kind,
-            &source.id,
-            &target.kind,
-            &target.id,
-            role,
-        )?
     } else {
-        bail!(
-            "Removing {role} links from {} records is not supported",
-            source.kind
-        );
+        bail!("issue unlink only supports issue records");
     };
     drop(db);
     app_use_cases::refresh_after_canonical_write(state_dir, db_path)?;
@@ -213,15 +202,9 @@ fn resolve_link_endpoint(db: &Database, reference: &str) -> Result<LinkEndpoint>
         });
     }
     if let Some(kind) = db.record_kind_for_id(reference)? {
-        if kind == "mission" {
-            return Ok(LinkEndpoint {
-                kind,
-                id: reference.to_string(),
-            });
-        }
-        bail!("{reference} is a {kind} record, not an issue or mission record");
+        bail!("{reference} is a {kind} record, not an issue record");
     }
-    Err(anyhow!("Issue or mission {reference} was not found"))
+    Err(anyhow!("Issue {reference} was not found"))
 }
 
 fn print_link_next_commands(issue_id: &str, target_id: &str) {
