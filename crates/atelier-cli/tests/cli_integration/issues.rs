@@ -2645,7 +2645,7 @@ fn test_issue_list_ready_marks_blocked_parent_headers_as_context() {
     let (success, ready_out, stderr) = run_atelier(dir.path(), &["issue", "list", "--ready"]);
     assert!(success, "ready list failed: {stderr}");
     assert!(
-        ready_out.contains("Blocked parent epic (context; parent blocked)"),
+        ready_out.contains("Blocked parent epic (shown for context; blocked through parent)"),
         "{ready_out}"
     );
     assert!(ready_out.contains("blocked by 1 external blocker"));

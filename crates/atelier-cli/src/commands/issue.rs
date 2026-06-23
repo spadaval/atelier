@@ -9,6 +9,7 @@ use crate::commands::issue_workflow::{
     load_issue_workflow_policy, open_blocker_ids_with_policy,
 };
 use crate::commands::work_order::{order_work_rows, WorkOrderRow};
+use crate::human_output::{self, DisplayRole, StylePolicy};
 use crate::utils::format_issue_id;
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::{Comment, EvidenceRecord, Issue, IssuePriority, Record};
@@ -1392,8 +1393,7 @@ fn render_issue_queue_human(
 ) -> Result<()> {
     let rows = order_queue_rows(items);
 
-    println!("{title}");
-    println!("{}", "=".repeat(title.len()));
+    human_output::print_heading(title);
     println!("{}", queue_summary(&rows));
 
     let mut groups = queue_groups(db, rows)?;
@@ -1631,10 +1631,14 @@ fn print_queue_group(group: QueueGroup, show_status: bool) {
         _ => group.title,
     };
     if group.id.is_some() && !group.external_blockers.is_empty() {
-        heading.push_str(" (context; parent blocked)");
+        let policy = StylePolicy::plain();
+        heading.push_str(&format!(
+            " ({}; {})",
+            DisplayRole::ContextOnly.render(policy),
+            DisplayRole::BlockedThroughParent.render(policy)
+        ));
     }
-    println!("\n{heading}");
-    println!("{}", "-".repeat(heading.len()));
+    println!("\n{}", human_output::section_heading(&heading));
     if !group.external_blockers.is_empty() {
         let group_id = group.id.as_deref().unwrap_or("<id>");
         println!(

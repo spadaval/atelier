@@ -12,7 +12,13 @@ use super::harness::SmokeHarness;
 fn test_issue_status_with_subissues() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["issue", "create", "Parent lifecycle issue"]);
+    h.run_ok(&[
+        "issue",
+        "create",
+        "Parent lifecycle issue",
+        "--issue-type",
+        "epic",
+    ]);
     let parent_id = h.issue_id(1);
     h.run_ok(&[
         "issue",
@@ -28,19 +34,17 @@ fn test_issue_status_with_subissues() {
 }
 
 #[test]
-fn test_issue_status_deep_nesting() {
+fn test_issue_create_rejects_deep_task_nesting() {
     let h = SmokeHarness::new();
 
-    h.run_ok(&["issue", "create", "Root issue"]);
+    h.run_ok(&["issue", "create", "Root issue", "--issue-type", "epic"]);
     let root_id = h.issue_id(1);
     h.run_ok(&["issue", "create", "Child issue", "--parent", &root_id]);
     let child_id = h.issue_id(2);
-    h.run_ok(&["issue", "create", "Grandchild issue", "--parent", &child_id]);
+    let result = h.run(&["issue", "create", "Grandchild issue", "--parent", &child_id]);
 
-    let status = h.run_ok(&["issue", "status", &root_id]);
-    assert!(status.stdout.contains("Root issue"));
-    assert!(status.stdout.contains("Child issue"));
-    assert!(status.stdout.contains("Grandchild issue"));
+    assert!(!result.success);
+    assert!(result.stderr.contains("only epics can own child work"));
 }
 
 #[test]

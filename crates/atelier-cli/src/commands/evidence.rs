@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use crate::human_output;
 use atelier_app::use_cases as app_use_cases;
 use atelier_core::{
     EvidenceOutputSummary, EvidenceRecord, EvidenceRecordData, EvidenceStreamSummary,
@@ -356,8 +357,7 @@ pub fn print_record(db: &Database, record: &EvidenceRecord) -> Result<()> {
 }
 
 fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
+    human_output::print_section_heading(title);
 }
 
 fn evidence_record_data(record: &EvidenceRecord) -> EvidenceRecordData {

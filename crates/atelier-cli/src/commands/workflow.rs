@@ -9,6 +9,7 @@ use std::process::Command;
 use std::time::Instant;
 
 use crate::commands::issue::issue_evidence_gate_status;
+use crate::human_output::{self, DecisionState, StylePolicy};
 use atelier_app::forgejo::{ForgejoClient, UreqForgejoTransport};
 use atelier_app::pr as app_pr;
 use atelier_app::project_config::{ProjectConfig, ReviewConfig, ReviewProviderKind};
@@ -1643,11 +1644,16 @@ pub fn print_issue_transition_options(
         }
     }
     for option in options {
+        let decision = if option.allowed {
+            DecisionState::Allowed
+        } else {
+            DecisionState::Blocked
+        };
         println!();
         println!(
             "{} [{}]",
             option.name,
-            if option.allowed { "allowed" } else { "blocked" }
+            decision.render(StylePolicy::plain())
         );
         println!("  From: {}", option.from.join(", "));
         println!("  To:   {}", option.to);
@@ -1877,9 +1883,14 @@ fn print_transition_detail(title: &str, results: &[ValidatorResult]) {
         return;
     }
     for result in results {
+        let decision = if result.passed {
+            DecisionState::Pass
+        } else {
+            DecisionState::Fail
+        };
         println!(
             "  {}  {}",
-            if result.passed { "pass" } else { "fail" },
+            decision.render(StylePolicy::plain()),
             result.validator
         );
         println!("      {}", result.reason);
@@ -1948,8 +1959,7 @@ pub(crate) fn mission_terminal_validators() -> &'static [&'static str] {
 }
 
 fn print_heading(title: &str) {
-    println!("{title}");
-    println!("{}", "-".repeat(title.len()));
+    human_output::print_section_heading(title);
 }
 
 pub(crate) fn ensure_transitionable_status(
