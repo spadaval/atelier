@@ -1,7 +1,7 @@
 ---
 created_at: "2026-06-13T20:44:46.646892265+00:00"
 id: "atelier-c9ej"
-issue_type: "task"
+issue_type: "epic"
 labels:
 - "assignee:root"
 - "docs"

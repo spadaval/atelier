@@ -118,7 +118,10 @@ fn test_create_subissue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent issue"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent issue", "--issue-type", "epic"],
+    );
     let parent_id = issue_ref(dir.path(), 1);
     let (success, stdout, _) = run_atelier(
         dir.path(),
@@ -141,6 +144,116 @@ fn test_create_subissue() {
 }
 
 #[test]
+fn test_issue_create_rejects_invalid_hierarchy_shapes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let epic_id = issue_id_by_title(dir.path(), "Parent epic");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Mission child",
+            "--issue-type",
+            "mission",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(!success, "mission child should be rejected");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("mission issue")
+            && stderr.contains("cannot have parent"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Epic child",
+            "--issue-type",
+            "epic",
+            "--parent",
+            &epic_id,
+        ],
+    );
+    assert!(!success, "epic child should be rejected");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("epic issue")
+            && stderr.contains("cannot have parent"),
+        "{stderr}"
+    );
+
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Task parent"]);
+    assert!(success, "task parent create failed: {stderr}");
+    let task_id = issue_id_by_title(dir.path(), "Task parent");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Task child", "--parent", &task_id],
+    );
+    assert!(!success, "task parent should be rejected");
+    assert!(stderr.contains("only epics can own child work"), "{stderr}");
+}
+
+#[test]
+fn test_issue_update_and_lint_reject_invalid_hierarchy_shapes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent epic", "--issue-type", "epic"],
+    );
+    assert!(success, "epic create failed: {stderr}");
+    let parent_id = issue_id_by_title(dir.path(), "Parent epic");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Child work", "--parent", &parent_id],
+    );
+    assert!(success, "child create failed: {stderr}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "update", &parent_id, "--issue-type", "task"],
+    );
+    assert!(!success, "parent with children should not become task");
+    assert!(
+        stderr.contains("workflow_issue_hierarchy_invalid")
+            && stderr.contains("cannot own child work"),
+        "{stderr}"
+    );
+
+    let parent_path = canonical_issue_path(dir.path(), &parent_id);
+    let parent_markdown = std::fs::read_to_string(&parent_path).unwrap();
+    std::fs::write(
+        &parent_path,
+        parent_markdown.replace("issue_type: \"epic\"", "issue_type: \"task\""),
+    )
+    .unwrap();
+
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["lint"]);
+    assert!(!success, "lint should reject corrupted parent type");
+    let transcript = format!("{stdout}\n{stderr}");
+    assert!(
+        transcript.contains("workflow_issue_hierarchy_invalid")
+            && transcript.contains("only epics can own child work"),
+        "{transcript}"
+    );
+}
+
+#[test]
 fn test_create_issue_rejects_work_flag() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
@@ -151,6 +264,113 @@ fn test_create_issue_rejects_work_flag() {
     );
     assert!(!success, "issue create --work should be rejected");
     assert!(stderr.contains("unexpected argument '--work'"));
+}
+
+#[test]
+fn test_configured_custom_issue_link_is_context_only() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    append_custom_issue_links(dir.path(), &["informs"]);
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Context mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    assert!(success, "mission create failed: {stderr}");
+    let mission_id = issue_id_by_title(dir.path(), "Context mission");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Mission work"]);
+    assert!(success, "work create failed: {stderr}");
+    let work_id = issue_id_by_title(dir.path(), "Mission work");
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Context note"]);
+    assert!(success, "context create failed: {stderr}");
+    let context_id = issue_id_by_title(dir.path(), "Context note");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &mission_id, &work_id, "--role", "advances"],
+    );
+    assert!(success, "advances link failed: {stderr}");
+    let (success, link_out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "link",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom link failed: {stderr}");
+    assert!(link_out.contains("Linked"));
+
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(mission_markdown.contains("type: \"advances\""));
+    assert!(mission_markdown.contains("type: \"informs\""));
+
+    let (success, search_out, stderr) = run_atelier(dir.path(), &["search", "informs"]);
+    assert!(success, "search failed: {stderr}");
+    assert!(search_out.contains("Context mission"), "{search_out}");
+    assert!(search_out.contains("Context note"), "{search_out}");
+
+    let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &mission_id]);
+    assert!(success, "show failed: {stderr}");
+    assert!(show_out.contains("informs"), "{show_out}");
+    assert!(show_out.contains("Context note"), "{show_out}");
+
+    let (success, status_out, stderr) = run_atelier(dir.path(), &["issue", "status", &mission_id]);
+    assert!(success, "mission status failed: {stderr}");
+    assert!(status_out.contains("Total: 1"), "{status_out}");
+    assert!(status_out.contains("Mission work"), "{status_out}");
+    assert!(
+        !status_out.contains("Context note"),
+        "custom context links must not count as mission work:\n{status_out}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "unlink",
+            &mission_id,
+            &context_id,
+            "--role",
+            "informs",
+        ],
+    );
+    assert!(success, "custom unlink failed: {stderr}");
+    let mission_markdown = read_canonical_record(dir.path(), "issues", &mission_id);
+    assert!(!mission_markdown.contains("type: \"informs\""));
+}
+
+#[test]
+fn test_unconfigured_custom_issue_link_is_rejected() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+
+    run_atelier(dir.path(), &["issue", "create", "Source issue"]);
+    run_atelier(dir.path(), &["issue", "create", "Target issue"]);
+    let source_id = issue_id_by_title(dir.path(), "Source issue");
+    let target_id = issue_id_by_title(dir.path(), "Target issue");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "link", &source_id, &target_id, "--role", "informs"],
+    );
+
+    assert!(!success, "unconfigured custom role should be rejected");
+    assert!(
+        stderr.contains("Invalid issue link role 'informs'")
+            && stderr.contains("Configured custom context-only roles: (none)")
+            && stderr.contains("[issue_links].custom_context_types"),
+        "{stderr}"
+    );
 }
 
 // ==================== Issue Listing Tests ====================
@@ -175,7 +395,10 @@ fn test_list_issues() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Issue 1"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Issue 1", "--issue-type", "epic"],
+    );
     let parent_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),
@@ -513,7 +736,16 @@ fn test_issue_reference_surfaces_accept_partial_issue_keys() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent key issue"]);
+    run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Parent key issue",
+            "--issue-type",
+            "epic",
+        ],
+    );
     run_atelier(dir.path(), &["issue", "create", "Related key issue"]);
     let parent_id = issue_id_by_title(dir.path(), "Parent key issue");
     let related_id = issue_id_by_title(dir.path(), "Related key issue");
@@ -1007,22 +1239,17 @@ fn test_show_issue_rich_human_output() {
 
     run_atelier(
         dir.path(),
-        &["issue", "create", "Parent issue", "-p", "high"],
-    );
-    let parent_id = issue_ref(dir.path(), 1);
-    run_atelier(
-        dir.path(),
         &[
             "issue",
             "create",
             "Target issue",
-            "--parent",
-            &parent_id,
+            "--issue-type",
+            "epic",
             "-p",
             "medium",
         ],
     );
-    let target_id = issue_ref(dir.path(), 2);
+    let target_id = issue_ref(dir.path(), 1);
     run_atelier(
         dir.path(),
         &[
@@ -1039,12 +1266,12 @@ fn test_show_issue_rich_human_output() {
         dir.path(),
         &["issue", "create", "Blocking issue", "-p", "high"],
     );
-    let blocking_id = issue_ref(dir.path(), 4);
+    let blocking_id = issue_ref(dir.path(), 3);
     run_atelier(
         dir.path(),
         &["issue", "create", "Downstream issue", "-p", "low"],
     );
-    let downstream_id = issue_ref(dir.path(), 5);
+    let downstream_id = issue_ref(dir.path(), 4);
     run_atelier(dir.path(), &["issue", "block", &target_id, &blocking_id]);
     run_atelier(dir.path(), &["issue", "block", &downstream_id, &target_id]);
     run_atelier(dir.path(), &["issue", "note", &target_id, "Recent note"]);
@@ -1057,7 +1284,6 @@ fn test_show_issue_rich_human_output() {
     assert!(stdout.contains("Type:"));
     assert!(stdout.contains("Priority: medium"));
     assert!(stdout.contains(&format!(".atelier/issues/{target_id}.md")));
-    assert!(stdout.contains("Parent issue"));
     assert!(stdout.contains("1 total | status: todo=1 | priority: low=1"));
     assert!(stdout.contains("Blocking issue"));
     assert!(stdout.contains("(open blocker)"));
@@ -1529,7 +1755,10 @@ fn test_history_issue_scope_defaults_single_issue_and_can_include_descendants() 
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Parent history"]);
+    run_atelier(
+        dir.path(),
+        &["issue", "create", "Parent history", "--issue-type", "epic"],
+    );
     let parent_id = issue_id_by_title(dir.path(), "Parent history");
     let (success, _, stderr) = run_atelier(
         dir.path(),

@@ -18,8 +18,6 @@ relationships:
   - kind: "issue"
     id: "atelier-a0fd"
   - kind: "issue"
-    id: "atelier-c9ej"
-  - kind: "issue"
     id: "atelier-e723"
   - kind: "issue"
     id: "atelier-gzel"

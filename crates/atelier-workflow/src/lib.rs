@@ -85,6 +85,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -114,6 +116,8 @@ workflows:
         description: "Start active work on this item."
         validators:
           - git.on_base_branch
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -154,6 +158,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -194,6 +200,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -240,7 +248,7 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "git.worktree_clean",
 ];
 const BUILTIN_ACTIONS: &[&str] = &[
-    "branch_prepare",
+    "branch.prepare",
     "tracker.commit",
     "branch.push",
     "review.merge",
@@ -2582,12 +2590,12 @@ mod tests {
     fn accepts_empty_action_param_object() {
         let policy = valid_policy().replace(
             "        actions:\n          - review.open: { role: worker }",
-            "        actions:\n          - branch_prepare: {}",
+            "        actions:\n          - branch.prepare: {}",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             action_names(&policy.workflows["epic_delivery"].transitions["request_review"].actions),
-            vec!["branch_prepare"]
+            vec!["branch.prepare"]
         );
     }
 

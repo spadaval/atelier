@@ -22,8 +22,6 @@ relationships:
   - kind: "issue"
     id: "atelier-krhk"
   - kind: "issue"
-    id: "atelier-pd0w"
-  - kind: "issue"
     id: "atelier-qxvj"
   - kind: "issue"
     id: "atelier-t79u"

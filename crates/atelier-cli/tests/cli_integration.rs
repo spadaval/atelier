@@ -455,6 +455,21 @@ fn set_prune_canonical_retention_days(dir: &Path, days: u64) {
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 }
 
+fn append_custom_issue_links(dir: &Path, roles: &[&str]) {
+    let path = dir.join(".atelier/config.toml");
+    let values = roles
+        .iter()
+        .map(|role| format!("\"{role}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap_or_else(|error| panic!("failed to open {}: {error}", path.display()));
+    writeln!(file, "\n[issue_links]\ncustom_context_types = [{values}]")
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+}
+
 fn set_issue_description(dir: &Path, issue_id: &str, description: &str) {
     if description.trim().is_empty() {
         return;
@@ -877,18 +892,7 @@ fn write_provider_review_action_workflow(dir: &Path) {
 }
 
 fn write_branch_action_workflow(dir: &Path) {
-    let task_start_without_actions =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n";
-    let task_start_with_prepare =
-        "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        actions:\n          - branch_prepare\n";
-    let epic_start_without_actions = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n";
-    let epic_start_with_prepare = "      start:\n        from: [todo, blocked]\n        to: in_progress\n        description: \"Start active work on this item.\"\n        validators:\n          - git.on_base_branch\n        actions:\n          - branch_prepare\n";
-    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.replacen(
-        task_start_without_actions,
-        task_start_with_prepare,
-        1,
-    );
-    workflow = workflow.replace(epic_start_without_actions, epic_start_with_prepare);
+    let mut workflow = atelier_workflow::STARTER_POLICY_YAML.to_string();
     workflow = workflow.replace(
         "          - tracker.current\n\n  epic_delivery:",
         "          - tracker.current\n        actions:\n          - tracker.commit\n          - branch_integrate\n\n  epic_delivery:",

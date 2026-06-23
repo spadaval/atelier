@@ -18,13 +18,7 @@ relationships:
   - kind: "issue"
     id: "atelier-000h"
   - kind: "issue"
-    id: "atelier-000u"
-  - kind: "issue"
-    id: "atelier-001n"
-  - kind: "issue"
     id: "atelier-0022"
-  - kind: "issue"
-    id: "atelier-0024"
   attachments: []
   relates: []
 schema: "atelier.issue"

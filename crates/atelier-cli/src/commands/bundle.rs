@@ -67,7 +67,7 @@ struct BundleResources {
     #[serde(default)]
     issues: Vec<BundleIssue>,
     #[serde(default)]
-    missions: Vec<BundleMission>,
+    missions: Vec<serde_json::Value>,
     #[serde(default)]
     evidence: Vec<BundleEvidence>,
 }
@@ -96,26 +96,13 @@ struct BundleIssue {
     #[serde(default)]
     blocks: Vec<BundleRef>,
     #[serde(default)]
+    advances: Vec<BundleRef>,
+    #[serde(default)]
     notes: Vec<BundleNote>,
     #[serde(default)]
     outcome: Vec<String>,
     #[serde(default)]
     evidence: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BundleMission {
-    client_ref: String,
-    title: String,
-    #[serde(default)]
-    operation: Option<String>,
-    #[serde(default)]
-    body: Option<String>,
-    #[serde(default)]
-    labels: Vec<String>,
-    #[serde(default)]
-    work: Vec<BundleRef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -173,6 +160,11 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
     if bundle.title.trim().is_empty() {
         bail!("Bundle title cannot be empty");
     }
+    if !bundle.resources.missions.is_empty() {
+        bail!(
+            "resources.missions is no longer supported; author missions in resources.issues with issue_type \"mission\" and advances links"
+        );
+    }
 
     let mut refs = BTreeSet::new();
     for (client_ref, kind) in bundle.client_refs() {
@@ -199,13 +191,7 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         validate_refs_exist(db, bundle, issue.parent.iter(), &issue.client_ref)?;
         validate_refs_exist(db, bundle, issue.depends_on.iter(), &issue.client_ref)?;
         validate_refs_exist(db, bundle, issue.blocks.iter(), &issue.client_ref)?;
-    }
-    for mission in &bundle.resources.missions {
-        validate_operation(mission.operation.as_deref(), &mission.client_ref)?;
-        if mission.title.trim().is_empty() {
-            bail!("Mission {} title cannot be empty", mission.client_ref);
-        }
-        validate_refs_exist(db, bundle, mission.work.iter(), &mission.client_ref)?;
+        validate_refs_exist(db, bundle, issue.advances.iter(), &issue.client_ref)?;
     }
     for evidence in &bundle.resources.evidence {
         validate_operation(evidence.operation.as_deref(), &evidence.client_ref)?;
@@ -237,7 +223,74 @@ fn validate_bundle(db: &Database, bundle: &BundleFile) -> Result<()> {
         }
         validate_refs_exist(db, bundle, evidence.validates.iter(), &evidence.client_ref)?;
     }
+    validate_bundle_hierarchy(db, bundle)?;
     Ok(())
+}
+
+fn validate_bundle_hierarchy(db: &Database, bundle: &BundleFile) -> Result<()> {
+    for issue in &bundle.resources.issues {
+        if issue.issue_type == "mission" {
+            if issue.parent.is_some() {
+                bail!(
+                    "Mission issue {} cannot have parent; use advances links for mission work",
+                    issue.client_ref
+                );
+            }
+        }
+        if issue.issue_type == "epic" {
+            if issue.parent.is_some() {
+                bail!(
+                    "Epic issue {} cannot have parent; epics are root work packages",
+                    issue.client_ref
+                );
+            }
+        }
+        if let Some(parent) = &issue.parent {
+            let parent_type = bundle_issue_type_for_ref(db, bundle, parent)?.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Issue parent for {} must resolve to an issue",
+                    issue.client_ref
+                )
+            })?;
+            if parent_type != "epic" {
+                bail!(
+                    "Issue {} cannot be child of {} parent; only epics can own child work",
+                    issue.client_ref,
+                    parent_type
+                );
+            }
+        }
+        if !issue.advances.is_empty() && issue.issue_type != "mission" {
+            bail!(
+                "Issue {} has advances links but issue_type is {}; only mission issue resources can declare advances",
+                issue.client_ref,
+                issue.issue_type
+            );
+        }
+    }
+    Ok(())
+}
+
+fn bundle_issue_type_for_ref(
+    db: &Database,
+    bundle: &BundleFile,
+    reference: &BundleRef,
+) -> Result<Option<String>> {
+    if let Some(client_ref) = &reference.client_ref {
+        if let Some(issue) = bundle
+            .resources
+            .issues
+            .iter()
+            .find(|issue| &issue.client_ref == client_ref)
+        {
+            return Ok(Some(issue.issue_type.clone()));
+        }
+        return Ok(None);
+    }
+    if let Some(id) = &reference.id {
+        return Ok(db.get_issue(id)?.map(|issue| issue.issue_type));
+    }
+    Ok(None)
 }
 
 fn validate_operation(operation: Option<&str>, client_ref: &str) -> Result<()> {
@@ -408,43 +461,6 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
             }));
     }
 
-    for mission in &bundle.resources.missions {
-        let now = chrono::Utc::now();
-        let id = store.allocate_issue_id()?;
-        let record = CanonicalIssueRecord {
-            issue: Issue {
-                id: id.clone(),
-                title: mission.title.clone(),
-                description: mission.body.clone(),
-                status: workflow_initial_issue_status("mission")?,
-                issue_type: "mission".to_string(),
-                priority: "medium".to_string(),
-                fields: Default::default(),
-                parent_id: None,
-                created_at: now,
-                updated_at: now,
-                closed_at: None,
-            },
-            labels: mission_labels(mission),
-            sections: IssueSections::unchecked_from_body(mission.body.as_deref()),
-            relationships: Relationships::default(),
-        };
-        store.write_issue_atomic(&record)?;
-        resolved.insert(
-            mission.client_ref.clone(),
-            ResolvedRef {
-                kind: "issue".to_string(),
-                id: id.clone(),
-            },
-        );
-        created
-            .entry("issues".to_string())
-            .or_default()
-            .push(json!({
-                "client_ref": mission.client_ref,
-                "id": id,
-            }));
-    }
     for evidence in &bundle.resources.evidence {
         let data = EvidenceRecordData {
             evidence_type: evidence.evidence_type.clone(),
@@ -507,20 +523,14 @@ fn apply_bundle_to_state(db: &Database, state_dir: &Path, bundle: &BundleFile) -
             }
             store.add_issue_block(&blocked.id, &source.id)?;
         }
+        for target in &issue.advances {
+            add_resolved_link(db, &store, bundle, &resolved, &source, target, "advances")?;
+        }
     }
 
     let mut relationship_count = 0usize;
-    for mission in &bundle.resources.missions {
-        let source = resolved_ref(
-            db,
-            bundle,
-            &resolved,
-            &BundleRef::client(&mission.client_ref),
-        )?;
-        for target in &mission.work {
-            add_resolved_link(db, &store, bundle, &resolved, &source, target, "advances")?;
-            relationship_count += 1;
-        }
+    for issue in &bundle.resources.issues {
+        relationship_count += issue.advances.len();
     }
     for evidence in &bundle.resources.evidence {
         let source = resolved_ref(
@@ -643,12 +653,6 @@ impl BundleFile {
         refs.extend(
             self.resources
                 .issues
-                .iter()
-                .map(|record| (record.client_ref.clone(), "issue")),
-        );
-        refs.extend(
-            self.resources
-                .missions
                 .iter()
                 .map(|record| (record.client_ref.clone(), "issue")),
         );
@@ -950,12 +954,6 @@ fn sorted(mut values: Vec<String>) -> Vec<String> {
     values.sort();
     values.dedup();
     values
-}
-
-fn mission_labels(mission: &BundleMission) -> Vec<String> {
-    let mut labels = mission.labels.clone();
-    labels.push("mission".to_string());
-    sorted(labels)
 }
 
 fn created_key(kind: &str) -> &str {

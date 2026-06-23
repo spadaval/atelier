@@ -26,8 +26,6 @@ relationships:
   - kind: "issue"
     id: "atelier-po2n"
   - kind: "issue"
-    id: "atelier-r4cf"
-  - kind: "issue"
     id: "atelier-tfn8"
   - kind: "issue"
     id: "atelier-z6sc"

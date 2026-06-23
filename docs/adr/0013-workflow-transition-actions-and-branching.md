@@ -46,7 +46,7 @@ context is computed from the work graph plus repository branch policy.
 
 4. The v1 built-in action families are exact and closed.
    Version 1 recognizes only these configured action families:
-   - `branch_prepare`: create or check out the workflow-derived owner branch.
+   - `branch.prepare`: create or check out the workflow-derived owner branch.
    - `branch_commit`: commit the transition's canonical tracker changes on the
      workflow-derived owner branch.
    - `branch_integrate`: integrate the owner branch to the configured base

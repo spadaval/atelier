@@ -12,7 +12,7 @@ pub(crate) fn action_preflight_blockers(
     planned_actions
         .iter()
         .filter_map(|action| match action.name.as_str() {
-            "branch_prepare" => branch_prepare_preflight(repo_root, action),
+            "branch.prepare" => branch_prepare_preflight(repo_root, action),
             "tracker.commit" | "branch.push" | "review.merge" | "base.sync"
             | "branch_integrate" => branch_post_action_preflight(repo_root, action),
             "review.open" => review_open_preflight(repo_root, action),

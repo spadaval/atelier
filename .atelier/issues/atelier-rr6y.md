@@ -10,11 +10,7 @@ labels:
 priority: "P1"
 relationships:
   blocks: []
-  children:
-  - kind: "issue"
-    id: "atelier-64w5"
-  - kind: "issue"
-    id: "atelier-ncog"
+  children: []
   attachments: []
   relates: []
 schema: "atelier.issue"

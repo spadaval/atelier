@@ -65,7 +65,14 @@ pub fn issue_transition_options(
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let mut blockers =
             crate::commands::workflow::required_field_failures(&record, transition, None)?;
-        blockers.extend(branch_context_blockers(db, &issue, name, transition)?);
+        let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
+        blockers.extend(branch_context_blockers(
+            db,
+            &issue,
+            name,
+            transition,
+            &planned_actions,
+        )?);
         let validator_results = crate::commands::workflow::evaluate_policy_transition(
             db,
             &policy,
@@ -81,8 +88,7 @@ pub fn issue_transition_options(
                 .map(|result| format!("validator {} failed: {}", result.validator, result.reason)),
         );
         let mut descriptions = transition_descriptions(transition);
-        descriptions.extend(branch_context_guidance(db, &issue, name)?);
-        let planned_actions = plan_transition_actions(db, &issue, name, transition)?;
+        descriptions.extend(branch_context_guidance(db, &issue, name, &planned_actions)?);
         blockers.extend(crate::commands::workflow::action_preflight_blockers(
             &repo_root,
             &planned_actions,
@@ -117,26 +123,20 @@ pub(crate) fn plan_transition_actions(
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
 ) -> Result<Vec<PlannedAction>> {
+    if transition.actions.is_empty() {
+        return Ok(Vec::new());
+    }
     let repo_root = crate::commands::workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let resolution =
         atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-    let mut actions = Vec::new();
-    if transition_name == "start"
-        && !transition
-            .actions
-            .iter()
-            .any(|action| action.builtin == "branch_prepare")
-    {
-        actions.push(branch_prepare_plan(issue, &resolution, 1));
-    }
-    actions.extend(plan_actions_for_resolution(
+    let _ = transition_name;
+    Ok(plan_actions_for_resolution(
         issue,
         &resolution,
         &transition.actions,
-        actions.len() + 1,
-    ));
-    Ok(actions)
+        1,
+    ))
 }
 
 pub(crate) fn plan_actions_for_resolution(
@@ -173,30 +173,6 @@ pub(crate) fn plan_actions_for_resolution(
             }
         })
         .collect()
-}
-
-fn branch_prepare_plan(
-    issue: &Issue,
-    resolution: &BranchLifecycleResolution,
-    order: usize,
-) -> PlannedAction {
-    PlannedAction {
-        order,
-        name: "branch_prepare".to_string(),
-        target_issue_id: issue.id.clone(),
-        branch_owner_id: resolution.owner_id.clone(),
-        expected_branch: resolution.expected_branch.clone(),
-        base_branch: resolution.base_branch.clone(),
-        merge_strategy: resolution.merge_strategy,
-        merge_owned: resolution.merge_owned,
-        review_artifact_target: None,
-        review_artifact_provider: None,
-        review_artifact_role: None,
-        forgejo_role_authors: None,
-        confirmation_required: false,
-        skip_reason: None,
-        block_reason: None,
-    }
 }
 
 struct ReviewArtifactActionPlan {
@@ -262,23 +238,6 @@ pub(crate) fn branch_lifecycle_context(
     })
 }
 
-pub(crate) fn known_branch_owner(
-    db: &Database,
-    branch: &str,
-) -> Result<Option<BranchLifecycleResolution>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    let policy = atelier_app::workflow_policy::load(&repo_root)?;
-    let mut owner_ids = std::collections::BTreeSet::new();
-    for issue in db.list_issues(Some("all"), None, None)? {
-        let resolution =
-            atelier_app::workflow_policy::resolve_branch_lifecycle(&policy, db, &issue.id)?;
-        if resolution.expected_branch == branch && owner_ids.insert(resolution.owner_id.clone()) {
-            return Ok(Some(resolution));
-        }
-    }
-    Ok(None)
-}
-
 pub(crate) fn configured_base_branch() -> Result<String> {
     let repo_root = crate::commands::workflow::repo_root()?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
@@ -295,22 +254,6 @@ pub(crate) fn current_git_branch() -> Result<Option<String>> {
     .ok()
     .map(|value| value.trim().to_string())
     .filter(|value| !value.is_empty()))
-}
-
-pub(crate) fn branch_ahead_count(branch: &str, base_branch: &str) -> Result<Option<usize>> {
-    let repo_root = crate::commands::workflow::repo_root()?;
-    if !crate::commands::workflow::branch_exists_at(&repo_root, branch)?
-        || !crate::commands::workflow::branch_exists_at(&repo_root, base_branch)?
-    {
-        return Ok(None);
-    }
-    let range = format!("{base_branch}..{branch}");
-    let count = crate::commands::workflow::git_stdout(
-        &repo_root,
-        &["rev-list", "--count", &range],
-        "count branch commits",
-    )?;
-    Ok(count.trim().parse::<usize>().ok())
 }
 
 pub(crate) fn branch_owner_label(
@@ -348,22 +291,15 @@ pub(crate) fn branch_lifecycle_state_line(context: &BranchLifecycleContext) -> S
     }
 }
 
-pub(crate) fn branch_lifecycle_scope_line(context: &BranchLifecycleContext) -> &'static str {
-    if context.resolution.merge_owned {
-        "owns its merge branch"
-    } else {
-        "nested under epic; merge is deferred to epic close"
-    }
-}
-
 fn branch_context_blockers(
     db: &Database,
     issue: &Issue,
     transition_name: &str,
     transition: &atelier_app::workflow_policy::TransitionDefinition,
+    planned_actions: &[PlannedAction],
 ) -> Result<Vec<String>> {
     let mut blockers = Vec::new();
-    if !matches!(transition_name, "start" | "close") {
+    if !planned_actions_need_branch_context(planned_actions) {
         return Ok(blockers);
     }
     let context = branch_lifecycle_context(db, &issue.id)?;
@@ -397,8 +333,9 @@ fn branch_context_guidance(
     db: &Database,
     issue: &Issue,
     transition_name: &str,
+    planned_actions: &[PlannedAction],
 ) -> Result<Vec<String>> {
-    if !matches!(transition_name, "start" | "close") {
+    if !planned_actions_need_branch_context(planned_actions) {
         return Ok(Vec::new());
     }
     let context = branch_lifecycle_context(db, &issue.id)?;
@@ -430,6 +367,21 @@ fn branch_context_guidance(
         ));
     }
     Ok(guidance)
+}
+
+pub(crate) fn planned_actions_need_branch_context(planned_actions: &[PlannedAction]) -> bool {
+    planned_actions.iter().any(|action| {
+        matches!(
+            action.name.as_str(),
+            "branch.prepare"
+                | "tracker.commit"
+                | "branch.push"
+                | "review.merge"
+                | "base.sync"
+                | "branch_integrate"
+                | "review.open"
+        )
+    })
 }
 
 pub(crate) fn transition_descriptions(
@@ -539,6 +491,31 @@ mod tests {
         assert!(plan[1].confirmation_required);
         assert!(plan.iter().all(|action| action.skip_reason.is_none()));
         assert!(plan.iter().all(|action| action.block_reason.is_none()));
+    }
+
+    #[test]
+    fn branch_prepare_is_explicit_planned_action() {
+        let issue = test_issue("atelier-epic1");
+        let resolution = BranchLifecycleResolution {
+            issue_id: "atelier-epic1".to_string(),
+            owner_id: "atelier-epic1".to_string(),
+            owner_issue_type: "epic".to_string(),
+            owner_kind: BranchOwnerKind::Epic,
+            expected_branch: "epic/atelier-epic1".to_string(),
+            base_branch: "master".to_string(),
+            merge_strategy: MergeStrategy::Squash,
+            merge_owned: true,
+            nested_under_epic: false,
+        };
+
+        let empty_plan = plan_actions_for_resolution(&issue, &resolution, &[], 1);
+        assert!(empty_plan.is_empty());
+        assert!(!planned_actions_need_branch_context(&empty_plan));
+
+        let plan = plan_actions_for_resolution(&issue, &resolution, &[action("branch.prepare")], 1);
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].name, "branch.prepare");
+        assert!(planned_actions_need_branch_context(&plan));
     }
 
     #[test]

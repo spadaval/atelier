@@ -275,6 +275,11 @@ Objective work and objective blockers are distinct. `objective advances issue`
 means the issue or epic is part of the objective's execution/progress graph.
 `objective blocked_by issue` means the issue, artifact update, or validation
 item is gating the objective but is not necessarily ordinary objective scope.
+Repositories may configure additional issue link types for local vocabulary.
+Those custom roles are context-only: they are stored, displayed, searched, and
+preserved as typed issue relationships, but they do not change mission progress,
+readiness, blockers, branch selection, review ownership, or transition
+validation unless promoted to a built-in semantic.
 
 ## Readable Objective Records
 

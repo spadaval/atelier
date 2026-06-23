@@ -20,7 +20,7 @@ one surface unless a later ADR explicitly changes that ownership.
 
 | Surface | Owns | Must not own |
 | --- | --- | --- |
-| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
+| `.atelier/config.toml` | Tracked project config: project schema/version, `project_slug`, canonical `state_root`, prune defaults, configured custom context-only issue link types, active review mode, provider backend identity, provider remote coordinates, and the environment variable name that supplies any provider admin token. | Issue statuses, transitions, validators, workflow actions, branch templates, required transition fields, workflow-action role attribution, provider secret values, local runtime paths or contents, projection data, diagnostics, locks, or caches. |
 | `.atelier/workflow.yaml` | Tracked workflow policy: branch policy, status catalog, active status roles, workflow applicability, transitions, terminal statuses, required transition fields, read-only validators, static descriptions, ordered transition actions, and action-owned review provider parameters such as action role attribution. | Provider host/owner/repo/token settings, environment variable values, local path overrides, projection/cache content, or hidden defaults. |
 | Local runtime and environment | Ignored machine-local state under `.atelier/runtime/` and `.atelier/cache/`, local diagnostics, locks, rebuilt SQLite projections, and secret values supplied through environment variables such as the provider token variable named in config. | Durable project records or project policy. Runtime/cache state must be rebuildable or disposable, and environment variables must not be required for ordinary non-provider development commands. |
 
@@ -32,10 +32,27 @@ transition opens or links the branch owner's review artifact through explicit
 actions such as `review.open`. Provider
 review actions declare the workflow role and any provider role-author mapping
 they use; provider secrets remain environment-only through the token variable
-named in `.atelier/config.toml`. Provider
-approval rules, branch protection, and merge authorization remain with the
-provider or native room implementation; workflow validators only read enough
-review state to decide whether an Atelier transition may proceed.
+named in `.atelier/config.toml`. Provider approval rules, branch protection,
+and merge authorization remain with the provider or native room implementation;
+workflow validators only read enough review state to decide whether an Atelier
+transition may proceed.
+
+Custom issue links belong to `.atelier/config.toml` because they are project
+vocabulary, not workflow behavior:
+
+```toml
+[issue_links]
+custom_context_types = ["references", "informs"]
+```
+
+Configured custom link types are accepted by `atelier issue link --role <type>`
+and stored in issue `relationships.relates[]`. They are context-only: commands
+may display, search, preserve, and unlink them, but they do not affect mission
+progress, readiness, blockers, branch ownership, review ownership, or workflow
+transition validators. Built-in workflow-driving roles such as `advances`,
+`blocked_by`, and evidence `validates` remain hard-coded semantics. Unknown
+custom link roles are rejected until listed in
+`issue_links.custom_context_types`.
 
 ## Operator Surface
 
@@ -57,7 +74,8 @@ the canonical issue `status`.
 
 ## Scope
 
-Workflow policy applies to issues. The contract defines:
+Workflow policy applies to issue records, including mission-shaped objectives
+whose front matter declares `issue_type: mission`. The contract defines:
 
 - a required branch policy for owner branch names, base branch, and merge
   strategy;
@@ -72,8 +90,9 @@ Workflow policy applies to issues. The contract defines:
 - optional static transition descriptions; and
 - strict configuration errors for invalid or obsolete config.
 
-Mission, evidence, activity, and future durable record lifecycles stay outside
-`.atelier/workflow.yaml`.
+Evidence, activity, and future durable record lifecycles stay outside
+`.atelier/workflow.yaml`. Mission lifecycle is workflow-owned because missions
+are issue records in v3, not a separate record kind or command namespace.
 
 Status `role` is allowed only when `category: active`. Valid role values are
 `worker`, `reviewer`, `validator`, and `manager`. Mutating review commands use
@@ -99,19 +118,47 @@ issue_types:
   bug: { label: Bug }
   epic: { label: Epic }
   feature: { label: Feature }
+  mission: { label: Mission }
   spike: { label: Spike }
   task: { label: Task }
   validation: { label: Validation }
 
 statuses:
+  ready: { category: todo }
   todo: { category: todo }
   in_progress: { category: active, role: worker }
   blocked: { category: blocked }
   review: { category: active, role: reviewer }
   validation: { category: active, role: validator }
   done: { category: done }
+  closed: { category: done }
+  superseded: { category: done }
 
 workflows:
+  mission_delivery:
+    applies_to: [mission]
+    initial_status: ready
+    done_statuses: [closed, superseded]
+    transitions:
+      close:
+        from: [ready, in_progress, validation]
+        to: closed
+        required_fields: [close_reason]
+        description: "Closing requires configured objective validators to pass."
+        validators:
+          - objective.work_present
+          - objective.work_terminal
+          - objective.blockers_none_open
+          - issue.sections_parseable
+          - evidence.attached: { min_count: 1 }
+          - validation.criteria_satisfied
+          - lint.none_blocking
+          - command_surface_current
+          - ignored_tests_reviewed
+          - tracker.current
+          - git.on_base_branch
+          - git.worktree_clean
+
   task_delivery:
     applies_to: [bug, feature, task]
     initial_status: todo
@@ -121,6 +168,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, validation]
         to: blocked
@@ -146,6 +195,8 @@ workflows:
         description: "Start active work on this item."
         validators:
           - git.on_base_branch
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -189,6 +240,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review, validation]
         to: blocked
@@ -225,6 +278,8 @@ workflows:
         from: [todo, blocked]
         to: in_progress
         description: "Start active work on this item."
+        actions:
+          - branch.prepare
       block:
         from: [todo, in_progress, review]
         to: blocked
@@ -333,6 +388,7 @@ Starter workflow names are:
 
 | Workflow | Applies to |
 | --- | --- |
+| `mission_delivery` | `mission` |
 | `task_delivery` | `bug`, `feature`, `task` |
 | `epic_delivery` | `epic` |
 | `validation_delivery` | `validation` |
@@ -365,7 +421,7 @@ Built-in actions are:
 
 | Action | Purpose |
 | --- | --- |
-| `branch_prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
+| `branch.prepare` | Create or check out the workflow-derived owner branch when the transition needs branch preparation. |
 | `tracker.commit` | Commit the transition's canonical tracker changes on the workflow-derived owner branch. |
 | `branch.push` | Push the workflow-derived owner branch to the configured review provider remote. |
 | `review.merge` | Ask the active review authority to merge or record merge completion for the branch owner's review artifact. |
@@ -475,6 +531,12 @@ Supported built-ins include:
 | `evidence.attached` | Required evidence is attached; supports `min_count`. |
 | `review.complete` | Required review artifact state is complete enough for the configured transition; the configured review provider remains the authority for approval rules and branch protection. |
 | `children.proof_complete` | Child work is closed with validating proof. |
+| `objective.work_present` | Mission-shaped objective has at least one configured execution work link. |
+| `objective.work_terminal` | Mission-shaped objective execution work is terminal according to each linked issue's workflow. |
+| `objective.blockers_none_open` | Mission-shaped objective has no open direct blockers. |
+| `validation.criteria_satisfied` | Mission `Validation` criteria are satisfied by linked work and evidence according to the configured objective closeout check. |
+| `command_surface_current` | Public command-surface guidance has been checked against current help and docs for closeout. |
+| `ignored_tests_reviewed` | Ignored or skipped test inventory has been reviewed for closeout risk. |
 | `blockers.none_open` | Target has no open blockers. |
 | `lint.none_blocking` | Blocking lint checks pass. |
 | `git.on_base_branch` | Current checkout is the configured `branch_policy.base_branch`. |

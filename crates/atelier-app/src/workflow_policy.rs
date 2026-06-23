@@ -30,11 +30,69 @@ pub fn check(db: &Database, repo_root: &Path) -> Result<WorkflowCheckReport> {
     let issues = db.list_issues(Some("all"), None, None)?;
     for issue in &issues {
         validate_issue_against_policy(&policy, issue, &policy_path)?;
+        validate_issue_hierarchy(db, issue, issue.parent_id.as_deref())?;
     }
     Ok(WorkflowCheckReport {
         issue_count: issues.len(),
         policy,
     })
+}
+
+pub fn validate_issue_hierarchy(
+    db: &Database,
+    issue: &Issue,
+    parent_id: Option<&str>,
+) -> Result<()> {
+    if issue.issue_type == "mission" {
+        if let Some(parent_id) = parent_id {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: mission issue {} cannot have parent {}; link mission work with `atelier issue link <mission-id> <issue-id> --role advances`",
+                issue.id,
+                parent_id
+            ));
+        }
+    }
+    if issue.issue_type == "epic" {
+        if let Some(parent_id) = parent_id {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: epic issue {} cannot have parent {}; epics are root work packages",
+                issue.id,
+                parent_id
+            ));
+        }
+    }
+    if let Some(parent_id) = parent_id {
+        let parent = db.get_issue(parent_id)?.ok_or_else(|| {
+            anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} references missing parent {}",
+                issue.id,
+                parent_id
+            )
+        })?;
+        if parent.issue_type != "epic" {
+            return Err(anyhow!(
+                "workflow_issue_hierarchy_invalid: issue {} cannot be child of {} {}; only epics can own child work",
+                issue.id,
+                parent.issue_type,
+                parent.id
+            ));
+        }
+    }
+    let children = db.get_subissues(&issue.id)?;
+    if !children.is_empty() && issue.issue_type != "epic" {
+        let child_ids = children
+            .iter()
+            .map(|child| child.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(anyhow!(
+            "workflow_issue_hierarchy_invalid: {} issue {} cannot own child work {}; only epics can own child work",
+            issue.issue_type,
+            issue.id,
+            child_ids
+        ));
+    }
+    Ok(())
 }
 
 pub fn resolve_branch_lifecycle(

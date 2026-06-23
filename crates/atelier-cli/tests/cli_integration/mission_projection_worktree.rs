@@ -10,11 +10,12 @@ fn create_mission_fixture(dir: &std::path::Path, title: &str) -> String {
   "schema_version": 1,
   "title": "Mission fixture",
   "resources": {{
-    "missions": [
+    "issues": [
       {{
         "client_ref": "mission.fixture",
         "title": {title:?},
-        "body": "Mission fixture body.",
+        "issue_type": "mission",
+        "description": "Mission fixture body.",
         "labels": ["mission"]
       }}
     ]
@@ -1011,10 +1012,6 @@ fn test_mission_status_names_concrete_closeout_blockers() {
     assert!(status_out.contains(&work_id));
     assert!(status_out.contains("Blockers: open"));
     assert!(status_out.contains(&blocker_id));
-    assert!(
-        status_out.contains("Dirty state: clean") || status_out.contains("Dirty state: dirty"),
-        "{status_out}"
-    );
     assert!(!status_out.contains("Advanced Validator Detail"));
     assert!(!status_out.contains("advanced terminal validator failure"));
 
@@ -2836,15 +2833,15 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
         "depends_on": [{ "client_ref": "issue.blocker" }],
         "outcome": ["summary maps client refs"],
         "evidence": ["export check passes"]
-      }
-    ],
-    "missions": [
+      },
       {
         "client_ref": "mission.bundle",
         "title": "Bundle mission",
-        "body": "Mission from bundle",
+        "issue_type": "mission",
+        "priority": "medium",
         "labels": ["bundle", "mission"],
-        "work": [{ "client_ref": "issue.work" }]
+        "advances": [{ "client_ref": "issue.work" }],
+        "description": "Mission from bundle"
       }
     ],
     "evidence": [
@@ -2898,6 +2895,88 @@ fn test_bundle_apply_records_links_export_and_rebuild() {
     assert!(mission_markdown.contains("issue_type: \"mission\""));
     assert!(mission_markdown.contains("- \"bundle\"\n"));
     assert!(mission_markdown.contains("- \"mission\"\n"));
+}
+
+#[test]
+fn test_bundle_rejects_removed_mission_resource_shape() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("removed-mission-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Removed mission shape",
+  "resources": {
+    "missions": [
+      {
+        "client_ref": "mission.removed",
+        "title": "Removed mission",
+        "body": "Old mission resource"
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "removed mission resource should be rejected");
+    assert!(
+        stderr.contains("resources.missions is no longer supported"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("issue_type \"mission\"") && stderr.contains("advances"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn test_bundle_rejects_mission_parent_scope() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let bundle_path = dir.path().join("mission-parent-bundle.json");
+    std::fs::write(
+        &bundle_path,
+        r#"{
+  "schema": "atelier.bundle",
+  "schema_version": 1,
+  "title": "Invalid mission parent",
+  "resources": {
+    "issues": [
+      {
+        "client_ref": "issue.parent",
+        "title": "Parent epic",
+        "issue_type": "epic"
+      },
+      {
+        "client_ref": "mission.child",
+        "title": "Invalid mission child",
+        "issue_type": "mission",
+        "parent": { "client_ref": "issue.parent" }
+      }
+    ]
+  }
+}"#,
+    )
+    .unwrap();
+
+    let (success, _stdout, stderr) = run_atelier(
+        dir.path(),
+        &["bundle", "preview", bundle_path.to_str().unwrap()],
+    );
+
+    assert!(!success, "mission parent should be rejected");
+    assert!(
+        stderr.contains("Mission issue mission.child cannot have parent"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -3227,54 +3306,32 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
 
     let (success, base_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "base status failed: {stderr}");
-    assert!(base_status.contains("Branch Policy"), "{base_status}");
-    assert!(
-        base_status.contains("Current branch: main"),
-        "{base_status}"
-    );
-    assert!(
-        base_status.contains("Base branch:    main"),
-        "{base_status}"
-    );
-    assert!(
-        base_status.contains("Branch owner:   (unknown)"),
-        "{base_status}"
-    );
+    assert!(!base_status.contains("Branch Policy"), "{base_status}");
+    assert!(base_status.contains("Branch:   main"), "{base_status}");
     assert!(!base_status.contains("branch for-epic"), "{base_status}");
 
-    for (id, owner, expected, scope) in [
+    for (id, owner, expected) in [
         (
             child_id.as_str(),
             format!("Owner:    epic {epic_id} (epic)"),
             format!("Expected: epic/{epic_id}"),
-            "Scope:    nested under epic; merge is deferred to epic close",
         ),
         (
             standalone_id.as_str(),
             format!("Owner:    issue {standalone_id} (task)"),
             format!("Expected: codex/{standalone_id}"),
-            "Scope:    owns its merge branch",
         ),
         (
             epic_id.as_str(),
             format!("Owner:    epic {epic_id} (epic)"),
             format!("Expected: epic/{epic_id}"),
-            "Scope:    owns its merge branch",
         ),
     ] {
         let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", id]);
         assert!(success, "issue show failed for {id}: {stderr}");
-        assert!(show_out.contains("Branch Policy"), "{show_out}");
-        assert!(show_out.contains(&owner), "{show_out}");
-        assert!(show_out.contains(&expected), "{show_out}");
-        assert!(show_out.contains(scope), "{show_out}");
-        assert!(
-            show_out.contains(&format!(
-                "Options:  atelier issue transition {id} --options"
-            )),
-            "{show_out}"
-        );
-        assert!(show_out.contains("Checkout: atelier status"), "{show_out}");
+        assert!(!show_out.contains("Branch Policy"), "{show_out}");
+        assert!(!show_out.contains(&owner), "{show_out}");
+        assert!(!show_out.contains(&expected), "{show_out}");
         assert!(
             !show_out.contains(&format!("Next:     atelier issue transition {id} start")),
             "{show_out}"
@@ -3302,19 +3359,14 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     let (success, epic_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "epic branch status failed: {stderr}");
     assert!(
-        epic_status.contains(&format!("Current branch: epic/{epic_id}")),
+        epic_status.contains(&format!("Branch:   epic/{epic_id}")),
         "{epic_status}"
     );
     assert!(
-        epic_status.contains(&format!("Branch owner:   epic {epic_id} (epic)")),
+        !epic_status.contains(&format!("Branch owner:   epic {epic_id} (epic)")),
         "{epic_status}"
     );
-    assert!(
-        epic_status.contains(&format!(
-            "{child_id} - owner epic {epic_id} (epic) | expected epic/{epic_id} | ok"
-        )),
-        "{epic_status}"
-    );
+    assert!(!epic_status.contains(" | expected "), "{epic_status}");
 
     let status = Command::new("git")
         .current_dir(dir.path())
@@ -3330,24 +3382,16 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     let (success, issue_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "issue branch status failed: {stderr}");
     assert!(
-        issue_status.contains(&format!("Current branch: codex/{standalone_id}")),
+        issue_status.contains(&format!("Branch:   codex/{standalone_id}")),
         "{issue_status}"
     );
     assert!(
-        issue_status.contains(&format!("Branch owner:   issue {standalone_id} (task)")),
+        !issue_status.contains(&format!("Branch owner:   issue {standalone_id} (task)")),
         "{issue_status}"
     );
+    assert!(!issue_status.contains(" | expected "), "{issue_status}");
     assert!(
-        issue_status.contains(&format!(
-            "{standalone_id} - owner issue {standalone_id} (task) | expected codex/{standalone_id} | ok"
-        )),
-        "{issue_status}"
-    );
-    assert!(
-        issue_status.contains(&format!("{child_id} - owner epic {epic_id} (epic)"))
-            && issue_status.contains(&format!(
-                "mismatch; inspect `atelier issue transition {child_id} --options` and `atelier status`"
-            )),
+        !issue_status.contains(&format!("{child_id} - owner epic {epic_id} (epic)")),
         "{issue_status}"
     );
 
@@ -3359,50 +3403,23 @@ fn test_branch_lifecycle_context_surfaces_on_status_issue_transition_and_mission
     assert!(status.success(), "switch to wrong branch failed");
     let (success, wrong_status, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "wrong branch status failed: {stderr}");
+    assert!(wrong_status.contains("Branch:   main"), "{wrong_status}");
     assert!(
-        wrong_status.contains("Current branch: main"),
-        "{wrong_status}"
-    );
-    assert!(
-        wrong_status.contains(&format!(
-            "mismatch; inspect `atelier issue transition {child_id} --options` and `atelier status`"
-        )),
-        "{wrong_status}"
-    );
-    assert!(
-        wrong_status.contains(&format!(
-            "mismatch; inspect `atelier issue transition {standalone_id} --options` and `atelier status`"
-        )),
+        !wrong_status.contains("mismatch; inspect"),
         "{wrong_status}"
     );
 
     let (success, mission_status, stderr) =
         run_atelier(dir.path(), &["issue", "status", &mission_id]);
     assert!(success, "mission status failed: {stderr}");
-    assert!(mission_status.contains("Branch Policy"), "{mission_status}");
     assert!(
-        mission_status.contains(&format!("epic {epic_id} (epic) -> epic/{epic_id}")),
+        !mission_status.contains("Branch Policy"),
         "{mission_status}"
     );
-    assert!(
-        mission_status.contains(&format!(
-            "issue {standalone_id} (task) -> codex/{standalone_id}"
-        )),
-        "{mission_status}"
-    );
-    assert!(mission_status.contains("Dirty state:"), "{mission_status}");
-    assert!(
-        mission_status.contains(&format!(
-            "{child_id} expected epic/{epic_id}; inspect `atelier issue transition {child_id} --options` and `atelier status`"
-        )),
-        "{mission_status}"
-    );
-    assert!(
-        mission_status.contains(&format!(
-            "{standalone_id} expected codex/{standalone_id}; inspect `atelier issue transition {standalone_id} --options` and `atelier status`"
-        )),
-        "{mission_status}"
-    );
+    assert!(!mission_status.contains(" -> epic/"), "{mission_status}");
+    assert!(!mission_status.contains(" -> codex/"), "{mission_status}");
+    assert!(!mission_status.contains("Dirty state:"), "{mission_status}");
+    assert!(!mission_status.contains(" expected "), "{mission_status}");
     assert!(
         !mission_status.contains("branch for-epic"),
         "{mission_status}"
@@ -3475,7 +3492,7 @@ fn test_start_branch_checkout_failure_leaves_tracker_state_unchanged() {
         "checkout-failure start unexpectedly succeeded:\n{stdout}"
     );
     assert!(
-        stderr.contains("action branch_prepare failed while switching")
+        stderr.contains("action branch.prepare failed while switching")
             && stderr.contains("retry `atelier issue transition")
             && stderr.contains("start`"),
         "{stderr}"
@@ -3517,7 +3534,7 @@ fn test_branch_actions_prepare_and_integrate_epic_workflow() {
     assert!(success, "epic action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch_prepare"),
+        start_out.contains("Action:   branch.prepare"),
         "{start_out}"
     );
 
@@ -3593,7 +3610,7 @@ fn test_child_branch_prepare_action_checks_out_parent_epic_branch() {
     assert!(success, "child action start failed: {stderr}");
     assert_eq!(git_current_branch(dir.path()), format!("epic/{epic_id}"));
     assert!(
-        start_out.contains("Action:   branch_prepare"),
+        start_out.contains("Action:   branch.prepare"),
         "{start_out}"
     );
     let (success, show_out, stderr) = run_atelier(dir.path(), &["issue", "show", &child_id]);
